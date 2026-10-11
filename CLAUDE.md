@@ -1,6 +1,8 @@
-# codebot — working agreement
+# Working agreement
 
 Read this before doing anything. It governs how Claude works in this repo.
+This file comes from the `codebot` base repository; a project forked from it keeps the rules and
+edits the project-specific parts (title, platforms, thresholds, routing) as needed.
 
 ## Phase
 
@@ -22,7 +24,8 @@ designed up front in `docs/design/05-debug-interface.md`, not bolted on.
 
 ## Major decisions get a proposal, a critic, and an ADR
 
-The project will likely span several languages and platforms (Windows, Linux, Android, iPhone).
+A project may span several languages and platforms; the targets are listed in
+`docs/design/06-platforms.md`.
 Choosing the language, toolkit, and API for each part matters more than almost anything else,
 so major choices are planned heavily and never made in passing. A major choice is any of:
 language, platform UI toolkit, cross-platform strategy, data storage, network protocol or API

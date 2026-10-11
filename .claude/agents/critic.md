@@ -15,7 +15,7 @@ Rules:
 - Check claims. If the proposal says a library supports a platform, a license is compatible, or an
   API exists, verify it (docs, release notes, repo) and cite what you found. Flag anything you
   could not verify.
-- Weigh the project's actual constraints: multiple platforms (Windows, Linux, Android, iPhone),
+- Weigh the project's actual constraints: the target platforms in `docs/design/06-platforms.md`,
   GPL-compatible dependencies, an agent-drivable debug interface for every feature, and the fact
   that agents will write and debug all the code. A choice that is good in general but bad for
   agent-driven development is a bad choice here.
