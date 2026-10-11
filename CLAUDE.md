@@ -20,6 +20,28 @@ entry point, an HTTP endpoint, a REPL command, or a scripted harness. "Done" mea
 drive the feature, observe its state, and reproduce a bug from a terminal. The debug interface is
 designed up front in `docs/design/05-debug-interface.md`, not bolted on.
 
+## Major decisions get a proposal, a critic, and an ADR
+
+The project will likely span several languages and platforms (Windows, Linux, Android, iPhone).
+Choosing the language, toolkit, and API for each part matters more than almost anything else,
+so major choices are planned heavily and never made in passing. A major choice is any of:
+language, platform UI toolkit, cross-platform strategy, data storage, network protocol or API
+surface, build system, or a dependency the whole project will lean on.
+
+Process:
+1. `architect` writes a proposal: the options considered, the constraints that matter here,
+   a recommendation, and what would change the recommendation. Saved under
+   `docs/design/proposals/NNNN-title.md`.
+2. `critic` reads it and argues against it, verifying claims and steelmanning the alternatives.
+3. `architect` revises, answers each objection in writing, and records the result as an ADR in
+   `docs/design/decisions/`. Unresolved disagreement goes to the user with both positions stated.
+4. Only then does implementation start.
+
+Technical design decisions do not need the user's sign-off; the coordinator makes the call
+after step 3 and reports it. Decisions about what humans see and touch (the front end, flows,
+wording, visuals) do need the user, because the end goal is a front end that humans use and
+their feedback is the ground truth there. Flag those explicitly and do not guess.
+
 ## Usage gating (hard rule)
 
 Plan limits are the 5-hour session meter and the weekly meter. Check them with `/usage`.
@@ -43,6 +65,7 @@ Pick the subagent by task; each one pins its own model in `.claude/agents/`.
 | Task | Agent | Model | Why |
 |---|---|---|---|
 | Design docs, architecture, ADRs, planning, organizing work, final review | `architect` | Fable 5.1 | Strongest reasoning; worth the cost where judgment matters most. |
+| Adversarial second opinion on a proposal or major technical choice | `critic` | Fable 5.1 | Must be able to find what the architect missed; a weaker critic rubber-stamps. |
 | Implementation, debugging, non-trivial refactors, building debug interfaces | `coder` | Opus 5.5 | Best coding model at Opus price. Effort pinned to high because its default is medium. |
 | Writing tests, fixing failing tests, small well-specified code changes | `tester` | Sonnet 5.5 | Fast and capable for scoped work at a fifth of Fable's cost. |
 | Running test suites, lint, format, commits, mechanical file ops | `runner` | Haiku 5.5 | Cheapest by far; these tasks need reliability, not depth. |
