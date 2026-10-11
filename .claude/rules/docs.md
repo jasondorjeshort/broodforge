@@ -41,4 +41,6 @@ These load automatically when a file under `docs/` is read or edited. The map of
 - Reference files state facts and working commands. Findings state evidence and status. Design docs
   state decisions. Do not mix: a provisional result in a design doc reads as truth later.
 - Write files that contain apostrophes or backticks with the Write or Edit tool, not a Bash heredoc
-  (open finding `docs/findings/2026-10-11-bash-heredoc-apostrophes.md`).
+  (open finding `docs/findings/2026-10-11-bash-heredoc-apostrophes.md`). The same goes for any text
+  that mentions a destructive git command: the `git-guard` hook matches the Bash command text, so a
+  heredoc containing `git push --force` is denied even though nothing runs it.
