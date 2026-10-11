@@ -1,0 +1,71 @@
+# codebot — working agreement
+
+Read this before doing anything. It governs how Claude works in this repo.
+
+## Phase
+
+Design first. No application code until the design docs in `docs/design/` are written and agreed.
+
+## Delegation: agents do all coding and debugging
+
+The main session is a coordinator. It plans, briefs, reviews results, and talks to the user.
+It does not write or debug application code itself. All coding and all debugging go to subagents
+defined in `.claude/agents/`. Brief each one fully: goal, files to read, what is already ruled out,
+scope boundaries, how to verify.
+
+## Debug interface is part of every feature
+
+Agents cannot click a GUI. Every feature ships with an agent-usable way to exercise it: a CLI
+entry point, an HTTP endpoint, a REPL command, or a scripted harness. "Done" means an agent can
+drive the feature, observe its state, and reproduce a bug from a terminal. The debug interface is
+designed up front in `docs/design/05-debug-interface.md`, not bolted on.
+
+## Usage gating (hard rule)
+
+Plan limits are the 5-hour session meter and the weekly meter. Check them with `/usage`.
+The status line (`.claude/statusline.js`) shows both and flags HOLD at 50% and STOP at 80%.
+A `PreToolUse` hook (`.claude/hooks/usage-gate.js`) refuses to launch new subagents once the
+higher meter reaches 50%. The hook reads `~/.claude/usage-state.json`, which the status line writes.
+
+| Usage (max of session, weekly) | Behavior |
+|---|---|
+| below 50% | Normal operation. |
+| 50% to 80% | No new work. No new subagents or tasks. Finish what is in flight, commit, then stop and report. |
+| 80% and above | Stop. Commit in-progress work with a clear WIP message, write a handoff note, end the turn. |
+
+Status line usage numbers exist only on claude.ai Pro and Max plans and only after the first
+response of a session. If they read `n/a`, run `/usage` by hand before launching agents.
+
+## Model routing
+
+Pick the subagent by task; each one pins its own model in `.claude/agents/`.
+
+| Task | Agent | Model | Why |
+|---|---|---|---|
+| Design docs, architecture, ADRs, planning, organizing work, final review | `architect` | Fable 5.1 | Strongest reasoning; worth the cost where judgment matters most. |
+| Implementation, debugging, non-trivial refactors, building debug interfaces | `coder` | Opus 5.5 | Best coding model at Opus price. Effort pinned to high because its default is medium. |
+| Writing tests, fixing failing tests, small well-specified code changes | `tester` | Sonnet 5.5 | Fast and capable for scoped work at a fifth of Fable's cost. |
+| Running test suites, lint, format, commits, mechanical file ops | `runner` | Haiku 5.5 | Cheapest by far; these tasks need reliability, not depth. |
+| Pre-push sanity checks and the push itself | `pusher` | Sonnet 5.5 | Needs enough judgment to read test output and spot secrets, not enough to justify Opus. |
+
+Price reference (per million tokens, input/output): Fable 5.1 $10/$50, Opus 5.5 $4/$20,
+Sonnet 5.5 $2/$10, Haiku 5.5 $0.10/$0.50.
+
+## Git
+
+- Branch: `main`. Commit small and often, as work lands. The `runner` agent commits; the `coder`
+  and `tester` agents leave a clean, described working tree for it.
+- Amend only when necessary (fixing a message, folding a forgotten file into the commit it belongs
+  to) and only on commits that have not been pushed. Never amend a pushed commit.
+- Only the `pusher` agent (or the user) pushes. It runs the sanity checks in its brief first and
+  never force-pushes.
+- Commit messages end with `Co-Authored-By: <model that did the work> <noreply@anthropic.com>`,
+  for example `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+
+## Licensing
+
+Fully open source. Default license is GPL-3.0-or-later (`LICENSE`). A component that is meant to be
+linked into other people's software may be LGPL-3.0-or-later instead; such a component carries its
+own `LICENSE` file in its directory and is listed in `docs/design/decisions/0001-licensing.md`.
+Every source file starts with an SPDX header: `SPDX-License-Identifier: GPL-3.0-or-later` (or `LGPL-3.0-or-later`).
+Dependencies must be GPL-compatible. See the ADR for the reasoning.

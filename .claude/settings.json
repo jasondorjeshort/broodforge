@@ -1,0 +1,19 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": "node .claude/statusline.js"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/usage-gate.js"
+          }
+        ]
+      }
+    ]
+  }
+}
