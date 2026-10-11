@@ -1,31 +1,28 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-11, at commit e9e7abf (plus uncommitted work), by architect
+Updated: 2026-10-11, at commit 87ab05b (plus uncommitted hooks), by main session
 
 ## Now
 
-- Implementing ADR 0002 (repository layout). The architect has written the ADR, the hook spec, the
-  `docs/` tree, `.claude/rules/`, nine skills, the agent and settings updates, and the `CLAUDE.md`
-  and `README.md` edits. All of it is uncommitted in the working tree.
-- The two Node hooks do not exist yet; `.claude/settings.json` already points at them (every
-  Bash and Write/Edit call shows a non-blocking hook error until they land). `"onFailure": "block"`
-  on git-guard is deliberately absent until the script exists; the coder adds it as its last step.
+- ADR 0002 is implemented. Hooks `git-guard.js` and `post-edit.js` exist, `test-hooks.js` passes
+  68 of 68, `onFailure: block` is on git-guard. Uncommitted: the three hook files, `usage-gate.js`
+  reason text, `.claude/settings.json`, and the coder's note in `0002-hook-specs.md`.
+- No application project yet. Hatchery is the project; the user has not described an app.
 
 ## Next
 
-1. Coordinator reviews the architect's output, then the runner commits it in steps: ADR and
-   proposal; docs tree and rules; skills; agents and settings; CLAUDE.md, README, finding.
-2. Coder writes `.claude/hooks/git-guard.js` and `.claude/hooks/post-edit.js` and edits the
-   usage-gate reason text, to `docs/design/decisions/0002-hook-specs.md`; runs the test tables.
-3. Runner confirms the pusher doc-size check passes (`pusher.md` check 7) on the current tree.
-4. Pusher pushes `main` on the user's request.
-5. Optional: test once whether `SessionStart` fires inside subagents (critic claim 5); only matters
-   if the deferred SessionStart hook is revived.
+1. Runner commits the hook batch (one commit, trailer Opus 5.5), then pusher pushes `main`.
+2. Architect folds the coder's nine spec deviations into `docs/design/decisions/0002-hook-specs.md`;
+   the one with a user-visible effect is 7: `post-edit` warns on every `docs/design/proposals/*.md`
+   because no index lists them. Fix by listing them in `docs/design/proposals/README.md`.
+3. Start a fresh session in this directory to confirm the status line shows the 5h and 7d meters
+   and that `@docs/HANDOFF.md` is imported. First real test of both.
+4. User decides the first decanted project; then `decant` and `00-vision.md` via the architect.
 
 ## Waiting on user
 
-none
+- Nothing blocking. The first app to decant from Hatchery is the user's call, when ready.
 
 ## Open findings
 

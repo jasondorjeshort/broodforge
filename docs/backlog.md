@@ -12,6 +12,10 @@ when near it, delete the oldest ideas (git has them) and turn stale deferred ite
 - A `limits.json` read by hooks, rule, and pusher if a third enforcement point for the doc caps appears.
 - Add `fork` to any future `SessionStart` matcher list; the hooks reference lists it alongside
   `startup`, `resume`, `clear`, `compact`.
+- When `docs/design/05-debug-interface.md` is written, give it a hooks section pointing at
+  `.claude/hooks/test-hooks.js` (`--only`, `--verbose`, `--input <file> <hook>` modes).
+- `post-edit` FORMATTERS on Windows: `spawnSync` without a shell cannot run `.cmd` shims such as
+  `prettier`; a decanted project filling the table needs the `.exe` or `node <script>` form.
 
 ## Deferred
 
