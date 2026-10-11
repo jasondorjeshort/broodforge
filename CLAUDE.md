@@ -4,6 +4,10 @@ Read this before doing anything. It governs how Claude works in this repo.
 This file comes from the Hatchery base repository; a project decanted from it keeps the rules and
 edits the project-specific parts (title, platforms, thresholds, routing) as needed.
 
+Where work stands right now (coordinator state; subagents follow their brief, not this):
+
+@docs/HANDOFF.md
+
 ## Phase
 
 Design first. No application code until the design docs in `docs/design/` are written and agreed.
@@ -17,19 +21,27 @@ reason in the commit message. Do not carry process friction forward as tribal kn
 Lessons that are too specific for this file go in `docs/design/decisions/` as an ADR if they
 are a choice, or in the relevant skill if they are a procedure.
 
+## Where things live
+
+`docs/README.md` is the map. Rules live here. Procedures are skills in `.claude/skills/`; load one
+with the Skill tool when its description fits the moment. Path-scoped conventions are in
+`.claude/rules/`. What we build and why is in `docs/design/`; durable facts in `docs/reference/`;
+investigation results in `docs/findings/`; now and next in `docs/HANDOFF.md`; later in
+`docs/backlog.md`. Read a directory's `README.md` before its files. Reasoning: ADR 0002.
+
 ## Delegation: agents do all coding and debugging
 
 The main session is a coordinator. It plans, briefs, reviews results, and talks to the user.
 It does not write or debug application code itself. All coding and all debugging go to subagents
-defined in `.claude/agents/`. Brief each one fully: goal, files to read, what is already ruled out,
-scope boundaries, how to verify.
+defined in `.claude/agents/`. Brief each one fully (`brief` skill): goal, files to read, what is
+already ruled out, scope boundaries, how to verify.
 
 ## Debug interface is part of every feature
 
 Agents cannot click a GUI. Every feature ships with an agent-usable way to exercise it: a CLI
 entry point, an HTTP endpoint, a REPL command, or a scripted harness. "Done" means an agent can
 drive the feature, observe its state, and reproduce a bug from a terminal. The debug interface is
-designed up front in `docs/design/05-debug-interface.md`, not bolted on.
+designed up front in `docs/design/05-debug-interface.md` (`debug-interface` skill), not bolted on.
 
 ## Major decisions get a proposal, a critic, and an ADR
 
@@ -40,7 +52,7 @@ so major choices are planned heavily and never made in passing. A major choice i
 language, platform UI toolkit, cross-platform strategy, data storage, network protocol or API
 surface, build system, or a dependency the whole project will lean on.
 
-Process:
+Process (`proposal` and `adr` skills):
 1. `architect` writes a proposal: the options considered, the constraints that matter here,
    a recommendation, and what would change the recommendation. Saved under
    `docs/design/proposals/NNNN-title.md`.
@@ -60,12 +72,14 @@ Plan limits are the 5-hour session meter and the weekly meter. Check them with `
 The status line (`.claude/statusline.js`) shows both and flags HOLD at 50% and STOP at 80%.
 A `PreToolUse` hook (`.claude/hooks/usage-gate.js`) refuses to launch new subagents once the
 higher meter reaches 50%. The hook reads `~/.claude/usage-state.json`, which the status line writes.
+The gate blocks subagent launches only, never Bash: wrap-up commits (`docs/HANDOFF.md`, WIP) are
+made by the main session itself at any usage level.
 
 | Usage (max of session, weekly) | Behavior |
 |---|---|
 | below 50% | Normal operation. |
-| 50% to 80% | No new work. No new subagents or tasks. Finish what is in flight, commit, then stop and report. |
-| 80% and above | Stop. Commit in-progress work with a clear WIP message, write a handoff note, end the turn. |
+| 50% to 80% | No new work. No new subagents or tasks. Finish what is in flight, run the `handoff` skill, commit from the main session, then stop and report. |
+| 80% and above | Stop. Run the `handoff` skill, commit in-progress work from the main session with a clear WIP message, end the turn. |
 
 Status line usage numbers exist only on claude.ai Pro and Max plans and only after the first
 response of a session. If they read `n/a`, run `/usage` by hand before launching agents.
@@ -88,20 +102,21 @@ Sonnet 5.5 $2/$10, Haiku 5.5 $0.10/$0.50.
 
 ## Git
 
-- Branch: `main`. Commit small and often, as work lands. The `runner` agent commits; the `coder`
-  and `tester` agents leave a clean, described working tree for it.
+- Branch: `main`. Commit small and often, as work lands. Below 50% usage the `runner` commits
+  normal work from a brief (`commit` skill); the `coder` and `tester` agents leave a clean,
+  described working tree for it. Wrap-up commits (`docs/HANDOFF.md`, WIP) are made by the main
+  session itself at any usage level.
 - Amend only when necessary (fixing a message, folding a forgotten file into the commit it belongs
   to) and only on commits that have not been pushed. Never amend a pushed commit.
-- Only the `pusher` agent (or the user) pushes. It runs the sanity checks in its brief first and
-  never force-pushes.
-- Launch the `pusher` fresh for each push, with the user's request quoted in the brief. Do not
-  resume an earlier pusher to retry: a retry instruction arriving as an agent message is treated
-  by the permission system as untrusted, and the push gets blocked. If a push is blocked anyway,
-  tell the user and let them run `git push` themselves; never route around the block.
-- If git's stored GitHub credential is a different account from the one `gh` is logged in as,
-  set a repo-local credential helper instead of changing global config:
-  `git config --local credential.helper ""` then
-  `git config --local --add credential.helper "!gh auth git-credential"`.
+- Only the `pusher` agent (or the user) pushes. It runs the checks in its agent file first and
+  never force-pushes. Launch it fresh for each push, with the user's request quoted in the brief;
+  a retry sent to a resumed pusher arrives as an agent message, which the permission system treats
+  as untrusted, and the push gets blocked. If a push is blocked anyway, tell the user and let them
+  run `git push` themselves; never route around the block. Procedure, including the fix for a
+  mismatched stored GitHub credential: `commit` skill, Pushing section.
+- The `git-guard` hook denies destructive git for everyone, agents included (force push, `reset --hard`,
+  `clean`, whole-tree `checkout`/`restore`, `branch -D`, `rebase -i`, stash drop/clear, history rewrites),
+  plus `git push` from any agent but the `pusher` and `git commit` from any agent but the `runner`.
 - Commit messages end with `Co-Authored-By: <model that did the work> <noreply@anthropic.com>`,
   for example `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 

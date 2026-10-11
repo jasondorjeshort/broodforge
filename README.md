@@ -1,42 +1,70 @@
 # Hatchery
 
+## Use it with Claude Code
+
+Start a new project from Hatchery. Replace the two placeholders, then paste into Claude Code:
+
+```
+Create a new project from the Hatchery base. Clone https://github.com/jasondorjeshort/hatchery.git
+into a directory named <project> and work inside it from now on. Rename the remote `origin` to
+`hatchery`, then add `origin` pointing at <new project remote URL>, and confirm both with
+`git remote -v`. Then load the `decant` skill and follow it to the end: check that node and gh
+are installed, replace the README, retitle CLAUDE.md, reset docs/HANDOFF.md and docs/backlog.md,
+clear docs/findings/ and docs/reference/, keep ADRs 0001 and 0002, and commit through the runner.
+Do not push. Report the remotes, the files you changed, and the first design step.
+```
+
+Update an existing project from Hatchery. Paste into Claude Code inside that project:
+
+```
+Update this project from the Hatchery base. Load the `update-from-hatchery` skill and follow it:
+confirm the working tree is clean, add the remote `hatchery`
+(https://github.com/jasondorjeshort/hatchery.git) if it is missing, fetch it, and merge
+`hatchery/main`. Resolve conflicts by the skill's rule: this project's own text wins in README.md,
+the project-specific sections of CLAUDE.md, docs/HANDOFF.md, docs/backlog.md, and everything under
+docs/design/, docs/findings/, and docs/reference/; the base wins under .claude/ unless an ADR here
+records a reason to differ. Leave no conflict markers. Re-run the project's checks and tests.
+Do not push. Report what changed in the base, how each conflict was resolved, and what I should act on.
+```
+
+Both need Node (hooks and status line) and the GitHub CLI `gh` (pushing) on `PATH`.
+
+## What this is
+
 A base repository to fork for agent-driven, design-first software projects. New projects are
-decanted from it: they inherit the conditioning (the working agreement and the agents) and grow
-their own design and code. It contains no application code. What it does contain:
+decanted from it: they inherit the conditioning (the working agreement, the agents, the skills,
+the hooks) and grow their own design and code. It contains no application code. What it does contain:
 
 - `CLAUDE.md`: the working agreement Claude Code follows in the repo. Agents do all coding and
   debugging, every feature ships with an agent-usable debug interface, major choices go through a
   proposal, a critic, and an ADR, and work stops when plan usage gets high.
 - `.claude/agents/`: six subagents with models matched to their job (architect and critic on
   Fable, coder on Opus, tester and pusher on Sonnet, runner on Haiku).
-- `.claude/statusline.js` and `.claude/hooks/usage-gate.js`: a status line that shows the 5-hour
-  and weekly plan meters, and a hook that refuses to launch new subagents once either reaches 50%.
-- `docs/design/`: the design document skeleton, with a proposals folder and an ADR folder.
+- `.claude/skills/`: the procedures (proposal, ADR, handoff, debug interface, finding, commit,
+  brief, decant, update-from-hatchery), loaded on demand.
+- `.claude/hooks/` and `.claude/statusline.js`: a status line showing the 5-hour and weekly plan
+  meters, a gate that refuses new subagents at 50%, a guard against destructive git, and a
+  post-edit check on documentation conventions.
+- `.claude/rules/docs.md`: conventions that load only when files under `docs/` are touched.
+- `docs/`: `HANDOFF.md` (where work stands, imported into every session), `backlog.md`, the
+  design skeleton with proposals and ADRs, `reference/` for durable facts, `findings/` for
+  investigation results. `docs/README.md` is the map.
 - `LICENSE` and `LICENSES/`: GPL-3.0-or-later by default, LGPL-3.0-or-later text for linkable components.
 
-## Starting a new project from this base
+Layout and reasoning: [`docs/design/decisions/0002-repository-layout.md`](docs/design/decisions/0002-repository-layout.md).
 
-1. Fork or clone, then point `origin` at the new project's remote. Keep this repo as a second
-   remote named `hatchery` if you want to merge later improvements to the base:
-   `git remote add hatchery https://github.com/jasondorjeshort/hatchery.git`.
-2. Replace this README with the new project's README. Keep the license section.
-3. In `CLAUDE.md`, set the title and adjust anything project-specific (the platform list, the
-   usage thresholds, the model routing) if the defaults do not fit.
-4. Revisit `docs/design/decisions/0001-licensing.md`. If the new project wants a different
-   license, supersede that ADR and replace `LICENSE`.
-5. Start the design with the `architect` agent: `docs/design/00-vision.md` first.
+## Starting a new project by hand
 
-On GitHub, mark this repository as a template (Settings, "Template repository") so new projects
-can be created from it with a clean history.
+The first prompt above does this for you. By hand: clone, rename `origin` to `hatchery`, add the
+project's `origin`, then run `/decant` in Claude Code and follow the `decant` skill. On GitHub, mark
+this repository as a template (Settings, "Template repository") if you prefer a clean history; then
+add the `hatchery` remote yourself so updates still work.
 
-## Pulling base improvements into a fork
+## Pulling base improvements into a project
 
-```
-git fetch hatchery
-git merge hatchery/main
-```
-
-Expect conflicts in `README.md` and `CLAUDE.md`; resolve in favor of the fork's project-specific text.
+The second prompt above does this. By hand: `git fetch hatchery && git merge hatchery/main`, then
+resolve conflicts by the rule in `.claude/skills/update-from-hatchery/SKILL.md`: the base wins under
+`.claude/`, the project wins in its own README, design, handoff, backlog, findings, and reference.
 
 ## License
 
