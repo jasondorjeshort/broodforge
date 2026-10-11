@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Status line for Claude Code. Reads the JSON Claude pipes on stdin, prints one line,
 // and writes the rate-limit numbers to ~/.claude/usage-state.json so the
 // usage-gate hook (.claude/hooks/usage-gate.js) can read them.
