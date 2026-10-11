@@ -257,18 +257,29 @@ for (const [id, label, filePath, expect, rawOverride, fmt] of P) {
 // ---------- usage-gate (section 3 text) ----------
 const home = path.join(scratch, 'home');
 fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+const HOLD_MSG = 'Usage gate: 5h 55%, 7d 10%. At or above 50%: do not start new subagents. Finish in-flight work in this session, run the handoff skill, commit from the main session, then report. On the user\'s explicit instruction only, write ~/.claude/usage-gate-override.json {"until": <epoch>, "reason": "..."} to lift HOLD.';
+const STOP_MSG = 'Usage gate: 5h 85%, 7d 10%. At or above 80%: stop all work, run the handoff skill, commit WIP from the main session, end the turn.';
+const nowSec = Math.floor(Date.now() / 1000);
+// [id, pct, expected deny reason or null for allow, override file contents or undefined]
 const U = [
-  ['U01', 55, 'Usage gate: 5h 55%, 7d 10%. At or above 50%: do not start new subagents. Finish in-flight work in this session, run the handoff skill, commit from the main session, then report.'],
-  ['U02', 85, 'Usage gate: 5h 85%, 7d 10%. At or above 80%: stop all work, run the handoff skill, commit WIP from the main session, end the turn.'],
+  ['U01', 55, HOLD_MSG],
+  ['U02', 85, STOP_MSG],
   ['U03', 20, null],
+  ['U04', 55, null, { until: nowSec + 3600, reason: 'test: user instruction' }],
+  ['U05', 55, HOLD_MSG, { until: nowSec - 1, reason: 'test: expired' }],
+  ['U06', 85, STOP_MSG, { until: nowSec + 3600, reason: 'test: override does not lift STOP' }],
+  ['U07', 55, HOLD_MSG, 'not json'],
 ];
-for (const [id, pct, expect] of U) {
+for (const [id, pct, expect, override] of U) {
   if (!selected(id)) continue;
   fs.writeFileSync(path.join(home, '.claude', 'usage-state.json'), JSON.stringify({
     updated_at: Math.floor(Date.now() / 1000),
     five_hour: { used_percentage: pct },
     seven_day: { used_percentage: 10 },
   }));
+  const ovPath = path.join(home, '.claude', 'usage-gate-override.json');
+  if (override === undefined) fs.rmSync(ovPath, { force: true });
+  else fs.writeFileSync(ovPath, typeof override === 'string' ? override : JSON.stringify(override));
   const env = Object.assign({}, process.env, { HOME: home, USERPROFILE: home });
   const r = run('usage-gate', JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {} }), env);
   let ok;

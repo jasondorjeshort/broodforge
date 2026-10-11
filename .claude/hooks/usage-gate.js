@@ -12,9 +12,21 @@ const os = require('os');
 const path = require('path');
 
 const STATE_FILE = path.join(os.homedir(), '.claude', 'usage-state.json');
+// Override: written by the coordinator only on the user's explicit instruction.
+// JSON {"until": <epoch seconds>, "reason": "<who asked and why>"}. Lifts HOLD (not STOP)
+// until `until`; the hook reports the reason on stderr each time it is used.
+const OVERRIDE_FILE = path.join(os.homedir(), '.claude', 'usage-gate-override.json');
 const HOLD = 50;
 const STOP = 80;
 const STALE_SECONDS = 2 * 60 * 60; // treat data older than 2h as unknown
+
+function activeOverride() {
+  try {
+    const o = JSON.parse(fs.readFileSync(OVERRIDE_FILE, 'utf8'));
+    if (typeof o.until !== 'number' || o.until <= Math.floor(Date.now() / 1000)) return null;
+    return o;
+  } catch (_) { return null; }
+}
 
 function allow() { process.exit(0); }
 function deny(reason) {
@@ -58,7 +70,12 @@ process.stdin.on('end', () => {
     return deny(`Usage gate: ${detail}. At or above ${STOP}%: stop all work, run the handoff skill, commit WIP from the main session, end the turn.`);
   }
   if (worst >= HOLD) {
-    return deny(`Usage gate: ${detail}. At or above ${HOLD}%: do not start new subagents. Finish in-flight work in this session, run the handoff skill, commit from the main session, then report.`);
+    const o = activeOverride();
+    if (o) {
+      process.stderr.write(`usage-gate: HOLD (${detail}) lifted by override until ${new Date(o.until * 1000).toLocaleString()}: ${o.reason || 'no reason given'}\n`);
+      return allow();
+    }
+    return deny(`Usage gate: ${detail}. At or above ${HOLD}%: do not start new subagents. Finish in-flight work in this session, run the handoff skill, commit from the main session, then report. On the user's explicit instruction only, write ~/.claude/usage-gate-override.json {"until": <epoch>, "reason": "..."} to lift HOLD.`);
   }
   allow();
 });
