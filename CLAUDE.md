@@ -8,6 +8,15 @@ edits the project-specific parts (title, platforms, thresholds, routing) as need
 
 Design first. No application code until the design docs in `docs/design/` are written and agreed.
 
+## This agreement is part of the work
+
+Designing the base is itself the project. When a step is awkward, an agent brief is missing
+something, a hook misfires, or a better way turns up, fix the protocol in the same sitting:
+edit this file, the agent definitions, the skills, or the hooks, and commit the change with the
+reason in the commit message. Do not carry process friction forward as tribal knowledge.
+Lessons that are too specific for this file go in `docs/design/decisions/` as an ADR if they
+are a choice, or in the relevant skill if they are a procedure.
+
 ## Delegation: agents do all coding and debugging
 
 The main session is a coordinator. It plans, briefs, reviews results, and talks to the user.
@@ -85,6 +94,14 @@ Sonnet 5.5 $2/$10, Haiku 5.5 $0.10/$0.50.
   to) and only on commits that have not been pushed. Never amend a pushed commit.
 - Only the `pusher` agent (or the user) pushes. It runs the sanity checks in its brief first and
   never force-pushes.
+- Launch the `pusher` fresh for each push, with the user's request quoted in the brief. Do not
+  resume an earlier pusher to retry: a retry instruction arriving as an agent message is treated
+  by the permission system as untrusted, and the push gets blocked. If a push is blocked anyway,
+  tell the user and let them run `git push` themselves; never route around the block.
+- If git's stored GitHub credential is a different account from the one `gh` is logged in as,
+  set a repo-local credential helper instead of changing global config:
+  `git config --local credential.helper ""` then
+  `git config --local --add credential.helper "!gh auth git-credential"`.
 - Commit messages end with `Co-Authored-By: <model that did the work> <noreply@anthropic.com>`,
   for example `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
