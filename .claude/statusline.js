@@ -46,14 +46,25 @@ process.stdin.on('end', () => {
   );
   const flag = worst >= STOP ? ' STOP' : worst >= WARN ? ' HOLD' : '';
 
+  // resets_at is epoch seconds. Show the clock time if the reset is within 24h, else the weekday.
+  const resetAt = (epoch) => {
+    if (typeof epoch !== 'number') return '';
+    const t = new Date(epoch * 1000);
+    const hours = (t - Date.now()) / 3600000;
+    const hm = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+    if (hours < 24) return ` ->${hm}`;
+    const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][t.getDay()];
+    return ` ->${day} ${hm}`;
+  };
+
   const parts = [
     model,
     `ctx ${pct(ctx)}`,
-    `5h ${pct(fiveH)}`,
-    `7d ${pct(sevenD)}${flag}`,
+    `5h ${pct(fiveH)}${resetAt(rl.five_hour && rl.five_hour.resets_at)}`,
+    `7d ${pct(sevenD)}${resetAt(rl.seven_day && rl.seven_day.resets_at)}${flag}`,
   ];
-  // cost.total_cost_usd is Claude Code's API-list-price estimate for this session's tokens
-  // (subagents included). On a subscription it is informational only; the meters are the limit.
-  if (typeof cost === 'number') parts.push(`~$${cost.toFixed(2)} list`);
+  // cost.total_cost_usd (API list-price estimate, subagents included) is deliberately not shown:
+  // on a subscription the meters and their reset times are what matter. Run /usage for the figure.
+  void cost;
   process.stdout.write(parts.join(' | '));
 });
