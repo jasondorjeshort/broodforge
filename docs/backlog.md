@@ -17,6 +17,25 @@ when near it, delete the oldest ideas (git has them) and turn stale deferred ite
 - `post-edit` FORMATTERS on Windows: `spawnSync` without a shell cannot run `.cmd` shims such as
   `prettier`; a decanted project filling the table needs the `.exe` or `node <script>` form.
 
+- From Dystopo (2026-10-11), each a candidate for a skill, hook or rule once proposal 0003 is
+  decided: a private-terms guard (a gitignored `private-terms.local.json` of names, boxes and
+  coordinates; a commit hook and a scanner for PR text and built artifacts); a `verify` agent and
+  the rule that the coordinator reads reports, not diffs; a release skill (tag-driven draft, verify
+  the artifact downloaded from the draft itself, hand-written notes, publish; version strings
+  derived from the tag); a `sweep` skill (one command, JSON summary, contact sheet; findings become
+  the next wave's sweep task); the lesson that the first install on a real device, release build,
+  empty, UI only, found a dead end no emulator sweep could; per-agent port and emulator allocation
+  in briefs; the Haiku runner executes sweeps and escalates to Sonnet only on failure.
+- Usage gate thresholds: Dystopo ran at 75% with the owner's clarification that only new
+  implementers stop there while in-flight verification and merges finish. Hatchery's 50/80 is
+  untested on a build-phase project; decide with proposal 0003 whether the gate needs a phase or
+  an override for in-flight work (Dystopo uses an environment variable the coordinator sets).
+- `git-guard` rules 3 and 4 (only the pusher pushes, only the runner commits) fit the single-branch
+  phase; in the wave model every implementer pushes its own `task/*` branch and opens a PR. Key the
+  rules off a phase setting or the branch name when 0003 is promoted.
+- The main session may push on the owner's instruction (CLAUDE.md says so); say it in the `commit`
+  skill's Pushing section too, so a coordinator does not launch a pusher for a push the owner asked for.
+
 ## Deferred
 
 - SessionStart hook (git log, open-finding count, usage line). Why not now: the `@docs/HANDOFF.md`
