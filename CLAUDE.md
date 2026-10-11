@@ -1,7 +1,7 @@
 # Working agreement
 
 Read this before doing anything. It governs how Claude works in this repo.
-This file comes from the `codebot` base repository; a project forked from it keeps the rules and
+This file comes from the Hatchery base repository; a project decanted from it keeps the rules and
 edits the project-specific parts (title, platforms, thresholds, routing) as needed.
 
 ## Phase

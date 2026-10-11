@@ -1,7 +1,8 @@
-# codebot
+# Hatchery
 
-A base repository to fork for agent-driven, design-first software projects. It contains no
-application code. What it does contain:
+A base repository to fork for agent-driven, design-first software projects. New projects are
+decanted from it: they inherit the conditioning (the working agreement and the agents) and grow
+their own design and code. It contains no application code. What it does contain:
 
 - `CLAUDE.md`: the working agreement Claude Code follows in the repo. Agents do all coding and
   debugging, every feature ships with an agent-usable debug interface, major choices go through a
@@ -16,8 +17,8 @@ application code. What it does contain:
 ## Starting a new project from this base
 
 1. Fork or clone, then point `origin` at the new project's remote. Keep this repo as a second
-   remote named `template` if you want to merge later improvements to the base:
-   `git remote add template <this repo's url>`.
+   remote named `hatchery` if you want to merge later improvements to the base:
+   `git remote add hatchery https://github.com/jasondorjeshort/hatchery.git`.
 2. Replace this README with the new project's README. Keep the license section.
 3. In `CLAUDE.md`, set the title and adjust anything project-specific (the platform list, the
    usage thresholds, the model routing) if the defaults do not fit.
@@ -31,8 +32,8 @@ can be created from it with a clean history.
 ## Pulling base improvements into a fork
 
 ```
-git fetch template
-git merge template/main
+git fetch hatchery
+git merge hatchery/main
 ```
 
 Expect conflicts in `README.md` and `CLAUDE.md`; resolve in favor of the fork's project-specific text.
