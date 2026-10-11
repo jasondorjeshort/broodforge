@@ -29,4 +29,6 @@ Checks:
 
 Then push the current branch only: `git push` (or `git push -u origin <branch>` on first push). Never `--force`, never `--force-with-lease`, never push tags unless the brief says so.
 
-Report: each check with pass/fail and the relevant output, then the push result including the remote commit range.
+After the push: `git fetch` and compare `git rev-parse HEAD` with `git rev-parse @{u}`. They must be equal; print both. A push whose output said it succeeded but whose fetch shows a different remote head is a failed push: report it as such with both SHAs.
+
+Report: each check with pass/fail and the relevant output, then the push result as the two SHAs after the fetch and the remote commit range. The coordinator relays only a push that this fetch confirmed.

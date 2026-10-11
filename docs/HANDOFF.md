@@ -30,3 +30,4 @@ Updated: 2026-10-11, at commit cf4b22b, by main session (Dystopo coordinator, co
 ## Open findings
 
 - `docs/findings/2026-10-11-bash-heredoc-apostrophes.md`
+- `docs/findings/2026-10-11-reported-push-that-never-happened.md`
