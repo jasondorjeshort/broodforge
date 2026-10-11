@@ -52,6 +52,8 @@ process.stdin.on('end', () => {
     `5h ${pct(fiveH)}`,
     `7d ${pct(sevenD)}${flag}`,
   ];
-  if (typeof cost === 'number') parts.push(`$${cost.toFixed(2)}`);
+  // cost.total_cost_usd is Claude Code's API-list-price estimate for this session's tokens
+  // (subagents included). On a subscription it is informational only; the meters are the limit.
+  if (typeof cost === 'number') parts.push(`~$${cost.toFixed(2)} list`);
   process.stdout.write(parts.join(' | '));
 });
