@@ -1,7 +1,12 @@
 # 0002. Repository layout for agent-driven projects
 
 Date: 2026-10-11
-Status: draft
+Status: promoted to ADR 0002
+
+Revised 2026-10-11 after the critic review (`0002-critic-review.md`). The section bodies keep the
+original design for the record, with factual errors corrected in place and marked "[corrected]".
+The final design is in `../decisions/0002-repository-layout.md`; the changes and their reasons are
+in "Critic's objections and responses" at the end.
 
 ## Question
 
@@ -16,7 +21,7 @@ The design is built around how Claude Code discovers files, not around human fil
 |---|---|---|
 | `CLAUDE.md` (+ `@imports`) | every session, every subagent | paid on every turn; keep tiny |
 | `.claude/rules/*.md` with `paths:` | only when matching files are touched | paid only in scope |
-| `.claude/skills/<name>/SKILL.md` | on description match or `/<name>`; agents only via `skills:` preload | descriptions always indexed, body on demand |
+| `.claude/skills/<name>/SKILL.md` | on description match or `/<name>`; subagents on demand through the `Skill` tool when it is in `tools:`, or by `skills:` preload [corrected] | descriptions always indexed, body on demand |
 | `.claude/agents/*.md` | when that agent is launched | per launch |
 | Hook stdout (`SessionStart`) / block reason (`Stop`) | at the event | per event, main session only |
 | Everything under `docs/` | only when a brief or an index points at it | zero until read; needs indexes |
@@ -36,8 +41,8 @@ than hoped to be found.
 - Every directory and file added is something every future agent has to learn. Scale is one
   owner, one coordinator session at a time, a handful of in-flight items. Do not design for more.
 - Node is available (hooks are Node); no jq. Python available but not needed.
-- GPL-3.0-or-later with SPDX headers on source files (this includes the hook scripts; the two
-  existing `.js` files currently lack headers and should get them).
+- GPL-3.0-or-later with SPDX headers on source files, hook scripts included. [corrected: the two
+  existing `.js` files already carry the header on line 2.]
 
 ## 1. Directory layout
 
@@ -167,9 +172,10 @@ sit beside `SKILL.md` and are read only when the procedure says so.
 Rejected: `review` (already the architect's rules), `usage` (built in), `reference` (folded into
 `finding` as promotion), `test` (language-specific; the decanted project adds it).
 
-Preloading via `skills:` frontmatter. Subagents' `tools:` lists do not include `Skill`, so a
-subagent only sees skills that are preloaded (to verify: whether subagents can invoke skills on
-demand at all). Preload where the agent is the author of the artifact the skill produces:
+Preloading via `skills:` frontmatter. [corrected: a subagent with `Skill` in `tools:` loads any
+project skill on demand; our agents lacked it only because their `tools:` lists are explicit. The
+table below was the original plan and is not adopted; see objection 1.] Preload where the agent is
+the author of the artifact the skill produces:
 
 | Agent | `skills:` | Why |
 |---|---|---|
@@ -206,7 +212,7 @@ session), and carry the SPDX header. Added to `.claude/settings.json`:
 
 | Event | Matcher | Script | Purpose |
 |---|---|---|---|
-| `SessionStart` | all (`startup`, `resume`, `clear`, `compact`) | `session-start.js` | Inject handoff, git state, open-finding count; record baseline (section 2). |
+| `SessionStart` | all (`startup`, `resume`, `clear`, `compact`, `fork` [corrected]) | `session-start.js` | Inject handoff, git state, open-finding count; record baseline (section 2). |
 | `Stop` | none | `handoff-check.js` | Block once per session when work happened and the handoff is unchanged (section 2). |
 | `PreToolUse` | `Bash` | `git-guard.js` | Deny destructive git regardless of who runs it: `push --force`/`-f`/`--force-with-lease`, `reset --hard`, `clean -f`, `checkout -- .`/`restore .` on the whole tree, `branch -D`, `rebase` with `-i`. Regex over the full command, so argument order does not matter. Hooks apply to subagent tool calls too (to verify), which makes the runner's and pusher's prose rules enforceable. |
 | `PostToolUse` | `Write\|Edit` | `post-edit.js` | Language-neutral checks returned as `additionalContext`, never blocking: a `docs/**` file over 300 lines, `HANDOFF.md` over 60 lines, a new `findings/` file without frontmatter. Contains the formatter slot: a `formatters` table keyed by extension, empty in the base, with a comment telling the decanted project to add `['.rs', 'rustfmt --edition 2021']` or the like. |
@@ -222,15 +228,17 @@ Considered and rejected:
 - `UserPromptSubmit` to inject usage or reminders: the status line shows usage, and injecting on
   every prompt is the cost model this design avoids.
 - `PreToolUse` denying `Write|Edit` on `CLAUDE.md` and `.claude/settings.json` from subagents:
-  attractive, but the hook input may not identify the caller as a subagent (to verify). Noted
-  for later if it can.
+  attractive and feasible [corrected: hook input carries `agent_id` and `agent_type` inside a
+  subagent]. Deferred with a trigger in the ADR; `git-guard` uses `agent_type` for push and
+  commit caller rules instead.
 - Auto-format on `PostToolUse`: shipped only as the slot above; the base has no language.
 
 ## 6. Permissions allowlist
 
-Committed in `.claude/settings.json`. Only commands that cannot change state. Rule syntax is
-prefix-with-`*` as in the brief; the critic should confirm whether `Bash(git status *)` also
-matches bare `git status` (both forms are listed to be safe).
+Committed in `.claude/settings.json`. Only commands that cannot change state. [corrected: a
+trailing ` *` also matches the bare command, so `Bash(git status)` beside `Bash(git status *)` is
+redundant; `Bash(git branch)` is kept because `--list *` does not cover it. `git fetch` writes
+remote refs and is removed. The list below is the original; the final list is in the ADR.]
 
 ```json
 "permissions": {
@@ -250,9 +258,11 @@ matches bare `git status` (both forms are listed to be safe).
 
 Not pre-approved on purpose: `git add`, `git commit` (the runner is briefed per commit and a
 prompt is a useful checkpoint), `git push` (pusher only), anything with `rm`, `curl`, package
-managers. Destructive git is handled by the hook because deny rules match prefixes and
-`git push origin --force` would slip past `Bash(git push --force *)`. The decanted project
-extends the list using the built-in allowlist-mining skill after a few sessions.
+managers. Destructive git is handled by the hook rather than deny rules because [corrected] a
+deny rule matches the whole command text with wildcards but "doesn't match the same program by
+path or inside `sh -c`", and it cannot see which agent is calling. The decanted project extends
+the list by hand with `/permissions` or "Yes, and don't ask again" after a few sessions
+[corrected: there is no built-in allowlist-mining skill].
 
 ## 7. What the base does not contain
 
@@ -328,4 +338,61 @@ status; permission rule prefix semantics for `Bash(cmd *)` versus bare `cmd`.
 
 ## Critic's objections and responses
 
-(none yet)
+Numbering follows `0002-critic-review.md` Part 2. Resolutions are recorded in ADR 0002.
+
+1. Preloads are the wrong default. **Accepted, and taken further.** No `skills:` preloads at all;
+   every agent gets `Skill` in `tools:` and a one-line pointer naming the skills relevant to it.
+   The critic's suggestion to keep `debug-interface` preloaded for the coder is not taken: the
+   obligation is already stated in `coder.md`, the skill loads on demand when a feature brief
+   arrives, and a bug-fix launch should not pay for it.
+2. The Stop hook has three correctness holes. **Accepted.** The Stop hook and `.claude/state/` are
+   deferred. The three holes (baseline rewritten on `compact`, deleted handoff, `session_id` across
+   `/clear`) are recorded as preconditions in the ADR's deferred list and in `docs/backlog.md`.
+3. The `@import` is the better continuity mechanism. **Accepted.** `CLAUDE.md` imports
+   `docs/HANDOFF.md`; the first line marks it as coordinator state. The SessionStart hook is
+   deferred with the trigger "a session resumes without knowing where it is". The handoff cap is
+   tightened to 40 lines (coordinator decision), which bounds the per-launch cost.
+4. Usage gating defeats the handoff. **Accepted, third option refined.** The gate blocks only
+   `Agent|Workflow`, never `Bash`, so the main session makes wrap-up commits (`HANDOFF.md`, WIP)
+   itself at any usage level; the runner rule governs normal work below 50%. Stated in both the
+   Usage gating table and the Git section of `CLAUDE.md`, and in the `handoff` and `commit` skills.
+5. Node is a silent single point of failure. **Accepted in part.** The `decant` skill verifies
+   `node --version` and `gh --version` as step one and says what breaks without them; `README.md`
+   names both as prerequisites; `git-guard` gets `"onFailure": "block"` (hooks reference: requires
+   2.1.295 or later; installed 2.1.296), so a missing Node blocks `Bash` loudly rather than
+   disarming the guard. `post-edit` stays non-blocking. The SessionStart shell fallback is moot
+   because the hook is deferred.
+6. Four programs encode the same constants; the linter has no home. **Accepted.** `check-docs.js`
+   is dropped. Two numbers (300 for any `docs/**/*.md`, 40 for `HANDOFF.md`) live in
+   `.claude/rules/docs.md` and are enforced in one place, pusher check 7 (`wc -l`). `post-edit`
+   warns with the same numbers but enforces nothing. The critic's "post-edit as the single
+   enforcement point" is not taken because a warning is not enforcement. `limits.json` is the
+   recorded step if a third point ever appears.
+7. Allowlist details. **Accepted with one exception.** Bare `Bash(git status)` dropped; `git fetch`
+   dropped; `Read(*.pem)`/`Read(*.key)` simplified; deny reasoning reworded to the documented
+   `sh -c` and path bypass. Exception: `Bash(git branch)` stays, because `Bash(git branch --list *)`
+   does not match bare `git branch`, and `Bash(git branch *)` would admit `git branch -D`.
+   `git ls-files *`, `git branch --show-current`, and `gh --version` added (read-only, used by the
+   pusher check and the skills). Noted: `cat`/`head`/`tail` on a `docs/` file trigger the rule.
+8. Agent memory trigger already met. **Accepted.** The rejection rests on the unindexed second
+   location; the "committed and capped" conditional is dropped; the trigger is repeated rediscovery.
+9. Handoff template duplicates the hook. **Accepted.** "Recently done" removed; sections are Now,
+   Next, Waiting on user, Open findings.
+10. Backlog has a cap and no overflow rule. **Accepted.** Rule written into `backlog.md` and
+    `.claude/rules/docs.md`: oldest ideas deleted, stale deferred items become superseded findings.
+11. The `brief` skill duplicates the agent files. **Accepted.** One template plus six one-line notes;
+    the skill says agent rules live in the agent file and are not restated.
+12. Factual and wording fixes. **Accepted.** All corrected in place above and marked. The
+    "deny `CLAUDE.md` edits from subagents" hook is feasible but is a `Write|Edit` matcher, not a
+    `Bash` one, so it is a separate hook; deferred with a trigger rather than folded into git-guard.
+    What is folded into git-guard, because `agent_type` makes it free: deny `git push` from any
+    subagent other than `pusher` and `git commit` from any subagent other than `runner`.
+13. Issues and `push` residuals. **Accepted.** ADR states the file wins over Issues until superseded.
+
+Changes made on the architect's or coordinator's initiative, not raised by the critic: `CLAUDE.md`
+target is 130 lines, not 80 (the current rules do not fit in 80 without losing content); a ninth
+skill, `update-from-hatchery`, added at the user's request together with two paste-able prompts at
+the top of `README.md`; the hook specifications moved to `../decisions/0002-hook-specs.md` so the
+ADR stays under 150 lines; `docs/design/proposals/` is exempt from the 300-line pusher cap, since
+this very file (already 332 lines before revision, 400 after) is a closed record that nothing loads
+on demand, and trimming it would mean deleting the alternatives or the objections.

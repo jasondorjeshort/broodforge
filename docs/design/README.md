@@ -23,3 +23,8 @@ humans see and touch is settled with the user.
 Decisions so far:
 
 - [0001 Licensing](decisions/0001-licensing.md): GPL-3.0-or-later by default, LGPL for linkable components.
+- [0002 Repository layout](decisions/0002-repository-layout.md): where knowledge, state, procedures,
+  rules, and hooks live; skills, permissions, and continuity by `@docs/HANDOFF.md` import. Companion
+  [hook specifications](decisions/0002-hook-specs.md) for `git-guard.js` and `post-edit.js`.
+
+The rest of `docs/` (handoff, backlog, reference, findings) is mapped in [`../README.md`](../README.md).
