@@ -55,10 +55,10 @@ process.stdin.on('end', () => {
   const detail = `5h ${fmt(fiveH)}, 7d ${fmt(sevenD)}`;
 
   if (worst >= STOP) {
-    return deny(`Usage gate: ${detail}. At or above ${STOP}%: stop all work, commit WIP, write a handoff note, end the turn.`);
+    return deny(`Usage gate: ${detail}. At or above ${STOP}%: stop all work, run the handoff skill, commit WIP from the main session, end the turn.`);
   }
   if (worst >= HOLD) {
-    return deny(`Usage gate: ${detail}. At or above ${HOLD}%: do not start new subagents. Finish in-flight work in this session, then report to the user.`);
+    return deny(`Usage gate: ${detail}. At or above ${HOLD}%: do not start new subagents. Finish in-flight work in this session, run the handoff skill, commit from the main session, then report.`);
   }
   allow();
 });

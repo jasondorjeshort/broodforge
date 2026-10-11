@@ -89,6 +89,11 @@ Test table (run as `printf '%s' '<json>' | node .claude/hooks/git-guard.js; echo
 | `echo "git push --force"` | - | deny rule 1 (false positive accepted; the message says so) |
 | `not json` | - | deny, internal error |
 
+Debug interface: `node .claude/hooks/test-hooks.js` runs every row above, the post-edit and
+usage-gate cases, and extra edge cases, printing PASS/FAIL per case and a summary; exit 1 on any
+failure. `--only <id-prefix>`, `--verbose`, and `--input <file> <hook>` (reproduce one input from a
+file, because a command line containing a denied git command trips the guard itself).
+
 ## 2. `post-edit.js` (PostToolUse, matcher `Write|Edit`, no `onFailure`)
 
 Input: `tool_input.file_path`, `cwd`. Resolve the path relative to `cwd`; act only when it is inside
@@ -122,7 +127,8 @@ Output when there is at least one message, exit 0:
 
 No messages: exit 0, no stdout. Test with a temporary 301-line file under `docs/reference/`, a
 41-line `docs/HANDOFF.md` copy, a findings file without frontmatter, and a clean file; delete the
-temporaries afterwards and show the four outputs in the report.
+temporaries afterwards and show the four outputs in the report. `test-hooks.js` (cases P01-P04)
+does this in a scratch `docs/` tree under the OS temp dir and prints each output.
 
 ## 3. `usage-gate.js` (exists; text change only)
 
