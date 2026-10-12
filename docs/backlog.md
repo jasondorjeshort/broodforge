@@ -48,5 +48,9 @@ when near it, delete the oldest ideas (git has them) and turn stale deferred ite
   despite the usage-gate text and the `commit` skill.
 - `memory: project` for `coder`. Why not now: a second, unindexed knowledge location. Trigger: the
   same environment fact appears in two findings, or coder briefs keep restating it.
+- Fable-specific usage gate (same 50/80 rule, applied to `architect` and `critic` launches). Why not
+  now: Claude Code 2.1.296 passes the status line only `rate_limits.five_hour` and `.seven_day`, with
+  no per-model meter (checked docs and live payload, 2026-10-12); until then run `/usage` by hand
+  before a Fable launch. Trigger: the statusline docs or payload gain a per-model field.
 - GitHub Issues for intake. Why not now: one owner; files are discoverable and version with the
   work. Trigger: a second regular contributor, parallel coordinator worktrees, or public users.
