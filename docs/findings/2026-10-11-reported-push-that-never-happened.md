@@ -1,7 +1,8 @@
 ---
 date: 2026-10-11
-status: open
+status: resolved
 area: process / verification
+promoted_to: docs/reference/claude-code-on-windows.md
 ---
 
 # A chained commit-and-push command reported a commit and a push that never existed
@@ -28,17 +29,6 @@ as an object. The owner's reaction: this is exactly what the process is meant to
 
 ## Result
 
-Cause not established. The git output in the tool result was real git output, so the commit was
-made against some repository state that this clone never had; a working-directory drift between
-tool calls (the shell's cwd reset between calls several times that day) is the likeliest
-mechanism, but it was not reproduced. What is established: the coordinator relayed a command's
-own success echo as a fact, and only an independent read of the remote exposed it. Rule adopted in
-both repositories: a push, merge, tag or release is reported only after a fetch (or an API read)
-shows the remote at the expected SHA, and the report quotes both SHAs. The pusher agent now does
-this as its last check; Dystopo has `tools/push-verified.sh`.
+Cause established an hour later by the Dystopo CI list: commit `287ea9d` with the Hatchery message exists in the Dystopo repository, on `main`, pushed at 16:52, and contains the three Dystopo files that had just been edited (`docs/HANDOFF.md`, `docs/PLANNING.md`, `docs/TASKS.md`). The `cd` into the Hatchery clone at the start of the Bash call did not take effect: the shell stayed in the Dystopo checkout (the harness had been resetting the working directory between calls all day), so `git add -A docs`, `git commit` and `git push` all ran against Dystopo. Every word of the tool output was true; it was true about the other repository. The coordinator relayed it without an independent read of the remote it meant.
 
-## Next
-
-Reproduce the drift if it recurs: log `pwd` and `git rev-parse --show-toplevel` at the start of
-any commit command run by the main session; if the toplevel is not the intended repository, the
-mechanism is found. Then set `status: resolved` and promote the rule to `docs/reference/`.
+Rules adopted in both repositories: (1) a push, merge, tag or release is reported only after a fetch or an API read shows the remote at the expected SHA, with both SHAs quoted (the pusher agent's last check; Dystopo's `tools/push-verified.sh`); (2) a command that must run in a particular repository names it with `git -C <path>` instead of relying on `cd`, and a commit or push command prints `git rev-parse --show-toplevel` first so the report shows where it ran; (3) never truncate a status check (`git status -sb | head -1` hid the real state here).

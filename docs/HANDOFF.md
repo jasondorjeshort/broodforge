@@ -31,4 +31,3 @@ Updated: 2026-10-11, at commit 103ab42, by main session (Hatchery coordinator)
 ## Open findings
 
 - `docs/findings/2026-10-11-bash-heredoc-apostrophes.md`
-- `docs/findings/2026-10-11-reported-push-that-never-happened.md`
