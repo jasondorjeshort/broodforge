@@ -152,7 +152,7 @@ succeeds and one that fails. All run in a scratch `docs/` tree under the OS temp
 
 ## 3. `usage-gate.js` (exists; text change only)
 
-HOLD reason becomes: `Usage gate: <detail>. At or above 50%: do not start new subagents. Finish
-in-flight work in this session, run the handoff skill, commit from the main session, then report.`
+HOLD reason becomes: `Usage gate: <detail>. At or above 50%: do not start new subagents. Let
+in-flight agents finish, run the handoff skill, commit from the main session, then report.`
 STOP reason becomes: `Usage gate: <detail>. At or above 80%: stop all work, run the handoff skill,
 commit WIP from the main session, end the turn.` Thresholds, inputs, and allow paths are unchanged.

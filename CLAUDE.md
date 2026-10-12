@@ -36,6 +36,15 @@ It does not write or debug application code itself. All coding and all debugging
 defined in `.claude/agents/`. Brief each one fully (`brief` skill): goal, files to read, what is
 already ruled out, scope boundaries, how to verify.
 
+The coordinator's own work is reading, deciding, briefing, reviewing reports, editing the
+coordination files (`docs/HANDOFF.md`, `docs/backlog.md`, a task board), and the wrap-up commits
+below. Everything that executes the project is delegated, even when it is one command: installing
+toolchains and SDKs, pulling, building, running tests or lint, starting servers or devices, and any
+fix. Route it by the table under Model routing (`runner` for mechanical runs, `tester` or `coder`
+for fixes). When the gate blocks launches, the coordinator writes the handoff and stops; it does
+not do the delegated work itself. (Dystopo, 2026-10-12: "agents do all coding" was read as
+allowing the coordinator to install an SDK, run the test suite and build packs by hand.)
+
 ## Debug interface is part of every feature
 
 Agents cannot click a GUI. Every feature ships with an agent-usable way to exercise it: a CLI

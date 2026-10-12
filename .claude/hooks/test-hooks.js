@@ -257,7 +257,7 @@ for (const [id, label, filePath, expect, rawOverride, fmt] of P) {
 // ---------- usage-gate (section 3 text) ----------
 const home = path.join(scratch, 'home');
 fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-const HOLD_MSG = 'Usage gate: 5h 55%, 7d 10%. At or above 50%: do not start new subagents. Finish in-flight work in this session, run the handoff skill, commit from the main session, then report. On the user\'s explicit instruction only, write ~/.claude/usage-gate-override.json {"until": <epoch>, "reason": "..."} to lift HOLD.';
+const HOLD_MSG = 'Usage gate: 5h 55%, 7d 10%. At or above 50%: do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report. On the user\'s explicit instruction only, write ~/.claude/usage-gate-override.json {"until": <epoch>, "reason": "..."} to lift HOLD.';
 const STOP_MSG = 'Usage gate: 5h 85%, 7d 10%. At or above 80%: stop all work, run the handoff skill, commit WIP from the main session, end the turn.';
 const nowSec = Math.floor(Date.now() / 1000);
 // [id, pct, expected deny reason or null for allow, override file contents or undefined]

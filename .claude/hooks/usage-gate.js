@@ -75,7 +75,7 @@ process.stdin.on('end', () => {
       process.stderr.write(`usage-gate: HOLD (${detail}) lifted by override until ${new Date(o.until * 1000).toLocaleString()}: ${o.reason || 'no reason given'}\n`);
       return allow();
     }
-    return deny(`Usage gate: ${detail}. At or above ${HOLD}%: do not start new subagents. Finish in-flight work in this session, run the handoff skill, commit from the main session, then report. On the user's explicit instruction only, write ~/.claude/usage-gate-override.json {"until": <epoch>, "reason": "..."} to lift HOLD.`);
+    return deny(`Usage gate: ${detail}. At or above ${HOLD}%: do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report. On the user's explicit instruction only, write ~/.claude/usage-gate-override.json {"until": <epoch>, "reason": "..."} to lift HOLD.`);
   }
   allow();
 });
