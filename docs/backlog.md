@@ -33,6 +33,8 @@ when near it, delete the oldest ideas (git has them) and turn stale deferred ite
 - `git-guard` rules 3 and 4 (only the pusher pushes, only the runner commits) fit the single-branch
   phase; in the wave model every implementer pushes its own `task/*` branch and opens a PR. Key the
   rules off a phase setting or the branch name when 0003 is promoted.
+- ADR numbers collide between Hatchery and its projects (both can write `0003` next); candidate fix:
+  Hatchery reserves `0001`-`0019`, projects start at `0020` (`adr` and `decant` skills). ADR 0004 defers it.
 - The main session may push on the owner's instruction (CLAUDE.md says so); say it in the `commit`
   skill's Pushing section too, so a coordinator does not launch a pusher for a push the owner asked for.
 

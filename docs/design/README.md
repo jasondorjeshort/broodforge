@@ -26,5 +26,8 @@ Decisions so far:
 - [0002 Repository layout](decisions/0002-repository-layout.md): where knowledge, state, procedures,
   rules, and hooks live; skills, permissions, and continuity by `@docs/HANDOFF.md` import. Companion
   [hook specifications](decisions/0002-hook-specs.md) for `git-guard.js` and `post-edit.js`.
+- [0004 Adopting the Hatchery practice](decisions/0004-adopt-hatchery.md): an existing project takes
+  the practice as files from `hatchery/main`, records the base commit in its own ADR, and updates by
+  three-way patch; merging stays the path for decanted projects. (0003 is reserved for proposal 0003.)
 
 The rest of `docs/` (handoff, backlog, reference, findings) is mapped in [`../README.md`](../README.md).

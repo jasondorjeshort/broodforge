@@ -71,6 +71,7 @@ project: base files win in `.claude/`, project files win in `README.md`, project
 `CLAUDE.md`, `HANDOFF.md`, `backlog.md`, `docs/design/`, `docs/findings/`, `docs/reference/`),
 `commit` (brief the runner; brief a fresh pusher with the user's request quoted), `brief` (one template
 for all agents). `README.md` opens with the two prompts that invoke `decant` and `update-from-hatchery`.
+Amended by ADR 0004: a tenth skill, `adopt-hatchery`, and a patch mode in `update-from-hatchery` for adopted projects.
 No `skills:` preloads: every agent has `Skill` in `tools:` and loads on demand (S:
 without preloads "the subagent can still discover and invoke project ... skills through the Skill tool").
 Each agent file names the skills relevant to it in one line. Rejected: `push` (lives in `pusher.md`),
