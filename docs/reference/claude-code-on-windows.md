@@ -32,6 +32,12 @@ source: observed (Dystopo waves 6 to 12 on Windows 10, Claude Code 2.1.x, Git Ba
   native command wraps stderr in error records.
 - `gh ... --jq` with a backtick inside the expression breaks in PowerShell; run `gh` from bash.
 
+## Working directory and git
+
+- A `cd` to another repository inside a Bash call may not take effect (the harness resets the working directory between calls, and did so mid-session). Name the repository: `git -C <path> ...`, and start any commit or push command with `git rev-parse --show-toplevel` so the report shows where it ran. Finding `../findings/2026-10-11-reported-push-that-never-happened.md`.
+- Prove a push: after `git push`, `git fetch` and compare `git rev-parse HEAD` with the remote ref; report both SHAs. A command's own success output is not evidence of what reached the remote.
+- Never truncate a status check to its first line; `git status --short` in full.
+
 ## Shared state
 
 - The session scratchpad is shared by every agent of the session: unique file names per agent.
