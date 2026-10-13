@@ -22,7 +22,9 @@ Everything below runs in a private clone of the project, on its default branch, 
    `git fetch hatchery`; `BASE=$(git rev-parse hatchery/main)`. Read this skill and ADR 0004 from
    `hatchery/main` if you have not already.
 3. Verbatim files (base wins): `git checkout hatchery/main -- .claude/agents .claude/skills
-   .claude/hooks .claude/statusline.js .claude/rules/README.md .claude/rules/docs.md`. Then
+   .claude/hooks .claude/statusline.js .claude/package.json .claude/rules/README.md
+   .claude/rules/docs.md` (`.claude/package.json` keeps the scripts CommonJS when the project's
+   root `package.json` says `"type": "module"`; without it every hook crashes). Then
    `.claude/hooks/policy.json` becomes the project's: who commits and pushes, deletable branches,
    usage thresholds (ADR 0006; `.claude/hooks/policy.examples/` has two worked ones). Ask the user
    where the project's existing rules do not say; `node .claude/hooks/policy.js` must print it.
