@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: GPL-3.0-or-later
 // PostToolUse hook for the Write and Edit tools. Non-blocking: it never exits non-zero
-// and never denies. It returns hookSpecificOutput.additionalContext when an edited
-// docs/**/*.md file breaks a size cap, lacks required frontmatter, is missing from its
+// and never denies. It returns hookSpecificOutput.additionalContext when CLAUDE.md passes
+// its 150-line cap or an edited docs/**/*.md file breaks a size cap, lacks required frontmatter, is missing from its
 // directory index, or names a repository path that does not exist, and it runs the
 // formatter for the file's extension if one is set.
 // Spec: docs/design/decisions/0002-hook-specs.md section 2; policy: ADR 0006.
@@ -29,6 +29,7 @@ if (process.env.POST_EDIT_FORMATTERS_JSON) {
 
 const DOCS_CAP = 300;
 const HANDOFF_CAP = 40;
+const CLAUDE_MD_CAP = 150; // .claude/rules/docs.md; loaded every turn, so the tightest cap
 const INDEX_EXEMPT = new Set(['README.md', 'HANDOFF.md']);
 
 const lineCount = (text) => (text.match(/\n/g) || []).length; // same as wc -l
@@ -137,6 +138,10 @@ function main(raw) {
 
   const msgs = [];
   if (inside && rel.startsWith('docs/') && rel.endsWith('.md')) msgs.push(...checkDocs(root, rel, abs));
+  if (inside && rel === 'CLAUDE.md') {
+    const n = lineCount(fs.readFileSync(abs, 'utf8'));
+    if (n > CLAUDE_MD_CAP) msgs.push(`post-edit: CLAUDE.md is ${n} lines; cap is ${CLAUDE_MD_CAP} (.claude/rules/docs.md). Move facts to docs/reference/ and path-scoped rules to .claude/rules/.`);
+  }
   const fmt = FORMATTERS[path.extname(abs).toLowerCase()];
   if (Array.isArray(fmt) && fmt.length > 0) msgs.push(...runFormatter(fmt, abs, rel));
 

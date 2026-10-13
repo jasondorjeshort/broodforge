@@ -374,13 +374,16 @@ write('docs/design/proposals/README.md', '# Proposals\n\n`0009-long.md`\n');
 write('docs/design/proposals/0009-long.md', lines(320));
 write('src/app.txt', 'not a doc\n');
 write('README.md', lines(400));
+write('CLAUDE.md', lines(151));
+write('src/CLAUDE.md', lines(151));
+write('root150/CLAUDE.md', lines(150));
 
 const absOf = (rel) => path.join(scratch, ...rel.split('/'));
 const fmtOk = { '.txt': [NODE, '-e', 'process.exit(0)'] };
 const fmtBad = { '.txt': [NODE, '-e', 'console.error("bad formatter output");process.exit(3)'] };
 
 // [id, label, file_path (absolute unless noted), expected additionalContext or null, raw stdin override, formatter env,
-//  policy file (the shipped one when omitted)]
+//  policy file (the shipped one when omitted), project root (the scratch tree when omitted)]
 const P = [
   // The four cases the spec asks for.
   ['P01', '301-line docs/reference file', absOf('docs/reference/big.md'),
@@ -404,6 +407,10 @@ const P = [
   ['PX08', 'non-doc file, empty formatter table', absOf('src/app.txt'), null],
   ['PX09', 'malformed stdin', '(n/a)', null, 'not json'],
   ['PX10', 'formatter that succeeds', absOf('src/app.txt'), null, null, fmtOk],
+  ['PX12', '151-line CLAUDE.md', absOf('CLAUDE.md'),
+    'post-edit: CLAUDE.md is 151 lines; cap is 150 (.claude/rules/docs.md). Move facts to docs/reference/ and path-scoped rules to .claude/rules/.'],
+  ['PX13', '150-line CLAUDE.md at another root', absOf('root150/CLAUDE.md'), null, null, null, null, absOf('root150')],
+  ['PX14', '151-line CLAUDE.md below the root', absOf('src/CLAUDE.md'), null],
   ['PX11', 'formatter that fails', absOf('src/app.txt'),
     `post-edit: formatter ${NODE} failed on src/app.txt: bad formatter output`, null, fmtBad],
   // Path anchors: backtick-quoted repo paths must exist.
@@ -435,10 +442,10 @@ write('docs/notes/placeholders.md', '# Placeholders\n\n`docs/design/decisions/NN
   '`origin/main`, `../decisions/x.md`, `task/T1`, `docs/reference/clean.md#section`, `docs/reference/clean.md:3`.\n');
 write('docs/PLANNING.md', lines(320));
 
-for (const [id, label, filePath, expect, rawOverride, fmt, policy] of P) {
+for (const [id, label, filePath, expect, rawOverride, fmt, policy, root] of P) {
   if (!selected(id)) continue;
   const stdin = rawOverride != null ? rawOverride : JSON.stringify({
-    hook_event_name: 'PostToolUse', tool_name: 'Write', cwd: scratch, tool_input: { file_path: filePath },
+    hook_event_name: 'PostToolUse', tool_name: 'Write', cwd: root || scratch, tool_input: { file_path: filePath },
   });
   const env = envWith({ HOOK_POLICY_FILE: policy || POLICIES.hatchery, POST_EDIT_FORMATTERS_JSON: fmt ? JSON.stringify(fmt) : undefined });
   const r = run('post-edit', stdin, env);
