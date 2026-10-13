@@ -74,8 +74,8 @@ override: ADR 0006 and `docs/design/decisions/0002-hook-specs.md`.
 | Usage (the worse meter, each judged against its own thresholds) | Behavior |
 |---|---|
 | below HOLD (base: 50%) | Normal operation. |
-| HOLD to STOP (base: 50% to 80%) | No new work, subagents or tasks. Let in-flight agents finish, run the `handoff` skill, commit from the main session, then stop and report. |
-| STOP and above (base: 80%) | Stop. Run the `handoff` skill, commit in-progress work from the main session with a clear WIP message, end the turn. |
+| HOLD to STOP (base: 50% to 100%) | No new work, subagents or tasks, unless the owner's override file lifts HOLD (ADR 0006). Otherwise let in-flight agents finish, run the `handoff` skill, commit from the main session, then stop and report. |
+| STOP and above (base: 100%, a ceiling only a project that forbids overage lowers) | Stop. Run the `handoff` skill, commit in-progress work from the main session with a clear WIP message, end the turn. |
 
 Meters show only on Pro and Max plans, after the first response; on `n/a`, run `/usage` first.
 
