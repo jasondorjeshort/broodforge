@@ -16,3 +16,4 @@ Open items are marked in the Status column; `HANDOFF.md` links the open ones.
 | `2026-10-11-windows-worktrees-long-paths.md` | resolved | tooling / git worktrees on Windows | `git worktree remove` fails on long paths; an empty robocopy mirror clears the tree. |
 | `2026-10-11-reported-push-that-never-happened.md` | resolved | process / verification | A `cd` to another clone inside a Bash call did not take effect; the commit and push landed in the other repository and were relayed as done. Rules: prove a push by fetch; `git -C`, not `cd`. |
 | `2026-10-11-shared-scratchpad-and-argument-splitting.md` | resolved | tooling / parallel agents on Windows | Parallel agents share one scratchpad; PowerShell 5.1 splits dotted arguments. |
+| `2026-10-12-windows-long-path-delete.md` | resolved | tooling / deleting worktrees on Windows | `Remove-Item` on Gradle build trees needs the `\\?\` prefix; plain paths fail past 260 characters. |
