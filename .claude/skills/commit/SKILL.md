@@ -29,7 +29,10 @@ STOP are made by the main session, because the usage gate blocks subagent launch
 
    The model is the one that did the work (Opus 5.5 for coder output, Sonnet 5.5 for tester,
    Fable 5.1 for architect or critic, Haiku 5.5 for mechanical runner work). Mixed authorship: one
-   line per model.
+   line per model. The runner has no Write tool and heredocs break on apostrophes, so a message
+   with an apostrophe, a backtick or more than one paragraph goes to a file: the coordinator writes
+   it to its scratchpad with the Write tool and the brief says `git commit -F <that path>` instead
+   of `Message:`.
 4. Launch the `runner` with that brief. Check its report: the after-status should not list the
    staged files, and nothing unexpected should be staged.
 5. Amend only when necessary (fix a message, fold a forgotten file into the commit it belongs to)
