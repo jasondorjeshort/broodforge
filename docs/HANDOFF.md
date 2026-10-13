@@ -1,34 +1,39 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-13, after the three-repo merge session, by main session (Hatchery coordinator)
+Updated: 2026-10-13, usage-gated session after the three-repo merge, by main session (Hatchery coordinator)
 
 ## Now
 
-- The base caught up with its two downstream projects in one unpushed run on `main`: Dystopo's
-  `git-guard` plus the bypasses an independent review reproduced, hook policy moved to
-  `.claude/hooks/policy.json` (ADR 0006), Dystopia's queues and triage blocks in `docs/ideas/`
-  and `docs/operator/`, a `reviewer` agent and the one-review rule (ADR 0007). `backlog.md` is
-  gone; its items are the first idea files.
-- Dystopia adopted the hooks the same day (its `docs/reference/hatchery-adoption.txt` records
-  what it takes and keeps); Dystopo pinned its `Hatchery base:` line but has not pulled yet.
+- `main` is pushed and level with `origin/main` (the merge session's run: `git-guard` with policy
+  in `.claude/hooks/policy.json`, ADR 0006; queues and triage in `docs/ideas/` and `docs/operator/`;
+  `reviewer` agent and ADR 0007; `backlog.md` retired into ideas).
+- Owner answered the push question: the main session pushes on an explicit ask, as `CLAUDE.md`
+  and `policy.json` already say; the idea is deleted. The owner's note that a Haiku pusher may be
+  cheaper is on `docs/ideas/2026-10-13-haiku-runner-escalates-to-sonnet.md`.
+- Weekly meter was at 93% (deny line 80, no override above it), so no agent ran; it resets
+  2026-10-16 00:00 EDT.
 
 ## Next
 
-1. Push `main` (user's call); then Dystopo runs `update-from-hatchery` in patch mode from
-   `0ce6670` and resolves `policy.json` in its own favour.
-2. Triage `docs/ideas/` (`triage` skill): every file there is untriaged except the `Waits:` ones;
-   two carry a `Question:` for the owner.
-3. Critic review of the hook rewrite and ADR 0006 as a whole; the reviewer's remaining advisories
+1. Dystopo runs `update-from-hatchery` in patch mode from `0ce6670` and resolves `policy.json` in
+   its own favour (in the Dystopo repo).
+2. Triage `docs/ideas/` (`triage` skill): fourteen files have no block; one `Question:` is open
+   (verify agent beside the reviewer, decided by proposal 0003).
+3. Trim `CLAUDE.md` (149 lines, cap 150): `architect`, one commit; move hook mechanics (git-guard
+   rule list, usage-cache details) to `docs/reference/` with pointers, point Major decisions at the
+   `proposal` skill for the steps, collapse the Delegation example list to one sentence. Owner has
+   seen the assessment and not yet said go.
+4. Critic review of the hook rewrite and ADR 0006 as a whole; the reviewer's remaining advisories
    are the two stale paths in `docs/reference/claude-code-on-windows.md`.
-4. Proposal 0003 (wave workflow) still decides the `wave` skill and a `verify` agent beside the
-   reviewer; its critic brief is `.claude/skills/proposal/brief-critic.md`.
-5. ReGenesis adoption, as before, once `main` is pushed.
+5. Proposal 0003 (wave workflow) critic pass (`.claude/skills/proposal/brief-critic.md`); decides
+   the `wave` skill and the verify-agent question.
+6. ReGenesis adoption.
 
 ## Waiting on user
 
-- The push of all three repositories at the end of the session.
-- `Answer:` lines on the two `Question:` ideas (main-session pushes; verify agent beside reviewer).
+- Go-ahead on the `CLAUDE.md` trim (item 3), and which sections stay verbatim, if any.
+- The `Answer:` on the verify-agent idea, or leave it to proposal 0003.
 
 ## Open findings
 
