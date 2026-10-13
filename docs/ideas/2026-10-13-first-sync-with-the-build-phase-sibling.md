@@ -16,7 +16,7 @@ HOLD hardcoded at 75 and the usage read from a different file under `~/.claude/`
 passes 113 cases. Its `adr`, `brief`, `finding` and `proposal` skills were edited on 2026-10-12,
 after the base's copies; `wave`, `release` and `sweep` exist only there.
 
-The patch from `0ce6670` to the base's head on `.claude` and `CLAUDE.md` is 22 files.
+The patch is `git diff 0ce6670 hatchery/main -- .claude CLAUDE.md`; it touches every hook.
 
 Plan: a session in that repository, with agents (after the weekly reset or with the deny line
 raised there). (1) Copy `update-from-hatchery` and add `Hatchery base: 0ce6670` to its ADR 0020 so

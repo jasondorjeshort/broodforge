@@ -524,7 +524,7 @@ const P = [
   ['PC04', 'malformed policy: base defaults', absOf('docs/reference/big.md'),
     'post-edit: docs/reference/big.md is 301 lines; cap is 300 (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.',
     null, null, scratchPolicy('pe-bad', '{ nope')],
-  ['PC05', 'task-branches example exempts docs/TASKS.md', absOf('docs/TASKS.md'), null, null, null, POLICIES.taskBranches],
+  ['PC05', 'task-branches example exempts docs/PLANNING.md', absOf('docs/PLANNING.md'), null, null, null, POLICIES.taskBranches],
   ['PC06', 'docs/PLANNING.md under the Hatchery policy', absOf('docs/PLANNING.md'),
     'post-edit: docs/PLANNING.md is 320 lines; cap is 300 (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.'],
   // Closed records are exempt from the path check by default; list items scope [no-check:].

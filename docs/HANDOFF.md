@@ -21,10 +21,11 @@ Updated: 2026-10-13, usage-gated session after the three-repo merge, by main ses
 
 1. Sync with the build-phase sibling, a session of its own in that repository; what it needs and
    why the skill cannot run there as is: `docs/ideas/2026-10-13-first-sync-with-the-build-phase-sibling.md`.
-2. Triage `docs/ideas/` (`triage` skill): fourteen files have no block; one `Question:` is open
+2. Triage `docs/ideas/` (`triage` skill): most files have no block; one `Question:` is open
    (verify agent beside the reviewer, decided by proposal 0003).
-3. Critic review of the hook rewrite and ADR 0006 as a whole, and of this session's unreviewed
-   main-session commits (the trim and the scrub), per the one-review rule.
+3. Critic review of the hook rewrite and ADR 0006 as a whole. This session's commits had their
+   `reviewer` pass (gate lifted by a temporary `policy.json` edit on the owner's word, reverted);
+   its findings are fixed in the follow-up commit.
 4. Proposal 0003 (wave workflow) critic pass (`.claude/skills/proposal/brief-critic.md`); decides
    the `wave` skill and the verify-agent question.
 5. Adoption of the owner's other existing project, after the above.
@@ -32,7 +33,7 @@ Updated: 2026-10-13, usage-gated session after the three-repo merge, by main ses
 ## Waiting on user
 
 - The `Answer:` on the verify-agent idea, or leave it to proposal 0003.
-- The push, when wanted.
+- The push of the review follow-up, when wanted.
 
 ## Open findings
 

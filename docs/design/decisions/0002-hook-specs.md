@@ -206,8 +206,8 @@ nothing is written, so a refresh without `rate_limits` never replaces numbers wi
 goes to a temporary file and is renamed; a failed rename removes the temporary file.
 `settings.json` sets `"refreshInterval": 60`, so the cache stays fresh while the user is idle and
 agents run. The line shows model, context, both windows
-with their reset times, and ` HOLD` or ` STOP` at the policy's `usage.hold` and `usage.deny`; a
-cached window past its `resets_at` shows `n/a`.
+with their reset times, and ` HOLD` or ` STOP` by the same per-meter judgement as the gate (the
+helper in `policy.js`); a cached window past its `resets_at` shows `n/a`.
 
 Gate. Each window is judged against its own thresholds (`usage.fiveHour`, `usage.sevenDay`, else the shared `usage.hold` and `usage.deny`) and the worse verdict wins; a window past its `resets_at` has reset and does not
 count. No file, no `updatedAt`, or data older than `usage.staleSeconds` is stale: with `whenStale`
@@ -220,7 +220,8 @@ At or above `usage.deny`: `Usage gate: 5h X%, 7d Y%. <meter> at or above <deny>%
 user's decision (docs/design/decisions/0006-hook-policy-file.md).`, unless the override file lifts
 it (ADR 0006). A crash exits 1, which does not block: the gate fails open.
 
-Harness cases U01 to U07 (thresholds and the override file), UX01 to UX12 (staleness both ways, a
-reset window, the example policies, a malformed policy, a pre-merge cache file), and S01 to S09 (the
+Harness cases U01 to U07 (thresholds and the override file), UX01 to UX17 (staleness both ways, a
+reset window, the example policies, per-meter thresholds, a malformed policy, a pre-merge cache
+file), and S01 to S09 (the
 status line's merge, the untouched file without `rate_limits`, malformed stdin, policy flags, a
 failed rename).

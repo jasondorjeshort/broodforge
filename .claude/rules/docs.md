@@ -61,7 +61,8 @@ These load automatically when a file under `docs/` or `CLAUDE.md` is read or edi
   reference, the handoff) state the practice, not which project it came from: "a downstream
   build-phase project", never its name. The base is copied into projects that have no reason to
   read about their siblings. Provenance belongs in closed records (proposals, decisions, findings)
-  and commit messages.
+  and commit messages. One exception: the handoff and an idea may give a sibling checkout's path
+  (`../<dir>`) when the next session has to find it; decant resets both.
 - The code wins. A doc explains intent; it does not define behaviour. Where a doc contradicts the
   code, the doc is stale: fix it in the same change that found the conflict, and bump `verified:`.
 - A change that alters behaviour, an invariant or an entry point a doc describes updates that doc

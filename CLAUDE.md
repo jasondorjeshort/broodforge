@@ -35,10 +35,10 @@ Read a directory's `README.md` before its files. Reasoning: ADRs 0002 and 0007.
 
 The main session is a coordinator. Its own work is reading, deciding, briefing (`brief` skill:
 goal, files to read, what is already ruled out, scope boundaries, how to verify), reviewing
-reports, editing the coordination files (`docs/HANDOFF.md`, the blocks in `docs/ideas/`, this
-file), and the wrap-up commits below. Everything that executes the project goes to the subagents
-in `.claude/agents/`, even when it is one command: installs, pulls, builds, test runs, servers,
-and every fix. When the gate blocks launches, the coordinator writes the handoff and stops; it
+reports, editing the coordination files (`docs/HANDOFF.md`, the blocks in `docs/ideas/`, a task
+board, this file), and the wrap-up commits below. Everything that executes the project goes to the
+subagents in `.claude/agents/`, even when it is one command: installs, pulls, builds, test runs,
+servers, devices, and every fix. When the gate blocks launches, the coordinator writes the handoff and stops; it
 does not do the delegated work itself.
 
 ## Debug interface is part of every feature
@@ -58,8 +58,8 @@ architect answers each objection in writing and records an ADR in `docs/design/d
 only then does implementation start (`proposal` and `adr` skills). Unresolved disagreement goes
 to the user with both positions stated.
 
-Technical decisions do not need the user's sign-off; the coordinator makes the call after the
-critic and reports it. Decisions about what humans see and touch (the front end, flows, wording,
+Technical decisions do not need the user's sign-off; the coordinator makes the call once the
+objections are answered and the ADR is recorded, and reports it. Decisions about what humans see and touch (the front end, flows, wording,
 visuals) do need the user, because their feedback is the ground truth there. Flag those
 explicitly and do not guess.
 
@@ -71,10 +71,10 @@ own there, never in the JS); the `usage-gate` hook refuses new subagent launches
 gate blocks launches only, never Bash. How the meters reach the hook, staleness, and the owner's
 override: ADR 0006 and `docs/design/decisions/0002-hook-specs.md`.
 
-| Usage (max of session, weekly) | Behavior |
+| Usage (the worse meter, each judged against its own thresholds) | Behavior |
 |---|---|
 | below HOLD (base: 50%) | Normal operation. |
-| HOLD to STOP (base: 50% to 80%) | No new work or subagents. Let in-flight agents finish, run the `handoff` skill, commit from the main session, then stop and report. |
+| HOLD to STOP (base: 50% to 80%) | No new work, subagents or tasks. Let in-flight agents finish, run the `handoff` skill, commit from the main session, then stop and report. |
 | STOP and above (base: 80%) | Stop. Run the `handoff` skill, commit in-progress work from the main session with a clear WIP message, end the turn. |
 
 Meters show only on Pro and Max plans, after the first response; on `n/a`, run `/usage` first.

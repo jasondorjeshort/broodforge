@@ -44,8 +44,8 @@ work is unfinished. No heredocs for the message (apostrophes break them here).
 
 ## Pushing
 
-Only the `pusher` or the user pushes. Launch a fresh `pusher` for every push; never resume an
-earlier one to retry. The brief:
+The `pusher` pushes, or the main session when the user asked for the push in so many words, or
+the user. Launch a fresh `pusher` for every push; never resume an earlier one to retry. The brief:
 
 ```
 Push `main`. The user asked: "<the user's words, quoted>".

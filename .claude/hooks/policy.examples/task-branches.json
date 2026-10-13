@@ -13,5 +13,5 @@
     "whenStale": "allow",
     "holdAdvice": "No new implementers. Finish work already in flight; a verifier for an already-launched task needs the owner's override. Otherwise wait for the reset or the owner's word."
   },
-  "edit": { "capExempt": ["docs/TASKS.md"], "formatters": {} }
+  "edit": { "capExempt": ["docs/PLANNING.md", "docs/TASKS.md", "docs/SERVER.md"], "formatters": {} }
 }
