@@ -34,9 +34,10 @@ const VALUE_OPTS = {
   commit: ['mFCct', ['--message', '--file', '--author', '--date', '--template', '--reuse-message',
     '--reedit-message', '--fixup', '--squash', '--cleanup', '--trailer', '--pathspec-from-file']],
   push: ['o', ['--push-option', '--repo', '--receive-pack', '--exec']],
+  'send-pack': ['', ['--receive-pack', '--exec']],
   branch: ['u', ['--set-upstream-to', '--contains', '--no-contains', '--points-at', '--format', '--sort']],
   checkout: ['bB', ['--orphan']],
-  switch: ['cC', ['--orphan']],
+  switch: ['cC', ['--orphan', '--create', '--force-create']],
   restore: ['s', ['--source']],
   clean: ['e', ['--exclude']],
   stash: ['m', ['--message']],
@@ -45,11 +46,40 @@ const VALUE_OPTS = {
   worktree: ['bB', ['--reason']],
   config: ['f', ['--file', '--blob', '--type', '--default', '--comment']],
 };
-const WHOLE_TREE = new Set(['.', './', '*', ':/']);
+// Per subcommand, the long flags the rules look for. git accepts any unambiguous prefix of a long
+// option (--har for --hard), so a prefix of four or more characters reads as every option it
+// starts; an ambiguous one is an error in git, so over-matching costs nothing.
+const GUARDED_LONG = {
+  push: ['--force', '--force-with-lease', '--force-if-includes', '--delete', '--mirror', '--prune',
+    '--no-verify', '--all', '--branches', '--tags', '--follow-tags', '--dry-run'],
+  'send-pack': ['--force', '--mirror', '--all'],
+  reset: ['--hard', '--merge', '--soft', '--mixed', '--keep'],
+  clean: ['--dry-run', '--force'],
+  checkout: ['--force'],
+  switch: ['--force', '--discard-changes'],
+  restore: ['--staged', '--worktree'],
+  branch: ['--delete', '--force', '--move', '--copy'],
+  rebase: ['--interactive', '--no-verify', '--abort', '--quit'],
+  commit: ['--no-verify'],
+  merge: ['--no-verify', '--abort', '--quit'],
+  pull: ['--no-verify'],
+  am: ['--no-verify', '--abort', '--quit'],
+  'cherry-pick': ['--abort', '--quit'],
+  revert: ['--abort', '--quit'],
+  worktree: ['--force'],
+  config: ['--unset', '--unset-all', '--remove-section', '--get', '--get-all', '--list'],
+};
+// Subcommands that create commits (rule 4), and those whose arguments must be visible (rule 19).
+const COMMIT_SUBS = new Set(['commit', 'merge', 'pull', 'cherry-pick', 'revert', 'am', 'rebase']);
+const DESTRUCTIVE = new Set(['push', 'send-pack', 'reset', 'checkout', 'switch', 'restore', 'clean', 'branch',
+  'worktree', 'stash', 'config', 'reflog', ...COMMIT_SUBS]);
 // Words that run their arguments (or stdin) as a script. When one appears, quoted text in the same
 // command line is read as commands too.
 const RUNNERS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'pwsh', 'powershell', 'cmd', 'wsl',
-  'eval', 'iex', 'invoke-expression', 'invoke-command', 'start-process', 'xargs', 'source', '.']);
+  'eval', 'iex', 'invoke-expression', 'invoke-command', 'start-process', 'saps', 'xargs', 'source', '.']);
+// Commands that run their arguments as another command; a runner after one of them still runs.
+const WRAPPERS = new Set(['sudo', 'command', 'exec', 'time', 'nohup', 'env', 'nice', 'timeout', 'xargs',
+  'start-process', 'saps', 'start', 'call', '!']);
 // Words that may precede a command without making it an argument.
 const PREFIX_WORDS = new Set(['sudo', 'command', 'exec', 'time', 'nohup', 'env', 'nice', '!', 'then', 'do',
   'else', 'if', 'elif', 'while', 'until']);
@@ -59,6 +89,7 @@ const NOTE = ' git-guard reads the command line, not what runs: it counted this 
 const isGit = (w) => /(^|[\/\\])git(\.exe)?$/i.test(w);
 const isEnvAssign = (w) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(w);
 const base = (w) => w.replace(/^.*[\/\\]/, '').replace(/\.exe$/i, '').toLowerCase();
+const isRunner = (w) => RUNNERS.has(base(w)) || /scriptblock\]::create/i.test(w);
 const has = (args, ...flags) => args.some((a) => flags.includes(a));
 const positionals = (args) => args.filter((a) => !a.startsWith('-'));
 const refName = (r) => r.replace(/^refs\/heads\//, '');
@@ -70,24 +101,55 @@ function deny(reason) {
   process.exit(0);
 }
 
-// Splits short clusters into single flags (-nm x becomes -n -m) and drops option values.
-function normalize(sub, rest) {
+// Normalises a subcommand's arguments: short clusters become single flags (-nm x is -n -m),
+// abbreviated long options become the options they start, and option values are dropped (kept
+// in values, keyed by option). opaque is true when a kept argument holds an expansion.
+function normalize(sub, rest, opq) {
   const [shortV, longV] = VALUE_OPTS[sub] || ['', []];
-  const out = [];
+  const known = (GUARDED_LONG[sub] || []).concat(longV);
+  const args = [];
+  const values = {};
+  let opaque = false;
   for (let k = 0; k < rest.length; k++) {
     const a = rest[k];
-    if (a === '--') { out.push(...rest.slice(k)); break; }
-    if (/^-[A-Za-z0-9]+$/.test(a)) {
-      for (let c = 1; c < a.length; c++) {
-        out.push(`-${a[c]}`);
-        if (shortV.includes(a[c])) { if (c === a.length - 1) k++; break; }
-      }
-    } else {
-      out.push(a);
-      if (longV.includes(a)) k++;
+    if (a === '--') {
+      args.push(...rest.slice(k));
+      opaque = opaque || opq.slice(k).some(Boolean);
+      break;
     }
+    if (/^-[A-Za-z0-9]/.test(a)) {
+      // A short cluster: letters until a value-taking one, whose value is the rest or the next word.
+      let c = 1;
+      for (; c < a.length && /[A-Za-z0-9]/.test(a[c]); c++) {
+        args.push(`-${a[c]}`);
+        if (shortV.includes(a[c])) {
+          if (c === a.length - 1) { values[`-${a[c]}`] = rest[k + 1]; k++; } else values[`-${a[c]}`] = a.slice(c + 1);
+          c = a.length + 1;
+          break;
+        }
+      }
+      if (c === a.length) continue;
+      if (c < a.length) { args.push(a); opaque = opaque || opq[k]; }
+      continue;
+    }
+    if (a.startsWith('--') && a.length > 2) {
+      const at = k;
+      const eq = a.indexOf('=');
+      const name = eq < 0 ? a : a.slice(0, eq);
+      const tail = eq < 0 ? '' : a.slice(eq);
+      const full = known.includes(name) || name.length < 4 ? [name] : known.filter((o) => o.startsWith(name));
+      const names = full.length > 0 ? full : [name];
+      for (const f of names) args.push(f + tail);
+      const takesValue = names.some((f) => longV.includes(f));
+      if (takesValue) { values[names[0]] = eq < 0 ? rest[k + 1] : tail.slice(1); if (eq < 0) k++; }
+      // An expansion in --name=value counts only when the option itself is hidden.
+      if (opq[at] && !(eq > 0 && /^--[A-Za-z0-9-]+$/.test(name))) opaque = true;
+      continue;
+    }
+    args.push(a);
+    opaque = opaque || opq[k];
   }
-  return out;
+  return { args, values, opaque };
 }
 
 // Resolves a cd or -C target against dir; Git Bash /c/... becomes C:/... on Windows.
@@ -97,30 +159,51 @@ function resolveDir(dir, rel) {
   return path.resolve(dir, process.platform === 'win32' ? p.replace(/^\/([a-zA-Z])(\/|$)/, '$1:/') : p);
 }
 
-// The git invocations in one simple command: { sub, args, globals, dir, first, text }.
+// True when a pathspec covers the whole tree: ".", "./.", "*", ":/", ":(top)", "sub/..", "..".
+function isWholeTree(p) {
+  const q = p.replace(/\\/g, '/').replace(/^:(\/|\([^)]*\))/, '');
+  const stack = [];
+  for (const seg of q.split('/')) {
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') { if (stack.length === 0) return true; stack.pop(); } else stack.push(seg);
+  }
+  return stack.length === 0 || (stack.length === 1 && stack[0] === '*');
+}
+
+// The git invocations in one simple command: { sub, args, values, opaque, globals, dir, first, text }.
 function invocations(cmd, dir) {
   const w = cmd.words;
+  const o = cmd.opaque || w.map(() => false);
   const out = [];
   for (let i = 0; i < w.length; i++) {
     if (!isGit(w[i])) continue;
     const globals = [];
     let d = dir;
+    let hidden = false; // a -c or --config-env value the reader cannot see
     let j = i + 1;
     while (j < w.length && w[j].startsWith('-')) {
       if (GLOBAL_OPTS_WITH_VALUE.has(w[j])) {
         globals.push([w[j], w[j + 1] || '']);
         if (w[j] === '-C') d = resolveDir(d, w[j + 1]);
+        if ((w[j] === '-c' || w[j] === '--config-env') && o[j + 1]) hidden = true;
         j += 2;
       } else {
         const eq = w[j].indexOf('=');
         globals.push(eq > 0 ? [w[j].slice(0, eq), w[j].slice(eq + 1)] : [w[j], null]);
+        if (w[j].startsWith('--config-env') && o[j]) hidden = true;
         j++;
       }
     }
-    if (j >= w.length) continue;
     const lead = w.slice(0, i);
+    const viaXargs = lead.some((x) => base(x) === 'xargs'); // xargs appends arguments the reader never sees
+    if (j >= w.length) {
+      if (viaXargs) out.push({ sub: SUBST, args: [], values: {}, opaque: true, globals, dir: d, text: cmd.text, first: false });
+      continue;
+    }
+    const n = normalize(w[j], w.slice(j + 1), o.slice(j + 1));
     out.push({
-      sub: w[j], args: normalize(w[j], w.slice(j + 1)), globals, dir: d, text: cmd.text,
+      sub: o[j] ? SUBST : w[j], args: n.args, values: n.values, opaque: n.opaque || hidden || viaXargs,
+      globals, dir: d, text: cmd.text,
       first: !cmd.fromData && lead.every((x) => isEnvAssign(x) || PREFIX_WORDS.has(x)),
     });
   }
@@ -137,6 +220,7 @@ function currentBranch(dir) {
   return branchCache.get(dir);
 }
 
+const isPush = (sub) => sub === 'push' || sub === 'send-pack';
 // The branches a push updates: { refs, all, unknown }. No refspec pushes the current branch.
 function pushTargets(inv) {
   const words = [];
@@ -198,19 +282,16 @@ function deletable(names, dir, { policy }) {
     `${d.requireMergedPr ? ', and only after GitHub shows their pull request merged; a failed or pending merge keeps the branch' : ''}.`;
 }
 
-const isLease = (a) => a.startsWith('--force-with-lease') || a === '--force-if-includes';
+const isLease = (a) => a.startsWith('--force-with-lease') || a.startsWith('--force-if-includes');
 const isPlainForce = (a) => a === '--force' || a.startsWith('--force=') || a === '-f' || (a.startsWith('+') && a.length > 1);
 const listOf = (who) => (who === 'any' ? 'any subagent' : who === 'none' ? 'none' : who.join(', '));
 const mayAct = (who, agent) => who === 'any' || (Array.isArray(who) && who.includes(agent));
 
-// Config keys an invocation sets through -c, --config-env, or GIT_CONFIG_* in the command line.
+// Config keys an invocation sets through -c, --config-env, or GIT_CONFIG_KEY_n in the command line.
 function configKeys(inv, ctx) {
   const keys = [];
   for (const [o, v] of inv.globals) if ((o === '-c' || o === '--config-env') && v) keys.push(v);
-  for (const e of ctx.envConfig) {
-    const m = /^(?:\$env:)?GIT_CONFIG_(?:KEY_\d+|PARAMETERS)=(.*)$/i.exec(e);
-    if (m) keys.push(...m[1].replace(/['"]/g, '').split(/\s+/));
-  }
+  for (const e of ctx.envConfig) if (/^GIT_CONFIG_KEY_\d+$/i.test(e.name)) keys.push(e.value);
   return keys;
 }
 // For git config: { unset, value } of the first positional key matching re, or null.
@@ -224,7 +305,10 @@ function configWrite(inv, re) {
   return { unset, value: pos[k].includes('=') ? pos[k].slice(pos[k].indexOf('=') + 1) : pos[k + 1] };
 }
 const HOOKS_KEY = /^core\.hookspath(=|$)/i;
+const INCLUDE_KEY = /^include(if\..*)?\.path(=|$)|^include\./i;
 const ALIAS_KEY = /^alias\./i;
+// Environment variables that point git at other config, so other hooks or aliases.
+const CONFIG_ENV = /^GIT_CONFIG(_GLOBAL|_SYSTEM|_PARAMETERS)?$/i;
 
 // Ordered rules. test(inv, ctx) returns false to pass, true to deny with the rule's advice, or a
 // string to deny with that advice instead. ctx: { agent, policy, envConfig }.
@@ -233,11 +317,11 @@ const RULES = [
     n: 1, prefix: 'force push',
     advice: 'The project does not force-push; integrate the remote changes and push normally, or ask the user.',
     test: (inv, { policy }) => {
-      if (inv.sub !== 'push') return false;
+      if (!isPush(inv.sub)) return false;
       if (inv.args.some(isPlainForce)) return true;
       if (!inv.args.some(isLease)) return false;
       const ok = policy.git.push.forceWithLease;
-      if (ok.length === 0) return true;
+      if (ok.length === 0 || inv.sub !== 'push') return true;
       return within(pushTargets(inv), ok) ? false : `--force-with-lease is allowed only onto branches matching ${ok.join(', ')}; ask the user for anything else.`;
     },
   },
@@ -245,7 +329,7 @@ const RULES = [
     n: 2, prefix: 'remote branch deletion',
     advice: 'Deleting or mirroring remote refs is for the user; ask the user to do it.',
     test: (inv, ctx) => {
-      if (inv.sub !== 'push') return false;
+      if (!isPush(inv.sub)) return false;
       if (has(inv.args, '--mirror', '--prune')) return true;
       const dels = pushDeletions(inv);
       if (dels.length === 0 && !has(inv.args, '--delete', '-d')) return false;
@@ -255,7 +339,7 @@ const RULES = [
   {
     n: 3, prefix: 'push not permitted for this caller',
     test: (inv, { agent, policy }) => {
-      if (inv.sub !== 'push') return false;
+      if (!isPush(inv.sub)) return false;
       const p = policy.git.push;
       if (agent === null) return p.mainSession ? false : 'Under .claude/hooks/policy.json the main session does not push; ask the user.';
       if (!mayAct(p.subagents, agent)) return `Under .claude/hooks/policy.json the subagents that push are: ${listOf(p.subagents)}. Leave the work committed and report.`;
@@ -266,12 +350,14 @@ const RULES = [
   {
     n: 4, prefix: 'commit not permitted for this caller',
     test: (inv, { agent, policy }) => {
-      if (inv.sub !== 'commit' || agent === null) return false;
+      if (!COMMIT_SUBS.has(inv.sub) || agent === null || has(inv.args, '--abort', '--quit')) return false;
       const c = policy.git.commit;
-      if (!mayAct(c.subagents, agent)) return `Under .claude/hooks/policy.json the subagents that commit are: ${listOf(c.subagents)}. Describe the change in your report so it can be committed.`;
+      if (!mayAct(c.subagents, agent)) {
+        return `Under .claude/hooks/policy.json the subagents that make commits (commit, merge, pull, cherry-pick, revert, am, rebase) are: ${listOf(c.subagents)}. Describe the change in your report so it can be committed.`;
+      }
       if (c.protectedBranches.length === 0) return false;
       const b = currentBranch(inv.dir);
-      return b !== null && matches(c.protectedBranches, b) ? `Subagents do not commit on ${b}; work on your own branch.` : false;
+      return b !== null && matches(c.protectedBranches, b) ? `Subagents do not make commits on ${b}; work on your own branch.` : false;
     },
   },
   {
@@ -290,7 +376,7 @@ const RULES = [
     test: ({ sub, args }) => {
       if (sub !== 'checkout') return false;
       const dd = args.indexOf('--');
-      return (dd >= 0 ? args.slice(dd + 1) : args.slice(-1)).some((a) => WHOLE_TREE.has(a));
+      return (dd >= 0 ? args.slice(dd + 1) : args.slice(-1)).some(isWholeTree);
     },
   },
   {
@@ -299,7 +385,7 @@ const RULES = [
     test: ({ sub, args }) => {
       if (sub !== 'restore') return false;
       const dd = args.indexOf('--');
-      if (!(dd >= 0 ? args.slice(dd + 1) : positionals(args)).some((a) => WHOLE_TREE.has(a))) return false;
+      if (!(dd >= 0 ? args.slice(dd + 1) : positionals(args)).some(isWholeTree)) return false;
       return !(has(args, '--staged', '-S') && !has(args, '--worktree', '-W'));
     },
   },
@@ -339,9 +425,13 @@ const RULES = [
     n: 14, prefix: 'hooks path override',
     test: (inv, ctx) => {
       const want = ctx.policy.git.hooksPath;
-      const advice = want ? `core.hooksPath stays ${want}; the project's git hooks must run.` : 'core.hooksPath is not changed here; the git hooks must run.';
-      if (configKeys(inv, ctx).some((k) => HOOKS_KEY.test(k))) return advice;
+      const advice = 'Config that can redirect the git hooks (core.hooksPath, include files, GIT_CONFIG_GLOBAL, ' +
+        `GIT_CONFIG_SYSTEM, GIT_CONFIG_PARAMETERS) is not changed here${want ? `; core.hooksPath stays ${want}` : ''}.`;
+      if (ctx.envConfig.some((e) => CONFIG_ENV.test(e.name))) return advice;
+      if (configKeys(inv, ctx).some((k) => HOOKS_KEY.test(k) || INCLUDE_KEY.test(k))) return advice;
       if (inv.sub !== 'config') return false;
+      const inc = configWrite(inv, INCLUDE_KEY);
+      if (inc && !inc.unset && inc.value !== undefined) return advice;
       const c = configWrite(inv, HOOKS_KEY);
       if (!c || (!c.unset && c.value === undefined)) return false; // a read
       if (!c.unset && want && c.value.replace(/\\/g, '/').replace(/\/$/, '') === want) return false;
@@ -369,14 +459,62 @@ const RULES = [
     advice: 'Remove a clean worktree without --force, or ask the user; a forced removal deletes uncommitted work.',
     test: ({ sub, args }) => sub === 'worktree' && positionals(args)[0] === 'remove' && has(args, '-f', '--force'),
   },
+  {
+    n: 18, prefix: 'forced branch reset',
+    test: (inv, { policy }) => {
+      let target;
+      if (inv.sub === 'checkout') target = inv.values['-B'];
+      else if (inv.sub === 'switch') target = inv.values['-C'] || inv.values['--force-create'];
+      else if (inv.sub === 'branch' && has(inv.args, '-f', '--force') &&
+        !has(inv.args, '-d', '-D', '--delete', '-m', '-M', '--move', '-c', '-C', '--copy')) target = positionals(inv.args)[0];
+      if (!target) return false;
+      const prot = policy.git.commit.protectedBranches;
+      if (!matches(prot, target) && target !== currentBranch(inv.dir)) return false;
+      return `Resetting ${target} to another commit drops the commits on it; create a new branch instead, or ask the user.`;
+    },
+  },
+  {
+    n: 19, prefix: 'unexpanded argument',
+    test: (inv) => {
+      if (inv.sub === SUBST) return 'The command runs git with a subcommand or arguments the guard cannot see (a variable, a substitution, xargs input, or a command word that is an expansion). Run git by name with its arguments written out.';
+      if (!DESTRUCTIVE.has(inv.sub) || !inv.opaque) return false;
+      return `The guard cannot see what a variable, substitution or brace expansion becomes, and git ${inv.sub} can discard work or bypass hooks. Run it with the values written out.`;
+    },
+  },
 ];
 
+// Start-Process git -ArgumentList "push --force" (or "push","--force") as the git command it runs.
+function startProcessCommand(c) {
+  if (!['start-process', 'saps', 'start'].includes(base(c.words[0]))) return null;
+  let file = null;
+  let argList = null;
+  let opaque = false;
+  for (let k = 1; k < c.words.length; k++) {
+    const w = c.words[k];
+    if (/^-(f|filepath)$/i.test(w)) { file = c.words[++k]; continue; }
+    if (/^-arg/i.test(w)) { argList = c.words[k + 1] || ''; opaque = !!(c.opaque && c.opaque[k + 1]); k++; continue; }
+    if (!w.startsWith('-') && file === null) file = w;
+  }
+  if (!file || !isGit(file)) return null;
+  const words = ['git', ...(argList || '').split(/[\s,]+/).filter(Boolean)];
+  return { words, opaque: words.map((_, i) => i > 0 && opaque), text: c.text, stdin: [], fromData: true };
+}
+
 // Every command the line runs, with the directory each runs in. Quoted text and heredoc bodies
-// are read as commands too when a RUNNERS word appears (sh -c, eval, | bash, powershell -Command).
+// are read as commands too when a runner word appears (sh -c, eval, | bash, powershell -Command,
+// [scriptblock]::Create).
 function commandsOf(command, dialect, cwd) {
   const top = parse(command, dialect);
   const cmds = top.commands.slice();
-  const runner = (list) => list.some((c) => c.words.some((w) => RUNNERS.has(base(w))));
+  // A runner counts where it runs: as the command word, or after a wrapper that runs its arguments
+  // (sudo bash -c, xargs sh -c, Start-Process powershell). As a plain argument it is only a word.
+  const runner = (list) => list.some((c) => {
+    let k = 0;
+    while (k < c.words.length && isEnvAssign(c.words[k])) k++;
+    if (k >= c.words.length) return false;
+    if (isRunner(c.words[k])) return true;
+    return WRAPPERS.has(base(c.words[k])) && c.words.slice(k + 1).some(isRunner);
+  });
   let data = runner(cmds) ? top.data : [];
   for (let depth = 0; depth < 3 && data.length > 0; depth++) {
     const next = [];
@@ -389,6 +527,7 @@ function commandsOf(command, dialect, cwd) {
     }
     data = next;
   }
+  for (const c of cmds.slice()) { const s = startProcessCommand(c); if (s) cmds.push(s); }
   let dir = cwd;
   return cmds.map((c) => {
     const at = dir;
@@ -397,19 +536,38 @@ function commandsOf(command, dialect, cwd) {
   });
 }
 
+// A command whose command word is an expansion ($G push -f, & $g push -f) in a line that names
+// git: what it runs cannot be seen. A PowerShell assignment ($x = git ...) and a word ending in a
+// literal file name other than git ($(dirname "$0")/tool.sh) are not this case.
+function opaqueCommand(cmd, mentionsGit) {
+  if (!mentionsGit) return false;
+  let k = 0;
+  while (k < cmd.words.length && isEnvAssign(cmd.words[k])) k++;
+  if (k >= cmd.words.length || !(cmd.opaque && cmd.opaque[k])) return false;
+  if (cmd.words[k + 1] === '=' || /^\$[A-Za-z_:]+=/.test(cmd.words[k])) return false;
+  const last = cmd.words[k].split(/[\/\\]/).pop();
+  return !(cmd.words[k].match(/[\/\\]/) && last && !/[$\0{}]/.test(last) && !isGit(last));
+}
+
 function decide(command, dialect, agent, cwd, loaded) {
   const cmds = commandsOf(command, dialect, cwd);
+  const mentionsGit = /(^|[^A-Za-z0-9_-])git(\.exe)?([^A-Za-z0-9_-]|$)/i.test(command);
   const invs = [];
-  for (const { cmd, dir } of cmds) invs.push(...invocations(cmd, dir));
+  for (const { cmd, dir } of cmds) {
+    invs.push(...invocations(cmd, dir));
+    if (opaqueCommand(cmd, mentionsGit)) invs.push({ sub: SUBST, args: [], values: {}, opaque: true, globals: [], dir, text: cmd.text, first: false });
+  }
   if (invs.length === 0) return null;
   const clip = (t) => (t.length > 200 ? `${t.slice(0, 200)}...` : t);
   if (loaded.error) {
     return `git-guard: policy file is malformed (${loaded.error}): \`${clip(invs[0].text)}\`. Every git command is denied until it is fixed; ask the user.`;
   }
+  // Config by environment (GIT_CONFIG_KEY_n=..., GIT_CONFIG_GLOBAL=..., $env:GIT_CONFIG_... = ...).
   const envConfig = [];
   for (const { cmd } of cmds) {
     cmd.words.forEach((w, k) => {
-      if (/^(?:\$env:)?GIT_CONFIG_(KEY_\d+|PARAMETERS)/i.test(w)) envConfig.push(w.includes('=') ? w : `${w}=${cmd.words[k + 2] || ''}`);
+      const m = /^(?:\$env:)?(GIT_CONFIG(?:_KEY_\d+|_PARAMETERS|_GLOBAL|_SYSTEM)?)(?:=(.*))?$/i.exec(w);
+      if (m) envConfig.push({ name: m[1], value: m[2] !== undefined ? m[2] : (cmd.words[k + 1] === '=' ? cmd.words[k + 2] || '' : '') });
     });
   }
   const ctx = { agent, policy: loaded.policy, envConfig };

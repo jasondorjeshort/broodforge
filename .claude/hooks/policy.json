@@ -7,5 +7,9 @@
     "hooksPath": null
   },
   "usage": { "hold": 50, "deny": 80, "staleSeconds": 7200, "whenStale": "allow" },
-  "edit": { "capExempt": [], "formatters": {} }
+  "edit": {
+    "capExempt": [],
+    "anchorExempt": ["docs/design/proposals/*", "docs/design/decisions/*", "docs/findings/*"],
+    "formatters": {}
+  }
 }

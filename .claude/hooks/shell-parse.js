@@ -4,16 +4,22 @@
 // functions. Spec: docs/design/decisions/0002-hook-specs.md section 1, Parsing.
 //
 // parse(text, dialect) with dialect 'bash' or 'powershell' returns { commands, data }:
-//   commands  every simple command, in source order, as { words, text, stdin }: words are the
-//             dequoted words (redirections removed; an unknown substitution reads as SUBST),
-//             text the source slice for messages, stdin the heredoc and here-string bodies fed to
-//             it. Commands inside $(...), backticks, <(...), (...) and, in PowerShell, $(...),
+//   commands  every simple command, in source order, as { words, opaque, text, stdin }: words are
+//             the dequoted words (redirections removed; an unknown substitution reads as SUBST);
+//             opaque[k] is true when word k holds an expansion whose value the reader cannot see
+//             (a variable, a substitution, a Bash brace expansion, a PowerShell splat); text is
+//             the source slice for messages; stdin the heredoc and here-string bodies fed to it.
+//             Commands inside $(...), backticks, <(...), (...) and, in PowerShell, $(...),
 //             @(...) and {...} script blocks are listed too, because they run.
 //   data      quoted strings and heredoc / here-string bodies. Not code unless a command hands
 //             them to a shell; git-guard decides that.
 'use strict';
 
 const SUBST = '\u0000';
+// The character after a "$" that makes it an expansion rather than a literal dollar.
+const VAR_START = { bash: /[A-Za-z_{0-9@*#?!$-]/, powershell: /[A-Za-z_{:?]/ };
+// A Bash brace expansion in a word's unquoted characters: {a,b} or {1..3}.
+const BRACE_EXPANSION = /\{[^{}]*(,|\.\.)[^{}]*\}/;
 
 // Index of the bracket closing the one at open, skipping quoted text. Returns src.length when
 // unbalanced (the rest of the line is then treated as inside).
@@ -57,16 +63,18 @@ function parse(text, dialect) {
 
 // Scans text that expands substitutions but is otherwise literal (inside double quotes, an
 // unquoted heredoc, a PowerShell @"..."@): lexes each $(...) or backtick body as code. Returns
-// the value with substitutions replaced by SUBST. stopAtQuote: end at an unescaped '"'.
+// the value with substitutions replaced by SUBST, and opaque when a variable or substitution was
+// expanded. stopAtQuote: end at an unescaped '"'.
 function expandable(src, start, dialect, out, stopAtQuote) {
   const ps = dialect === 'powershell';
   let v = '';
   let i = start;
+  let opaque = false;
   while (i < src.length) {
     const ch = src[i];
     if (stopAtQuote && ch === '"') {
       if (ps && src[i + 1] === '"') { v += '"'; i += 2; continue; }
-      return { value: v, end: i + 1 };
+      return { value: v, end: i + 1, opaque };
     }
     if (!ps && ch === '\\' && i + 1 < src.length) {
       const n = src[i + 1];
@@ -77,25 +85,29 @@ function expandable(src, start, dialect, out, stopAtQuote) {
     if (ch === '$' && src[i + 1] === '(') {
       const j = matchClose(src, i + 1, dialect);
       lex(src.slice(i + 2, j), dialect, out);
-      v += SUBST; i = j + 1; continue;
+      v += SUBST; opaque = true; i = j + 1; continue;
     }
     if (!ps && ch === '`') {
       let j = i + 1;
       while (j < src.length && src[j] !== '`') j += src[j] === '\\' ? 2 : 1;
       lex(src.slice(i + 1, j), dialect, out);
-      v += SUBST; i = j + 1; continue;
+      v += SUBST; opaque = true; i = j + 1; continue;
     }
+    if (ch === '$' && VAR_START[dialect].test(src[i + 1] || '')) opaque = true;
     v += ch; i++;
   }
-  return { value: v, end: src.length };
+  return { value: v, end: src.length, opaque };
 }
 
 function lex(src, dialect, out) {
   const ps = dialect === 'powershell';
   const n = src.length;
-  let cur = { words: [], text: '', stdin: [] };
+  const fresh = () => ({ words: [], opaque: [], text: '', stdin: [] });
+  let cur = fresh();
   let word = null;
   let quoted = false;
+  let opq = false; // the current word holds an expansion
+  let bare = ''; // the current word's unquoted characters, for Bash brace expansion
   let start = 0;
   let redirect = null; // pending redirection whose target is the next word
   const heredocs = []; // bash heredocs waiting for the next newline
@@ -112,8 +124,11 @@ function lex(src, dialect, out) {
       // Bash group braces: not words of the command they enclose.
     } else {
       cur.words.push(w);
+      cur.opaque.push(opq || (!ps && BRACE_EXPANSION.test(bare)));
     }
     quoted = false;
+    opq = false;
+    bare = '';
   };
   const end = (at) => {
     flush();
@@ -121,7 +136,7 @@ function lex(src, dialect, out) {
       cur.text = src.slice(start, at === null ? n : at).trim();
       out.commands.push(cur);
     }
-    cur = { words: [], text: '', stdin: [] };
+    cur = fresh();
     if (at !== null) start = at;
   };
   const add = (s) => { word = (word === null ? '' : word) + s; };
@@ -169,27 +184,28 @@ function lex(src, dialect, out) {
       const q = src[i + 1];
       const close = src.indexOf(`\n${q}@`, i + 2);
       const body = src.slice(i + 3, close < 0 ? n : close);
-      const v = q === '"' ? expandable(body, 0, dialect, out, false).value : body;
-      add(v); out.data.push(v); quoted = true; i = close < 0 ? n : close + 3; continue;
+      const r = q === '"' ? expandable(body, 0, dialect, out, false) : { value: body, opaque: false };
+      add(r.value); out.data.push(r.value); quoted = true; opq = opq || r.opaque;
+      i = close < 0 ? n : close + 3; continue;
     }
     if (ch === '"') {
       const r = expandable(src, i + 1, dialect, out, true);
-      add(r.value); out.data.push(r.value); quoted = true; i = r.end; continue;
+      add(r.value); out.data.push(r.value); quoted = true; opq = opq || r.opaque; i = r.end; continue;
     }
     if (ch === '$' && src[i + 1] === '(') {
       const j = matchClose(src, i + 1, dialect);
       lex(src.slice(i + 2, j), dialect, out);
-      add(SUBST); i = j + 1; continue;
+      add(SUBST); opq = true; i = j + 1; continue;
     }
     if (!ps && ch === '`') {
       let j = i + 1;
       while (j < n && src[j] !== '`') j += src[j] === '\\' ? 2 : 1;
       lex(src.slice(i + 1, j), dialect, out);
-      add(SUBST); i = j + 1; continue;
+      add(SUBST); opq = true; i = j + 1; continue;
     }
     if (!ps && ch === '$' && src[i + 1] === '{') {
       const j = matchClose(src, i + 1, dialect);
-      add(src.slice(i, j + 1)); i = j + 1; continue;
+      add(src.slice(i, j + 1)); opq = true; i = j + 1; continue;
     }
     if (!ps && (ch === '<' || ch === '>') && src[i + 1] === '(') {
       const j = matchClose(src, i + 1, dialect);
@@ -216,7 +232,9 @@ function lex(src, dialect, out) {
       start = i;
       continue;
     }
-    add(ch); i++;
+    if (ch === '$' && VAR_START[dialect].test(src[i + 1] || '')) opq = true;
+    if (ps && ch === '@' && word === null && /[A-Za-z_]/.test(src[i + 1] || '')) opq = true; // splatting
+    add(ch); bare += ch; i++;
   }
   end(null);
   // A heredoc whose newline never came (the command ends on the same line) has an empty body.

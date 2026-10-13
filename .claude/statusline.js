@@ -40,11 +40,14 @@ function update(rl) {
   }
   if (!fresh) return state;
   out.updatedAt = Math.floor(Date.now() / 1000);
+  const tmp = `${STATE_FILE}.${process.pid}.tmp`;
   try {
-    const tmp = `${STATE_FILE}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(out));
     fs.renameSync(tmp, STATE_FILE);
-  } catch (_) { /* the status line must never fail */ }
+  } catch (_) {
+    // The status line must never fail; do not leave a temporary file behind either.
+    try { fs.rmSync(tmp, { force: true }); } catch (__) { /* nothing more to do */ }
+  }
   return out;
 }
 

@@ -1,7 +1,7 @@
 # ADR 0002 companion: hook specifications
 
 Behaviour of the scripts under `.claude/hooks/` and of `.claude/statusline.js`, as implemented and
-tested on 2026-10-13 (`node .claude/hooks/test-hooks.js`, 255 cases). The code is the reference;
+tested on 2026-10-13 (`node .claude/hooks/test-hooks.js`, 325 cases). The code is the reference;
 this document describes it exactly enough to re-implement or extend it. What each project may choose
 lives in `.claude/hooks/policy.json`, read through `policy.js`; its schema, defaults and fail modes
 are ADR 0006. Every script: Node, `'use strict'`, standard library only, SPDX header, reads all of
@@ -34,22 +34,35 @@ and `@"..."@` here-strings, `#` and `<# #>` comments; a backslash is literal. Re
 `2>&1`, `*>`, `<`, ...) and their targets are not words. Bash heredocs (`<<`, `<<-`, quoted or not)
 are read at the next newline; their bodies, quoted strings and here-strings are *data*. Commands
 inside `$(...)`, backticks and `<(...)`, and in an unquoted heredoc's `$(...)`, are listed as
-commands, because they run; their value in the enclosing word is unknown.
+commands, because they run; their value in the enclosing word is unknown. A word is *opaque* when
+it holds something the reader cannot see: a substitution, a variable (`$X`, `${F:-...}`, a `$name`
+inside double quotes), a Bash brace expansion (`{-f,}`, `{1..3}`), or a PowerShell splat (`@a`).
 
-Data becomes commands only when a word in the line is a runner: `sh`, `bash`, `zsh`, `dash`,
-`ksh`, `fish`, `pwsh`, `powershell`, `cmd`, `wsl`, `eval`, `iex`, `Invoke-Expression`,
-`Invoke-Command`, `Start-Process`, `xargs`, `source` or `.`. Then every data string is parsed with
-both dialects, three levels deep. So `git commit -m "fix git push -n"`, a heredoc commit message and
-`echo "git push --force"` allow, while `bash -c "git reset --hard"` and `echo "git push -f" | sh`
-are read as the git commands they run.
+Data becomes commands only when a runner runs in the line: `sh`, `bash`, `zsh`, `dash`, `ksh`,
+`fish`, `pwsh`, `powershell`, `cmd`, `wsl`, `eval`, `iex`, `Invoke-Expression`, `Invoke-Command`,
+`Start-Process`, `xargs`, `source`, `.` or `[scriptblock]::Create`, as a command word or after a
+wrapper (`sudo`, `env`, `xargs`, `timeout`, `nohup`, `Start-Process`, ...); a runner's name as a
+plain argument runs nothing. Then every data string is parsed with both dialects, three levels
+deep. So `git commit -m "fix git push -n"`, a heredoc commit message and `echo "git push --force"`
+allow, while `bash -c "git reset --hard"` and `echo "git push -f" | sh` are read as the git commands
+they run. `Start-Process git -ArgumentList "push --force"` (or `"push","--force"`) is reassembled
+into the git command it starts.
 
 Locating git. In each command every word whose base name is `git` or `git.exe` (any case, any
 path) starts an invocation. Words after it that start with `-` are global options; `-C`, `-c`,
 `--git-dir`, `--work-tree`, `--namespace`, `--config-env` and `--super-prefix` take the next word,
 and `--opt=value` is split. The next word is the subcommand; a git word with nothing after it is not
-an invocation. Arguments are normalised: a short cluster becomes single flags (`-nm x` is `-n -m`),
-and each subcommand's value-taking options drop their value (`VALUE_OPTS` in the code), so
-`-m "-n"` and `-mnote` are a message, not `-n`. An invocation is *first* when only `NAME=value`
+an invocation. Arguments are normalised: a short cluster becomes single flags (`-nm x` is `-n -m`);
+an abbreviated long option of four or more characters becomes every guarded option it starts
+(`--har` is `--hard`, `--forc` is each `--force*`), because git accepts any unambiguous prefix; and
+each subcommand's value-taking options drop their value (`VALUE_OPTS` in the code), so `-m "-n"` and
+`-mnote` are a message, not `-n`, and `-m "add $f"` is not opaque. An invocation is opaque when a
+remaining argument is, when a `-c`/`--config-env` value is, or when `xargs` runs it (xargs appends
+arguments from stdin). A command whose command word is opaque, in a line that names git, is an
+invocation with an unknown subcommand, unless it is a PowerShell assignment (`$h = git ...`) or the
+word ends in a literal file name that is not git (`$(dirname "$0")/check.sh`).
+
+An invocation is *first* when only `NAME=value`
 words or prefix words (`sudo`, `env`, `time`, `then`, `do`, ...) precede it and it did not come
 from data. Its directory is the input `cwd`, moved by earlier `cd`, `pushd`, `Set-Location` or
 `sl` commands in the line and then by `-C`; Git Bash `/c/...` resolves as `C:/...` on Windows.
@@ -66,30 +79,33 @@ unreadable branch match no pattern list but `*`.
 
 | # | Denies ... | Reason prefix |
 |---|---|---|
-| 1 | `push` with `--force`, `--force=...`, `-f` or `+<refspec>`; or `--force-with-lease`/`--force-if-includes` unless `git.push.forceWithLease` lists patterns matching every target | `force push` |
-| 2 | `push` with `--mirror` or `--prune`; or `--delete`, `-d` or `:<ref>`, unless every deleted branch matches `git.branchDelete.branches` and, when `requireMergedPr`, GitHub shows a merged PR from it | `remote branch deletion` |
-| 3 | `push` from the main session when `git.push.mainSession` is false; from a subagent not allowed by `git.push.subagents`; from an allowed subagent when `git.push.branches` is not `["*"]` and some target matches none of them | `push not permitted for this caller` |
-| 4 | `commit` from a subagent not allowed by `git.commit.subagents`, or on a current branch matching `git.commit.protectedBranches` | `commit not permitted for this caller` |
+| 1 | `push` or `send-pack` with `--force`, `--force=...`, `-f` or `+<refspec>`; or `--force-with-lease`/`--force-if-includes` unless `git.push.forceWithLease` lists patterns matching every target of a `push` | `force push` |
+| 2 | `push` or `send-pack` with `--mirror` or `--prune`; or `--delete`, `-d` or `:<ref>`, unless every deleted branch matches `git.branchDelete.branches` and, when `requireMergedPr`, GitHub shows a merged PR from it | `remote branch deletion` |
+| 3 | `push` or `send-pack` from the main session when `git.push.mainSession` is false; from a subagent not allowed by `git.push.subagents`; from an allowed subagent when `git.push.branches` is not `["*"]` and some target matches none of them | `push not permitted for this caller` |
+| 4 | `commit`, `merge`, `pull`, `cherry-pick`, `revert`, `am` or `rebase` (not with `--abort` or `--quit`) from a subagent not allowed by `git.commit.subagents`, or on a current branch matching `git.commit.protectedBranches` | `commit not permitted for this caller` |
 | 5 | `reset` with `--hard` or `--merge` | `destructive reset` |
 | 6 | `clean` without `-n` or `--dry-run` | `git clean deletes untracked files` |
-| 7 | `checkout` whose pathspec (words after `--`, else the last argument) is `.`, `./`, `*` or `:/` | `whole-tree checkout discards edits` |
+| 7 | `checkout` whose pathspec (words after `--`, else the last argument) covers the whole tree: `.`, `./.`, `*`, `:/`, `:(top)`, or a path that `..` walks back to the start (`src/..`, `..`) | `whole-tree checkout discards edits` |
 | 8 | `restore` with one of those pathspecs (after `--`, else any non-dash argument), unless `--staged`/`-S` without `--worktree`/`-W` | `whole-tree restore discards edits` |
 | 9 | `branch` with `-D`, or a delete flag and a force flag, unless the branches pass the rule-2 test | `forced branch delete` |
 | 10 | `rebase` with `-i`, `--interactive` or `--interactive=...` | `interactive rebase is unsupported here` |
 | 11 | `stash` whose first positional is `drop` or `clear` | `stash drop/clear is unrecoverable` |
 | 12 | `filter-branch`, `filter-repo`, `replace`, `update-ref`, or `reflog expire`/`delete` | `history rewrite` |
 | 13 | `--no-verify` on `commit`, `push`, `merge`, `pull`, `rebase`, `am`, `cherry-pick` or `revert`; `commit -n` (`push -n` is `--dry-run` and allowed) | `hooks bypass` |
-| 14 | `core.hooksPath` set by `-c`, `--config-env` or `GIT_CONFIG_KEY_n`/`GIT_CONFIG_PARAMETERS` (prefix, `export` or `$env:`), or `git config` that unsets it or sets it to anything but `git.hooksPath` (null: any value). A read allows. | `hooks path override` |
-| 15 | `alias.*` set by the same routes, or `git config alias.<x> <value>` | `git alias definition` |
+| 14 | any `GIT_CONFIG`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM` or `GIT_CONFIG_PARAMETERS` assignment in the line (prefix, `export` or `$env:`); `core.hooksPath`, `include.*` or `includeIf.*.path` set by `-c`, `--config-env` or `GIT_CONFIG_KEY_n`; `git config` writing `include.path`/`includeIf.*.path`, or unsetting `core.hooksPath` or setting it to anything but `git.hooksPath` (null: any value). A read allows. | `hooks path override` |
+| 15 | `alias.*` set by `-c`, `--config-env` or `GIT_CONFIG_KEY_n`, or `git config alias.<x> <value>` | `git alias definition` |
 | 16 | `checkout` with `-f`/`--force`; `switch` with `-f`, `--force` or `--discard-changes` | `forced checkout discards edits` |
 | 17 | `worktree remove` with `-f` or `--force` | `forced worktree removal` |
+| 18 | `checkout -B <b>`, `switch -C`/`--force-create <b>`, or `branch -f <b>` (not deleting, moving or copying) when `<b>` is the current branch or matches `git.commit.protectedBranches` | `forced branch reset` |
+| 19 | an invocation with an unknown subcommand; or an opaque invocation of `push`, `send-pack`, `reset`, `checkout`, `switch`, `restore`, `clean`, `branch`, `worktree`, `stash`, `config`, `reflog` or a rule-4 subcommand. Other subcommands (`log`, `diff`, `add`, ...) stay allowed. | `unexpanded argument` |
 
 The merged-PR check runs `gh pr list --head <branch> --state merged --json number --limit 1` in the
 invocation's directory, once per branch; any failure counts as not merged. Test seam:
 `GIT_GUARD_MERGED`, comma-separated branch names, replaces the call.
 
-Deny output, exit 0. The advice is the rule's own sentence, or, for rules 1 to 4, 9 and 14, a
-sentence built from the policy (which agents may act, which branches):
+Deny output, exit 0. The advice is the rule's own sentence, or, for rules 1 to 4, 9, 14 and 18, a
+sentence built from the policy (which agents may act, which branches); rule 19's says the guard
+cannot see what the expansion becomes:
 
 ```json
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny",
@@ -107,14 +123,19 @@ internal error (<message>); command not run. Fix the hook or ask the user to run
 exits 2. Decision: exit 2 blocks on every Claude Code version; `onFailure: "block"` stays as the
 second layer for a crash before the handler is installed or a missing `node`.
 
-Not covered, by design: aliases already in the user's git config, scripts that run git, a variable
-as the command word (`$g push -f`), arguments reaching git through `xargs` from stdin, `gh pr merge
---delete-branch`, and `branch -f`, which moves a branch (the reflog keeps the old commit).
+Not covered, by design: aliases already in the user's git config; scripts that run git; another
+interpreter running git (`node -e "...execSync('git push -f')"`, `python -c "os.system(...)"`),
+whose code is text to the guard; `gh pr merge --delete-branch`; and `branch -f` onto a branch that
+is neither current nor protected (the reflog keeps the old commit).
 
 Test groups: G01 to G25 and GX01 to GX25 are the original table (G24 now allows: quoted text is
-data); GN covers rules 12 to 17 and lease-as-force; GQ the parser in both shells; GF malformed and
-absent policy files; GP one command set under the Hatchery policy, no policy, and the two examples,
-in scratch repositories on `main` and on `task/T1`, which shows the absent file behaving as the
+data); GN covers rules 12 to 17 and lease-as-force; GQ the parser in both shells; GR the shapes an
+independent review reproduced as bypasses on 2026-10-13 (abbreviated options, opaque arguments,
+PowerShell launchers, commit-making subcommands, config by environment and include, forced branch
+resets, `send-pack`, whole-tree spellings), with the false positives they must not cause; GF
+malformed and absent policy files; GP one command set under the Hatchery policy, no policy, and
+the two examples, in scratch repositories on `main` and on `task/T1`, which shows the absent file
+behaving as the
 Hatchery one. LIVE01 to LIVE04 check that the repository's own `policy.json` and the examples
 load and that the harness's Hatchery fixture equals the loader's defaults.
 
@@ -134,9 +155,10 @@ root is the input `cwd`, falling back to `process.cwd()`; `CLAUDE_PROJECT_DIR` i
 `cwd` is what a relative `file_path` resolves against and the harness drives a scratch tree through
 it. "Inside" means the path relative to the root does not start with `..`. The docs checks run only
 for files inside, under `docs/`, ending in `.md`; the root `CLAUDE.md` has its own cap check. The
-formatter runs for any file whose lower-cased extension has one. Never exits non-zero; any exception is swallowed. On Windows the `cwd` must be a
-Windows path (`C:/...`); a Git Bash `/c/...` path resolves to a missing file and the hook stays
-silent. A malformed policy means the base defaults here, since the hook only advises.
+formatter runs for any file whose lower-cased extension has one. Never exits non-zero; any
+exception is swallowed. On Windows the `cwd` must be a Windows path (`C:/...`); a Git Bash
+`/c/...` path resolves to a missing file and the hook stays silent. A malformed policy means the
+base defaults here, since the hook only advises.
 
 `CLAUDE.md` at the root over 150 lines: `post-edit: CLAUDE.md is N lines; cap is 150
 (.claude/rules/docs.md). Move facts to docs/reference/ and path-scoped rules to .claude/rules/.`
@@ -152,9 +174,12 @@ Checks on `docs/**/*.md` (`<path>` from the root with forward slashes; line coun
 | a file at least one directory below `docs/`, basename not `README.md` or `HANDOFF.md`, named in no `README.md` from its own folder up to `docs/<top>/README.md` | `post-edit: <path> is not listed in <folder>/README.md. Add one line.` |
 | a backtick-quoted token holding `/` whose first segment is a top-level directory of the root (not `.git`), that does not exist | `post-edit: <path> names paths that do not exist: <list>. Fix them, or mark the paragraph [no-check: <reason>] (.claude/rules/docs.md).` |
 
-Path anchors skip fenced code blocks, paragraphs (blank-line separated) containing `[no-check:`,
-and tokens with `*`, `<`, `>`, `{`, `}`, `$`, `NNNN` or `YYYY`; a `#anchor` or `:line` suffix is
-dropped before the lookup. Each missing path is listed once.
+Path anchors skip files matching `edit.anchorExempt` (by default the closed records under
+`docs/design/proposals/`, `docs/design/decisions/` and `docs/findings/`, which name paths as they
+were), fenced code blocks (indented ones too), any paragraph (blank-line separated) or list item
+containing `[no-check:` (a list item scopes it even without blank lines between items), and tokens
+with `*`, `<`, `>`, `{`, `}`, `$`, `NNNN` or `YYYY`; a `#anchor` or `:line` suffix is dropped
+before the lookup. Each missing path is listed once.
 
 Frontmatter means the file starts with `---`, closes with `---` within 20 lines, and each named key
 starts a line between them. Lines split on LF or CRLF.
@@ -169,8 +194,8 @@ first 5 non-empty stderr lines, else the spawn error, else `killed by <signal> (
 Output with at least one message, exit 0:
 `{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"<messages>"}}`; none:
 exit 0, no stdout. Harness cases P01 to P04 and PX01 to PX14 cover the checks above, the
-formatter and the `CLAUDE.md` cap; PA the path anchors; PC cap exemptions and formatters from a
-policy file, a malformed policy, and the Dystopo example.
+formatter and the `CLAUDE.md` cap; PA the path anchors, closed records and list-item scope; PC cap
+exemptions and formatters from a policy file, a malformed policy, and the Dystopo example.
 
 ## 3. `usage-gate.js` (PreToolUse, matcher `Agent|Workflow`, no `onFailure`) and the status line
 
@@ -178,8 +203,9 @@ Cache: `~/.claude/usage-state.json`, `{ "five_hour": { "used_percentage", "reset
 "seven_day": {...}, "updatedAt" }`, epoch seconds. `.claude/statusline.js` writes it: a window
 present on stdin replaces the cached one, an absent window keeps it, and when neither is present
 nothing is written, so a refresh without `rate_limits` never replaces numbers with nulls. The write
-goes to a temporary file and is renamed. `settings.json` sets `"refreshInterval": 60`, so the cache
-stays fresh while the user is idle and agents run. The line shows model, context, both windows
+goes to a temporary file and is renamed; a failed rename removes the temporary file.
+`settings.json` sets `"refreshInterval": 60`, so the cache stays fresh while the user is idle and
+agents run. The line shows model, context, both windows
 with their reset times, and ` HOLD` or ` STOP` at the policy's `usage.hold` and `usage.deny`; a
 cached window past its `resets_at` shows `n/a`.
 
@@ -195,5 +221,6 @@ user's decision (docs/design/decisions/0006-hook-policy-file.md).`, unless the o
 it (ADR 0006). A crash exits 1, which does not block: the gate fails open.
 
 Harness cases U01 to U07 (thresholds and the override file), UX01 to UX12 (staleness both ways, a
-reset window, the example policies, a malformed policy, a pre-merge cache file), and S01 to S08 (the
-status line's merge, the untouched file without `rate_limits`, malformed stdin, policy flags).
+reset window, the example policies, a malformed policy, a pre-merge cache file), and S01 to S09 (the
+status line's merge, the untouched file without `rate_limits`, malformed stdin, policy flags, a
+failed rename).

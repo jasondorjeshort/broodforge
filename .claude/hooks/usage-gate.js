@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: GPL-3.0-or-later
-// PreToolUse hook for the Agent and Workflow tools.
-// Denies launching new subagents when plan usage (the higher of the 5-hour and 7-day windows) is
-// at or above usage.hold in .claude/hooks/policy.json, and denies everything at usage.deny.
+// PreToolUse hook for the Agent and Workflow tools, the only calls it sees.
+// Denies launching a subagent or workflow when plan usage (the higher of the 5-hour and 7-day
+// windows) is at or above usage.hold in .claude/hooks/policy.json, override file aside, and at or
+// above usage.deny without exception. Other tools are never gated here.
 // Usage comes from ~/.claude/usage-state.json, which .claude/statusline.js writes.
 // Spec: docs/design/decisions/0002-hook-specs.md section 3; policy: ADR 0006.
 //

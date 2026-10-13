@@ -51,6 +51,7 @@ and `dystopia.json`, each with a `$comment` saying what it encodes.
 | `usage.whenStale` | `"allow"` or `"deny"` | `"allow"` | What the gate does with stale or missing data. |
 | `usage.holdAdvice` / `usage.denyAdvice` | text | the base's wording | The sentence after the threshold in each deny. |
 | `edit.capExempt` | path patterns | `[]` | Docs exempt from the 300-line cap. |
+| `edit.anchorExempt` | path patterns | proposals, decisions, findings | Docs whose backtick-quoted paths are not checked: closed records that name paths as they were. |
 | `edit.formatters` | extension to argv | `{}` | Formatter per file extension, e.g. `".rs": ["rustfmt"]`. |
 
 Branch and path patterns match the whole name; `*` matches anything, `/` included. A missing key
@@ -84,8 +85,11 @@ waits until a session's status line has written fresh data (the hook never runs 
 
 `~/.claude/usage-gate-override.json`, `{"until": <epoch seconds>, "reason": "<who asked and
 why>"}`, lifts HOLD (never the deny line) until `until`, and the gate prints the reason each time it
-is used. It is written only on the user's explicit instruction. The deny text no longer explains
-how to write it; it points here, because a deny message is read by the agent that was refused.
+is used. It is written only on the user's explicit instruction. The file is machine-wide, like the
+usage cache beside it: one override lifts HOLD for every project on the machine, not only the one
+where it was asked for, so the reason should name the scope the user gave. The deny text no longer
+explains how to write it; it points here, because a deny message is read by the agent that was
+refused.
 
 ### Test seams
 
@@ -118,12 +122,15 @@ project whose root `package.json` declares `"type": "module"` makes Node load th
 - Dystopo's in-flight relaunch override (`DYSTOPO_GATE_OVERRIDE=1`) is not carried over; its
   example sets `deny` to 100 so the override file can lift its 75% line instead.
 - The guard now reads quoted text as data. Text handed to a shell (`sh -c`, `eval`, `| bash`,
-  `powershell -Command`) is still read as commands, and anything the parser cannot see (aliases in
-  the user's git config, scripts, a variable as the command word) is still unguarded, as before.
+  `powershell -Command`) is still read as commands. What the reader cannot see (a variable, a
+  substitution, a brace expansion, xargs input) is denied on any subcommand that can discard work
+  or bypass hooks, so `git checkout "$BRANCH"` needs the name written out; `git log $(...)` still
+  runs. Still unguarded: aliases already in the user's git config, scripts, and other interpreters
+  running git (`node -e`, `python -c`).
 - A malformed policy stops all git work until it is fixed. That is deliberate and loud, and
   `node .claude/hooks/policy.js` says what is wrong.
 - More moving parts: four scripts share a loader and the guard has a shell reader of a few hundred
-  lines. The harness (255 cases) is what keeps them honest; a change to either needs its cases.
+  lines. The harness (325 cases) is what keeps them honest; a change to either needs its cases.
   It reads no file of the repository it runs in (its Hatchery policy is a fixture inside it, its
   docs a scratch tree), so it passes unchanged in every project that copies it; the project's own
   `policy.json` is checked only for loading.

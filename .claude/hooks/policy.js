@@ -34,7 +34,11 @@ const DEFAULTS = {
     holdAdvice: 'Do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report.',
     denyAdvice: 'Stop all work, run the handoff skill, commit WIP from the main session, end the turn.',
   },
-  edit: { capExempt: [], formatters: {} },
+  edit: {
+    capExempt: [],
+    anchorExempt: ['docs/design/proposals/*', 'docs/design/decisions/*', 'docs/findings/*'],
+    formatters: {},
+  },
 };
 
 const isStrings = (v) => Array.isArray(v) && v.every((s) => typeof s === 'string' && s !== '');
@@ -59,7 +63,7 @@ const SCHEMA = {
     hooksPath: 'pathOrNull',
   },
   usage: { hold: 'percent', deny: 'percent', staleSeconds: 'seconds', whenStale: 'stale', holdAdvice: 'text', denyAdvice: 'text' },
-  edit: { capExempt: 'patterns', formatters: 'formatters' },
+  edit: { capExempt: 'patterns', anchorExempt: 'patterns', formatters: 'formatters' },
 };
 
 // Walks value against schema, merging over defaults. Throws on the first problem.

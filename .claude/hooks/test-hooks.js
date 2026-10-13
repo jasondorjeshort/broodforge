@@ -94,7 +94,7 @@ const HATCHERY_POLICY = {
     hooksPath: null,
   },
   usage: { hold: 50, deny: 80, staleSeconds: 7200, whenStale: 'allow' },
-  edit: { capExempt: [], formatters: {} },
+  edit: { capExempt: [], anchorExempt: ['docs/design/proposals/*', 'docs/design/decisions/*', 'docs/findings/*'], formatters: {} },
 };
 fs.writeFileSync(path.join(scratch, 'policy-hatchery.json'), JSON.stringify(HATCHERY_POLICY));
 const POLICIES = {
@@ -148,6 +148,8 @@ const PREFIX = {
   15: 'git alias definition',
   16: 'forced checkout discards edits',
   17: 'forced worktree removal',
+  18: 'forced branch reset',
+  19: 'unexpanded argument',
   policy: 'policy file is malformed (',
 };
 const NOTE_MARK = 'git-guard reads the command line, not what runs';
@@ -314,6 +316,88 @@ const GQ = [
 ];
 for (const [id, command, tool, agent, expect, extra] of GQ) guardCase(id, { command, tool, agent }, expect, extra);
 
+// Shapes an independent review reproduced as bypasses (2026-10-13), and the cases it found
+// untested. [id, command, tool, agent, expect, cwd, policy]
+const mainNoPush = scratchPolicy('main-no-push', { git: { push: { mainSession: false } } });
+const GR = [
+  // Abbreviated long options read as the options they start.
+  ['GR01', 'git reset --har HEAD~1', 'Bash', null, 5],
+  ['GR02', 'git checkout --forc main', 'Bash', null, 16],
+  ['GR03', 'git push --mirr origin', 'Bash', null, 2],
+  ['GR04', 'git push --delet origin x', 'Bash', null, 2],
+  ['GR05', 'git commit --no-verif -m x', 'Bash', null, 13],
+  ['GR06', 'git switch --discard main', 'Bash', null, 16],
+  ['GR07', 'git worktree remove --forc wt', 'Bash', null, 17],
+  ['GR08', 'git clean --dry', 'Bash', null, 'allow'], // --dry is --dry-run
+  ['GR09', 'git push --force-if-includes', 'Bash', 'pusher', 1],
+  // Arguments the reader cannot see, on a subcommand that can do harm.
+  ['GR10', 'X=--force; git push $X', 'Bash', null, 19],
+  ['GR11', 'git push {-f,}', 'Bash', null, 19],
+  ['GR12', 'git push ${F:---force}', 'Bash', null, 19],
+  ['GR13', 'git push $(echo --force)', 'Bash', null, 19],
+  ['GR14', 'G=git; $G push -f', 'Bash', null, 19],
+  ['GR15', 'echo --force | xargs git push', 'Bash', null, 19],
+  ['GR16', 'git checkout "$BRANCH"', 'Bash', null, 19],
+  ['GR17', 'git reset --soft $(git commit-tree HEAD^{tree} -p HEAD -m x)', 'Bash', null, 19],
+  ['GR18', 'git log --oneline $(git merge-base main HEAD)..HEAD', 'Bash', null, 'allow'],
+  ['GR19', 'git commit -m "add $f" --file="$TMP"', 'Bash', 'runner', 'allow'], // values of options
+  ['GR20', '$(git rev-parse --show-toplevel)/scripts/check.sh', 'Bash', null, 'allow'],
+  ['GR21', 'git -C "$REPO" status && git diff {a,b}.txt', 'Bash', null, 'allow'],
+  ['GR22', '$g="git"; & $g push -f', 'PowerShell', null, 19],
+  ['GR23', '$a="push","-f"; git @a', 'PowerShell', null, 19],
+  ['GR24', '$h = git rev-parse HEAD', 'PowerShell', null, 'allow'],
+  // PowerShell launchers.
+  ['GR25', 'Start-Process git -ArgumentList "push --force"', 'PowerShell', null, 1],
+  ['GR26', 'Start-Process git -ArgumentList "push","--force"', 'PowerShell', null, 1],
+  ['GR27', 'Start-Process -FilePath git -ArgumentList $rest', 'PowerShell', null, 19],
+  ['GR28', '& ([scriptblock]::Create("git push -f"))', 'PowerShell', null, 1],
+  ['GR29', 'iex "git reset --hard"', 'PowerShell', null, 5],
+  ['GR30', 'cmd /c "git push -f"', 'PowerShell', null, 1],
+  ['GR31', 'cmd /c git push -f', 'Bash', null, 1],
+  ['GR32', 'echo "git push -f" | xargs -I{} sh -c "{}"', 'Bash', null, 1],
+  ['GR33', 'sudo -u x bash -c "git reset --hard"', 'Bash', null, 5],
+  ['GR34', "t 'git -C x push' '' PowerShell", 'Bash', 'coder', 'allow'], // a runner name as an argument runs nothing
+  ['GR35', 'node -e "require(\'child_process\').execSync(\'git push -f\')"', 'Bash', null, 'allow'], // not covered, by design
+  // Every command that makes a commit is rule 4's.
+  ['GR36', 'git merge --no-ff feature', 'Bash', 'coder', 4],
+  ['GR37', 'git cherry-pick abc', 'Bash', 'coder', 4],
+  ['GR38', 'git revert HEAD', 'Bash', 'coder', 4],
+  ['GR39', 'git am patch.mbox', 'Bash', 'coder', 4],
+  ['GR40', 'git rebase main', 'Bash', 'coder', 4],
+  ['GR41', 'git pull', 'Bash', 'coder', 4],
+  ['GR42', 'git rebase --abort', 'Bash', 'coder', 'allow'],
+  ['GR43', 'git merge feature', 'Bash', 'general-purpose', 4, repoMain, POLICIES.dystopo],
+  ['GR44', 'git rebase origin/main', 'Bash', 'general-purpose', 'allow', repoTask, POLICIES.dystopo],
+  // Config that redirects hooks by another route.
+  ['GR45', 'GIT_CONFIG_GLOBAL=/tmp/evil git commit -m x', 'Bash', null, 14],
+  ['GR46', 'GIT_CONFIG_SYSTEM=/tmp/evil git status', 'Bash', null, 14],
+  ['GR47', "GIT_CONFIG_PARAMETERS=\"'core.hooksPath'='x'\" git commit -m x", 'Bash', null, 14],
+  ['GR48', 'git -c include.path=/tmp/evil commit -m x', 'Bash', null, 14],
+  ['GR49', 'git config include.path /tmp/evil', 'Bash', null, 14],
+  ['GR50', 'git config includeIf.gitdir:~/w/.path /tmp/evil', 'Bash', null, 14],
+  ['GR51', "$env:GIT_CONFIG_GLOBAL = 'x'; git status", 'PowerShell', null, 14],
+  ['GR52', 'git config --get include.path', 'Bash', null, 'allow'],
+  // Forced branch resets, send-pack, and whole-tree spellings.
+  ['GR53', 'git checkout -B main HEAD~3', 'Bash', null, 18], // main is the current branch
+  ['GR54', 'git switch -C main HEAD~3', 'Bash', null, 18],
+  ['GR55', 'git branch -f main HEAD~3', 'Bash', null, 'allow', repoTask], // not current, not protected
+  ['GR56', 'git branch -f main HEAD~3', 'Bash', null, 18, repoTask, POLICIES.dystopo],
+  ['GR57', 'git checkout -B topic origin/topic', 'Bash', null, 'allow'],
+  ['GR58', 'git send-pack --force origin main', 'Bash', null, 1],
+  ['GR59', 'git checkout -- ./.', 'Bash', null, 7],
+  ['GR60', 'git checkout -- src/..', 'Bash', null, 7],
+  ['GR61', 'git restore -- ./docs/..', 'Bash', null, 8],
+  ['GR62', 'git checkout -- ./src', 'Bash', null, 'allow'],
+  // Untested before.
+  ['GR63', 'git push', 'Bash', null, 3, null, mainNoPush],
+  ['GR64', 'git reflog delete HEAD@{1}', 'Bash', null, 12],
+];
+for (const [id, command, tool, agent, expect, cwd, policy] of GR) {
+  guardCase(id, { command, tool, agent, cwd: cwd || undefined, policy: policy || undefined }, expect);
+}
+// A reassembled Start-Process command carries the note: git ran from text, not as the command word.
+guardCase('GR65', { command: 'Start-Process git -ArgumentList "push --force"', tool: 'PowerShell' }, 1, withNote);
+
 // Policy file: malformed denies every git command (and nothing else); absent means the defaults.
 const badJson = scratchPolicy('badjson', '{ "git": ');
 const badKey = scratchPolicy('badkey', { git: { push: { subagent: 'any' } } });
@@ -373,7 +457,7 @@ write('docs/reference/noverified.md', '---\nsource: observed\n---\n# No verified
 write('docs/reference/unlisted.md', '---\nverified: 2026-10-11\n---\n# Unlisted\n');
 // 41 lines, synthetic: the suite reads no file of the repository it runs in.
 write('docs/HANDOFF.md', `# Handoff\n\n${lines(39)}`);
-write('docs/findings/README.md', '# Findings\n\n`2026-01-01-nofm.md` `2026-01-02-ok.md`\n');
+write('docs/findings/README.md', '# Findings\n\n`2026-01-01-nofm.md` `2026-01-02-ok.md` `2026-01-03-gone.md`\n');
 write('docs/findings/2026-01-01-nofm.md', '# A finding without frontmatter\n\n## Question\n');
 write('docs/findings/2026-01-02-ok.md', '---\ndate: 2026-01-02\nstatus: open\narea: test\n---\n# OK\n');
 write('docs/design/README.md', '# Design\n\n- [0009 Something](decisions/0009-something.md)\n');
@@ -442,8 +526,19 @@ const P = [
   ['PC05', 'Dystopo example exempts docs/PLANNING.md', absOf('docs/PLANNING.md'), null, null, null, POLICIES.dystopo],
   ['PC06', 'docs/PLANNING.md under the Hatchery policy', absOf('docs/PLANNING.md'),
     'post-edit: docs/PLANNING.md is 320 lines; cap is 300 (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.'],
+  // Closed records are exempt from the path check by default; list items scope [no-check:].
+  ['PA05', 'a finding naming a gone path (closed record)', absOf('docs/findings/2026-01-03-gone.md'), null],
+  ['PA06', 'the same finding with anchorExempt emptied', absOf('docs/findings/2026-01-03-gone.md'),
+    'post-edit: docs/findings/2026-01-03-gone.md names paths that do not exist: `docs/reference/gone.md`. Fix them, or mark the paragraph [no-check: <reason>] (.claude/rules/docs.md).',
+    null, null, scratchPolicy('anchor-all', { edit: { anchorExempt: [] } })],
+  ['PA07', 'an indented fenced block', absOf('docs/notes/indented.md'), null],
+  ['PA08', '[no-check:] covers its own list item only', absOf('docs/notes/list.md'),
+    'post-edit: docs/notes/list.md names paths that do not exist: `docs/reference/also-gone.md`. Fix them, or mark the paragraph [no-check: <reason>] (.claude/rules/docs.md).'],
 ];
-write('docs/notes/README.md', '# Notes\n\n`anchors.md` `nocheck.md` `fenced.md` `placeholders.md`\n');
+write('docs/findings/2026-01-03-gone.md', '---\ndate: 2026-01-03\nstatus: resolved\narea: test\n---\n# Gone\n\nIt lived in `docs/reference/gone.md`.\n');
+write('docs/notes/indented.md', '# Indented\n\n- step:\n\n    ```\n    cat `docs/reference/gone.md`\n    ```\n');
+write('docs/notes/list.md', '# List\n\n- planned `docs/reference/gone.md` [no-check: not yet]\n- also `docs/reference/also-gone.md`\n- fine `docs/reference/clean.md`\n');
+write('docs/notes/README.md', '# Notes\n\n`anchors.md` `nocheck.md` `fenced.md` `placeholders.md` `indented.md` `list.md`\n');
 write('docs/notes/anchors.md', '# Anchors\n\nSee `docs/reference/clean.md`, `docs/reference/gone.md`, `src/app.txt` and `src/old/`.\n\nAgain `docs/reference/gone.md`.\n');
 write('docs/notes/nocheck.md', '# No check\n\nPlanned: `docs/reference/gone.md`. [no-check: not written yet]\n');
 write('docs/notes/fenced.md', '# Fenced\n\n```\nls `docs/reference/gone.md`\n```\n\nFine: `docs/reference/clean.md`.\n');
@@ -599,6 +694,16 @@ if (selected('S08')) {
   fs.writeFileSync(slFile, JSON.stringify({ updatedAt: nowSec, five_hour: { used_percentage: 90, resets_at: nowSec - 1 }, seven_day: { used_percentage: 5 } }));
   const r = statusline(JSON.stringify({ model: { display_name: 'M' } }));
   report('S08', 'cached window past its reset shows n/a', r.stdout.includes('5h n/a') && !r.stdout.includes('STOP'), r.stdout, r.stdout);
+}
+// A rename that fails (the cache path is a directory here) leaves no temporary file behind.
+if (selected('S09')) {
+  fs.rmSync(slFile, { force: true });
+  fs.mkdirSync(slFile);
+  const r = statusline(rl(40, 10));
+  const left = fs.readdirSync(path.dirname(slFile)).filter((f) => f.endsWith('.tmp'));
+  report('S09', 'failed rename: no .tmp left, line still prints', r.code === 0 && left.length === 0 && r.stdout.includes('5h 40%'),
+    `exit ${r.code}, leftovers ${left.join(', ')}`, r.stdout);
+  fs.rmSync(slFile, { recursive: true, force: true });
 }
 
 // ---------- policy files themselves ----------

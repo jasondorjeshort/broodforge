@@ -87,7 +87,8 @@ function checkDocs(root, rel, abs) {
       msgs.push(`post-edit: ${rel} is not listed in ${dir}/README.md. Add one line.`);
     }
   }
-  const missing = missingPaths(root, text);
+  // Closed records (proposals, decisions, findings by default) name paths as they were.
+  const missing = matches(edit.anchorExempt, rel) ? [] : missingPaths(root, text);
   if (missing.length > 0) {
     const list = missing.map((m) => `\`${m}\``).join(', ');
     msgs.push(`post-edit: ${rel} names paths that do not exist: ${list}. Fix them, or mark the paragraph [no-check: <reason>] (.claude/rules/docs.md).`);
@@ -97,16 +98,18 @@ function checkDocs(root, rel, abs) {
 
 // Path anchors: a backtick-quoted token that looks like a repository path (it contains "/" and
 // starts with an existing top-level directory such as docs or .claude) must exist, unless its
-// paragraph carries [no-check: ...]. Fenced blocks and placeholders (NNNN, <slug>, *) are skipped.
+// paragraph, or its list item, carries [no-check: ...]. Fenced blocks (indented ones too) and
+// placeholders (NNNN, <slug>, *) are skipped.
 function missingPaths(root, text) {
   let tops;
   try {
     tops = new Set(fs.readdirSync(root, { withFileTypes: true })
       .filter((e) => e.isDirectory() && e.name !== '.git').map((e) => e.name));
   } catch (_) { return []; }
-  const prose = text.replace(/\r/g, '').replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, '');
+  const prose = text.replace(/\r/g, '').replace(/^[ \t]*(```|~~~)[^\n]*\n[\s\S]*?^[ \t]*\1[^\n]*$/gm, '');
+  const units = prose.split(/\n[ \t]*\n/).flatMap((p) => p.split(/\n(?=[ \t]*(?:[-*+]|\d+[.)])[ \t])/));
   const missing = [];
-  for (const para of prose.split(/\n[ \t]*\n/)) {
+  for (const para of units) {
     if (para.includes('[no-check:')) continue;
     for (const m of para.matchAll(/`([^`\s]+)`/g)) {
       const p = m[1].replace(/[#:].*$/, '');
