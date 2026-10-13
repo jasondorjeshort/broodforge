@@ -58,7 +58,8 @@ process.stdin.on('end', () => {
   let d = {};
   try { d = JSON.parse(raw) || {}; } catch (_) { /* print what we can */ }
   let usage = null;
-  try { usage = require('./hooks/policy').load().policy.usage; } catch (_) { /* no flags */ }
+  let usageVerdict = null;
+  try { ({ usageVerdict } = require('./hooks/policy')); usage = require('./hooks/policy').load().policy.usage; } catch (_) { /* no flags */ }
 
   const state = update(d.rate_limits);
   const now = Math.floor(Date.now() / 1000);
@@ -66,8 +67,9 @@ process.stdin.on('end', () => {
   const fiveH = live(state.five_hour);
   const sevenD = live(state.seven_day);
   const pct = (v) => (typeof v === 'number' ? `${Math.round(v)}%` : 'n/a');
-  const worst = Math.max(fiveH ? fiveH.used_percentage : 0, sevenD ? sevenD.used_percentage : 0);
-  const flag = !usage ? '' : worst >= usage.deny ? ' STOP' : worst >= usage.hold ? ' HOLD' : '';
+  // Same judgement as the gate: each meter against its own thresholds, the worse one wins.
+  const level = usage ? usageVerdict(usage, { '5h': fiveH ? fiveH.used_percentage : null, '7d': sevenD ? sevenD.used_percentage : null }).level : 0;
+  const flag = level === 2 ? ' STOP' : level === 1 ? ' HOLD' : '';
 
   // resets_at is epoch seconds. Show the clock time if the reset is within 24h, else the weekday.
   const resetAt = (w) => {

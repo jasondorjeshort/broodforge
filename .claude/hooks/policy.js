@@ -29,6 +29,10 @@ const DEFAULTS = {
   usage: {
     hold: 50,
     deny: 80,
+    // Per-meter overrides; null inherits hold/deny. A project whose session meter strands
+    // in-flight agents sooner than the weekly one runs down sets them apart (policy.examples/per-meter.json).
+    fiveHour: { hold: null, deny: null },
+    sevenDay: { hold: null, deny: null },
     staleSeconds: 7200,
     whenStale: 'allow',
     holdAdvice: 'Do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report.',
@@ -49,6 +53,7 @@ const TYPES = {
   bool: (v) => typeof v === 'boolean',
   pathOrNull: (v) => v === null || (typeof v === 'string' && v !== ''),
   percent: (v) => typeof v === 'number' && v >= 0 && v <= 100,
+  percentOrNull: (v) => v === null || TYPES.percent(v),
   seconds: (v) => Number.isInteger(v) && v > 0,
   stale: (v) => v === 'allow' || v === 'deny',
   text: (v) => typeof v === 'string' && v !== '',
@@ -62,7 +67,12 @@ const SCHEMA = {
     branchDelete: { branches: 'patterns', requireMergedPr: 'bool' },
     hooksPath: 'pathOrNull',
   },
-  usage: { hold: 'percent', deny: 'percent', staleSeconds: 'seconds', whenStale: 'stale', holdAdvice: 'text', denyAdvice: 'text' },
+  usage: {
+    hold: 'percent', deny: 'percent',
+    fiveHour: { hold: 'percentOrNull', deny: 'percentOrNull' },
+    sevenDay: { hold: 'percentOrNull', deny: 'percentOrNull' },
+    staleSeconds: 'seconds', whenStale: 'stale', holdAdvice: 'text', denyAdvice: 'text',
+  },
   edit: { capExempt: 'patterns', anchorExempt: 'patterns', formatters: 'formatters' },
 };
 
@@ -98,11 +108,38 @@ function load(file) {
   }
   try {
     const policy = merge(SCHEMA, JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text), DEFAULTS, '');
-    if (policy.usage.hold > policy.usage.deny) throw new Error('usage.hold is above usage.deny');
+    for (const [label, t] of meterThresholds(policy.usage)) {
+      if (t.hold > t.deny) throw new Error(`usage hold is above deny for the ${label} meter`);
+    }
     return { policy, error: null, source };
   } catch (e) {
     return { policy: DEFAULTS, error: `${source}: ${e.message}`, source };
   }
+}
+
+// The effective [label, {hold, deny}] pair per meter: the per-meter value where set, else the
+// shared one. Keys match the windows the status line caches.
+function meterThresholds(usage) {
+  const pick = (m) => ({ hold: m.hold === null ? usage.hold : m.hold, deny: m.deny === null ? usage.deny : m.deny });
+  return [['5h', pick(usage.fiveHour)], ['7d', pick(usage.sevenDay)]];
+}
+
+// Judges readings { '5h': percent|null, '7d': percent|null } against the policy. Returns
+// { level, hits }: level 2 when any meter is at or above its deny line, 1 when any is at or
+// above its hold line, else 0; hits lists the meters that tripped at that level, as
+// { label, pct, threshold }. The worse meter wins, each judged by its own thresholds.
+function usageVerdict(usage, readings) {
+  const out = { level: 0, hits: [] };
+  for (const key of ['deny', 'hold']) {
+    const level = key === 'deny' ? 2 : 1;
+    const hits = [];
+    for (const [label, t] of meterThresholds(usage)) {
+      const pct = readings[label];
+      if (typeof pct === 'number' && pct >= t[key]) hits.push({ label, pct, threshold: t[key] });
+    }
+    if (hits.length) return { level, hits };
+  }
+  return out;
 }
 
 // True when name matches one of the patterns; "*" matches any run of characters, "/" included.
@@ -110,7 +147,7 @@ function matches(patterns, name) {
   return patterns.some((p) => new RegExp(`^${p.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`).test(name));
 }
 
-module.exports = { load, matches, DEFAULTS };
+module.exports = { load, matches, usageVerdict, meterThresholds, DEFAULTS };
 
 if (require.main === module) {
   const r = load(process.argv[2]);

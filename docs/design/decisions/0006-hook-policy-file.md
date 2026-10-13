@@ -32,9 +32,9 @@ the gate's thresholds were duplicated in the status line.
 
 `.claude/hooks/policy.json`, read by `.claude/hooks/policy.js` for `git-guard.js`, `usage-gate.js`,
 `post-edit.js` and `.claude/statusline.js`. The scripts hold mechanism; the file holds choices. The
-base ships one reproducing its own behaviour; `.claude/hooks/policy.examples/` holds
-`task-branches.json` (Dystopo's model) and `single-branch.json` (Dystopia's), each with a
-`$comment` saying what it encodes and neither naming its project, since the examples ship with the base.
+base ships one reproducing its own behaviour; `.claude/hooks/policy.examples/` holds one example
+per model seen downstream (task branches, single branch, per-meter thresholds), each with a
+`$comment` saying what it encodes and none naming its project, since the examples ship with the base.
 
 | Key | Type | Base value | Meaning |
 |---|---|---|---|
@@ -48,6 +48,7 @@ base ships one reproducing its own behaviour; `.claude/hooks/policy.examples/` h
 | `git.branchDelete.requireMergedPr` | boolean | `false` | Also require a merged pull request on GitHub (`gh`, fails closed). |
 | `git.hooksPath` | path or `null` | `null` | The one value `core.hooksPath` may be set to; `null` allows none. |
 | `usage.hold` / `usage.deny` | percent | `50` / `80` | No new subagents at `hold`; stop at `deny`. `hold` may not exceed `deny`. |
+| `usage.fiveHour` / `usage.sevenDay` | `{ "hold", "deny" }`, each percent or `null` | both `null` | Per-meter thresholds; `null` inherits `usage.hold` / `usage.deny`. Each meter is judged by its own pair and the worse verdict wins (ReGenesis, its ADR 0004). |
 | `usage.staleSeconds` | seconds | `7200` | Older usage data is stale. |
 | `usage.whenStale` | `"allow"` or `"deny"` | `"allow"` | What the gate does with stale or missing data. |
 | `usage.holdAdvice` / `usage.denyAdvice` | text | the base's wording | The sentence after the threshold in each deny. |
