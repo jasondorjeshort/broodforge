@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // PreToolUse hook for the Agent and Workflow tools, the only calls it sees.
 // Denies launching a subagent or workflow when plan usage (the higher of the 5-hour and 7-day
-// windows) is at or above usage.hold in .claude/hooks/policy.json, override file aside, and at or
-// above usage.deny without exception. Other tools are never gated here.
+// windows) is at or above usage.hold in .claude/hooks/policy.json, unless the owner's override
+// lifts it, and at or above usage.deny without exception. Other tools are never gated here.
 // Usage comes from ~/.claude/usage-state.json, which .claude/statusline.js writes.
 // Spec: docs/design/decisions/0002-hook-specs.md section 3; policy: ADR 0006.
 //
@@ -15,10 +15,11 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { load, usageVerdict } = require('./policy');
+const { load, usageVerdict, overrideMeters } = require('./policy');
 
 const STATE_FILE = path.join(os.homedir(), '.claude', 'usage-state.json');
-// Lifts HOLD (not the deny line) until `until`, epoch seconds; written only on the user's word.
+// Lifts HOLD (not the deny line) until `until`, epoch seconds, on the meters in `meters` ("5h",
+// "7d"; both when absent); written only on the user's word. Format: ADR 0006, The HOLD override.
 const OVERRIDE_FILE = path.join(os.homedir(), '.claude', 'usage-gate-override.json');
 const POLICY_DOC = 'docs/design/decisions/0006-hook-policy-file.md';
 
@@ -64,12 +65,18 @@ function main() {
 
   if (v.level === 2) deny(`Usage gate: ${detail}. ${tripped}: ${u.denyAdvice}`);
   if (v.level === 1) {
-    const o = readJson(OVERRIDE_FILE);
-    if (o && typeof o.until === 'number' && o.until > now) {
-      note(`HOLD (${detail}) lifted by override until ${new Date(o.until * 1000).toLocaleString()}: ${o.reason || 'no reason given'}`);
+    if (u.overrideEnv && process.env[u.overrideEnv] === '1') {
+      note(`HOLD (${detail}) lifted for this session by ${u.overrideEnv}=1.`);
       return;
     }
-    deny(`Usage gate: ${detail}. ${tripped}: ${u.holdAdvice} Lifting this early is the user's decision (${POLICY_DOC}).`);
+    const o = readJson(OVERRIDE_FILE);
+    const lifted = overrideMeters(o, now);
+    if (lifted.length && v.hits.every((h) => lifted.includes(h.label))) {
+      note(`HOLD (${detail}) lifted on ${lifted.join(' and ')} by override until ${new Date(o.until * 1000).toLocaleString()}: ${o.reason || 'no reason given'}`);
+      return;
+    }
+    const partial = lifted.length ? ` The override in force lifts only ${lifted.join(' and ')}.` : '';
+    deny(`Usage gate: ${detail}. ${tripped}: ${u.holdAdvice}${partial} Lifting this early is the user's decision (${POLICY_DOC}).`);
   }
 }
 

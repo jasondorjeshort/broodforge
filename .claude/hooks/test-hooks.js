@@ -649,6 +649,47 @@ for (const [id, label, state, policy, expect, stderrHas] of UX) {
   report(id, `${label} -> ${expect === null ? 'allow' : 'deny'}`, ok, detail, r.stdout);
 }
 
+// The override per meter and the session variable. [id, label, state, override file contents or
+// undefined, policy, extra env, expected deny-reason prefix or null for allow, stderr must include]
+const ovFile = path.join(home, '.claude', 'usage-gate-override.json');
+const envPolicy = scratchPolicy('ug-env', { usage: { hold: 75, deny: 100, overrideEnv: 'HOOK_TEST_GATE_OVERRIDE' } });
+const ov = (meters, until) => Object.assign({ until: until || nowSec + 3600, reason: 'test: owner' }, meters === undefined ? {} : { meters });
+const UO = [
+  ['UO01', 'override with no meters lifts HOLD on both', fresh(60, 70), ov(), POLICIES.hatchery, {}, null, 'lifted on 5h and 7d'],
+  ['UO02', 'override on 7d lifts a 7d HOLD', fresh(10, 70), ov(['7d']), POLICIES.hatchery, {}, null, 'lifted on 7d'],
+  ['UO03', 'override on 7d keeps a 5h HOLD', fresh(60, 70), ov(['7d']), POLICIES.hatchery, {},
+    'Usage gate: 5h 60%, 7d 70%. 5h at or above 50%, 7d at or above 50%: Do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report. The override in force lifts only 7d.'],
+  ['UO04', 'override on 5h keeps a 7d HOLD', fresh(10, 70), ov(['5h']), POLICIES.hatchery, {}, 'Usage gate: 5h 10%, 7d 70%. 7d at or above 50%'],
+  ['UO05', 'an unknown meter name lifts nothing', fresh(10, 70), ov(['7d', 'weekly']), POLICIES.hatchery, {}, 'Usage gate: 5h 10%, 7d 70%. 7d at or above 50%'],
+  ['UO06', 'meters not a list lifts nothing', fresh(10, 70), ov('7d'), POLICIES.hatchery, {}, 'Usage gate: 5h 10%, 7d 70%. 7d at or above 50%'],
+  ['UO07', 'expired per-meter override lifts nothing', fresh(10, 70), ov(['7d'], nowSec - 1), POLICIES.hatchery, {}, 'Usage gate: 5h 10%, 7d 70%. 7d at or above 50%'],
+  ['UO08', 'deny 100: the override lifts both meters at 95%', fresh(90, 95), ov(), POLICIES.taskBranches, {}, null, 'lifted on 5h and 7d'],
+  ['UO09', 'deny 100: no override, 95% 7d is HOLD', fresh(10, 95), undefined, POLICIES.taskBranches, {}, 'Usage gate: 5h 10%, 7d 95%. 7d at or above 75%'],
+  ['UO10', 'overrideEnv set to 1 lifts HOLD', fresh(80, 95), undefined, envPolicy, { HOOK_TEST_GATE_OVERRIDE: '1' }, null, 'lifted for this session by HOOK_TEST_GATE_OVERRIDE=1'],
+  ['UO11', 'overrideEnv unset: HOLD', fresh(80, 95), undefined, envPolicy, { HOOK_TEST_GATE_OVERRIDE: undefined }, 'Usage gate: 5h 80%, 7d 95%. 5h at or above 75%, 7d at or above 75%'],
+  ['UO12', 'overrideEnv does not lift the deny line', fresh(10, 100), undefined, envPolicy, { HOOK_TEST_GATE_OVERRIDE: '1' }, 'Usage gate: 5h 10%, 7d 100%. 7d at or above 100%'],
+  ['UO13', 'overrideEnv that is not a variable name is malformed', fresh(55, 10), undefined,
+    scratchPolicy('ug-env-bad', { usage: { overrideEnv: 'A B' } }), {}, HOLD_MSG, 'using the base defaults'],
+];
+for (const [id, label, state, override, policy, extraEnv, expect, stderrHas] of UO) {
+  if (!selected(id)) continue;
+  fs.writeFileSync(stateFile, JSON.stringify(state));
+  if (override === undefined) fs.rmSync(ovFile, { force: true }); else fs.writeFileSync(ovFile, JSON.stringify(override));
+  const r = run('usage-gate', JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {} }),
+    envWith(Object.assign({ HOME: home, USERPROFILE: home, HOOK_POLICY_FILE: policy }, extraEnv)));
+  let ok;
+  let detail;
+  if (expect === null) { ok = r.code === 0 && r.stdout === ''; detail = 'expected allow (exit 0, no stdout)'; }
+  else {
+    const d = parseDecision(r.stdout);
+    ok = r.code === 0 && !!d && d.decision === 'deny' && d.reason.startsWith(expect);
+    detail = `expected a reason starting ${JSON.stringify(expect)}`;
+  }
+  if (ok && stderrHas && !r.stderr.includes(stderrHas)) { ok = false; detail = `stderr lacks ${JSON.stringify(stderrHas)}: ${r.stderr}`; }
+  report(id, `${label} -> ${expect === null ? 'allow' : 'deny'}`, ok, detail, r.stdout);
+}
+fs.rmSync(ovFile, { force: true });
+
 // ---------- statusline ----------
 // Runs .claude/statusline.js with a scratch HOME. The cache must merge per window and never lose
 // numbers to a refresh that carries no rate_limits.

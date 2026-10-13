@@ -35,6 +35,10 @@ const DEFAULTS = {
     sevenDay: { hold: null, deny: null },
     staleSeconds: 7200,
     whenStale: 'allow',
+    // Name of an environment variable that, set to "1" when the session starts, lifts HOLD on both
+    // meters for that whole session (never the deny line); null for none. For a project that
+    // relaunches in-flight work past HOLD from a session started for that purpose.
+    overrideEnv: null,
     holdAdvice: 'Do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report.',
     denyAdvice: 'Stop all work, run the handoff skill, commit WIP from the main session, end the turn.',
   },
@@ -52,6 +56,7 @@ const TYPES = {
   patterns: isStrings,
   bool: (v) => typeof v === 'boolean',
   pathOrNull: (v) => v === null || (typeof v === 'string' && v !== ''),
+  envNameOrNull: (v) => v === null || (typeof v === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(v)),
   percent: (v) => typeof v === 'number' && v >= 0 && v <= 100,
   percentOrNull: (v) => v === null || TYPES.percent(v),
   seconds: (v) => Number.isInteger(v) && v > 0,
@@ -71,7 +76,7 @@ const SCHEMA = {
     hold: 'percent', deny: 'percent',
     fiveHour: { hold: 'percentOrNull', deny: 'percentOrNull' },
     sevenDay: { hold: 'percentOrNull', deny: 'percentOrNull' },
-    staleSeconds: 'seconds', whenStale: 'stale', holdAdvice: 'text', denyAdvice: 'text',
+    staleSeconds: 'seconds', whenStale: 'stale', overrideEnv: 'envNameOrNull', holdAdvice: 'text', denyAdvice: 'text',
   },
   edit: { capExempt: 'patterns', anchorExempt: 'patterns', formatters: 'formatters' },
 };
@@ -142,12 +147,24 @@ function usageVerdict(usage, readings) {
   return out;
 }
 
+// The meters an override file lifts HOLD on at time now (epoch seconds): [] when the file is
+// absent, expired or malformed, else its "meters" list ("5h", "7d"), both when the list is absent.
+// An unknown meter name or a list that is not one makes the whole file malformed, so a typo lifts
+// nothing rather than something the user did not ask for.
+const METERS = ['5h', '7d'];
+function overrideMeters(override, now) {
+  if (!override || typeof override !== 'object' || typeof override.until !== 'number' || override.until <= now) return [];
+  if (override.meters === undefined) return METERS.slice();
+  if (!Array.isArray(override.meters) || override.meters.length === 0 || !override.meters.every((m) => METERS.includes(m))) return [];
+  return METERS.filter((m) => override.meters.includes(m));
+}
+
 // True when name matches one of the patterns; "*" matches any run of characters, "/" included.
 function matches(patterns, name) {
   return patterns.some((p) => new RegExp(`^${p.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`).test(name));
 }
 
-module.exports = { load, matches, usageVerdict, meterThresholds, DEFAULTS };
+module.exports = { load, matches, usageVerdict, meterThresholds, overrideMeters, DEFAULTS };
 
 if (require.main === module) {
   const r = load(process.argv[2]);

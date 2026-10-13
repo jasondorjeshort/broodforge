@@ -218,9 +218,10 @@ the status line refreshes the data while a session is open.` The hook never runs
 At or above `usage.deny`: `Usage gate: 5h X%, 7d Y%. <meter> at or above <deny>%: <denyAdvice>`. At or above
 `usage.hold`: `Usage gate: 5h X%, 7d Y%. <meter> at or above <hold>%: <holdAdvice> Lifting this early is the
 user's decision (docs/design/decisions/0006-hook-policy-file.md).`, unless the override file lifts
-it (ADR 0006). A crash exits 1, which does not block: the gate fails open.
+every meter that tripped, or `usage.overrideEnv` names a variable set to `1` (ADR 0006). A crash exits 1, which does not block: the gate fails open.
 
-Harness cases U01 to U07 (thresholds and the override file), UX01 to UX17 (staleness both ways, a
+Harness cases U01 to U07 (thresholds and the override file), UO01 to UO13 (the override per
+meter, `deny` at 100, `usage.overrideEnv`), UX01 to UX17 (staleness both ways, a
 reset window, the example policies, per-meter thresholds, a malformed policy, a pre-merge cache
 file), and S01 to S09 (the
 status line's merge, the untouched file without `rate_limits`, malformed stdin, policy flags, a
