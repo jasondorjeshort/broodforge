@@ -15,8 +15,11 @@
 //       tool (a command line containing e.g. a force push would itself trip git-guard).
 //
 // Isolation: post-edit cases run against a scratch tree in the OS temp dir (deleted at
-// the end); usage-gate cases point HOME/USERPROFILE at a scratch dir. The real docs/ and
-// ~/.claude are never touched. Exit codes: 0 all pass, 1 any failure, 2 usage error.
+// the end); git-guard cases run in two scratch repositories (one on main, one on task/T1);
+// usage-gate and statusline cases point HOME/USERPROFILE at a scratch dir. Every case names
+// its policy file through HOOK_POLICY_FILE: the shipped one, an example, none, or a scratch
+// file. The real docs/ and ~/.claude are never touched. Exit codes: 0 all pass, 1 any
+// failure, 2 usage error.
 'use strict';
 const fs = require('fs');
 const os = require('os');
@@ -75,6 +78,44 @@ function parseDecision(stdout) {
   } catch (_) { return null; }
 }
 
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'hooks-test-'));
+const fwd = (p) => p.split(path.sep).join('/');
+
+// ---------- policies ----------
+// Every hook case names the policy file it runs under (HOOK_POLICY_FILE): the shipped one, the
+// two examples, none at all (the defaults), or a scratch file written for the case.
+const POLICIES = {
+  hatchery: path.join(HOOKS, 'policy.json'),
+  dystopo: path.join(HOOKS, 'policy.examples', 'dystopo.json'),
+  dystopia: path.join(HOOKS, 'policy.examples', 'dystopia.json'),
+  none: path.join(scratch, 'no-such-policy.json'),
+};
+function scratchPolicy(name, obj) {
+  const f = path.join(scratch, `policy-${name}.json`);
+  fs.writeFileSync(f, typeof obj === 'string' ? obj : JSON.stringify(obj));
+  return f;
+}
+const envWith = (extra) => {
+  const env = Object.assign({}, process.env, extra);
+  for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
+  return env;
+};
+
+// ---------- scratch git repositories (git-guard reads the current branch) ----------
+function git(dir, ...args) {
+  const r = spawnSync('git', ['-C', dir, '-c', 'user.name=hooks-test', '-c', 'user.email=hooks-test@example.invalid',
+    '-c', 'commit.gpgsign=false', ...args], { encoding: 'utf8' });
+  if (r.status !== 0) { process.stderr.write(`test-hooks: git ${args.join(' ')} failed: ${r.stderr}\n`); process.exit(2); }
+}
+const repoMain = path.join(scratch, 'repo-main');
+const repoTask = path.join(scratch, 'repo-task');
+for (const [dir, branch] of [[repoMain, 'main'], [repoTask, 'task/T1']]) {
+  fs.mkdirSync(dir, { recursive: true });
+  git(dir, 'init', '-q');
+  git(dir, 'checkout', '-q', '-b', branch);
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'init');
+}
+
 // ---------- git-guard ----------
 const PREFIX = {
   1: 'force push',
@@ -89,7 +130,49 @@ const PREFIX = {
   10: 'interactive rebase is unsupported here',
   11: 'stash drop/clear is unrecoverable',
   12: 'history rewrite',
+  13: 'hooks bypass',
+  14: 'hooks path override',
+  15: 'git alias definition',
+  16: 'forced checkout discards edits',
+  17: 'forced worktree removal',
+  policy: 'policy file is malformed (',
 };
+const NOTE_MARK = 'git-guard reads the command line, not what runs';
+const withNote = (d) => d.reason.includes(NOTE_MARK) || 'reason lacks the note about command text';
+const noNote = (d) => !d.reason.includes(NOTE_MARK) || 'reason carries the note, but git is the command here';
+
+// Runs git-guard once. o: { command, agent, tool, cwd, policy, raw, merged }. expect: 'allow',
+// 'internal' (exit 2, reason on stderr), a rule number, or 'policy' (malformed policy deny).
+function guardCase(id, o, expect, extra) {
+  if (!selected(id)) return;
+  const input = { hook_event_name: 'PreToolUse', tool_name: o.tool || 'Bash', cwd: o.cwd || repoMain, tool_input: { command: o.command } };
+  if (o.agent !== null && o.agent !== undefined) input.agent_type = o.agent;
+  const stdin = o.raw !== undefined && o.raw !== null ? o.raw : JSON.stringify(input);
+  // task/T1 has a merged pull request, task/T2 does not (git-guard's GIT_GUARD_MERGED seam).
+  const r = run('git-guard', stdin, envWith({ HOOK_POLICY_FILE: o.policy || POLICIES.hatchery, GIT_GUARD_MERGED: 'task/T1' }));
+  const shown = JSON.stringify(String(o.command).split(fwd(scratch)).join('<scratch>'));
+  const where = `${o.tool === 'PowerShell' ? ' ps' : ''}${o.cwd === repoTask ? ' on task/T1' : ''}${o.policyName ? ` (${o.policyName})` : ''}`;
+  const label = `${shown} [${o.agent == null ? '-' : JSON.stringify(o.agent)}]${where} -> ${typeof expect === 'number' ? `deny rule ${expect}` : expect}`;
+  let ok = false;
+  let detail = '';
+  if (expect === 'internal') {
+    // The guard's own failure exits 2 with the reason on stderr, which blocks even without onFailure.
+    ok = r.code === 2 && r.stdout === '' && r.stderr.startsWith('git-guard: internal error (');
+    detail = `expected exit 2 and an internal-error reason on stderr; got exit ${r.code}, stderr ${JSON.stringify(r.stderr)}`;
+  } else if (r.code !== 0) detail = `exit ${r.code}, expected 0; stderr: ${r.stderr.trim()}`;
+  else if (expect === 'allow') { ok = r.stdout === ''; detail = 'expected no stdout'; }
+  else {
+    const d = parseDecision(r.stdout);
+    if (!d || d.event !== 'PreToolUse' || d.decision !== 'deny' || typeof d.reason !== 'string') detail = 'expected deny JSON';
+    else {
+      const want = expect === 'policy' ? `git-guard: ${PREFIX.policy}` : `git-guard: ${PREFIX[expect]}: \``;
+      ok = d.reason.startsWith(want);
+      detail = `reason should start with ${JSON.stringify(want)}; got ${JSON.stringify(d.reason)}`;
+      if (ok && extra) { const e = extra(d); if (e !== true) { ok = false; detail = e; } }
+    }
+  }
+  report(id, label, ok, detail, r.stdout);
+}
 
 // [id, command, agent_type or null, expect: 'allow' | rule number | 'internal', raw stdin override, extra check]
 const G = [
@@ -147,36 +230,122 @@ const G = [
   ['GX25', '(empty stdin)', null, 'internal', ''],
 ];
 
-for (const [id, command, agent, expect, rawOverride, extra] of G) {
-  if (!selected(id)) continue;
-  const input = { hook_event_name: 'PreToolUse', tool_name: 'Bash', cwd: process.cwd(), tool_input: { command } };
-  if (agent !== null) input.agent_type = agent;
-  const stdin = rawOverride !== undefined && rawOverride !== null ? rawOverride : JSON.stringify(input);
-  const r = run('git-guard', stdin);
-  const label = `${JSON.stringify(command)} [${agent === null ? '-' : JSON.stringify(agent)}] -> ${expect === 'allow' || expect === 'internal' ? expect : `deny rule ${expect}`}`;
-  let ok = false;
-  let detail = '';
-  if (expect === 'internal') {
-    // The guard's own failure exits 2 with the reason on stderr, which blocks even without onFailure.
-    ok = r.code === 2 && r.stdout === '' && r.stderr.startsWith('git-guard: internal error (');
-    detail = `expected exit 2 and an internal-error reason on stderr; got exit ${r.code}, stderr ${JSON.stringify(r.stderr)}`;
-  } else if (r.code !== 0) detail = `exit ${r.code}, expected 0; stderr: ${r.stderr.trim()}`;
-  else if (expect === 'allow') { ok = r.stdout === ''; detail = 'expected no stdout'; }
-  else {
-    const d = parseDecision(r.stdout);
-    if (!d || d.event !== 'PreToolUse' || d.decision !== 'deny' || typeof d.reason !== 'string') detail = 'expected deny JSON';
-    else {
-      const want = `git-guard: ${PREFIX[expect]}: \``;
-      ok = d.reason.startsWith(want);
-      detail = `reason should start with ${JSON.stringify(want)}; got ${JSON.stringify(d.reason)}`;
-      if (ok && extra) { const e = extra(d); if (e !== true) { ok = false; detail = e; } }
-    }
+for (const [id, command, agent, expect, raw, extra] of G) guardCase(id, { command, agent, raw }, expect, extra);
+
+// New rules (13 to 17, and the additions to 12), under the shipped policy.
+// [id, command, agent, expect, extra]
+const GN = [
+  ['GN01', 'git commit --no-verify -m x', null, 13],
+  ['GN02', 'git commit -nm x', 'runner', 13],
+  ['GN03', 'git push --no-verify', 'pusher', 13],
+  ['GN04', 'git merge --no-verify topic', null, 13],
+  ['GN05', 'git push -n', 'pusher', 'allow'], // push -n is --dry-run, not --no-verify
+  ['GN06', 'git -c core.hooksPath=/dev/null commit -m x', null, 14],
+  ['GN07', 'git --config-env=core.hooksPath=HP commit -m x', null, 14],
+  ['GN08', 'git config --unset core.hooksPath', null, 14],
+  ['GN09', 'git config core.hooksPath .git/hooks', null, 14],
+  ['GN10', 'git config core.hooksPath', 'runner', 'allow'], // a read
+  ['GN11', 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=x git commit -m x', null, 14],
+  ['GN12', 'git -c alias.p=\'!git push -f\' p', null, 15],
+  ['GN13', 'git config --global alias.p "push --force"', null, 15],
+  ['GN14', 'git config --get alias.st', null, 'allow'],
+  ['GN15', 'git checkout -f main', null, 16],
+  ['GN16', 'git checkout --force -- src', null, 16],
+  ['GN17', 'git switch --discard-changes main', null, 16],
+  ['GN18', 'git switch -f main', null, 16],
+  ['GN19', 'git switch main', null, 'allow'],
+  ['GN20', 'git worktree remove --force ../wt', null, 17],
+  ['GN21', 'git worktree remove -f ../wt', null, 17],
+  ['GN22', 'git worktree remove ../wt', null, 'allow'],
+  ['GN23', 'git update-ref -d refs/heads/topic', null, 12],
+  ['GN24', 'git reflog expire --expire=now --all', null, 12],
+  ['GN25', 'git reflog show', null, 'allow'],
+  ['GN26', 'git push --force-with-lease origin main', null, 1], // lease is force unless the policy names branches
+  ['GN27', 'git -C . -c x.y=z --no-pager push --force', null, 1],
+  ['GN28', 'git --git-dir=.git push origin +main', null, 1],
+];
+for (const [id, command, agent, expect, extra] of GN) guardCase(id, { command, agent }, expect, extra);
+
+// Quote-aware parsing: quoted text and heredoc bodies are data unless handed to a shell.
+// [id, command, tool, agent, expect, extra]
+const HEREDOC_MSG = "git commit -m \"$(cat <<'EOF'\nDon't git push --force (yet); git reset --hard\nEOF\n)\"";
+const GQ = [
+  ['GQ01', 'git commit -m "fix git push -n and --no-verify"', 'Bash', 'runner', 'allow'],
+  ['GQ02', HEREDOC_MSG, 'Bash', null, 'allow'],
+  ['GQ03', 'git commit -m "-n"', 'Bash', null, 'allow'],
+  ['GQ04', 'git commit -mnote', 'Bash', null, 'allow'], // -m with its value attached
+  ['GQ05', 'git commit -m x -n', 'Bash', null, 13, noNote],
+  ['GQ06', "echo 'git reset --hard' > notes.txt", 'Bash', null, 'allow'],
+  ['GQ07', 'cat > notes.md <<EOF\ngit push --force\nEOF', 'Bash', null, 'allow'],
+  ['GQ08', 'git status # then git push --force', 'Bash', null, 'allow'],
+  ['GQ09', 'echo git push -f', 'Bash', null, 1, withNote], // unquoted: still read as a command
+  ['GQ10', 'bash -c "git reset --hard"', 'Bash', null, 5, withNote],
+  ['GQ11', 'echo "git push -f" | sh', 'Bash', null, 1, withNote],
+  ['GQ12', 'bash <<EOF\ngit clean -fdx\nEOF', 'Bash', null, 6, withNote],
+  ['GQ13', 'x=$(git push -f)', 'Bash', null, 1],
+  ['GQ14', 'echo `git stash drop`', 'Bash', null, 11],
+  ['GQ15', 'cat <<EOF\n$(git reset --hard)\nEOF', 'Bash', null, 5], // an unquoted heredoc expands $(...)
+  ['GQ16', 'cat <<\'EOF\'\n$(git reset --hard)\nEOF', 'Bash', null, 'allow'],
+  ['GQ17', '{ git push --force; }', 'Bash', null, 1, noNote],
+  ['GQ18', 'git push "--force"', 'Bash', null, 1],
+  ['GQ19', 'git status 2>&1 && git push --force > out.txt', 'Bash', null, 1],
+  ['GQ20', "git commit -m 'it''s git push -f'", 'PowerShell', null, 'allow'],
+  ['GQ21', "& 'C:\\Program Files\\Git\\cmd\\git.exe' push --force", 'PowerShell', null, 1],
+  ['GQ22', "git commit -m @'\ngit push --force\n'@", 'PowerShell', null, 'allow'],
+  ['GQ23', 'Invoke-Command { git push -f } | Out-Null', 'PowerShell', null, 1],
+  ['GQ24', 'powershell -NoProfile -Command "git reset --hard"', 'PowerShell', null, 5, withNote],
+  ['GQ25', "$env:GIT_CONFIG_KEY_0 = 'core.hooksPath'; git commit -m x", 'PowerShell', null, 14],
+  ['GQ26', 'git status; git push --force 2>&1', 'PowerShell', null, 1],
+  ['GQ27', 'Write-Output "git push --force"', 'PowerShell', null, 'allow'],
+  ['GQ28', 'git commit -m "$(git rev-parse HEAD) fix"', 'PowerShell', 'coder', 4],
+];
+for (const [id, command, tool, agent, expect, extra] of GQ) guardCase(id, { command, tool, agent }, expect, extra);
+
+// Policy file: malformed denies every git command (and nothing else); absent means the defaults.
+const badJson = scratchPolicy('badjson', '{ "git": ');
+const badKey = scratchPolicy('badkey', { git: { push: { subagent: 'any' } } });
+const badType = scratchPolicy('badtype', { usage: { hold: 'fifty' } });
+guardCase('GF01', { command: 'git status', policy: badJson, policyName: 'not JSON' }, 'policy');
+guardCase('GF02', { command: 'git status', policy: badKey, policyName: 'unknown key' }, 'policy');
+guardCase('GF03', { command: 'git log', policy: badType, policyName: 'wrong type' }, 'policy');
+guardCase('GF04', { command: 'ls -la', policy: badJson, policyName: 'not JSON' }, 'allow');
+guardCase('GF05', { command: 'git commit -m x', agent: 'coder', policy: POLICIES.none, policyName: 'absent' }, 4);
+guardCase('GF06', { command: 'git commit -m x', agent: 'runner', policy: POLICIES.none, policyName: 'absent' }, 'allow');
+
+// One command set under every policy. The absent file must behave as the shipped one.
+// [id, command, agent, cwd, { hatchery, dystopo, dystopia }]
+const H = 'hatchery';
+const GP = [
+  ['01', 'git push', 'pusher', repoMain, { hatchery: 'allow', dystopo: 3, dystopia: 3 }],
+  ['02', 'git push', 'general-purpose', repoTask, { hatchery: 3, dystopo: 'allow', dystopia: 3 }],
+  ['03', 'git push', null, repoMain, { hatchery: 'allow', dystopo: 'allow', dystopia: 'allow' }],
+  ['04', 'git commit -m x', 'runner', repoMain, { hatchery: 'allow', dystopo: 4, dystopia: 'allow' }],
+  ['05', 'git commit -m x', 'general-purpose', repoMain, { hatchery: 4, dystopo: 4, dystopia: 'allow' }],
+  ['06', 'git commit -m x', 'general-purpose', repoTask, { hatchery: 4, dystopo: 'allow', dystopia: 'allow' }],
+  ['07', 'git push --force-with-lease origin task/T1', 'general-purpose', repoTask, { hatchery: 1, dystopo: 'allow', dystopia: 1 }],
+  ['08', 'git push --force-with-lease origin main', null, repoMain, { hatchery: 1, dystopo: 1, dystopia: 1 }],
+  ['09', 'git branch -D task/T1', null, repoMain, { hatchery: 9, dystopo: 'allow', dystopia: 9 }],
+  ['10', 'git branch -D task/T2', null, repoMain, { hatchery: 9, dystopo: 9, dystopia: 9 }],
+  ['11', 'git push origin --delete task/T1', null, repoMain, { hatchery: 2, dystopo: 'allow', dystopia: 2 }],
+  ['12', 'git push origin :task/T2', 'general-purpose', repoMain, { hatchery: 2, dystopo: 2, dystopia: 2 }],
+  ['13', 'git config core.hooksPath tools/git-hooks', null, repoMain, { hatchery: 14, dystopo: 'allow', dystopia: 14 }],
+  ['14', 'git push --tags', 'general-purpose', repoTask, { hatchery: 3, dystopo: 3, dystopia: 3 }],
+  ['15', 'git push --tags', 'pusher', repoMain, { hatchery: 'allow', dystopo: 3, dystopia: 3 }],
+  ['16', 'git push origin v1.0', null, repoMain, { hatchery: 'allow', dystopo: 'allow', dystopia: 'allow' }],
+  ['17', 'git push origin HEAD:main', 'general-purpose', repoTask, { hatchery: 3, dystopo: 3, dystopia: 3 }],
+  ['18', `git -C ${fwd(repoTask)} commit -m x`, 'general-purpose', repoMain, { hatchery: 4, dystopo: 'allow', dystopia: 'allow' }],
+  ['19', `cd ${fwd(repoMain)} && git commit -m x`, 'general-purpose', repoTask, { hatchery: 4, dystopo: 4, dystopia: 'allow' }],
+  ['20', 'git reset --hard', null, repoMain, { hatchery: 5, dystopo: 5, dystopia: 5 }],
+  ['21', 'git commit --no-verify -m x', 'general-purpose', repoTask, { hatchery: 4, dystopo: 13, dystopia: 13 }],
+];
+for (const [n, command, agent, cwd, want] of GP) {
+  for (const p of [H, 'none', 'dystopo', 'dystopia']) {
+    const tag = { hatchery: 'H', none: 'N', dystopo: 'O', dystopia: 'A' }[p];
+    guardCase(`GP${n}${tag}`, { command, agent, cwd, policy: POLICIES[p], policyName: p }, want[p === 'none' ? H : p]);
   }
-  report(id, label, ok, detail, r.stdout);
 }
 
 // ---------- post-edit ----------
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'hooks-test-'));
 const write = (rel, text) => {
   const f = path.join(scratch, ...rel.split('/'));
   fs.mkdirSync(path.dirname(f), { recursive: true });
@@ -210,7 +379,8 @@ const absOf = (rel) => path.join(scratch, ...rel.split('/'));
 const fmtOk = { '.txt': [NODE, '-e', 'process.exit(0)'] };
 const fmtBad = { '.txt': [NODE, '-e', 'console.error("bad formatter output");process.exit(3)'] };
 
-// [id, label, file_path (absolute unless noted), expected additionalContext or null, raw stdin override, formatter env]
+// [id, label, file_path (absolute unless noted), expected additionalContext or null, raw stdin override, formatter env,
+//  policy file (the shipped one when omitted)]
 const P = [
   // The four cases the spec asks for.
   ['P01', '301-line docs/reference file', absOf('docs/reference/big.md'),
@@ -236,16 +406,41 @@ const P = [
   ['PX10', 'formatter that succeeds', absOf('src/app.txt'), null, null, fmtOk],
   ['PX11', 'formatter that fails', absOf('src/app.txt'),
     `post-edit: formatter ${NODE} failed on src/app.txt: bad formatter output`, null, fmtBad],
+  // Path anchors: backtick-quoted repo paths must exist.
+  ['PA01', 'doc naming a missing path', absOf('docs/notes/anchors.md'),
+    'post-edit: docs/notes/anchors.md names paths that do not exist: `docs/reference/gone.md`, `src/old/`. Fix them, or mark the paragraph [no-check: <reason>] (.claude/rules/docs.md).'],
+  ['PA02', 'missing path in a [no-check] paragraph', absOf('docs/notes/nocheck.md'), null],
+  ['PA03', 'missing path in a fenced block', absOf('docs/notes/fenced.md'), null],
+  ['PA04', 'placeholders, globs, refs, other repos', absOf('docs/notes/placeholders.md'), null],
+  // Policy: cap exemptions and formatters come from the edit block.
+  ['PC01', 'cap exemption by path', absOf('docs/reference/big.md'), null, null, null,
+    scratchPolicy('capexempt', { edit: { capExempt: ['docs/reference/big.md'] } })],
+  ['PC02', 'cap exemption by pattern', absOf('docs/reference/big.md'), null, null, null,
+    scratchPolicy('capglob', { edit: { capExempt: ['docs/reference/*'] } })],
+  ['PC03', 'formatter from the policy', absOf('src/app.txt'),
+    `post-edit: formatter ${NODE} failed on src/app.txt: bad formatter output`, null, null,
+    scratchPolicy('formatter', { edit: { formatters: fmtBad } })],
+  ['PC04', 'malformed policy: base defaults', absOf('docs/reference/big.md'),
+    'post-edit: docs/reference/big.md is 301 lines; cap is 300 (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.',
+    null, null, scratchPolicy('pe-bad', '{ nope')],
+  ['PC05', 'Dystopo example exempts docs/PLANNING.md', absOf('docs/PLANNING.md'), null, null, null, POLICIES.dystopo],
+  ['PC06', 'docs/PLANNING.md under the shipped policy', absOf('docs/PLANNING.md'),
+    'post-edit: docs/PLANNING.md is 320 lines; cap is 300 (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.'],
 ];
+write('docs/notes/README.md', '# Notes\n\n`anchors.md` `nocheck.md` `fenced.md` `placeholders.md`\n');
+write('docs/notes/anchors.md', '# Anchors\n\nSee `docs/reference/clean.md`, `docs/reference/gone.md`, `src/app.txt` and `src/old/`.\n\nAgain `docs/reference/gone.md`.\n');
+write('docs/notes/nocheck.md', '# No check\n\nPlanned: `docs/reference/gone.md`. [no-check: not written yet]\n');
+write('docs/notes/fenced.md', '# Fenced\n\n```\nls `docs/reference/gone.md`\n```\n\nFine: `docs/reference/clean.md`.\n');
+write('docs/notes/placeholders.md', '# Placeholders\n\n`docs/design/decisions/NNNN-title.md`, `docs/findings/<slug>.md`, `docs/*.md`,\n' +
+  '`origin/main`, `../decisions/x.md`, `task/T1`, `docs/reference/clean.md#section`, `docs/reference/clean.md:3`.\n');
+write('docs/PLANNING.md', lines(320));
 
-for (const [id, label, filePath, expect, rawOverride, fmt] of P) {
+for (const [id, label, filePath, expect, rawOverride, fmt, policy] of P) {
   if (!selected(id)) continue;
   const stdin = rawOverride != null ? rawOverride : JSON.stringify({
     hook_event_name: 'PostToolUse', tool_name: 'Write', cwd: scratch, tool_input: { file_path: filePath },
   });
-  const env = Object.assign({}, process.env);
-  delete env.POST_EDIT_FORMATTERS_JSON;
-  if (fmt) env.POST_EDIT_FORMATTERS_JSON = JSON.stringify(fmt);
+  const env = envWith({ HOOK_POLICY_FILE: policy || POLICIES.hatchery, POST_EDIT_FORMATTERS_JSON: fmt ? JSON.stringify(fmt) : undefined });
   const r = run('post-edit', stdin, env);
   let ok = false;
   let detail = '';
@@ -286,7 +481,7 @@ for (const [id, pct, expect, override] of U) {
   const ovPath = path.join(home, '.claude', 'usage-gate-override.json');
   if (override === undefined) fs.rmSync(ovPath, { force: true });
   else fs.writeFileSync(ovPath, typeof override === 'string' ? override : JSON.stringify(override));
-  const env = Object.assign({}, process.env, { HOME: home, USERPROFILE: home });
+  const env = envWith({ HOME: home, USERPROFILE: home, HOOK_POLICY_FILE: POLICIES.hatchery });
   const r = run('usage-gate', JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {} }), env);
   let ok;
   let detail;
@@ -297,6 +492,97 @@ for (const [id, pct, expect, override] of U) {
     detail = `expected reason ${JSON.stringify(expect)}`;
   }
   report(id, `usage ${pct}% -> ${expect === null ? 'allow' : 'deny'}`, ok, detail, r.stdout);
+}
+
+// Staleness, reset windows and the example policies. state null means no file.
+// [id, label, state, policy file, expected deny-reason prefix or null for allow, stderr must include]
+const stateFile = path.join(home, '.claude', 'usage-state.json');
+const fresh = (five, seven, extra) => Object.assign({ updatedAt: nowSec, five_hour: { used_percentage: five }, seven_day: { used_percentage: seven } }, extra);
+const staleDeny = scratchPolicy('stale-deny', { usage: { whenStale: 'deny' } });
+const UX = [
+  ['UX01', 'stale data, whenStale allow', fresh(95, 10, { updatedAt: nowSec - 3 * 3600 }), POLICIES.hatchery, null, '180 min old; allowing'],
+  ['UX02', 'stale data, whenStale deny', fresh(10, 10, { updatedAt: nowSec - 3 * 3600 }), staleDeny,
+    'Usage gate: usage data is 180 min old, and the policy denies delegation without fresh data. Check usage with /usage'],
+  ['UX03', 'no data, whenStale deny', null, staleDeny, 'Usage gate: no usage data'],
+  ['UX04', 'no data, whenStale allow', null, POLICIES.hatchery, null, 'no usage data'],
+  ['UX05', 'a window past its reset no longer counts', fresh(95, 10, { five_hour: { used_percentage: 95, resets_at: nowSec - 60 } }), POLICIES.hatchery, null],
+  ['UX06', 'a window before its reset counts', fresh(95, 10, { five_hour: { used_percentage: 95, resets_at: nowSec + 60 } }), POLICIES.hatchery, 'Usage gate: 5h 95%, 7d 10%. At or above 80%'],
+  ['UX07', 'Dystopia example, 85%', fresh(85, 10), POLICIES.dystopia, 'Usage gate: 5h 85%, 7d 10%. At or above 80%: Do not start new subagents. Let in-flight agents finish and commit'],
+  ['UX08', 'Dystopia example, 92%', fresh(92, 10), POLICIES.dystopia, 'Usage gate: 5h 92%, 7d 10%. At or above 90%: Stop all work; commit what is green'],
+  ['UX09', 'Dystopia example, 60%', fresh(60, 10), POLICIES.dystopia, null],
+  ['UX10', 'Dystopo example, 80%', fresh(10, 80), POLICIES.dystopo, 'Usage gate: 5h 10%, 7d 80%. At or above 75%: No new implementers'],
+  ['UX11', 'malformed policy: base defaults', fresh(55, 10), scratchPolicy('ug-bad', '[]'), HOLD_MSG, 'using the base defaults'],
+  ['UX12', 'pre-merge file with updated_at only', { updated_at: nowSec, five_hour: { used_percentage: 95 } }, POLICIES.hatchery, null, 'no usage data'],
+];
+fs.rmSync(path.join(home, '.claude', 'usage-gate-override.json'), { force: true });
+for (const [id, label, state, policy, expect, stderrHas] of UX) {
+  if (!selected(id)) continue;
+  if (state === null) fs.rmSync(stateFile, { force: true }); else fs.writeFileSync(stateFile, JSON.stringify(state));
+  const r = run('usage-gate', JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {} }),
+    envWith({ HOME: home, USERPROFILE: home, HOOK_POLICY_FILE: policy }));
+  let ok;
+  let detail;
+  if (expect === null) { ok = r.code === 0 && r.stdout === ''; detail = 'expected allow (exit 0, no stdout)'; }
+  else {
+    const d = parseDecision(r.stdout);
+    ok = r.code === 0 && !!d && d.decision === 'deny' && d.reason.startsWith(expect);
+    detail = `expected a reason starting ${JSON.stringify(expect)}`;
+  }
+  if (ok && stderrHas && !r.stderr.includes(stderrHas)) { ok = false; detail = `stderr lacks ${JSON.stringify(stderrHas)}: ${r.stderr}`; }
+  report(id, `${label} -> ${expect === null ? 'allow' : 'deny'}`, ok, detail, r.stdout);
+}
+
+// ---------- statusline ----------
+// Runs .claude/statusline.js with a scratch HOME. The cache must merge per window and never lose
+// numbers to a refresh that carries no rate_limits.
+const slHome = path.join(scratch, 'sl-home');
+fs.mkdirSync(path.join(slHome, '.claude'), { recursive: true });
+const slFile = path.join(slHome, '.claude', 'usage-state.json');
+const readSl = () => { try { return fs.readFileSync(slFile, 'utf8'); } catch (_) { return null; } };
+function statusline(stdin, policy) {
+  const r = spawnSync(NODE, [path.join(HOOKS, '..', 'statusline.js')], {
+    input: stdin, encoding: 'utf8', timeout: 30000,
+    env: envWith({ HOME: slHome, USERPROFILE: slHome, HOOK_POLICY_FILE: policy || POLICIES.hatchery }),
+  });
+  return { code: r.status, stdout: r.stdout || '' };
+}
+const rl = (five, seven) => JSON.stringify({ model: { display_name: 'M' }, rate_limits: Object.assign({},
+  five === null ? {} : { five_hour: { used_percentage: five, resets_at: nowSec + 3600 } },
+  seven === null ? {} : { seven_day: { used_percentage: seven, resets_at: nowSec + 86400 * 3 } }) });
+// [id, label, stdin, policy, check(result, fileBefore, fileAfter) -> true or a failure detail]
+const S = [
+  ['S01', 'both windows written', rl(55, 20), null, (r, b, a) => {
+    const j = JSON.parse(a);
+    return (j.five_hour.used_percentage === 55 && j.five_hour.resets_at === nowSec + 3600 && j.seven_day.used_percentage === 20 &&
+      typeof j.updatedAt === 'number' && r.stdout.includes('5h 55%') && r.stdout.endsWith(' HOLD')) || `file ${a}, line ${r.stdout}`;
+  }],
+  ['S02', 'no rate_limits: file untouched, cached numbers shown', JSON.stringify({ model: { display_name: 'M' } }), null,
+    (r, b, a) => (b === a && r.stdout.includes('5h 55%') && r.stdout.includes('7d 20%')) || `before ${b}, after ${a}, line ${r.stdout}`],
+  ['S03', 'one window: the other is kept', rl(null, 30), null, (r, b, a) => {
+    const j = JSON.parse(a);
+    return (j.five_hour.used_percentage === 55 && j.seven_day.used_percentage === 30) || `file ${a}`;
+  }],
+  ['S04', 'malformed stdin: prints, writes nothing', 'not json', null,
+    (r, b, a) => (r.code === 0 && b === a && r.stdout.startsWith('? |')) || `exit ${r.code}, line ${r.stdout}`],
+  ['S05', 'flags follow the policy (Dystopia: 85 is HOLD)', rl(85, 10), POLICIES.dystopia, (r) => r.stdout.endsWith(' HOLD') || r.stdout],
+  ['S06', 'flags follow the policy (Dystopia: 92 is STOP)', rl(92, 10), POLICIES.dystopia, (r) => r.stdout.endsWith(' STOP') || r.stdout],
+  ['S07', 'flags follow the policy (shipped: 85 is STOP)', rl(85, 10), null, (r) => r.stdout.endsWith(' STOP') || r.stdout],
+];
+fs.rmSync(slFile, { force: true });
+for (const [id, label, stdin, policy, check] of S) {
+  if (!selected(id)) continue;
+  const before = readSl();
+  const r = statusline(stdin, policy);
+  const after = readSl();
+  let res;
+  try { res = check(r, before, after); } catch (e) { res = e.message; }
+  report(id, label, res === true, res, r.stdout);
+}
+// A cached window past its reset reads as n/a rather than its old number.
+if (selected('S08')) {
+  fs.writeFileSync(slFile, JSON.stringify({ updatedAt: nowSec, five_hour: { used_percentage: 90, resets_at: nowSec - 1 }, seven_day: { used_percentage: 5 } }));
+  const r = statusline(JSON.stringify({ model: { display_name: 'M' } }));
+  report('S08', 'cached window past its reset shows n/a', r.stdout.includes('5h n/a') && !r.stdout.includes('STOP'), r.stdout, r.stdout);
 }
 
 if (opt.keep) process.stdout.write(`scratch tree kept at ${scratch}\n`);
