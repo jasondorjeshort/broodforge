@@ -22,7 +22,10 @@ Everything below runs in a private clone of the project, on its default branch, 
    `git fetch hatchery`; `BASE=$(git rev-parse hatchery/main)`. Read this skill and ADR 0004 from
    `hatchery/main` if you have not already.
 3. Verbatim files (base wins): `git checkout hatchery/main -- .claude/agents .claude/skills
-   .claude/hooks .claude/statusline.js .claude/rules/README.md .claude/rules/docs.md`.
+   .claude/hooks .claude/statusline.js .claude/rules/README.md .claude/rules/docs.md`. Then
+   `.claude/hooks/policy.json` becomes the project's: who commits and pushes, deletable branches,
+   usage thresholds (ADR 0006; `.claude/hooks/policy.examples/` has two worked ones). Ask the user
+   where the project's existing rules do not say; `node .claude/hooks/policy.js` must print it.
 4. `.claude/settings.json`: if absent, take Hatchery's. If present, write the union: Hatchery's
    `statusLine`, `permissions` (allow and deny lists appended, no duplicates), and every Hatchery
    hook entry, plus every existing project hook entry under its own event. Nothing of the project's

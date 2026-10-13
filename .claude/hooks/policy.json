@@ -1,0 +1,11 @@
+{
+  "$comment": "Project policy for the hooks in this directory. Schema, defaults and fail modes: docs/design/decisions/0006-hook-policy-file.md. Check with: node .claude/hooks/policy.js",
+  "git": {
+    "commit": { "subagents": ["runner"], "protectedBranches": [] },
+    "push": { "subagents": ["pusher"], "branches": ["*"], "mainSession": true, "forceWithLease": [] },
+    "branchDelete": { "branches": [], "requireMergedPr": false },
+    "hooksPath": null
+  },
+  "usage": { "hold": 50, "deny": 80, "staleSeconds": 7200, "whenStale": "allow" },
+  "edit": { "capExempt": [], "formatters": {} }
+}

@@ -37,6 +37,9 @@ project's own `NNNN-adopt-hatchery.md` records the base commit).
      `LICENSES/`. Exception: the project has recorded a reason to differ (an ADR, or a comment in
      the file naming one; an adopted project's `NNNN-adopt-hatchery.md` lists its overrides and the
      hook entries it keeps); then keep the project version and note it in the report.
+   - Project wins, always: `.claude/hooks/policy.json`, the project's choices for the hooks (ADR
+     0006). If the base added a key, the project may add it by hand; `node .claude/hooks/policy.js`
+     must then print the policy, not an error.
    - Project wins: `README.md`; the title and project-specific sections of `CLAUDE.md`
      (phase, platforms, thresholds, routing, branch name, `## Project rules`, anything the project
      added); `docs/HANDOFF.md`; `docs/ideas/`; everything under `docs/design/`, `docs/findings/`,

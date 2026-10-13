@@ -79,8 +79,8 @@ function parseDecision(stdout) {
 const PREFIX = {
   1: 'force push',
   2: 'remote branch deletion',
-  3: 'only the pusher agent pushes',
-  4: 'only the runner agent commits; leave the tree for it',
+  3: 'push not permitted for this caller',
+  4: 'commit not permitted for this caller',
   5: 'destructive reset',
   6: 'git clean deletes untracked files',
   7: 'whole-tree checkout discards edits',
@@ -117,7 +117,7 @@ const G = [
   ['G21', 'git rebase -i HEAD~3', null, 10],
   ['G22', 'git stash list', null, 'allow'],
   ['G23', 'git stash drop', null, 11],
-  ['G24', 'echo "git push --force"', null, 1, null, (d) => d.reason.includes('only quoted') || 'reason lacks the false-positive note'],
+  ['G24', 'echo "git push --force"', null, 'allow'], // quoted text is data since the quote-aware parser
   ['G25', 'not json', null, 'internal', 'not json'],
   // Extra cases: implementation choices and edge cases beyond the spec table.
   ['GX01', 'git push origin +main', null, 1],
@@ -156,13 +156,17 @@ for (const [id, command, agent, expect, rawOverride, extra] of G) {
   const label = `${JSON.stringify(command)} [${agent === null ? '-' : JSON.stringify(agent)}] -> ${expect === 'allow' || expect === 'internal' ? expect : `deny rule ${expect}`}`;
   let ok = false;
   let detail = '';
-  if (r.code !== 0) detail = `exit ${r.code}, expected 0; stderr: ${r.stderr.trim()}`;
+  if (expect === 'internal') {
+    // The guard's own failure exits 2 with the reason on stderr, which blocks even without onFailure.
+    ok = r.code === 2 && r.stdout === '' && r.stderr.startsWith('git-guard: internal error (');
+    detail = `expected exit 2 and an internal-error reason on stderr; got exit ${r.code}, stderr ${JSON.stringify(r.stderr)}`;
+  } else if (r.code !== 0) detail = `exit ${r.code}, expected 0; stderr: ${r.stderr.trim()}`;
   else if (expect === 'allow') { ok = r.stdout === ''; detail = 'expected no stdout'; }
   else {
     const d = parseDecision(r.stdout);
     if (!d || d.event !== 'PreToolUse' || d.decision !== 'deny' || typeof d.reason !== 'string') detail = 'expected deny JSON';
     else {
-      const want = expect === 'internal' ? 'git-guard: internal error (' : `git-guard: ${PREFIX[expect]}: \``;
+      const want = `git-guard: ${PREFIX[expect]}: \``;
       ok = d.reason.startsWith(want);
       detail = `reason should start with ${JSON.stringify(want)}; got ${JSON.stringify(d.reason)}`;
       if (ok && extra) { const e = extra(d); if (e !== true) { ok = false; detail = e; } }
