@@ -29,5 +29,8 @@ Decisions so far:
 - [0004 Adopting the Hatchery practice](decisions/0004-adopt-hatchery.md): an existing project takes
   the practice as files from `hatchery/main`, records the base commit in its own ADR, and updates by
   three-way patch; merging stays the path for decanted projects. (0003 is reserved for proposal 0003.)
+- [0007 Queues, triage and one review](decisions/0007-queues-triage-and-one-review.md): `docs/ideas/`
+  and `docs/operator/` as delete-when-done queues with triage blocks; a `reviewer` agent and one
+  independent review per change; amends ADR 0002 where it names `backlog.md`.
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).

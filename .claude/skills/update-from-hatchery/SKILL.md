@@ -51,7 +51,7 @@ project's own `NNNN-adopt-hatchery.md` records the base commit).
    via the runner (`commit` skill), subject `Update from Hatchery <old short sha>..<new short sha>`.
 6. Post-merge checks, each must pass or be reported as a failure:
    - `node --version`; `node .claude/hooks/usage-gate.js < /dev/null` exits 0.
-   - `wc -l CLAUDE.md docs/HANDOFF.md`: under 130 and 40.
+   - `wc -l CLAUDE.md docs/HANDOFF.md`: at most 150 and 40.
    - Every `.claude/skills/*/SKILL.md` and `.claude/agents/*.md` starts with frontmatter.
    - `.claude/settings.json` parses, and (adopted projects) still contains every project hook entry
      the adoption ADR lists.

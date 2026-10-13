@@ -37,7 +37,7 @@ ideas. Everything below runs in the new project's clone.
 9. `.claude/settings.json`: keep as is. `.claude/rules/`: keep `docs.md`; add language rules
    later per `.claude/rules/README.md`.
 10. Verify: `git status --short` shows only the intended edits; `wc -l CLAUDE.md docs/HANDOFF.md`
-    are under 130 and 40.
+    are at most 150 and 40.
 11. Commit via the runner (`commit` skill): subject `Decant <project> from Hatchery`, body listing
     what was removed and kept. Do not push; the user decides when.
 12. Report: remotes, files changed, and the first design step for the architect.

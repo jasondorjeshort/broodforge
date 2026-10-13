@@ -104,7 +104,7 @@ No `memory:` on any agent: it is a second knowledge location without an index, s
 than the agent that wrote it. Build and environment facts go in `docs/reference/`. In-flight work is
 tracked in files (`HANDOFF.md`, `backlog.md`), not GitHub Issues: files are discoverable with the tools
 agents already have, version with the work, and need no network or auth. If Issues ever coexist with
-`backlog.md`, the file wins until this ADR is superseded.
+`backlog.md`, the file wins until this ADR is superseded. Amended by ADR 0007: `backlog.md` is now `docs/ideas/`.
 
 ### Deferred, with triggers
 

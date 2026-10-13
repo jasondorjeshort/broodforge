@@ -34,7 +34,7 @@ pusher refuses a push above it.
    Paths of findings with status open, or "none".
    ```
 
-3. Anything that does not fit: later work to `docs/ideas/` (one dated file per item; a `Waits:` block when it has a trigger);
+3. Anything that does not fit: later work to `docs/ideas/` (one dated file per item; only the owner adds a `Waits:` block);
    evidence to a finding (`finding` skill); durable facts to `docs/reference/`. The handoff links,
    it never explains.
 4. Check `wc -l docs/HANDOFF.md` is 40 or less.

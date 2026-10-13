@@ -6,7 +6,8 @@ Read the index of a directory before its files. Nothing here is loaded automatic
 | Path | What lives there | Loaded |
 |---|---|---|
 | `HANDOFF.md` | Now, Next, Waiting on user, Open findings. Coordinator state, 40-line cap. | every session and subagent, via `CLAUDE.md` |
-| `backlog.md` | Ideas (no commitment) and Deferred work (with the trigger that revives it). | on demand |
+| `ideas/` | One dated file per improvement nobody is working on, each anchored to code; triaged into `Plan:`, `Question:` or `Waits:`; deleted when built. | on demand; start at `ideas/README.md` |
+| `operator/` | One dated file per step only the owner can take (accounts, keys, elevation); deleted when done. | on demand; start at `operator/README.md` |
 | `design/` | What we build and why: `00`-`06` design docs, `proposals/`, `decisions/` (ADRs). | on demand; start at `design/README.md` |
 | `reference/` | Durable facts about tools, APIs, platforms, environments. One topic per file, `verified:` date. | on demand; start at `reference/README.md` |
 | `findings/` | Dated, status-tagged results of investigations: root causes, benchmarks, failed approaches. | on demand; start at `findings/README.md` |
@@ -20,7 +21,9 @@ Where does a new piece of text go? Ask in this order:
 4. A fact about a tool, API, platform, or environment that will stay true: `reference/`.
 5. The result of an investigation: `findings/`, via the `finding` skill. When resolved, promote the
    durable part to `reference/` or `design/` and set `promoted_to`.
-6. What is happening now or next: `HANDOFF.md` (`handoff` skill). Later than next: `backlog.md`.
+6. What is happening now or next: `HANDOFF.md` (`handoff` skill). Later than next, or not yet
+   decided: an `ideas/` file (`triage` skill writes its block). A step only the owner can take:
+   an `operator/` file, in the commit that needs it.
 
 Conventions (caps, frontmatter, indexes) are enforced by `.claude/rules/docs.md`, which loads
 automatically when a file under `docs/` is read or edited, and by the `pusher` before every push.

@@ -26,8 +26,9 @@ are a choice, or in the relevant skill if they are a procedure.
 `docs/README.md` is the map. Rules live here. Procedures are skills in `.claude/skills/`; load one
 with the Skill tool when its description fits the moment. Path-scoped conventions are in
 `.claude/rules/`. What we build and why is in `docs/design/`; durable facts in `docs/reference/`;
-investigation results in `docs/findings/`; now and next in `docs/HANDOFF.md`; later in
-`docs/backlog.md`. Read a directory's `README.md` before its files. Reasoning: ADR 0002.
+investigation results in `docs/findings/`; now and next in `docs/HANDOFF.md`; later, or not yet
+decided, one dated file each in `docs/ideas/`; steps only the owner can take in `docs/operator/`.
+Read a directory's `README.md` before its files. Reasoning: ADRs 0002 and 0007.
 
 ## Delegation: agents do all coding and debugging
 
@@ -37,13 +38,12 @@ defined in `.claude/agents/`. Brief each one fully (`brief` skill): goal, files 
 already ruled out, scope boundaries, how to verify.
 
 The coordinator's own work is reading, deciding, briefing, reviewing reports, editing the
-coordination files (`docs/HANDOFF.md`, `docs/backlog.md`, a task board), and the wrap-up commits
-below. Everything that executes the project is delegated, even when it is one command: installing
+coordination files (`docs/HANDOFF.md`, the blocks in `docs/ideas/`, a task board), and the wrap-up
+commits below. Everything that executes the project is delegated, even when it is one command: installing
 toolchains and SDKs, pulling, building, running tests or lint, starting servers or devices, and any
 fix. Route it by the table under Model routing (`runner` for mechanical runs, `tester` or `coder`
 for fixes). When the gate blocks launches, the coordinator writes the handoff and stops; it does
-not do the delegated work itself. (Dystopo, 2026-10-12: "agents do all coding" was read as
-allowing the coordinator to install an SDK, run the test suite and build packs by hand.)
+not do the delegated work itself, not even an SDK install or a test run.
 
 ## Debug interface is part of every feature
 
@@ -78,11 +78,12 @@ their feedback is the ground truth there. Flag those explicitly and do not guess
 ## Usage gating (hard rule)
 
 Plan limits are the 5-hour session meter and the weekly meter. Check them with `/usage`.
-The status line (`.claude/statusline.js`) shows both and flags HOLD at 50% and STOP at 80%.
-A `PreToolUse` hook (`.claude/hooks/usage-gate.js`) refuses to launch new subagents once the
-higher meter reaches 50%. The hook reads `~/.claude/usage-state.json`, which the status line writes.
-The gate blocks subagent launches only, never Bash: wrap-up commits (`docs/HANDOFF.md`, WIP) are
-made by the main session itself at any usage level.
+The status line (`.claude/statusline.js`) shows both and flags HOLD and STOP at the thresholds in
+`.claude/hooks/policy.json` (a project sets its own there, never in the JS). A `PreToolUse` hook (`.claude/hooks/usage-gate.js`) refuses to launch new subagents once
+the higher meter reaches HOLD. The hook reads `~/.claude/usage-state.json`, which the status line
+writes on every refresh; the gate is only as fresh as the last refresh, so `settings.json` gives
+the status line a `refreshInterval`. The gate blocks subagent launches only, never Bash: wrap-up
+commits (`docs/HANDOFF.md`, WIP) are made by the main session itself at any usage level.
 
 | Usage (max of session, weekly) | Behavior |
 |---|---|
@@ -90,8 +91,7 @@ made by the main session itself at any usage level.
 | 50% to 80% | No new work. No new subagents or tasks. Let in-flight agents finish, run the `handoff` skill, commit from the main session, then stop and report. |
 | 80% and above | Stop. Run the `handoff` skill, commit in-progress work from the main session with a clear WIP message, end the turn. |
 
-Status line usage numbers exist only on claude.ai Pro and Max plans and only after the first
-response of a session. If they read `n/a`, run `/usage` by hand before launching agents.
+Meters show only on Pro and Max plans, after the first response; on `n/a`, run `/usage` first.
 
 ## Model routing
 
@@ -99,15 +99,22 @@ Pick the subagent by task; each one pins its own model in `.claude/agents/`.
 
 | Task | Agent | Model | Why |
 |---|---|---|---|
-| Design docs, architecture, ADRs, planning, organizing work, final review | `architect` | Fable 5.1 | Strongest reasoning; worth the cost where judgment matters most. |
+| Design docs, architecture, ADRs, planning, organizing work, design review | `architect` | Fable 5.1 | Strongest reasoning; worth the cost where judgment matters most. |
 | Adversarial second opinion on a proposal or major technical choice | `critic` | Fable 5.1 | Must be able to find what the architect missed; a weaker critic rubber-stamps. |
 | Implementation, debugging, non-trivial refactors, building debug interfaces | `coder` | Opus 5.5 | Best coding model at Opus price. Effort pinned to high because its default is medium. |
 | Writing tests, fixing failing tests, small well-specified code changes | `tester` | Sonnet 5.5 | Fast and capable for scoped work at a fifth of Fable's cost. |
 | Running test suites, lint, format, commits, mechanical file ops | `runner` | Haiku 5.5 | Cheapest by far; these tasks need reliability, not depth. |
+| Independent review of a diff or unpushed commit; reports, does not fix | `reviewer` | Opus 5.5 | Must read code as well as the coder wrote it; a weaker reviewer rubber-stamps. |
 | Pre-push sanity checks and the push itself | `pusher` | Sonnet 5.5 | Needs enough judgment to read test output and spot secrets, not enough to justify Opus. |
 
-Price reference (per million tokens, input/output): Fable 5.1 $10/$50, Opus 5.5 $4/$20,
-Sonnet 5.5 $2/$10, Haiku 5.5 $0.10/$0.50.
+## One independent review per change
+
+Every change is read once by an agent that did not write it before it is pushed: `reviewer` for
+code and docs, `critic` for a proposal. The coordinator reads the report, not the diff, and
+routes fixes back to the writer; a fix to an unpushed commit is amended into it. One review, not
+three: the writer's own check and the pusher's mechanical checks are not reviews, and a second
+reading of the same diff by the same model finds what the first did. The user reviews what humans
+see and touch, and anything the reviewer marked blocking that the coordinator overrode.
 
 ## Git
 
@@ -115,17 +122,21 @@ Sonnet 5.5 $2/$10, Haiku 5.5 $0.10/$0.50.
   normal work from a brief (`commit` skill); the `coder` and `tester` agents leave a clean,
   described working tree for it. Wrap-up commits (`docs/HANDOFF.md`, WIP) are made by the main
   session itself at any usage level.
-- Amend only when necessary (fixing a message, folding a forgotten file into the commit it belongs
-  to) and only on commits that have not been pushed. Never amend a pushed commit.
-- Only the `pusher` agent (or the user) pushes. It runs the checks in its agent file first and
+- Amend to fold a review fix, a forgotten file or a message fix into the unpushed commit it belongs
+  to, and for nothing else. Never amend a pushed commit.
+- Only the `pusher` agent pushes, or the main session when the user asked for the push in so many
+  words (the guard exempts the main session; the ask is the rule). It runs the checks in its agent file first and
   never force-pushes. Launch it fresh for each push, with the user's request quoted in the brief;
   a retry sent to a resumed pusher arrives as an agent message, which the permission system treats
   as untrusted, and the push gets blocked. If a push is blocked anyway, tell the user and let them
   run `git push` themselves; never route around the block. Procedure, including the fix for a
   mismatched stored GitHub credential: `commit` skill, Pushing section.
 - The `git-guard` hook denies destructive git for everyone, agents included (force push, `reset --hard`,
-  `clean`, whole-tree `checkout`/`restore`, `branch -D`, `rebase -i`, stash drop/clear, history rewrites),
-  plus `git push` from any agent but the `pusher` and `git commit` from any agent but the `runner`.
+  `clean`, whole-tree `checkout`/`restore`, `branch -D`, `rebase -i`, stash drop/clear, history
+  rewrites, `--no-verify`, a `core.hooksPath` override), in Bash and PowerShell alike. Which agents
+  may commit and push is policy, read from `.claude/hooks/policy.json`: the base allows `git commit`
+  only from the `runner` and `git push` only from the `pusher`, with the main session exempt from
+  both; a project with its own branch or push model changes the policy file, never the hook.
 - Commit messages end with `Co-Authored-By: <model that did the work> <noreply@anthropic.com>`,
   for example `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
