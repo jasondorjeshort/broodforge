@@ -113,9 +113,8 @@ project whose root `package.json` declares `"type": "module"` makes Node load th
   changes its rules by editing one JSON file that the harness can run against.
 - The three projects can be compared by diffing two small files. Dystopo's ADR 0021 exceptions
   E1 to E5, A1 and A2 are `dystopo.json`, and the GP group of the harness runs them.
-- `dystopia.json` follows the request it was written from: subagents never push. Dystopia today
-  runs its push drain in a fresh agent; adopting the example as it stands would deny that agent,
-  so Dystopia would name the agent's type in `git.push.subagents`.
+- In `dystopia.json` only `pusher` pushes among subagents: Dystopia's push cards start a fresh
+  agent of that type, and every other subagent commits but never pushes.
 - Dystopo's in-flight relaunch override (`DYSTOPO_GATE_OVERRIDE=1`) is not carried over; its
   example sets `deny` to 100 so the override file can lift its 75% line instead.
 - The guard now reads quoted text as data. Text handed to a shell (`sh -c`, `eval`, `| bash`,
@@ -124,6 +123,9 @@ project whose root `package.json` declares `"type": "module"` makes Node load th
 - A malformed policy stops all git work until it is fixed. That is deliberate and loud, and
   `node .claude/hooks/policy.js` says what is wrong.
 - More moving parts: four scripts share a loader and the guard has a shell reader of a few hundred
-  lines. The harness (251 cases) is what keeps them honest; a change to either needs its cases.
+  lines. The harness (255 cases) is what keeps them honest; a change to either needs its cases.
+  It reads no file of the repository it runs in (its Hatchery policy is a fixture inside it, its
+  docs a scratch tree), so it passes unchanged in every project that copies it; the project's own
+  `policy.json` is checked only for loading.
 - Supersede when Claude Code passes hooks a parsed argv for shell tools (the reader could go), or
   when proposal 0003 settles a branch model that wants policy keys this file lacks.

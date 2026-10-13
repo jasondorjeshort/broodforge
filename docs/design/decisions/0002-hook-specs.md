@@ -1,7 +1,7 @@
 # ADR 0002 companion: hook specifications
 
 Behaviour of the scripts under `.claude/hooks/` and of `.claude/statusline.js`, as implemented and
-tested on 2026-10-13 (`node .claude/hooks/test-hooks.js`, 251 cases). The code is the reference;
+tested on 2026-10-13 (`node .claude/hooks/test-hooks.js`, 255 cases). The code is the reference;
 this document describes it exactly enough to re-implement or extend it. What each project may choose
 lives in `.claude/hooks/policy.json`, read through `policy.js`; its schema, defaults and fail modes
 are ADR 0006. Every script: Node, `'use strict'`, standard library only, SPDX header, reads all of
@@ -113,9 +113,14 @@ as the command word (`$g push -f`), arguments reaching git through `xargs` from 
 
 Test groups: G01 to G25 and GX01 to GX25 are the original table (G24 now allows: quoted text is
 data); GN covers rules 12 to 17 and lease-as-force; GQ the parser in both shells; GF malformed and
-absent policy files; GP one command set under the shipped policy, no policy, and the two examples,
+absent policy files; GP one command set under the Hatchery policy, no policy, and the two examples,
 in scratch repositories on `main` and on `task/T1`, which shows the absent file behaving as the
-shipped one.
+Hatchery one. LIVE01 to LIVE04 check that the repository's own `policy.json` and the examples
+load and that the harness's Hatchery fixture equals the loader's defaults.
+
+The harness reads no file of the repository it runs in: the Hatchery policy is a fixture inside
+it, written to the scratch tree, and the docs it checks (a 41-line handoff included) are synthetic.
+So a project that copies `.claude/hooks/` and sets its own policy runs it unchanged.
 
 Debug interface: `node .claude/hooks/test-hooks.js` runs every case for all hooks, PASS/FAIL per
 case plus a summary; exit 1 on any failure, 2 on a usage error. Flags: `--only <id-prefix>`,

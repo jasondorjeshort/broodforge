@@ -17,8 +17,8 @@
 // Isolation: post-edit cases run against a scratch tree in the OS temp dir (deleted at
 // the end); git-guard cases run in two scratch repositories (one on main, one on task/T1);
 // usage-gate and statusline cases point HOME/USERPROFILE at a scratch dir. Every case names
-// its policy file through HOOK_POLICY_FILE: the shipped one, an example, none, or a scratch
-// file. The real docs/ and ~/.claude are never touched. Exit codes: 0 all pass, 1 any
+// its policy file through HOOK_POLICY_FILE: the Hatchery fixture, an example, none, or a scratch
+// file. No file of the repository is read except to check that policy.json loads, and ~/.claude is never touched. Exit codes: 0 all pass, 1 any
 // failure, 2 usage error.
 'use strict';
 const fs = require('fs');
@@ -82,10 +82,23 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'hooks-test-'));
 const fwd = (p) => p.split(path.sep).join('/');
 
 // ---------- policies ----------
-// Every hook case names the policy file it runs under (HOOK_POLICY_FILE): the shipped one, the
-// two examples, none at all (the defaults), or a scratch file written for the case.
+// Every hook case names the policy file it runs under (HOOK_POLICY_FILE): the Hatchery fixture
+// below, the two examples, none at all (the defaults), or a scratch file written for the case. The
+// repository's own policy.json is never a fixture, so the suite passes unchanged in a project that
+// copied it and set its own policy; LIVE01 only checks that the project's file loads.
+const HATCHERY_POLICY = {
+  git: {
+    commit: { subagents: ['runner'], protectedBranches: [] },
+    push: { subagents: ['pusher'], branches: ['*'], mainSession: true, forceWithLease: [] },
+    branchDelete: { branches: [], requireMergedPr: false },
+    hooksPath: null,
+  },
+  usage: { hold: 50, deny: 80, staleSeconds: 7200, whenStale: 'allow' },
+  edit: { capExempt: [], formatters: {} },
+};
+fs.writeFileSync(path.join(scratch, 'policy-hatchery.json'), JSON.stringify(HATCHERY_POLICY));
 const POLICIES = {
-  hatchery: path.join(HOOKS, 'policy.json'),
+  hatchery: path.join(scratch, 'policy-hatchery.json'),
   dystopo: path.join(HOOKS, 'policy.examples', 'dystopo.json'),
   dystopia: path.join(HOOKS, 'policy.examples', 'dystopia.json'),
   none: path.join(scratch, 'no-such-policy.json'),
@@ -232,7 +245,7 @@ const G = [
 
 for (const [id, command, agent, expect, raw, extra] of G) guardCase(id, { command, agent, raw }, expect, extra);
 
-// New rules (13 to 17, and the additions to 12), under the shipped policy.
+// New rules (13 to 17, and the additions to 12), under the Hatchery policy.
 // [id, command, agent, expect, extra]
 const GN = [
   ['GN01', 'git commit --no-verify -m x', null, 13],
@@ -312,11 +325,11 @@ guardCase('GF04', { command: 'ls -la', policy: badJson, policyName: 'not JSON' }
 guardCase('GF05', { command: 'git commit -m x', agent: 'coder', policy: POLICIES.none, policyName: 'absent' }, 4);
 guardCase('GF06', { command: 'git commit -m x', agent: 'runner', policy: POLICIES.none, policyName: 'absent' }, 'allow');
 
-// One command set under every policy. The absent file must behave as the shipped one.
+// One command set under every policy. The absent file must behave as the Hatchery one.
 // [id, command, agent, cwd, { hatchery, dystopo, dystopia }]
 const H = 'hatchery';
 const GP = [
-  ['01', 'git push', 'pusher', repoMain, { hatchery: 'allow', dystopo: 3, dystopia: 3 }],
+  ['01', 'git push', 'pusher', repoMain, { hatchery: 'allow', dystopo: 3, dystopia: 'allow' }],
   ['02', 'git push', 'general-purpose', repoTask, { hatchery: 3, dystopo: 'allow', dystopia: 3 }],
   ['03', 'git push', null, repoMain, { hatchery: 'allow', dystopo: 'allow', dystopia: 'allow' }],
   ['04', 'git commit -m x', 'runner', repoMain, { hatchery: 'allow', dystopo: 4, dystopia: 'allow' }],
@@ -330,7 +343,7 @@ const GP = [
   ['12', 'git push origin :task/T2', 'general-purpose', repoMain, { hatchery: 2, dystopo: 2, dystopia: 2 }],
   ['13', 'git config core.hooksPath tools/git-hooks', null, repoMain, { hatchery: 14, dystopo: 'allow', dystopia: 14 }],
   ['14', 'git push --tags', 'general-purpose', repoTask, { hatchery: 3, dystopo: 3, dystopia: 3 }],
-  ['15', 'git push --tags', 'pusher', repoMain, { hatchery: 'allow', dystopo: 3, dystopia: 3 }],
+  ['15', 'git push --tags', 'pusher', repoMain, { hatchery: 'allow', dystopo: 3, dystopia: 'allow' }],
   ['16', 'git push origin v1.0', null, repoMain, { hatchery: 'allow', dystopo: 'allow', dystopia: 'allow' }],
   ['17', 'git push origin HEAD:main', 'general-purpose', repoTask, { hatchery: 3, dystopo: 3, dystopia: 3 }],
   ['18', `git -C ${fwd(repoTask)} commit -m x`, 'general-purpose', repoMain, { hatchery: 4, dystopo: 'allow', dystopia: 'allow' }],
@@ -358,12 +371,8 @@ write('docs/reference/big.md', `---\nverified: 2026-10-11\nsource: observed\n---
 write('docs/reference/clean.md', '---\nverified: 2026-10-11\nsource: observed\n---\n\n# Clean\n');
 write('docs/reference/noverified.md', '---\nsource: observed\n---\n# No verified\n');
 write('docs/reference/unlisted.md', '---\nverified: 2026-10-11\n---\n# Unlisted\n');
-// Backticks dropped: the paths the real handoff names do not exist in the scratch tree, and this
-// case tests the line cap, not the path-anchor check.
-const realHandoff = fs.readFileSync(path.join(HOOKS, '..', '..', 'docs', 'HANDOFF.md'), 'utf8').replace(/`/g, '');
-const handoffLines = realHandoff.split('\n').filter((_, i, a) => i < a.length - 1 || a[i] !== '');
-while (handoffLines.length < 41) handoffLines.push('padding');
-write('docs/HANDOFF.md', handoffLines.slice(0, 41).join('\n') + '\n'); // 41-line copy of the real one
+// 41 lines, synthetic: the suite reads no file of the repository it runs in.
+write('docs/HANDOFF.md', `# Handoff\n\n${lines(39)}`);
 write('docs/findings/README.md', '# Findings\n\n`2026-01-01-nofm.md` `2026-01-02-ok.md`\n');
 write('docs/findings/2026-01-01-nofm.md', '# A finding without frontmatter\n\n## Question\n');
 write('docs/findings/2026-01-02-ok.md', '---\ndate: 2026-01-02\nstatus: open\narea: test\n---\n# OK\n');
@@ -383,12 +392,12 @@ const fmtOk = { '.txt': [NODE, '-e', 'process.exit(0)'] };
 const fmtBad = { '.txt': [NODE, '-e', 'console.error("bad formatter output");process.exit(3)'] };
 
 // [id, label, file_path (absolute unless noted), expected additionalContext or null, raw stdin override, formatter env,
-//  policy file (the shipped one when omitted), project root (the scratch tree when omitted)]
+//  policy file (the Hatchery fixture when omitted), project root (the scratch tree when omitted)]
 const P = [
   // The four cases the spec asks for.
   ['P01', '301-line docs/reference file', absOf('docs/reference/big.md'),
     'post-edit: docs/reference/big.md is 301 lines; cap is 300 (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.'],
-  ['P02', '41-line docs/HANDOFF.md copy', absOf('docs/HANDOFF.md'),
+  ['P02', '41-line docs/HANDOFF.md', absOf('docs/HANDOFF.md'),
     'post-edit: docs/HANDOFF.md is 41 lines; cap is 40. Move detail to docs/ideas/ or a finding.'],
   ['P03', 'findings file without frontmatter', absOf('docs/findings/2026-01-01-nofm.md'),
     'post-edit: docs/findings/2026-01-01-nofm.md lacks finding frontmatter (date, status, area). See the finding skill.'],
@@ -431,7 +440,7 @@ const P = [
     'post-edit: docs/reference/big.md is 301 lines; cap is 300 (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.',
     null, null, scratchPolicy('pe-bad', '{ nope')],
   ['PC05', 'Dystopo example exempts docs/PLANNING.md', absOf('docs/PLANNING.md'), null, null, null, POLICIES.dystopo],
-  ['PC06', 'docs/PLANNING.md under the shipped policy', absOf('docs/PLANNING.md'),
+  ['PC06', 'docs/PLANNING.md under the Hatchery policy', absOf('docs/PLANNING.md'),
     'post-edit: docs/PLANNING.md is 320 lines; cap is 300 (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.'],
 ];
 write('docs/notes/README.md', '# Notes\n\n`anchors.md` `nocheck.md` `fenced.md` `placeholders.md`\n');
@@ -573,7 +582,7 @@ const S = [
     (r, b, a) => (r.code === 0 && b === a && r.stdout.startsWith('? |')) || `exit ${r.code}, line ${r.stdout}`],
   ['S05', 'flags follow the policy (Dystopia: 85 is HOLD)', rl(85, 10), POLICIES.dystopia, (r) => r.stdout.endsWith(' HOLD') || r.stdout],
   ['S06', 'flags follow the policy (Dystopia: 92 is STOP)', rl(92, 10), POLICIES.dystopia, (r) => r.stdout.endsWith(' STOP') || r.stdout],
-  ['S07', 'flags follow the policy (shipped: 85 is STOP)', rl(85, 10), null, (r) => r.stdout.endsWith(' STOP') || r.stdout],
+  ['S07', 'flags follow the policy (Hatchery: 85 is STOP)', rl(85, 10), null, (r) => r.stdout.endsWith(' STOP') || r.stdout],
 ];
 fs.rmSync(slFile, { force: true });
 for (const [id, label, stdin, policy, check] of S) {
@@ -590,6 +599,26 @@ if (selected('S08')) {
   fs.writeFileSync(slFile, JSON.stringify({ updatedAt: nowSec, five_hour: { used_percentage: 90, resets_at: nowSec - 1 }, seven_day: { used_percentage: 5 } }));
   const r = statusline(JSON.stringify({ model: { display_name: 'M' } }));
   report('S08', 'cached window past its reset shows n/a', r.stdout.includes('5h n/a') && !r.stdout.includes('STOP'), r.stdout, r.stdout);
+}
+
+// ---------- policy files themselves ----------
+// The repository's own policy.json (whatever the project chose) and the examples must load; the
+// Hatchery fixture must equal the loader's defaults, since an absent file means those.
+{
+  const { load, DEFAULTS } = require('./policy');
+  const files = [['LIVE01', 'this repository\'s policy.json loads (or is absent)', path.join(HOOKS, 'policy.json')],
+    ['LIVE02', 'policy.examples/dystopo.json loads', POLICIES.dystopo],
+    ['LIVE03', 'policy.examples/dystopia.json loads', POLICIES.dystopia]];
+  for (const [id, label, file] of files) {
+    if (!selected(id)) continue;
+    const r = load(file);
+    report(id, label, r.error === null, r.error);
+  }
+  if (selected('LIVE04')) {
+    const merged = load(POLICIES.hatchery).policy;
+    const strip = (p) => JSON.stringify(Object.assign({}, p, { usage: Object.assign({}, p.usage, { holdAdvice: '', denyAdvice: '' }) }));
+    report('LIVE04', 'the Hatchery fixture equals the loader defaults', strip(merged) === strip(DEFAULTS), `fixture ${strip(merged)} vs defaults ${strip(DEFAULTS)}`);
+  }
 }
 
 if (opt.keep) process.stdout.write(`scratch tree kept at ${scratch}\n`);
