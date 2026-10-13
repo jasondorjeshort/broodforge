@@ -74,6 +74,7 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-13-debug-interface-doc-hooks-section.md` | chore | Debug-interface design doc gets a hooks section when it is written |
 | `2026-10-13-fable-per-model-usage-gate.md` | feature | Fable launches gated on a per-model meter; waits on statusline field |
 | `2026-10-13-first-install-on-real-device-lesson.md` | chore | First install on a real device before a release is called done |
+| `2026-10-13-first-sync-with-the-build-phase-sibling.md` | chore | First two-way sync with the build-phase sibling; what its first patch run needs |
 | `2026-10-13-github-issues-for-intake.md` | question | Intake in GitHub Issues; waits on a second contributor or public users |
 | `2026-10-13-haiku-runner-escalates-to-sonnet.md` | chore | Haiku runner escalates to Sonnet only when a sweep fails |
 | `2026-10-13-per-agent-port-emulator-allocation.md` | chore | Briefs allocate a distinct port and emulator per parallel agent |

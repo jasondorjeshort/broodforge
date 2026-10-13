@@ -19,9 +19,8 @@ Updated: 2026-10-13, usage-gated session after the three-repo merge, by main ses
 
 ## Next
 
-1. Sync with `../dystopo`: it pulls the base in patch mode (its `Hatchery base:` line says from
-   where) and resolves `policy.json` in its own favour; anything it has that the base lacks comes
-   back as an idea or a proposal here.
+1. Sync with the build-phase sibling, a session of its own in that repository; what it needs and
+   why the skill cannot run there as is: `docs/ideas/2026-10-13-first-sync-with-the-build-phase-sibling.md`.
 2. Triage `docs/ideas/` (`triage` skill): fourteen files have no block; one `Question:` is open
    (verify agent beside the reviewer, decided by proposal 0003).
 3. Critic review of the hook rewrite and ADR 0006 as a whole, and of this session's unreviewed
