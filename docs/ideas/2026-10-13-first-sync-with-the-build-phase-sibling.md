@@ -1,7 +1,7 @@
 ---
 date: 2026-10-13
 kind: chore
-related: [2026-10-13-verify-agent-reads-reports-not-diffs.md, 2026-10-13-usage-gate-phase-override.md]
+related: [2026-10-13-verify-agent-reads-reports-not-diffs.md]
 ---
 
 # First sync with the build-phase sibling, both ways

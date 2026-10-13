@@ -93,7 +93,7 @@ const HATCHERY_POLICY = {
     branchDelete: { branches: [], requireMergedPr: false },
     hooksPath: null,
   },
-  usage: { hold: 50, deny: 80, staleSeconds: 7200, whenStale: 'allow' },
+  usage: { hold: 50, deny: null, staleSeconds: 7200, whenStale: 'allow' },
   edit: { capExempt: [], anchorExempt: ['docs/design/proposals/*', 'docs/design/decisions/*', 'docs/findings/*'], formatters: {} },
 };
 fs.writeFileSync(path.join(scratch, 'policy-hatchery.json'), JSON.stringify(HATCHERY_POLICY));
@@ -572,18 +572,29 @@ const home = path.join(scratch, 'home');
 fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
 const HOLD_MSG = 'Usage gate: 5h 55%, 7d 10%. 5h at or above 50%: Do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report. Lifting this early is the user\'s decision (docs/design/decisions/0006-hook-policy-file.md).';
 const STOP_MSG = 'Usage gate: 5h 85%, 7d 10%. 5h at or above 80%: Stop all work, run the handoff skill, commit WIP from the main session, end the turn.';
+const HOLD_85 = HOLD_MSG.replace('5h 55%', '5h 85%');
+// A HOLD deny with an override file that lifts nothing names why, in one clause before "Lifting".
+const withClause = (msg, clause) => msg.replace(' Lifting this early', ` ${clause} Lifting this early`);
+const OV_EXPIRED = 'An override file exists but is expired.';
+const OV_MALFORMED = 'An override file exists but is malformed (see ADR 0006, The HOLD override).';
 const nowSec = Math.floor(Date.now() / 1000);
-// [id, pct, expected deny reason or null for allow, override file contents or undefined]
+// The base has no deny line, so the STOP cases run under the Hatchery fixture with deny at 80.
+const deny80 = scratchPolicy('deny-80', Object.assign({}, HATCHERY_POLICY, { usage: Object.assign({}, HATCHERY_POLICY.usage, { deny: 80 }) }));
+// [id, pct, expected deny reason or null for allow, override file contents or undefined, policy or
+// undefined for the Hatchery fixture]
 const U = [
   ['U01', 55, HOLD_MSG],
-  ['U02', 85, STOP_MSG],
+  ['U02', 85, STOP_MSG, undefined, deny80],
   ['U03', 20, null],
   ['U04', 55, null, { until: nowSec + 3600, reason: 'test: user instruction' }],
-  ['U05', 55, HOLD_MSG, { until: nowSec - 1, reason: 'test: expired' }],
-  ['U06', 85, STOP_MSG, { until: nowSec + 3600, reason: 'test: override does not lift STOP' }],
-  ['U07', 55, HOLD_MSG, 'not json'],
+  ['U05', 55, withClause(HOLD_MSG, OV_EXPIRED), { until: nowSec - 1, reason: 'test: expired, and the deny says so' }],
+  ['U06', 85, STOP_MSG, { until: nowSec + 3600, reason: 'test: override does not lift STOP' }, deny80],
+  ['U07', 55, withClause(HOLD_MSG, OV_MALFORMED), 'not json'],
+  ['U10', 55, withClause(HOLD_MSG, OV_MALFORMED), { reason: 'test: no until, malformed' }],
+  ['U08', 85, HOLD_85],
+  ['U09', 85, null, { until: nowSec + 3600, reason: 'test: no deny line, the override lifts 85' }],
 ];
-for (const [id, pct, expect, override] of U) {
+for (const [id, pct, expect, override, policy] of U) {
   if (!selected(id)) continue;
   fs.writeFileSync(path.join(home, '.claude', 'usage-state.json'), JSON.stringify({
     updatedAt: Math.floor(Date.now() / 1000),
@@ -593,7 +604,7 @@ for (const [id, pct, expect, override] of U) {
   const ovPath = path.join(home, '.claude', 'usage-gate-override.json');
   if (override === undefined) fs.rmSync(ovPath, { force: true });
   else fs.writeFileSync(ovPath, typeof override === 'string' ? override : JSON.stringify(override));
-  const env = envWith({ HOME: home, USERPROFILE: home, HOOK_POLICY_FILE: POLICIES.hatchery });
+  const env = envWith({ HOME: home, USERPROFILE: home, HOOK_POLICY_FILE: policy || POLICIES.hatchery });
   const r = run('usage-gate', JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {} }), env);
   let ok;
   let detail;
@@ -603,7 +614,8 @@ for (const [id, pct, expect, override] of U) {
     ok = r.code === 0 && !!d && d.decision === 'deny' && d.reason === expect;
     detail = `expected reason ${JSON.stringify(expect)}`;
   }
-  report(id, `usage ${pct}% -> ${expect === null ? 'allow' : 'deny'}`, ok, detail, r.stdout);
+  const under = policy ? ', deny line at 80' : ', no deny line';
+  report(id, `usage ${pct}%${override === undefined ? '' : ', override'}${under} -> ${expect === null ? 'allow' : 'deny'}`, ok, detail, r.stdout);
 }
 
 // Staleness, reset windows and the example policies. state null means no file.
@@ -618,7 +630,7 @@ const UX = [
   ['UX03', 'no data, whenStale deny', null, staleDeny, 'Usage gate: no usage data'],
   ['UX04', 'no data, whenStale allow', null, POLICIES.hatchery, null, 'no usage data'],
   ['UX05', 'a window past its reset no longer counts', fresh(95, 10, { five_hour: { used_percentage: 95, resets_at: nowSec - 60 } }), POLICIES.hatchery, null],
-  ['UX06', 'a window before its reset counts', fresh(95, 10, { five_hour: { used_percentage: 95, resets_at: nowSec + 60 } }), POLICIES.hatchery, 'Usage gate: 5h 95%, 7d 10%. 5h at or above 80%'],
+  ['UX06', 'a window before its reset counts (HOLD: the base has no deny line)', fresh(95, 10, { five_hour: { used_percentage: 95, resets_at: nowSec + 60 } }), POLICIES.hatchery, 'Usage gate: 5h 95%, 7d 10%. 5h at or above 50%'],
   ['UX07', 'single-branch example, 85%', fresh(85, 10), POLICIES.singleBranch, 'Usage gate: 5h 85%, 7d 10%. 5h at or above 80%: Do not start new subagents. Let in-flight agents finish and commit'],
   ['UX08', 'single-branch example, 92%', fresh(92, 10), POLICIES.singleBranch, 'Usage gate: 5h 92%, 7d 10%. 5h at or above 90%: Stop all work; commit what is green'],
   ['UX09', 'single-branch example, 60%', fresh(60, 10), POLICIES.singleBranch, null],
@@ -630,6 +642,10 @@ const UX = [
   ['UX15', 'per-meter example: 7d 70 is under its own hold', fresh(10, 70), POLICIES.perMeter, null],
   ['UX16', 'per-meter example: 7d 91 is its own deny', fresh(10, 91), POLICIES.perMeter, 'Usage gate: 5h 10%, 7d 91%. 7d at or above 90%'],
   ['UX17', 'per-meter hold above deny is malformed', fresh(55, 10), scratchPolicy('ug-meter-bad', { usage: { fiveHour: { hold: 90, deny: 80 } } }), HOLD_MSG, 'using the base defaults'],
+  ['UX18', 'a string deny is malformed', fresh(55, 10), scratchPolicy('ug-deny-string', { usage: { deny: 'off' } }), HOLD_MSG, 'using the base defaults'],
+  ['UX19', 'a string per-meter deny is malformed', fresh(55, 10), scratchPolicy('ug-meter-deny-string', { usage: { sevenDay: { hold: null, deny: 'none' } } }), HOLD_MSG, 'using the base defaults'],
+  ['UX20', 'hold 90 with no deny line is valid', fresh(55, 10), scratchPolicy('ug-hold-high', { usage: { hold: 90 } }), null],
+  ['UX21', 'per-meter hold above the inherited deny is malformed', fresh(55, 10), scratchPolicy('ug-inherited-deny', { usage: { deny: 80, sevenDay: { hold: 90, deny: null } } }), HOLD_MSG, 'using the base defaults'],
 ];
 fs.rmSync(path.join(home, '.claude', 'usage-gate-override.json'), { force: true });
 for (const [id, label, state, policy, expect, stderrHas] of UX) {
@@ -653,23 +669,37 @@ for (const [id, label, state, policy, expect, stderrHas] of UX) {
 // undefined, policy, extra env, expected deny-reason prefix or null for allow, stderr must include]
 const ovFile = path.join(home, '.claude', 'usage-gate-override.json');
 const envPolicy = scratchPolicy('ug-env', { usage: { hold: 75, deny: 100, overrideEnv: 'HOOK_TEST_GATE_OVERRIDE' } });
+const HOLD_7D70_MALFORMED = withClause(HOLD_MSG.replace('5h 55%, 7d 10%. 5h at', '5h 10%, 7d 70%. 7d at'), OV_MALFORMED);
+const meter5Deny = scratchPolicy('ug-5h-deny', { usage: { fiveHour: { hold: null, deny: 80 } } });
 const ov = (meters, until) => Object.assign({ until: until || nowSec + 3600, reason: 'test: owner' }, meters === undefined ? {} : { meters });
 const UO = [
   ['UO01', 'override with no meters lifts HOLD on both', fresh(60, 70), ov(), POLICIES.hatchery, {}, null, 'lifted on 5h and 7d'],
   ['UO02', 'override on 7d lifts a 7d HOLD', fresh(10, 70), ov(['7d']), POLICIES.hatchery, {}, null, 'lifted on 7d'],
   ['UO03', 'override on 7d keeps a 5h HOLD', fresh(60, 70), ov(['7d']), POLICIES.hatchery, {},
-    'Usage gate: 5h 60%, 7d 70%. 5h at or above 50%, 7d at or above 50%: Do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report. The override in force lifts only 7d.'],
+    'Usage gate: 5h 60%, 7d 70%. 5h at or above 50%, 7d at or above 50%: Do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report. The override in force lifts only 7d. Lifting this early'],
   ['UO04', 'override on 5h keeps a 7d HOLD', fresh(10, 70), ov(['5h']), POLICIES.hatchery, {}, 'Usage gate: 5h 10%, 7d 70%. 7d at or above 50%'],
   ['UO05', 'an unknown meter name lifts nothing', fresh(10, 70), ov(['7d', 'weekly']), POLICIES.hatchery, {}, 'Usage gate: 5h 10%, 7d 70%. 7d at or above 50%'],
   ['UO06', 'meters not a list lifts nothing', fresh(10, 70), ov('7d'), POLICIES.hatchery, {}, 'Usage gate: 5h 10%, 7d 70%. 7d at or above 50%'],
   ['UO07', 'expired per-meter override lifts nothing', fresh(10, 70), ov(['7d'], nowSec - 1), POLICIES.hatchery, {}, 'Usage gate: 5h 10%, 7d 70%. 7d at or above 50%'],
-  ['UO08', 'deny 100: the override lifts both meters at 95%', fresh(90, 95), ov(), POLICIES.taskBranches, {}, null, 'lifted on 5h and 7d'],
-  ['UO09', 'deny 100: no override, 95% 7d is HOLD', fresh(10, 95), undefined, POLICIES.taskBranches, {}, 'Usage gate: 5h 10%, 7d 95%. 7d at or above 75%'],
+  ['UO08', 'no deny line (task-branches, was deny 100): the override lifts both meters at 95%', fresh(90, 95), ov(), POLICIES.taskBranches, {}, null, 'lifted on 5h and 7d'],
+  ['UO09', 'no deny line (task-branches, was deny 100): no override, 95% 7d is HOLD', fresh(10, 95), undefined, POLICIES.taskBranches, {}, 'Usage gate: 5h 10%, 7d 95%. 7d at or above 75%'],
   ['UO10', 'overrideEnv set to 1 lifts HOLD', fresh(80, 95), undefined, envPolicy, { HOOK_TEST_GATE_OVERRIDE: '1' }, null, 'lifted for this session by HOOK_TEST_GATE_OVERRIDE=1'],
+  ['UO23', 'overrideEnv set to 1 with an expired override file: allow', fresh(80, 95), ov(undefined, nowSec - 1), envPolicy, { HOOK_TEST_GATE_OVERRIDE: '1' }, null, 'lifted for this session by HOOK_TEST_GATE_OVERRIDE=1'],
   ['UO11', 'overrideEnv unset: HOLD', fresh(80, 95), undefined, envPolicy, { HOOK_TEST_GATE_OVERRIDE: undefined }, 'Usage gate: 5h 80%, 7d 95%. 5h at or above 75%, 7d at or above 75%'],
   ['UO12', 'overrideEnv does not lift the deny line', fresh(10, 100), undefined, envPolicy, { HOOK_TEST_GATE_OVERRIDE: '1' }, 'Usage gate: 5h 10%, 7d 100%. 7d at or above 100%'],
   ['UO13', 'overrideEnv that is not a variable name is malformed', fresh(55, 10), undefined,
     scratchPolicy('ug-env-bad', { usage: { overrideEnv: 'A B' } }), {}, HOLD_MSG, 'using the base defaults'],
+  ['UO14', 'no deny line: 7d at 100 is HOLD', fresh(10, 100), undefined, POLICIES.hatchery, {}, 'Usage gate: 5h 10%, 7d 100%. 7d at or above 50%: Do not start new subagents'],
+  ['UO15', 'no deny line: the override on 7d lifts 7d at 100', fresh(10, 100), ov(['7d']), POLICIES.hatchery, {}, null, 'lifted on 7d'],
+  ['UO16', 'no deny line: the override on 7d keeps a 5h HOLD at 100', fresh(100, 100), ov(['7d']), POLICIES.hatchery, {},
+    'Usage gate: 5h 100%, 7d 100%. 5h at or above 50%, 7d at or above 50%'],
+  ['UO17', 'deny on 5h only: 7d at 100 lifted by the override', fresh(10, 100), ov(['7d']), meter5Deny, {}, null, 'lifted on 7d'],
+  ['UO18', 'deny on 5h only: 5h at 85 is STOP despite the override', fresh(85, 100), ov(), meter5Deny, {}, 'Usage gate: 5h 85%, 7d 100%. 5h at or above 80%: Stop all work'],
+  ['UO19', 'meters null lifts nothing, and the deny says malformed', fresh(10, 70), ov(null), POLICIES.hatchery, {}, HOLD_7D70_MALFORMED],
+  ['UO20', 'meters [] lifts nothing, and the deny says malformed', fresh(10, 70), ov([]), POLICIES.hatchery, {}, HOLD_7D70_MALFORMED],
+  ['UO21', 'overrideEnv set to "true", not "1": HOLD stays', fresh(80, 95), undefined, envPolicy, { HOOK_TEST_GATE_OVERRIDE: 'true' }, 'Usage gate: 5h 80%, 7d 95%. 5h at or above 75%, 7d at or above 75%'],
+  ['UO22', 'expired override: the deny says expired', fresh(10, 70), ov(['7d'], nowSec - 1), POLICIES.hatchery, {},
+    withClause(HOLD_MSG.replace('5h 55%, 7d 10%. 5h at', '5h 10%, 7d 70%. 7d at'), OV_EXPIRED)],
 ];
 for (const [id, label, state, override, policy, extraEnv, expect, stderrHas] of UO) {
   if (!selected(id)) continue;
@@ -724,7 +754,10 @@ const S = [
     (r, b, a) => (r.code === 0 && b === a && r.stdout.startsWith('? |')) || `exit ${r.code}, line ${r.stdout}`],
   ['S05', 'flags follow the policy (single-branch: 85 is HOLD)', rl(85, 10), POLICIES.singleBranch, (r) => r.stdout.endsWith(' HOLD') || r.stdout],
   ['S06', 'flags follow the policy (single-branch: 92 is STOP)', rl(92, 10), POLICIES.singleBranch, (r) => r.stdout.endsWith(' STOP') || r.stdout],
-  ['S07', 'flags follow the policy (Hatchery: 85 is STOP)', rl(85, 10), null, (r) => r.stdout.endsWith(' STOP') || r.stdout],
+  ['S07', 'flags follow the policy (Hatchery, no deny line: 85 is HOLD, was STOP at deny 80)', rl(85, 10), null, (r) => r.stdout.endsWith(' HOLD') || r.stdout],
+  ['S10', 'no deny line: both meters at 100 show HOLD, never STOP', rl(100, 100), null,
+    (r) => (r.stdout.endsWith(' HOLD') && !r.stdout.includes('STOP')) || r.stdout],
+  ['S11', 'a deny line set: 85 is STOP', rl(85, 10), deny80, (r) => r.stdout.endsWith(' STOP') || r.stdout],
 ];
 fs.rmSync(slFile, { force: true });
 for (const [id, label, stdin, policy, check] of S) {

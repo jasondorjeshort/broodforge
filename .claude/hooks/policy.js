@@ -28,8 +28,10 @@ const DEFAULTS = {
   },
   usage: {
     hold: 50,
-    deny: 80,
-    // Per-meter overrides; null inherits hold/deny. A project whose session meter strands
+    // null: no deny line, only HOLD, which the override file can lift up to and past a saturated
+    // meter. A project that forbids overage sets a percent here as a ceiling no override lifts.
+    deny: null,
+    // Per-meter overrides; null inherits hold/deny, so a meter has no deny line when both are null. A project whose session meter strands
     // in-flight agents sooner than the weekly one runs down sets them apart (policy.examples/per-meter.json).
     fiveHour: { hold: null, deny: null },
     sevenDay: { hold: null, deny: null },
@@ -73,7 +75,7 @@ const SCHEMA = {
     hooksPath: 'pathOrNull',
   },
   usage: {
-    hold: 'percent', deny: 'percent',
+    hold: 'percent', deny: 'percentOrNull',
     fiveHour: { hold: 'percentOrNull', deny: 'percentOrNull' },
     sevenDay: { hold: 'percentOrNull', deny: 'percentOrNull' },
     staleSeconds: 'seconds', whenStale: 'stale', overrideEnv: 'envNameOrNull', holdAdvice: 'text', denyAdvice: 'text',
@@ -114,7 +116,7 @@ function load(file) {
   try {
     const policy = merge(SCHEMA, JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text), DEFAULTS, '');
     for (const [label, t] of meterThresholds(policy.usage)) {
-      if (t.hold > t.deny) throw new Error(`usage hold is above deny for the ${label} meter`);
+      if (t.deny !== null && t.hold > t.deny) throw new Error(`usage hold is above deny for the ${label} meter`);
     }
     return { policy, error: null, source };
   } catch (e) {
@@ -123,16 +125,17 @@ function load(file) {
 }
 
 // The effective [label, {hold, deny}] pair per meter: the per-meter value where set, else the
-// shared one. Keys match the windows the status line caches.
+// shared one; deny is null when the meter has no deny line. Keys match the windows the status
+// line caches.
 function meterThresholds(usage) {
   const pick = (m) => ({ hold: m.hold === null ? usage.hold : m.hold, deny: m.deny === null ? usage.deny : m.deny });
   return [['5h', pick(usage.fiveHour)], ['7d', pick(usage.sevenDay)]];
 }
 
 // Judges readings { '5h': percent|null, '7d': percent|null } against the policy. Returns
-// { level, hits }: level 2 when any meter is at or above its deny line, 1 when any is at or
-// above its hold line, else 0; hits lists the meters that tripped at that level, as
-// { label, pct, threshold }. The worse meter wins, each judged by its own thresholds.
+// { level, hits }: level 2 when any meter is at or above its deny line (a meter without one never
+// is), 1 when any is at or above its hold line, else 0; hits lists the meters that tripped at that
+// level, as { label, pct, threshold }. The worse meter wins, each judged by its own thresholds.
 function usageVerdict(usage, readings) {
   const out = { level: 0, hits: [] };
   for (const key of ['deny', 'hold']) {
@@ -140,7 +143,7 @@ function usageVerdict(usage, readings) {
     const hits = [];
     for (const [label, t] of meterThresholds(usage)) {
       const pct = readings[label];
-      if (typeof pct === 'number' && pct >= t[key]) hits.push({ label, pct, threshold: t[key] });
+      if (typeof pct === 'number' && t[key] !== null && pct >= t[key]) hits.push({ label, pct, threshold: t[key] });
     }
     if (hits.length) return { level, hits };
   }

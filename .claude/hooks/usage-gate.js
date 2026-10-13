@@ -3,7 +3,8 @@
 // PreToolUse hook for the Agent and Workflow tools, the only calls it sees.
 // Denies launching a subagent or workflow when plan usage (the higher of the 5-hour and 7-day
 // windows) is at or above usage.hold in .claude/hooks/policy.json, unless the owner's override
-// lifts it, and at or above usage.deny without exception. Other tools are never gated here.
+// lifts it, and at or above usage.deny, where a deny line is set, without exception (null, the
+// base, means none: HOLD is then the only line). Other tools are never gated here.
 // Usage comes from ~/.claude/usage-state.json, which .claude/statusline.js writes.
 // Spec: docs/design/decisions/0002-hook-specs.md section 3; policy: ADR 0006.
 //
@@ -76,7 +77,14 @@ function main() {
       return;
     }
     const partial = lifted.length ? ` The override in force lifts only ${lifted.join(' and ')}.` : '';
-    deny(`Usage gate: ${detail}. ${tripped}: ${u.holdAdvice}${partial} Lifting this early is the user's decision (${POLICY_DOC}).`);
+    // A file that lifts nothing says why in one clause; the format lives in the ADR, not here.
+    let unused = '';
+    if (!lifted.length && fs.existsSync(OVERRIDE_FILE)) {
+      unused = o && typeof o === 'object' && typeof o.until === 'number' && o.until <= now
+        ? ' An override file exists but is expired.'
+        : ' An override file exists but is malformed (see ADR 0006, The HOLD override).';
+    }
+    deny(`Usage gate: ${detail}. ${tripped}: ${u.holdAdvice}${partial}${unused} Lifting this early is the user's decision (${POLICY_DOC}).`);
   }
 }
 

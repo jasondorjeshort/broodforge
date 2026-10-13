@@ -3,6 +3,11 @@
 Date: 2026-10-13
 Status: accepted
 
+The key table and "The HOLD override" section are living: they are amended in place as keys and
+formats change, and keep the provenance notes a decision record carries (the projects a key came
+from): the no-project-names rule is for living docs copied into projects, and this record stays a
+closed record even where a table in it is amended. The rest of the record stays as accepted.
+
 Record: proposal `../proposals/0005-rules-that-bit-downstream.md` (option B, and its two extra
 items: the PowerShell matcher and the base harness as a contract); Dystopo's ADRs 0020 and 0021
 (its alignment with the base and its `git-guard` exceptions); Dystopia's `CLAUDE.md`, section
@@ -47,8 +52,8 @@ per model seen downstream (task branches, single branch, per-meter thresholds), 
 | `git.branchDelete.branches` | branch patterns | `[]` | `branch -D` and `push --delete` are allowed only for these. |
 | `git.branchDelete.requireMergedPr` | boolean | `false` | Also require a merged pull request on GitHub (`gh`, fails closed). |
 | `git.hooksPath` | path or `null` | `null` | The one value `core.hooksPath` may be set to; `null` allows none. |
-| `usage.hold` / `usage.deny` | percent | `50` / `80` | No new subagents at `hold`; stop at `deny`. `hold` may not exceed `deny`. |
-| `usage.fiveHour` / `usage.sevenDay` | `{ "hold", "deny" }`, each percent or `null` | both `null` | Per-meter thresholds; `null` inherits `usage.hold` / `usage.deny`. Each meter is judged by its own pair and the worse verdict wins (ReGenesis, its ADR 0004). |
+| `usage.hold` / `usage.deny` | percent / percent or `null` | `50` / `null` | No new subagents at `hold`; stop at `deny`, a ceiling no override lifts. `null` means no deny line: HOLD is the only line, and the override can lift it up to and past a saturated meter. `hold` may not exceed a `deny` that is set. |
+| `usage.fiveHour` / `usage.sevenDay` | `{ "hold", "deny" }`, each percent or `null` | both `null` | Per-meter thresholds; `null` inherits `usage.hold` / `usage.deny`, so a meter has no deny line when its own and the shared `deny` are both `null`. Each meter is judged by its own pair and the worse verdict wins (ReGenesis, its ADR 0004). |
 | `usage.staleSeconds` | seconds | `7200` | Older usage data is stale. |
 | `usage.whenStale` | `"allow"` or `"deny"` | `"allow"` | What the gate does with stale or missing data. |
 | `usage.overrideEnv` | variable name or `null` | `null` | An environment variable that, set to `1` when the session starts, lifts HOLD on both meters for that session (never the deny line). |
@@ -90,10 +95,15 @@ waits until a session's status line has written fresh data (the hook never runs 
 why>", "meters": ["7d"]}`, lifts HOLD (never the deny line) until `until`, and the gate prints the
 reason each time it is used. `meters` (`"5h"`, `"7d"`; both when absent) names the meters it lifts,
 so a user who says to ignore the weekly meter and follow the session one gets exactly that; a HOLD
-on a meter not named still denies, and says which meters the override lifts. An unknown meter name
-makes the file lift nothing (added 2026-10-13 for Dystopo's T94, with `usage.overrideEnv`). A
-project that wants the override to lift everything sets `deny` to 100, as the task-branches example
-does. It is written only on the user's explicit instruction. The file is machine-wide, like the
+on a meter not named still denies, and says which meters the override lifts. An unknown meter name,
+`"meters": null` or `"meters": []` makes the file lift nothing (added 2026-10-13 for Dystopo's T94,
+with `usage.overrideEnv`). A HOLD deny says when an override file exists but is expired or
+malformed, and points here rather than teaching the format. With
+no deny line, the base since 2026-10-13, the override lifts every HOLD, including on a meter at
+100%; a project that forbids overage sets `deny` and keeps a ceiling the override cannot lift. A
+deny of 100 is not the same as none: it trips exactly when a meter saturates, with no lift. The
+override file is written only on the user's explicit instruction, and the same rule holds for `usage.overrideEnv`:
+it is set in a policy file, and its variable set in a session, only on the owner's instruction. The file is machine-wide, like the
 usage cache beside it: one override lifts HOLD for every project on the machine, not only the one
 where it was asked for, so the reason should name the scope the user gave. The deny text no longer
 explains how to write it; it points here, because a deny message is read by the agent that was
@@ -128,8 +138,8 @@ project whose root `package.json` declares `"type": "module"` makes Node load th
 - In `single-branch.json` only `pusher` pushes among subagents: Dystopia's push cards start a fresh
   agent of that type, and every other subagent commits but never pushes.
 - Dystopo's in-flight relaunch override (`DYSTOPO_GATE_OVERRIDE=1`) became the policy key
-  `usage.overrideEnv` (2026-10-13), so its gate is the base script unchanged; its example sets
-  `deny` to 100 so the override file can lift its 75% line on either meter or both.
+  `usage.overrideEnv` (2026-10-13), so its gate is the base script unchanged; its example has no
+  deny line, so the override file can lift its 75% line on either meter or both.
 - The guard now reads quoted text as data. Text handed to a shell (`sh -c`, `eval`, `| bash`,
   `powershell -Command`) is still read as commands. What the reader cannot see (a variable, a
   substitution, a brace expansion, xargs input) is denied on any subcommand that can discard work
@@ -139,7 +149,7 @@ project whose root `package.json` declares `"type": "module"` makes Node load th
 - A malformed policy stops all git work until it is fixed. That is deliberate and loud, and
   `node .claude/hooks/policy.js` says what is wrong.
 - More moving parts: four scripts share a loader and the guard has a shell reader of a few hundred
-  lines. The harness (344 cases on 2026-10-13) is what keeps them honest; a change to either needs its cases.
+  lines. The harness is what keeps them honest; a change to either needs its cases.
   It reads no file of the repository it runs in (its Hatchery policy is a fixture inside it, its
   docs a scratch tree), so it passes unchanged in every project that copies it; the project's own
   `policy.json` is checked only for loading.

@@ -60,8 +60,9 @@ to the user with both positions stated.
 
 Technical decisions do not need the user's sign-off; the coordinator makes the call once the
 objections are answered and the ADR is recorded, and reports it. Decisions about what humans see and touch (the front end, flows, wording,
-visuals) do need the user, because their feedback is the ground truth there. Flag those
-explicitly and do not guess.
+visuals) do need the user, because their feedback is the ground truth there. So do decisions
+about what the owner pays: plan limits, overage, and any threshold that stops or spends money.
+Flag those explicitly and do not guess.
 
 ## Usage gating (hard rule)
 
@@ -74,8 +75,8 @@ override: ADR 0006 and `docs/design/decisions/0002-hook-specs.md`.
 | Usage (the worse meter, each judged against its own thresholds) | Behavior |
 |---|---|
 | below HOLD (base: 50%) | Normal operation. |
-| HOLD to STOP (base: 50% to 100%) | No new work, subagents or tasks, unless the owner's override file lifts HOLD (ADR 0006). Otherwise let in-flight agents finish, run the `handoff` skill, commit from the main session, then stop and report. |
-| STOP and above (base: 100%, a ceiling only a project that forbids overage lowers) | Stop. Run the `handoff` skill, commit in-progress work from the main session with a clear WIP message, end the turn. |
+| HOLD and above, below any STOP (base: 50% and up, no STOP line) | No new work, subagents or tasks, unless the owner's override file lifts HOLD (ADR 0006). Otherwise let in-flight agents finish, run the `handoff` skill, commit from the main session, then stop and report. |
+| STOP and above (base: none; a project sets one in its policy file) | Stop. Run the `handoff` skill, commit in-progress work from the main session with a clear WIP message, end the turn. |
 
 Meters show only on Pro and Max plans, after the first response; on `n/a`, run `/usage` first.
 

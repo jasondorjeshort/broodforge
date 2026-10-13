@@ -207,7 +207,8 @@ goes to a temporary file and is renamed; a failed rename removes the temporary f
 `settings.json` sets `"refreshInterval": 60`, so the cache stays fresh while the user is idle and
 agents run. The line shows model, context, both windows
 with their reset times, and ` HOLD` or ` STOP` by the same per-meter judgement as the gate (the
-helper in `policy.js`); a cached window past its `resets_at` shows `n/a`.
+helper in `policy.js`; ` STOP` only on a meter with a deny line); a cached window past its
+`resets_at` shows `n/a`.
 
 Gate. Each window is judged against its own thresholds (`usage.fiveHour`, `usage.sevenDay`, else the shared `usage.hold` and `usage.deny`) and the worse verdict wins; a window past its `resets_at` has reset and does not
 count. No file, no `updatedAt`, or data older than `usage.staleSeconds` is stale: with `whenStale`
@@ -215,14 +216,19 @@ count. No file, no `updatedAt`, or data older than `usage.staleSeconds` is stale
 the policy denies delegation without fresh data. Check usage with /usage in an interactive session;
 the status line refreshes the data while a session is open.` The hook never runs `claude -p`.
 
-At or above `usage.deny`: `Usage gate: 5h X%, 7d Y%. <meter> at or above <deny>%: <denyAdvice>`. At or above
-`usage.hold`: `Usage gate: 5h X%, 7d Y%. <meter> at or above <hold>%: <holdAdvice> Lifting this early is the
-user's decision (docs/design/decisions/0006-hook-policy-file.md).`, unless the override file lifts
-every meter that tripped, or `usage.overrideEnv` names a variable set to `1` (ADR 0006). A crash exits 1, which does not block: the gate fails open.
+At or above a deny line, where one is set: `Usage gate: 5h X%, 7d Y%. <meter> at or above <deny>%: <denyAdvice>`.
+`usage.deny` `null`, the base, sets none, so a meter at 100% is a HOLD like any other. At or above
+`usage.hold`: `Usage gate: 5h X%, 7d Y%. <meter> at or above <hold>%: <holdAdvice>[ The override in force
+lifts only <meters>.][ An override file exists but is expired.| An override file exists but is
+malformed (see ADR 0006, The HOLD override).] Lifting this early is the user's decision
+(docs/design/decisions/0006-hook-policy-file.md).` The first bracket appears when an override in
+force lifts some meters but not every one that tripped; the second when an override file exists
+but lifts nothing. There is no HOLD deny when the override file lifts every meter that tripped, or
+`usage.overrideEnv` names a variable set to exactly `1` (ADR 0006). A crash exits 1, which does not
+block: the gate fails open.
 
-Harness cases U01 to U07 (thresholds and the override file), UO01 to UO13 (the override per
-meter, `deny` at 100, `usage.overrideEnv`), UX01 to UX17 (staleness both ways, a
-reset window, the example policies, per-meter thresholds, a malformed policy, a pre-merge cache
-file), and S01 to S09 (the
-status line's merge, the untouched file without `rate_limits`, malformed stdin, policy flags, a
-failed rename).
+Harness cases U (thresholds and the override file, with and without a deny line), UO (the
+override per meter, no deny line on one meter or both, `usage.overrideEnv`), UX (staleness both
+ways, a reset window, the example policies, per-meter thresholds, a malformed policy including a
+string `deny`, a pre-merge cache file), and S (the status line's merge, the untouched file without
+`rate_limits`, malformed stdin, policy flags, no STOP without a deny line, a failed rename).

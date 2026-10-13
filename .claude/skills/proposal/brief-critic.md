@@ -9,7 +9,9 @@ Already ruled out and why (do not re-argue these): <list, or "nothing">.
 
 Verify every item under "Claims to verify" against primary sources (docs, release notes, source)
 and cite what you found. Then argue the strongest case against the recommendation and for the best
-alternative. Produce a numbered list of objections with severity (blocking, serious, minor),
+alternative. For every mechanism in the proposal that refuses, denies or fails closed, say who can
+lift it, from where, while a session is running, and whether its refusal message says so; a refusal
+with no documented lift is an objection. Produce a numbered list of objections with severity (blocking, serious, minor),
 evidence, and what would resolve each; then one paragraph with your own recommendation and
 confidence.
 

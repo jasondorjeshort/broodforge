@@ -87,5 +87,4 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-13-stop-hook-stale-handoff-block.md` | feature | Stop hook blocks once when HANDOFF.md is stale; waits on evidence |
 | `2026-10-13-subagent-deny-protected-files-hook.md` | feature | Deny subagent writes to CLAUDE.md and settings in a PreToolUse hook |
 | `2026-10-13-sweep-skill-json-summary.md` | feature | Sweep skill: one command, JSON summary, contact sheet |
-| `2026-10-13-usage-gate-phase-override.md` | question | Usage gate needs a phase or override for in-flight work? |
 | `2026-10-13-verify-agent-reads-reports-not-diffs.md` | question | Is a verify agent that runs the change still wanted beside the reviewer? |

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Status line for Claude Code. Reads the JSON Claude pipes on stdin, prints one line, and keeps
 // ~/.claude/usage-state.json current for the usage-gate hook (.claude/hooks/usage-gate.js).
-// Thresholds for the HOLD and STOP flags come from .claude/hooks/policy.json (usage block).
+// Thresholds for the HOLD and STOP flags come from .claude/hooks/policy.json (usage block); STOP
+// shows only on a meter with a deny line, which the base does not set.
 // Spec: docs/design/decisions/0002-hook-specs.md section 3.
 //
 // Fields: https://code.claude.com/docs/en/statusline. rate_limits appears only on claude.ai

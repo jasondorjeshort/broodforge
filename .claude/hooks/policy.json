@@ -6,7 +6,7 @@
     "branchDelete": { "branches": [], "requireMergedPr": false },
     "hooksPath": null
   },
-  "usage": { "hold": 50, "deny": 100, "staleSeconds": 7200, "whenStale": "allow" },
+  "usage": { "hold": 50, "deny": null, "staleSeconds": 7200, "whenStale": "allow" },
   "edit": {
     "capExempt": [],
     "anchorExempt": ["docs/design/proposals/*", "docs/design/decisions/*", "docs/findings/*"],
