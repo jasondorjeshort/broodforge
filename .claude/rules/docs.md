@@ -62,8 +62,9 @@ These load automatically when a file under `docs/` or `CLAUDE.md` is read or edi
 - A change that alters behaviour, an invariant or an entry point a doc describes updates that doc
   in the same commit. Docs are the layer that historically slipped: code moved, docs went wrong.
 - A path written in a doc names a file that exists; the post-edit hook warns about one that does
-  not. A paragraph that must name a path that is gone or not yet there carries
-  `[no-check: <reason>]`. A moved paragraph leaves a pointer behind.
+  not. A paragraph or list item that must name a path that is gone or not yet there carries
+  `[no-check: <reason>]`; closed records (proposals, decisions, findings) are exempt by policy.
+  A moved paragraph leaves a pointer behind.
 - Write files that contain apostrophes or backticks with the Write or Edit tool, not a Bash heredoc
   (open finding `docs/findings/2026-10-11-bash-heredoc-apostrophes.md`). The `git-guard` hook reads
   quoted text and heredoc bodies as data, so text that only mentions a git command is not denied

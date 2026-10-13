@@ -1,37 +1,34 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-12, at commit dc35250, by main session (Hatchery coordinator)
+Updated: 2026-10-13, after the three-repo merge session, by main session (Hatchery coordinator)
 
 ## Now
 
-- Adoption path landed, not yet critic-reviewed: ADR 0004, the `adopt-hatchery` skill, patch mode
-  in `update-from-hatchery`, and three self-contained README prompts with preconditions. Trigger:
-  the old update prompt was pasted into ReGenesis (own history, never decanted) and stopped.
-- The adoption prompt reads the skill from `hatchery/main` on GitHub, so Hatchery must be pushed
-  before it can run anywhere.
+- The base caught up with its two downstream projects in one unpushed run on `main`: Dystopo's
+  `git-guard` plus the bypasses an independent review reproduced, hook policy moved to
+  `.claude/hooks/policy.json` (ADR 0006), Dystopia's queues and triage blocks in `docs/ideas/`
+  and `docs/operator/`, a `reviewer` agent and the one-review rule (ADR 0007). `backlog.md` is
+  gone; its items are the first idea files.
+- Dystopia adopted the hooks the same day (its `docs/reference/hatchery-adoption.txt` records
+  what it takes and keeps); Dystopo pinned its `Hatchery base:` line but has not pulled yet.
 
 ## Next
 
-1. User runs the "Adopt the Hatchery practice" prompt in the ReGenesis laptop clone. The run will
-   ask about CLAUDE.md contradictions (push after every commit and the Stop hook vs pusher-only;
-   amend to fold review fixes; `/code-review` before push), the license, and five docs over 300
-   lines. Friction found there comes back here as protocol fixes.
-2. Launch two critics in parallel: whole-base review including ADR 0004 and `adopt-hatchery`
-   (write to `docs/findings/2026-10-12-critic-review-of-base.md`) and proposal 0003 review (brief
-   from `.claude/skills/proposal/brief-critic.md`, write to `docs/design/proposals/0003-critic-review.md`).
-3. Fix after the critics, in one batch: backlog item claiming CLAUDE.md lets the main session push
-   (it does not; decide the rule on purpose); reference file's usage-meters section states Dystopo
-   policy as fact (move to proposal 0003); backlog Ideas entries from Dystopo exceed one line each;
-   ADR numbering collision between Hatchery and projects (backlog Ideas).
-4. Architect revises 0003 to ADR 0003; this decides `wave` skill, `verify` agent, phase keying of
-   git-guard rules 3 and 4, and any usage-gate override for in-flight work.
-5. Decide whether Dystopo is also adopted or stays as it is; ReGenesis is the first adopted project.
+1. Push `main` (user's call); then Dystopo runs `update-from-hatchery` in patch mode from
+   `0ce6670` and resolves `policy.json` in its own favour.
+2. Triage `docs/ideas/` (`triage` skill): every file there is untriaged except the `Waits:` ones;
+   two carry a `Question:` for the owner.
+3. Critic review of the hook rewrite and ADR 0006 as a whole; the reviewer's remaining advisories
+   are the two stale paths in `docs/reference/claude-code-on-windows.md`.
+4. Proposal 0003 (wave workflow) still decides the `wave` skill and a `verify` agent beside the
+   reviewer; its critic brief is `.claude/skills/proposal/brief-critic.md`.
+5. ReGenesis adoption, as before, once `main` is pushed.
 
 ## Waiting on user
 
-- A push of Hatchery `main` (pusher needs the request in the user's words), so ReGenesis can fetch
-  the adopt skill.
+- The push of all three repositories at the end of the session.
+- `Answer:` lines on the two `Question:` ideas (main-session pushes; verify agent beside reviewer).
 
 ## Open findings
 
