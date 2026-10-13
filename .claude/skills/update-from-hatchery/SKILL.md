@@ -21,7 +21,7 @@ project's own `NNNN-adopt-hatchery.md` records the base commit).
 2. Remote: `git remote -v`. If `hatchery` is missing,
    `git remote add hatchery https://github.com/jasondorjeshort/hatchery.git`. `git fetch hatchery`.
 3. Mode. `git merge-base HEAD hatchery/main` succeeds: merge mode, `FROM=$(git merge-base HEAD
-   hatchery/main)`. It fails: `FROM=$(grep -rho "Hatchery base: [0-9a-f]\{7,40\}" docs/design/decisions/
+   hatchery/main)`. It fails: `FROM=$(grep -rho "Hatchery base: [0-9a-f]\{7,40\}" docs/
    | head -1 | cut -d' ' -f3)`; non-empty means patch mode. Both empty: stop, the project has no
    relation to Hatchery; name the adoption prompt. Record `git log --oneline $FROM..hatchery/main` as
    the incoming base commits; if empty, report "already up to date" and stop.
@@ -42,7 +42,7 @@ project's own `NNNN-adopt-hatchery.md` records the base commit).
      must then print the policy, not an error.
    - Project wins: `README.md`; the title and project-specific sections of `CLAUDE.md`
      (phase, platforms, thresholds, routing, branch name, `## Project rules`, anything the project
-     added); `docs/HANDOFF.md`; `docs/ideas/`; everything under `docs/design/`, `docs/findings/`,
+     added); `docs/HANDOFF.md`; the files under `docs/ideas/` and `docs/operator/` (their `README.md`s are the base's, since the block grammar must stay identical across projects, ADR 0007); everything under `docs/design/`, `docs/findings/`,
      `docs/reference/`.
    - `CLAUDE.md` rule sections (This agreement, Where things live, Delegation, Debug interface,
      Major decisions, Usage gating, Git, Licensing): base wins unless the project has an ADR for

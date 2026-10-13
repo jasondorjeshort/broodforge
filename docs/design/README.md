@@ -25,10 +25,13 @@ Decisions so far:
 - [0001 Licensing](decisions/0001-licensing.md): GPL-3.0-or-later by default, LGPL for linkable components.
 - [0002 Repository layout](decisions/0002-repository-layout.md): where knowledge, state, procedures,
   rules, and hooks live; skills, permissions, and continuity by `@docs/HANDOFF.md` import. Companion
-  [hook specifications](decisions/0002-hook-specs.md) for `git-guard.js` and `post-edit.js`.
+  [hook specifications](decisions/0002-hook-specs.md) for the hooks and the status line.
 - [0004 Adopting the Hatchery practice](decisions/0004-adopt-hatchery.md): an existing project takes
   the practice as files from `hatchery/main`, records the base commit in its own ADR, and updates by
   three-way patch; merging stays the path for decanted projects. (0003 is reserved for proposal 0003.)
+- [0006 Hook policy file](decisions/0006-hook-policy-file.md): each project's choices for the hooks
+  (who commits and pushes, deletable branches, usage lines, cap exemptions) live in
+  `.claude/hooks/policy.json`, not in the scripts; the guard fails closed, the usage gate open.
 - [0007 Queues, triage and one review](decisions/0007-queues-triage-and-one-review.md): `docs/ideas/`
   and `docs/operator/` as delete-when-done queues with triage blocks; a `reviewer` agent and one
   independent review per change; amends ADR 0002 where it names `backlog.md`.
