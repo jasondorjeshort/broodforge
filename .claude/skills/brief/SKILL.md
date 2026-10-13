@@ -42,3 +42,8 @@ the brief supplies what only this task knows.
 - Do not paste `docs/HANDOFF.md` or design docs into the brief; they are imported or indexed.
 - Say which model attribution the commit will carry if the agent's output will be committed by
   someone else.
+- Paths in a brief use forward slashes (`C:/Users/...`) even on Windows: the Bash tool is Git Bash
+  and strips the backslashes from an unquoted path. A command meant for another repository says
+  `git -C <path>`, never `cd` (finding `docs/findings/2026-10-11-reported-push-that-never-happened.md`).
+- Name only tools the agent has (`.claude/agents/<name>.md`): the runner has no Write tool, so a
+  file it needs is written by the coordinator and the brief gives the path.

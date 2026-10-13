@@ -27,6 +27,11 @@ project's own `NNNN-adopt-hatchery.md` records the base commit).
    the incoming base commits; if empty, report "already up to date" and stop.
 4. Bring the changes in.
    - Merge mode: `git merge --no-ff hatchery/main -m "Merge hatchery/main into <project>"`.
+     `git merge` counts as a commit under `git.commit.subagents` (ADR 0006), so under the base
+     policy only the `runner` may run it: the coordinator briefs the runner with
+     `git merge --no-ff --no-commit hatchery/main`, the agent running this skill resolves the
+     conflicts (step 5), and the runner commits. Step 3's `merge-base` is only meaningful after
+     step 2's fetch; a sha the project has never fetched fails it even when the histories are joined.
    - Patch mode: `git diff $FROM hatchery/main -- .claude CLAUDE.md LICENSES | git apply --3way`
      (drop `LICENSES` if the project has none). Needs a clean tree; conflicts are reported by
      `git apply` as "with conflicts" and show up in step 5 the same way.

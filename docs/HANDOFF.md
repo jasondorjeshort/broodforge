@@ -1,39 +1,36 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-13, usage-gated session after the three-repo merge, by main session (Hatchery coordinator)
+Updated: 2026-10-13, at commit 7c57730 plus the wrap-up commit, by main session (Hatchery coordinator)
 
 ## Now
 
-- `CLAUDE.md` trimmed to rules with pointers (mechanism text now lives in ADR 0006 and the hook
-  specs), and living docs no longer name the downstream projects: new content rule in
-  `.claude/rules/docs.md`, policy examples renamed by the model they show, proposal 0005 renamed.
-  Closed records keep their provenance. Done in the main session because the weekly meter (93%)
-  was above the deny line, on the owner's word.
-- Owner answered the push question: the main session pushes on an explicit ask, as `CLAUDE.md`
-  and `policy.json` already say; the idea is deleted. The owner's note that a Haiku pusher may be
-  cheaper is on `docs/ideas/2026-10-13-haiku-runner-escalates-to-sonnet.md`.
-- Owner's direction: the base and its first build-phase sibling (`../dystopo`) are modeled on each
-  other and are to be kept in sync both ways, by `update-from-hatchery` there and by lifting its
-  improvements here. Weekly meter resets 2026-10-16 00:00 EDT.
+- Usage gate: the deny line is optional and the base ships none; the override file lifts HOLD per
+  meter; `usage.overrideEnv` names a session variable (ADR 0006, living key table). Pushed at
+  7c57730. The owner's override file lifts HOLD on the weekly meter, machine-wide, until the reset
+  on 2026-10-16 00:00 EDT. Root cause and sibling traps: `docs/findings/2026-10-13-usage-gate-deny-line-trap.md`.
+- Build-phase sibling (`../dystopo`): its PR #90 adopts the base gate; Hatchery PR #1 from it is
+  merged, so its worktree `../hatchery-wt/usage-gate` and the branch `task/T94` here can go.
+- Second sibling (`../regenesis`): updated to 7c57730 on `master` by patch plus an ours-merge
+  (2ce5ccd, 0ad0d5b), every deny line null. Unpushed and not yet reviewed there; its copies of
+  base ADRs 0002 and 0006 are still the 44f09a2 versions.
 
 ## Next
 
-1. Sync with the build-phase sibling, a session of its own in that repository; what it needs and
-   why the skill cannot run there as is: `docs/ideas/2026-10-13-first-sync-with-the-build-phase-sibling.md`.
-2. Triage `docs/ideas/` (`triage` skill): most files have no block; one `Question:` is open
-   (verify agent beside the reviewer, decided by proposal 0003).
-3. Critic review of the hook rewrite and ADR 0006 as a whole. This session's commits had their
-   `reviewer` pass (gate lifted by a temporary `policy.json` edit on the owner's word, reverted);
-   its findings are fixed in the follow-up commit.
-4. Proposal 0003 (wave workflow) critic pass (`.claude/skills/proposal/brief-critic.md`); decides
-   the `wave` skill and the verify-agent question.
-5. Adoption of the owner's other existing project, after the above.
+1. Architect answers the critic reviews of proposals 0003 and 0005 (`docs/design/proposals/README.md`),
+   revises or promotes; this decides the `wave` skill and the verify-agent question.
+2. Critic review of ADR 0006 as a whole, with the escape-hatch question now in
+   `.claude/skills/proposal/brief-critic.md`.
+3. Triage `docs/ideas/` (`triage` skill): three new gate ideas from the finding above, plus the
+   files with no block.
+4. Regenesis: independent review and push of its update, in its own session.
+5. Adoption of the owner's other existing project.
 
 ## Waiting on user
 
+- Push of the wrap-up commit (this file, the finding, three ideas, two skill fixes).
+- Removal of the merged `task/T94` branch and its worktree here.
 - The `Answer:` on the verify-agent idea, or leave it to proposal 0003.
-- The push of the review follow-up, when wanted.
 
 ## Open findings
 

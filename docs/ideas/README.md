@@ -88,3 +88,6 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-13-subagent-deny-protected-files-hook.md` | feature | Deny subagent writes to CLAUDE.md and settings in a PreToolUse hook |
 | `2026-10-13-sweep-skill-json-summary.md` | feature | Sweep skill: one command, JSON summary, contact sheet |
 | `2026-10-13-verify-agent-reads-reports-not-diffs.md` | question | Is a verify agent that runs the change still wanted beside the reviewer? |
+| `2026-10-13-malformed-policy-falls-back-silently.md` | bug | Usage gate and status line use base defaults on a malformed policy with only a stderr note |
+| `2026-10-13-override-file-is-machine-wide.md` | question | The override file lifts HOLD for every project on the machine; per-project scope? |
+| `2026-10-13-usage-gate-stale-deny-not-liftable.md` | bug | The stale-data deny has no lift; a headless session is not gated at all |
