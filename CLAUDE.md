@@ -87,7 +87,7 @@ made by the main session itself at any usage level.
 | Usage (max of session, weekly) | Behavior |
 |---|---|
 | below 50% | Normal operation. |
-| 50% to 80% | No new work. No new subagents or tasks. Finish what is in flight, run the `handoff` skill, commit from the main session, then stop and report. |
+| 50% to 80% | No new work. No new subagents or tasks. Let in-flight agents finish, run the `handoff` skill, commit from the main session, then stop and report. |
 | 80% and above | Stop. Run the `handoff` skill, commit in-progress work from the main session with a clear WIP message, end the turn. |
 
 Status line usage numbers exist only on claude.ai Pro and Max plans and only after the first

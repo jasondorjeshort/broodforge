@@ -31,9 +31,9 @@ through the `\\?\` prefix, then deleted five ways.
 ## Result
 
 On Windows PowerShell 5.1 without long paths enabled, a recursive delete of a long-path tree works only
-through the `\\?\` prefix. With it, both `Remove-Item -Recurse -Force` and
-`[System.IO.Directory]::Delete(..., $true)` work; `Remove-Item -Force` also clears read-only
-attributes, `Directory.Delete` does not. The coordinator's observation fits a prefix that had lost a
+through the `\\?\` prefix. With it, both `Remove-Item -LiteralPath ('\\?\' + $path) -Recurse -Force`
+and `[System.IO.Directory]::Delete('\\?\' + $path, $true)` work; `Remove-Item -Force` also clears
+read-only attributes, `Directory.Delete` does not. The coordinator's observation fits a prefix that had lost a
 backslash: the `CLAUDE.md` line had been edited through a shell that collapsed `\\` to `\`. Write the
 prefix in single quotes in PowerShell and never pass it through Git Bash. After the delete,
 `git worktree prune`; a worktree the harness locked needs `git worktree unlock` first.

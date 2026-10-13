@@ -1,7 +1,7 @@
 # ADR 0002 companion: hook specifications
 
 Behaviour of the three scripts under `.claude/hooks/`, as implemented and tested on 2026-10-11
-(`node .claude/hooks/test-hooks.js`, 68 cases). The code is the reference; this document describes
+(`node .claude/hooks/test-hooks.js`, 72 cases). The code is the reference; this document describes
 it exactly enough to re-implement or extend it. Both new scripts: Node, `'use strict'`, no
 dependencies outside the standard library, SPDX header on line 2 after the shebang, read all of stdin
 as JSON, run under Git Bash on Windows and bash on Linux. Hook contract:

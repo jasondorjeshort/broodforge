@@ -14,9 +14,11 @@ A Windows note found on the way is a separate finding here,
 
 ## Question
 
-Each of these four rules was written into Dystopo's `CLAUDE.md` the day something went wrong, and
-none is in the base. Should the base carry them, and where: as working-agreement text, in a hook, or
-only as reference material for projects that reach the situation?
+Rules 1 and 2 were written into Dystopo's `CLAUDE.md` the day something went wrong (the two findings
+above). Rules 3 and 4 were written before anything broke, as guards: 3 with the privacy hooks on
+2026-10-09, 4 with the module map on 2026-10-10, both in Dystopo's "Rules" and "Debug before you push"
+sections. None of the four is in the base. Should the base carry them, and where: as working-agreement
+text, in a hook, or only as reference material for projects that reach the situation?
 
 1. **Never create a junction or symlink inside a worktree that points at the main checkout.**
    Removing the worktree with a recursive delete follows the link and deletes the target's contents;
