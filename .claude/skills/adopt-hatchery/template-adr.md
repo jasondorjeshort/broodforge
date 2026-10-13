@@ -22,7 +22,7 @@ and why the practice was adopted rather than the project decanted anew.
   replaces Hatchery's lines (this is the "recorded reason to differ" the update rule honours):
   - <section>: <decision>.
 - License: <adopted GPL-3.0-or-later and kept ADR 0001 | kept existing <license>, supersedes 0001 |
-  none, supersedes 0001>. SPDX headers: <new files only; retrofit in backlog | all files>.
+  none, supersedes 0001>. SPDX headers: <new files only; retrofit as an ideas file | all files>.
 - Docs over the 300-line cap at adoption: <file: split | exempted in pusher check 7 and post-edit.js>.
 
 ## Consequences

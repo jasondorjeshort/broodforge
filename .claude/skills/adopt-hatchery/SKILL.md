@@ -41,17 +41,17 @@ Everything below runs in a private clone of the project, on its default branch, 
    thresholds; routing table; branch name in `## Git`; `## Licensing` per step 8; `## Project rules`.
    `wc -l CLAUDE.md` under 130; move more to `.claude/rules/` until it is.
 7. Docs skeleton, only where the project lacks the file: `git checkout hatchery/main -- docs/HANDOFF.md
-   docs/backlog.md docs/findings/README.md docs/reference/README.md docs/design/proposals/README.md
+   docs/ideas/README.md docs/findings/README.md docs/reference/README.md docs/design/proposals/README.md
    docs/design/decisions/README.md docs/design/decisions/0001-licensing.md
    docs/design/decisions/0002-repository-layout.md docs/design/decisions/0002-hook-specs.md`, then
-   reset `findings/` and `reference/` index tables to their empty row and empty both backlog sections.
+   reset `findings/` and `reference/` index tables to their empty row and leave `docs/ideas/` with only its README.
    `docs/design/README.md`: absent, write one that lists the existing design files one line each plus
    "Decisions so far"; present, add the list. `docs/README.md`: add one row per added path to the
    project's own map; move nothing. `docs/HANDOFF.md`: `handoff` skill; Now is "adopting Hatchery",
    Next links the project's current work wherever it already lives.
 8. License. No `LICENSE`: ask the user (GPL-3.0-or-later as Hatchery, or none). Yes: `git checkout
-   hatchery/main -- LICENSE LICENSES`, keep 0001, SPDX headers on new files, retrofit as a backlog
-   line. No: copy nothing, `## Licensing` is one line stating the terms, the ADR of step 10
+   hatchery/main -- LICENSE LICENSES`, keep 0001, SPDX headers on new files, retrofit as an ideas
+   file. No: copy nothing, `## Licensing` is one line stating the terms, the ADR of step 10
    supersedes 0001. `LICENSE` present and different: keep it, copy nothing, supersede 0001 the same way.
 9. Caps. `git ls-files 'docs/*.md' | xargs wc -l | awk '$1>300 && $2!="total"'`: list every pre-existing file over
    300 lines. Per file the user chooses split or exempt; an exemption is a `case` skip added to

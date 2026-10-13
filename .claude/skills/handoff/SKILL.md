@@ -34,14 +34,14 @@ pusher refuses a push above it.
    Paths of findings with status open, or "none".
    ```
 
-3. Anything that does not fit: later work to `docs/backlog.md` (Ideas or Deferred with a trigger);
+3. Anything that does not fit: later work to `docs/ideas/` (one dated file per item; a `Waits:` block when it has a trigger);
    evidence to a finding (`finding` skill); durable facts to `docs/reference/`. The handoff links,
    it never explains.
 4. Check `wc -l docs/HANDOFF.md` is 40 or less.
 5. Commit it. Below 50% usage brief the runner (`commit` skill). At HOLD or STOP the main session
    commits itself: `git add docs/HANDOFF.md` plus any WIP files, with a message starting `WIP:` if
    work is unfinished, ending with the Co-Authored-By line for the model doing the work.
-6. Report in one paragraph what moved to backlog or findings.
+6. Report in one paragraph what moved to ideas or findings.
 
 ## Rules
 

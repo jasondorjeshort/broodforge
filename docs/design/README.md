@@ -30,4 +30,4 @@ Decisions so far:
   the practice as files from `hatchery/main`, records the base commit in its own ADR, and updates by
   three-way patch; merging stays the path for decanted projects. (0003 is reserved for proposal 0003.)
 
-The rest of `docs/` (handoff, backlog, reference, findings) is mapped in [`../README.md`](../README.md).
+The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).

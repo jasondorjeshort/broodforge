@@ -39,7 +39,7 @@ project's own `NNNN-adopt-hatchery.md` records the base commit).
      hook entries it keeps); then keep the project version and note it in the report.
    - Project wins: `README.md`; the title and project-specific sections of `CLAUDE.md`
      (phase, platforms, thresholds, routing, branch name, `## Project rules`, anything the project
-     added); `docs/HANDOFF.md`; `docs/backlog.md`; everything under `docs/design/`, `docs/findings/`,
+     added); `docs/HANDOFF.md`; `docs/ideas/`; everything under `docs/design/`, `docs/findings/`,
      `docs/reference/`.
    - `CLAUDE.md` rule sections (This agreement, Where things live, Delegation, Debug interface,
      Major decisions, Usage gating, Git, Licensing): base wins unless the project has an ADR for

@@ -13,7 +13,7 @@ Create a new project from the Hatchery base. Preconditions, stop and tell me if 
 https://github.com/jasondorjeshort/hatchery.git into <project> and work inside it from now on.
 Rename the remote `origin` to `hatchery`, add `origin` pointing at <new project remote URL>, and
 confirm both with `git remote -v`. Load the `decant` skill (it is in the clone) and follow it to the
-end: replace the README, retitle CLAUDE.md, reset docs/HANDOFF.md and docs/backlog.md, clear
+end: replace the README, retitle CLAUDE.md, reset docs/HANDOFF.md and docs/ideas/, clear
 docs/findings/ and docs/reference/, keep ADRs 0001 and 0002, and commit through the runner.
 Do not push. Report the remotes, the files you changed, and the first design step.
 ```
@@ -30,7 +30,7 @@ Then load the `update-from-hatchery` skill and follow it: add the remote `hatche
 (https://github.com/jasondorjeshort/hatchery.git) if missing, fetch it, pick the mode the skill
 describes (merge when there is a merge-base, patch when the project's adopt-hatchery ADR records a
 Hatchery base commit), and resolve conflicts by the skill's rule: this project's own text wins in
-README.md, the project-specific sections of CLAUDE.md, docs/HANDOFF.md, docs/backlog.md, and
+README.md, the project-specific sections of CLAUDE.md, docs/HANDOFF.md, docs/ideas/, and
 everything under docs/design/, docs/findings/, docs/reference/; the base wins under .claude/
 unless an ADR here records a reason to differ. Leave no conflict markers. Re-run the project's
 checks and tests. Do not push. Report the mode, what changed in the base, how each conflict was
@@ -78,8 +78,8 @@ no application code. What it does contain:
   meters, a gate that refuses new subagents at 50%, a guard against destructive git, and a
   post-edit check on documentation conventions.
 - `.claude/rules/docs.md`: conventions that load only when files under `docs/` are touched.
-- `docs/`: `HANDOFF.md` (where work stands, imported into every session), `backlog.md`, the
-  design skeleton with proposals and ADRs, `reference/` for durable facts, `findings/` for
+- `docs/`: `HANDOFF.md` (where work stands, imported into every session), `ideas/` (one dated file
+  per idea), the design skeleton with proposals and ADRs, `reference/` for durable facts, `findings/` for
   investigation results. `docs/README.md` is the map.
 - `LICENSE` and `LICENSES/`: GPL-3.0-or-later by default, LGPL-3.0-or-later text for linkable components.
 
@@ -99,7 +99,7 @@ The second prompt above does this for either kind of project. By hand, decanted 
 `git diff <recorded Hatchery base> hatchery/main -- .claude CLAUDE.md` with `git apply --3way` and
 bump the base line in your `adopt-hatchery` ADR. Either way, resolve conflicts by the rule in
 `.claude/skills/update-from-hatchery/SKILL.md`: the base wins under `.claude/`, the project wins in
-its own README, design, handoff, backlog, findings, and reference.
+its own README, design, handoff, ideas, findings, and reference.
 
 ## Adopting the practice in an existing project
 

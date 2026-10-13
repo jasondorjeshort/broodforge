@@ -7,7 +7,7 @@ description: Turn a fresh clone of the Hatchery base repository into a new proje
 
 Hatchery is the base; a project is decanted from it. The result keeps the working agreement, the
 agents, the skills, the hooks, and ADRs 0001 and 0002, and starts its own design, handoff, and
-backlog. Everything below runs in the new project's clone.
+ideas. Everything below runs in the new project's clone.
 
 ## Steps
 
@@ -27,7 +27,7 @@ backlog. Everything below runs in the new project's clone.
    model routing. Change only what the project needs.
 5. `docs/HANDOFF.md`: rewrite with the `handoff` skill; Now is "decanting from Hatchery", Next is
    the design sequence starting at `docs/design/00-vision.md`.
-6. `docs/backlog.md`: keep the header paragraph, empty both sections.
+6. `docs/ideas/`: delete every idea file except `README.md`; reset its index table to its empty row.
 7. `docs/findings/` and `docs/reference/`: delete every file except `README.md`; reset each index
    table to its empty row. Hatchery's findings are about Hatchery.
 8. `docs/design/`: keep `README.md`, `decisions/0001-licensing.md`, `decisions/0002-*.md`, and
