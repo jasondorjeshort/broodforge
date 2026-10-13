@@ -57,6 +57,11 @@ These load automatically when a file under `docs/` or `CLAUDE.md` is read or edi
   after the title says it is coordinator state. It never contains procedure or rationale; it links.
 - Reference files state facts and working commands. Findings state evidence and status. Design docs
   state decisions. Do not mix: a provisional result in a design doc reads as truth later.
+- Living docs (`CLAUDE.md`, skills, agents, hooks and their examples, rules, READMEs, ideas,
+  reference, the handoff) state the practice, not which project it came from: "a downstream
+  build-phase project", never its name. The base is copied into projects that have no reason to
+  read about their siblings. Provenance belongs in closed records (proposals, decisions, findings)
+  and commit messages.
 - The code wins. A doc explains intent; it does not define behaviour. Where a doc contradicts the
   code, the doc is stale: fix it in the same change that found the conflict, and bump `verified:`.
 - A change that alters behaviour, an invariant or an entry point a doc describes updates that doc

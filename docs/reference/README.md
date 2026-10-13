@@ -10,4 +10,4 @@ already certain. When a fact turns out to be wrong, fix it and bump `verified:`;
 
 | File | Topic | Verified |
 |---|---|---|
-| `claude-code-on-windows.md` | Processes, worktrees, shells, shared state and usage meters for parallel agents on Windows (from Dystopo waves 6 to 12). | 2026-10-11 |
+| `claude-code-on-windows.md` | Processes, worktrees, shells, shared state and usage meters for parallel agents on Windows. | 2026-10-11 |

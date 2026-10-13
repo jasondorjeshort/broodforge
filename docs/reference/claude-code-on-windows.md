@@ -1,6 +1,6 @@
 ---
 verified: 2026-10-11
-source: observed (Dystopo waves 6 to 12 on Windows 10, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1)
+source: observed (twelve waves of parallel agents on a downstream project; Windows 10, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1)
 ---
 
 # Claude Code on Windows: what holds
@@ -18,7 +18,7 @@ source: observed (Dystopo waves 6 to 12 on Windows 10, Claude Code 2.1.x, Git Ba
 
 ## Git worktrees
 
-- One worktree per agent under `.claude/worktrees/`. Removal on long paths: `robocopy <empty> <dir>
+- One worktree per agent under `.claude/worktrees/` [no-check: a build-phase project's directory, absent in the base]. Removal on long paths: `robocopy <empty> <dir>
   /MIR`, then `Remove-Item -Recurse -Force`, then `git worktree prune`; `git worktree unlock` first
   if the harness locked it.
 - The harness creates a worktree only when the shell's cwd is inside the repo; reset the cwd before
@@ -52,4 +52,4 @@ source: observed (Dystopo waves 6 to 12 on Windows 10, Claude Code 2.1.x, Git Ba
 - The status line writes the 5-hour and weekly percentages to a JSON file under `~/.claude/`; a
   PreToolUse hook on `Agent|Workflow` reads it and refuses new launches above the threshold. What
   stops at the threshold is launching new implementers; verifiers and merges of work already in
-  flight may finish (Dystopo, owner's clarification 2026-10-10).
+  flight may finish (owner's clarification, 2026-10-10).

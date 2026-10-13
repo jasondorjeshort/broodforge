@@ -195,7 +195,7 @@ Output with at least one message, exit 0:
 `{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"<messages>"}}`; none:
 exit 0, no stdout. Harness cases P01 to P04 and PX01 to PX14 cover the checks above, the
 formatter and the `CLAUDE.md` cap; PA the path anchors, closed records and list-item scope; PC cap
-exemptions and formatters from a policy file, a malformed policy, and the Dystopo example.
+exemptions and formatters from a policy file, a malformed policy, and the task-branches example.
 
 ## 3. `usage-gate.js` (PreToolUse, matcher `Agent|Workflow`, no `onFailure`) and the status line
 

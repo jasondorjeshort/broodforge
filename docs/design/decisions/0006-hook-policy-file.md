@@ -3,7 +3,7 @@
 Date: 2026-10-13
 Status: accepted
 
-Record: proposal `../proposals/0005-rules-that-bit-in-dystopo.md` (option B, and its two extra
+Record: proposal `../proposals/0005-rules-that-bit-downstream.md` (option B, and its two extra
 items: the PowerShell matcher and the base harness as a contract); Dystopo's ADRs 0020 and 0021
 (its alignment with the base and its `git-guard` exceptions); Dystopia's `CLAUDE.md`, section
 Git & Commits. Behaviour of each script: the companion `0002-hook-specs.md`. ADR 0007 is the docs
@@ -32,8 +32,9 @@ the gate's thresholds were duplicated in the status line.
 
 `.claude/hooks/policy.json`, read by `.claude/hooks/policy.js` for `git-guard.js`, `usage-gate.js`,
 `post-edit.js` and `.claude/statusline.js`. The scripts hold mechanism; the file holds choices. The
-base ships one reproducing its own behaviour; `.claude/hooks/policy.examples/` holds `dystopo.json`
-and `dystopia.json`, each with a `$comment` saying what it encodes.
+base ships one reproducing its own behaviour; `.claude/hooks/policy.examples/` holds
+`task-branches.json` (Dystopo's model) and `single-branch.json` (Dystopia's), each with a
+`$comment` saying what it encodes and neither naming its project, since the examples ship with the base.
 
 | Key | Type | Base value | Meaning |
 |---|---|---|---|
@@ -116,8 +117,8 @@ project whose root `package.json` declares `"type": "module"` makes Node load th
 - An update from the base patches scripts without touching any project's choices, and a project
   changes its rules by editing one JSON file that the harness can run against.
 - The three projects can be compared by diffing two small files. Dystopo's ADR 0021 exceptions
-  E1 to E5, A1 and A2 are `dystopo.json`, and the GP group of the harness runs them.
-- In `dystopia.json` only `pusher` pushes among subagents: Dystopia's push cards start a fresh
+  E1 to E5, A1 and A2 are `task-branches.json`, and the GP group of the harness runs them.
+- In `single-branch.json` only `pusher` pushes among subagents: Dystopia's push cards start a fresh
   agent of that type, and every other subagent commits but never pushes.
 - Dystopo's in-flight relaunch override (`DYSTOPO_GATE_OVERRIDE=1`) is not carried over; its
   example sets `deny` to 100 so the override file can lift its 75% line instead.

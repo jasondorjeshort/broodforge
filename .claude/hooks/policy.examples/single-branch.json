@@ -1,5 +1,5 @@
 {
-  "$comment": "Dystopia: one branch (master); any subagent commits its own step wherever it works; only the pusher agent, which the push cards start fresh, pushes; the main session may too. Delegation slows at 80% and stops at 90%.",
+  "$comment": "Single-branch model: one branch (master); any subagent commits its own step wherever it works; only the pusher agent, started fresh for each push, pushes among subagents; the main session may too. Delegation slows at 80% and stops at 90%.",
   "git": {
     "commit": { "subagents": "any", "protectedBranches": [] },
     "push": { "subagents": ["pusher"], "branches": ["*"], "mainSession": true, "forceWithLease": [] },

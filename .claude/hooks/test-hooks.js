@@ -99,8 +99,8 @@ const HATCHERY_POLICY = {
 fs.writeFileSync(path.join(scratch, 'policy-hatchery.json'), JSON.stringify(HATCHERY_POLICY));
 const POLICIES = {
   hatchery: path.join(scratch, 'policy-hatchery.json'),
-  dystopo: path.join(HOOKS, 'policy.examples', 'dystopo.json'),
-  dystopia: path.join(HOOKS, 'policy.examples', 'dystopia.json'),
+  taskBranches: path.join(HOOKS, 'policy.examples', 'task-branches.json'),
+  singleBranch: path.join(HOOKS, 'policy.examples', 'single-branch.json'),
   none: path.join(scratch, 'no-such-policy.json'),
 };
 function scratchPolicy(name, obj) {
@@ -366,8 +366,8 @@ const GR = [
   ['GR40', 'git rebase main', 'Bash', 'coder', 4],
   ['GR41', 'git pull', 'Bash', 'coder', 4],
   ['GR42', 'git rebase --abort', 'Bash', 'coder', 'allow'],
-  ['GR43', 'git merge feature', 'Bash', 'general-purpose', 4, repoMain, POLICIES.dystopo],
-  ['GR44', 'git rebase origin/main', 'Bash', 'general-purpose', 'allow', repoTask, POLICIES.dystopo],
+  ['GR43', 'git merge feature', 'Bash', 'general-purpose', 4, repoMain, POLICIES.taskBranches],
+  ['GR44', 'git rebase origin/main', 'Bash', 'general-purpose', 'allow', repoTask, POLICIES.taskBranches],
   // Config that redirects hooks by another route.
   ['GR45', 'GIT_CONFIG_GLOBAL=/tmp/evil git commit -m x', 'Bash', null, 14],
   ['GR46', 'GIT_CONFIG_SYSTEM=/tmp/evil git status', 'Bash', null, 14],
@@ -381,7 +381,7 @@ const GR = [
   ['GR53', 'git checkout -B main HEAD~3', 'Bash', null, 18], // main is the current branch
   ['GR54', 'git switch -C main HEAD~3', 'Bash', null, 18],
   ['GR55', 'git branch -f main HEAD~3', 'Bash', null, 'allow', repoTask], // not current, not protected
-  ['GR56', 'git branch -f main HEAD~3', 'Bash', null, 18, repoTask, POLICIES.dystopo],
+  ['GR56', 'git branch -f main HEAD~3', 'Bash', null, 18, repoTask, POLICIES.taskBranches],
   ['GR57', 'git checkout -B topic origin/topic', 'Bash', null, 'allow'],
   ['GR58', 'git send-pack --force origin main', 'Bash', null, 1],
   ['GR59', 'git checkout -- ./.', 'Bash', null, 7],
@@ -410,34 +410,34 @@ guardCase('GF05', { command: 'git commit -m x', agent: 'coder', policy: POLICIES
 guardCase('GF06', { command: 'git commit -m x', agent: 'runner', policy: POLICIES.none, policyName: 'absent' }, 'allow');
 
 // One command set under every policy. The absent file must behave as the Hatchery one.
-// [id, command, agent, cwd, { hatchery, dystopo, dystopia }]
+// [id, command, agent, cwd, { hatchery, taskBranches, singleBranch }]
 const H = 'hatchery';
 const GP = [
-  ['01', 'git push', 'pusher', repoMain, { hatchery: 'allow', dystopo: 3, dystopia: 'allow' }],
-  ['02', 'git push', 'general-purpose', repoTask, { hatchery: 3, dystopo: 'allow', dystopia: 3 }],
-  ['03', 'git push', null, repoMain, { hatchery: 'allow', dystopo: 'allow', dystopia: 'allow' }],
-  ['04', 'git commit -m x', 'runner', repoMain, { hatchery: 'allow', dystopo: 4, dystopia: 'allow' }],
-  ['05', 'git commit -m x', 'general-purpose', repoMain, { hatchery: 4, dystopo: 4, dystopia: 'allow' }],
-  ['06', 'git commit -m x', 'general-purpose', repoTask, { hatchery: 4, dystopo: 'allow', dystopia: 'allow' }],
-  ['07', 'git push --force-with-lease origin task/T1', 'general-purpose', repoTask, { hatchery: 1, dystopo: 'allow', dystopia: 1 }],
-  ['08', 'git push --force-with-lease origin main', null, repoMain, { hatchery: 1, dystopo: 1, dystopia: 1 }],
-  ['09', 'git branch -D task/T1', null, repoMain, { hatchery: 9, dystopo: 'allow', dystopia: 9 }],
-  ['10', 'git branch -D task/T2', null, repoMain, { hatchery: 9, dystopo: 9, dystopia: 9 }],
-  ['11', 'git push origin --delete task/T1', null, repoMain, { hatchery: 2, dystopo: 'allow', dystopia: 2 }],
-  ['12', 'git push origin :task/T2', 'general-purpose', repoMain, { hatchery: 2, dystopo: 2, dystopia: 2 }],
-  ['13', 'git config core.hooksPath tools/git-hooks', null, repoMain, { hatchery: 14, dystopo: 'allow', dystopia: 14 }],
-  ['14', 'git push --tags', 'general-purpose', repoTask, { hatchery: 3, dystopo: 3, dystopia: 3 }],
-  ['15', 'git push --tags', 'pusher', repoMain, { hatchery: 'allow', dystopo: 3, dystopia: 'allow' }],
-  ['16', 'git push origin v1.0', null, repoMain, { hatchery: 'allow', dystopo: 'allow', dystopia: 'allow' }],
-  ['17', 'git push origin HEAD:main', 'general-purpose', repoTask, { hatchery: 3, dystopo: 3, dystopia: 3 }],
-  ['18', `git -C ${fwd(repoTask)} commit -m x`, 'general-purpose', repoMain, { hatchery: 4, dystopo: 'allow', dystopia: 'allow' }],
-  ['19', `cd ${fwd(repoMain)} && git commit -m x`, 'general-purpose', repoTask, { hatchery: 4, dystopo: 4, dystopia: 'allow' }],
-  ['20', 'git reset --hard', null, repoMain, { hatchery: 5, dystopo: 5, dystopia: 5 }],
-  ['21', 'git commit --no-verify -m x', 'general-purpose', repoTask, { hatchery: 4, dystopo: 13, dystopia: 13 }],
+  ['01', 'git push', 'pusher', repoMain, { hatchery: 'allow', taskBranches:3, singleBranch:'allow' }],
+  ['02', 'git push', 'general-purpose', repoTask, { hatchery: 3, taskBranches:'allow', singleBranch:3 }],
+  ['03', 'git push', null, repoMain, { hatchery: 'allow', taskBranches:'allow', singleBranch:'allow' }],
+  ['04', 'git commit -m x', 'runner', repoMain, { hatchery: 'allow', taskBranches:4, singleBranch:'allow' }],
+  ['05', 'git commit -m x', 'general-purpose', repoMain, { hatchery: 4, taskBranches:4, singleBranch:'allow' }],
+  ['06', 'git commit -m x', 'general-purpose', repoTask, { hatchery: 4, taskBranches:'allow', singleBranch:'allow' }],
+  ['07', 'git push --force-with-lease origin task/T1', 'general-purpose', repoTask, { hatchery: 1, taskBranches:'allow', singleBranch:1 }],
+  ['08', 'git push --force-with-lease origin main', null, repoMain, { hatchery: 1, taskBranches:1, singleBranch:1 }],
+  ['09', 'git branch -D task/T1', null, repoMain, { hatchery: 9, taskBranches:'allow', singleBranch:9 }],
+  ['10', 'git branch -D task/T2', null, repoMain, { hatchery: 9, taskBranches:9, singleBranch:9 }],
+  ['11', 'git push origin --delete task/T1', null, repoMain, { hatchery: 2, taskBranches:'allow', singleBranch:2 }],
+  ['12', 'git push origin :task/T2', 'general-purpose', repoMain, { hatchery: 2, taskBranches:2, singleBranch:2 }],
+  ['13', 'git config core.hooksPath tools/git-hooks', null, repoMain, { hatchery: 14, taskBranches:'allow', singleBranch:14 }],
+  ['14', 'git push --tags', 'general-purpose', repoTask, { hatchery: 3, taskBranches:3, singleBranch:3 }],
+  ['15', 'git push --tags', 'pusher', repoMain, { hatchery: 'allow', taskBranches:3, singleBranch:'allow' }],
+  ['16', 'git push origin v1.0', null, repoMain, { hatchery: 'allow', taskBranches:'allow', singleBranch:'allow' }],
+  ['17', 'git push origin HEAD:main', 'general-purpose', repoTask, { hatchery: 3, taskBranches:3, singleBranch:3 }],
+  ['18', `git -C ${fwd(repoTask)} commit -m x`, 'general-purpose', repoMain, { hatchery: 4, taskBranches:'allow', singleBranch:'allow' }],
+  ['19', `cd ${fwd(repoMain)} && git commit -m x`, 'general-purpose', repoTask, { hatchery: 4, taskBranches:4, singleBranch:'allow' }],
+  ['20', 'git reset --hard', null, repoMain, { hatchery: 5, taskBranches:5, singleBranch:5 }],
+  ['21', 'git commit --no-verify -m x', 'general-purpose', repoTask, { hatchery: 4, taskBranches:13, singleBranch:13 }],
 ];
 for (const [n, command, agent, cwd, want] of GP) {
-  for (const p of [H, 'none', 'dystopo', 'dystopia']) {
-    const tag = { hatchery: 'H', none: 'N', dystopo: 'O', dystopia: 'A' }[p];
+  for (const p of [H, 'none', 'taskBranches', 'singleBranch']) {
+    const tag = { hatchery: 'H', none: 'N', taskBranches: 'T', singleBranch: 'S' }[p];
     guardCase(`GP${n}${tag}`, { command, agent, cwd, policy: POLICIES[p], policyName: p }, want[p === 'none' ? H : p]);
   }
 }
@@ -523,7 +523,7 @@ const P = [
   ['PC04', 'malformed policy: base defaults', absOf('docs/reference/big.md'),
     'post-edit: docs/reference/big.md is 301 lines; cap is 300 (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.',
     null, null, scratchPolicy('pe-bad', '{ nope')],
-  ['PC05', 'Dystopo example exempts docs/PLANNING.md', absOf('docs/PLANNING.md'), null, null, null, POLICIES.dystopo],
+  ['PC05', 'task-branches example exempts docs/TASKS.md', absOf('docs/TASKS.md'), null, null, null, POLICIES.taskBranches],
   ['PC06', 'docs/PLANNING.md under the Hatchery policy', absOf('docs/PLANNING.md'),
     'post-edit: docs/PLANNING.md is 320 lines; cap is 300 (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.'],
   // Closed records are exempt from the path check by default; list items scope [no-check:].
@@ -618,10 +618,10 @@ const UX = [
   ['UX04', 'no data, whenStale allow', null, POLICIES.hatchery, null, 'no usage data'],
   ['UX05', 'a window past its reset no longer counts', fresh(95, 10, { five_hour: { used_percentage: 95, resets_at: nowSec - 60 } }), POLICIES.hatchery, null],
   ['UX06', 'a window before its reset counts', fresh(95, 10, { five_hour: { used_percentage: 95, resets_at: nowSec + 60 } }), POLICIES.hatchery, 'Usage gate: 5h 95%, 7d 10%. At or above 80%'],
-  ['UX07', 'Dystopia example, 85%', fresh(85, 10), POLICIES.dystopia, 'Usage gate: 5h 85%, 7d 10%. At or above 80%: Do not start new subagents. Let in-flight agents finish and commit'],
-  ['UX08', 'Dystopia example, 92%', fresh(92, 10), POLICIES.dystopia, 'Usage gate: 5h 92%, 7d 10%. At or above 90%: Stop all work; commit what is green'],
-  ['UX09', 'Dystopia example, 60%', fresh(60, 10), POLICIES.dystopia, null],
-  ['UX10', 'Dystopo example, 80%', fresh(10, 80), POLICIES.dystopo, 'Usage gate: 5h 10%, 7d 80%. At or above 75%: No new implementers'],
+  ['UX07', 'single-branch example, 85%', fresh(85, 10), POLICIES.singleBranch, 'Usage gate: 5h 85%, 7d 10%. At or above 80%: Do not start new subagents. Let in-flight agents finish and commit'],
+  ['UX08', 'single-branch example, 92%', fresh(92, 10), POLICIES.singleBranch, 'Usage gate: 5h 92%, 7d 10%. At or above 90%: Stop all work; commit what is green'],
+  ['UX09', 'single-branch example, 60%', fresh(60, 10), POLICIES.singleBranch, null],
+  ['UX10', 'task-branches example, 80%', fresh(10, 80), POLICIES.taskBranches, 'Usage gate: 5h 10%, 7d 80%. At or above 75%: No new implementers'],
   ['UX11', 'malformed policy: base defaults', fresh(55, 10), scratchPolicy('ug-bad', '[]'), HOLD_MSG, 'using the base defaults'],
   ['UX12', 'pre-merge file with updated_at only', { updated_at: nowSec, five_hour: { used_percentage: 95 } }, POLICIES.hatchery, null, 'no usage data'],
 ];
@@ -675,8 +675,8 @@ const S = [
   }],
   ['S04', 'malformed stdin: prints, writes nothing', 'not json', null,
     (r, b, a) => (r.code === 0 && b === a && r.stdout.startsWith('? |')) || `exit ${r.code}, line ${r.stdout}`],
-  ['S05', 'flags follow the policy (Dystopia: 85 is HOLD)', rl(85, 10), POLICIES.dystopia, (r) => r.stdout.endsWith(' HOLD') || r.stdout],
-  ['S06', 'flags follow the policy (Dystopia: 92 is STOP)', rl(92, 10), POLICIES.dystopia, (r) => r.stdout.endsWith(' STOP') || r.stdout],
+  ['S05', 'flags follow the policy (single-branch: 85 is HOLD)', rl(85, 10), POLICIES.singleBranch, (r) => r.stdout.endsWith(' HOLD') || r.stdout],
+  ['S06', 'flags follow the policy (single-branch: 92 is STOP)', rl(92, 10), POLICIES.singleBranch, (r) => r.stdout.endsWith(' STOP') || r.stdout],
   ['S07', 'flags follow the policy (Hatchery: 85 is STOP)', rl(85, 10), null, (r) => r.stdout.endsWith(' STOP') || r.stdout],
 ];
 fs.rmSync(slFile, { force: true });
@@ -712,8 +712,8 @@ if (selected('S09')) {
 {
   const { load, DEFAULTS } = require('./policy');
   const files = [['LIVE01', 'this repository\'s policy.json loads (or is absent)', path.join(HOOKS, 'policy.json')],
-    ['LIVE02', 'policy.examples/dystopo.json loads', POLICIES.dystopo],
-    ['LIVE03', 'policy.examples/dystopia.json loads', POLICIES.dystopia]];
+    ['LIVE02', 'policy.examples/task-branches.json loads', POLICIES.taskBranches],
+    ['LIVE03', 'policy.examples/single-branch.json loads', POLICIES.singleBranch]];
   for (const [id, label, file] of files) {
     if (!selected(id)) continue;
     const r = load(file);

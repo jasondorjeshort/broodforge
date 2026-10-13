@@ -1,4 +1,4 @@
-# 0005. Four rules that bit in Dystopo and are missing from the base
+# 0005. Four rules that bit downstream and are missing from the base
 
 Date: 2026-10-12
 Status: draft
