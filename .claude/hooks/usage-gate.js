@@ -15,7 +15,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { load } = require('./policy');
+const { load, usageVerdict } = require('./policy');
 
 const STATE_FILE = path.join(os.homedir(), '.claude', 'usage-state.json');
 // Lifts HOLD (not the deny line) until `until`, epoch seconds; written only on the user's word.
@@ -55,18 +55,21 @@ function main() {
     ? w.used_percentage : null);
   const fiveH = pct(state.five_hour);
   const sevenD = pct(state.seven_day);
-  const worst = Math.max(fiveH || 0, sevenD || 0);
   const fmt = (v) => (v === null ? 'n/a' : `${Math.round(v)}%`);
   const detail = `5h ${fmt(fiveH)}, 7d ${fmt(sevenD)}`;
+  // Each meter is judged by its own thresholds (usage.fiveHour / usage.sevenDay, else the shared
+  // hold/deny) and the worse verdict wins; the reason names the meter that tripped.
+  const v = usageVerdict(u, { '5h': fiveH, '7d': sevenD });
+  const tripped = v.hits.map((h) => `${h.label} at or above ${h.threshold}%`).join(', ');
 
-  if (worst >= u.deny) deny(`Usage gate: ${detail}. At or above ${u.deny}%: ${u.denyAdvice}`);
-  if (worst >= u.hold) {
+  if (v.level === 2) deny(`Usage gate: ${detail}. ${tripped}: ${u.denyAdvice}`);
+  if (v.level === 1) {
     const o = readJson(OVERRIDE_FILE);
     if (o && typeof o.until === 'number' && o.until > now) {
       note(`HOLD (${detail}) lifted by override until ${new Date(o.until * 1000).toLocaleString()}: ${o.reason || 'no reason given'}`);
       return;
     }
-    deny(`Usage gate: ${detail}. At or above ${u.hold}%: ${u.holdAdvice} Lifting this early is the user's decision (${POLICY_DOC}).`);
+    deny(`Usage gate: ${detail}. ${tripped}: ${u.holdAdvice} Lifting this early is the user's decision (${POLICY_DOC}).`);
   }
 }
 

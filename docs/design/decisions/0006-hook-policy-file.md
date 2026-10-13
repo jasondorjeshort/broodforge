@@ -47,6 +47,7 @@ and `dystopia.json`, each with a `$comment` saying what it encodes.
 | `git.branchDelete.requireMergedPr` | boolean | `false` | Also require a merged pull request on GitHub (`gh`, fails closed). |
 | `git.hooksPath` | path or `null` | `null` | The one value `core.hooksPath` may be set to; `null` allows none. |
 | `usage.hold` / `usage.deny` | percent | `50` / `80` | No new subagents at `hold`; stop at `deny`. `hold` may not exceed `deny`. |
+| `usage.fiveHour` / `usage.sevenDay` | `{ "hold", "deny" }`, each percent or `null` | both `null` | Per-meter thresholds; `null` inherits `usage.hold` / `usage.deny`. Each meter is judged by its own pair and the worse verdict wins (ReGenesis, its ADR 0004). |
 | `usage.staleSeconds` | seconds | `7200` | Older usage data is stale. |
 | `usage.whenStale` | `"allow"` or `"deny"` | `"allow"` | What the gate does with stale or missing data. |
 | `usage.holdAdvice` / `usage.denyAdvice` | text | the base's wording | The sentence after the threshold in each deny. |

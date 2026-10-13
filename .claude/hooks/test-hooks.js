@@ -101,6 +101,7 @@ const POLICIES = {
   hatchery: path.join(scratch, 'policy-hatchery.json'),
   dystopo: path.join(HOOKS, 'policy.examples', 'dystopo.json'),
   dystopia: path.join(HOOKS, 'policy.examples', 'dystopia.json'),
+  regenesis: path.join(HOOKS, 'policy.examples', 'regenesis.json'),
   none: path.join(scratch, 'no-such-policy.json'),
 };
 function scratchPolicy(name, obj) {
@@ -569,8 +570,8 @@ for (const [id, label, filePath, expect, rawOverride, fmt, policy, root] of P) {
 // ---------- usage-gate (section 3 text) ----------
 const home = path.join(scratch, 'home');
 fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-const HOLD_MSG = 'Usage gate: 5h 55%, 7d 10%. At or above 50%: Do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report. Lifting this early is the user\'s decision (docs/design/decisions/0006-hook-policy-file.md).';
-const STOP_MSG = 'Usage gate: 5h 85%, 7d 10%. At or above 80%: Stop all work, run the handoff skill, commit WIP from the main session, end the turn.';
+const HOLD_MSG = 'Usage gate: 5h 55%, 7d 10%. 5h at or above 50%: Do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report. Lifting this early is the user\'s decision (docs/design/decisions/0006-hook-policy-file.md).';
+const STOP_MSG = 'Usage gate: 5h 85%, 7d 10%. 5h at or above 80%: Stop all work, run the handoff skill, commit WIP from the main session, end the turn.';
 const nowSec = Math.floor(Date.now() / 1000);
 // [id, pct, expected deny reason or null for allow, override file contents or undefined]
 const U = [
@@ -617,13 +618,14 @@ const UX = [
   ['UX03', 'no data, whenStale deny', null, staleDeny, 'Usage gate: no usage data'],
   ['UX04', 'no data, whenStale allow', null, POLICIES.hatchery, null, 'no usage data'],
   ['UX05', 'a window past its reset no longer counts', fresh(95, 10, { five_hour: { used_percentage: 95, resets_at: nowSec - 60 } }), POLICIES.hatchery, null],
-  ['UX06', 'a window before its reset counts', fresh(95, 10, { five_hour: { used_percentage: 95, resets_at: nowSec + 60 } }), POLICIES.hatchery, 'Usage gate: 5h 95%, 7d 10%. At or above 80%'],
-  ['UX07', 'Dystopia example, 85%', fresh(85, 10), POLICIES.dystopia, 'Usage gate: 5h 85%, 7d 10%. At or above 80%: Do not start new subagents. Let in-flight agents finish and commit'],
-  ['UX08', 'Dystopia example, 92%', fresh(92, 10), POLICIES.dystopia, 'Usage gate: 5h 92%, 7d 10%. At or above 90%: Stop all work; commit what is green'],
+  ['UX06', 'a window before its reset counts', fresh(95, 10, { five_hour: { used_percentage: 95, resets_at: nowSec + 60 } }), POLICIES.hatchery, 'Usage gate: 5h 95%, 7d 10%. 5h at or above 80%'],
+  ['UX07', 'Dystopia example, 85%', fresh(85, 10), POLICIES.dystopia, 'Usage gate: 5h 85%, 7d 10%. 5h at or above 80%: Do not start new subagents. Let in-flight agents finish and commit'],
+  ['UX08', 'Dystopia example, 92%', fresh(92, 10), POLICIES.dystopia, 'Usage gate: 5h 92%, 7d 10%. 5h at or above 90%: Stop all work; commit what is green'],
   ['UX09', 'Dystopia example, 60%', fresh(60, 10), POLICIES.dystopia, null],
-  ['UX10', 'Dystopo example, 80%', fresh(10, 80), POLICIES.dystopo, 'Usage gate: 5h 10%, 7d 80%. At or above 75%: No new implementers'],
+  ['UX10', 'Dystopo example, 80%', fresh(10, 80), POLICIES.dystopo, 'Usage gate: 5h 10%, 7d 80%. 7d at or above 75%: No new implementers'],
   ['UX11', 'malformed policy: base defaults', fresh(55, 10), scratchPolicy('ug-bad', '[]'), HOLD_MSG, 'using the base defaults'],
   ['UX12', 'pre-merge file with updated_at only', { updated_at: nowSec, five_hour: { used_percentage: 95 } }, POLICIES.hatchery, null, 'no usage data'],
+  ['UX13', 'ReGenesis example: 5h judged by its own hold', fresh(65, 10), POLICIES.regenesis, 'Usage gate: 5h 65%, 7d 10%. 5h at or above 60%'],  ['UX14', 'ReGenesis example: 7d judged by its own hold', fresh(10, 80), POLICIES.regenesis, 'Usage gate: 5h 10%, 7d 80%. 7d at or above 75%'],  ['UX15', 'ReGenesis example: 7d 70 is under its own hold', fresh(10, 70), POLICIES.regenesis, null],  ['UX16', 'ReGenesis example: 7d 91 is its own deny', fresh(10, 91), POLICIES.regenesis, 'Usage gate: 5h 10%, 7d 91%. 7d at or above 90%'],  ['UX17', 'per-meter hold above deny is malformed', fresh(55, 10), scratchPolicy('ug-meter-bad', { usage: { fiveHour: { hold: 90, deny: 80 } } }), HOLD_MSG, 'using the base defaults'],
 ];
 fs.rmSync(path.join(home, '.claude', 'usage-gate-override.json'), { force: true });
 for (const [id, label, state, policy, expect, stderrHas] of UX) {
@@ -713,7 +715,8 @@ if (selected('S09')) {
   const { load, DEFAULTS } = require('./policy');
   const files = [['LIVE01', 'this repository\'s policy.json loads (or is absent)', path.join(HOOKS, 'policy.json')],
     ['LIVE02', 'policy.examples/dystopo.json loads', POLICIES.dystopo],
-    ['LIVE03', 'policy.examples/dystopia.json loads', POLICIES.dystopia]];
+    ['LIVE03', 'policy.examples/dystopia.json loads', POLICIES.dystopia],
+    ['LIVE04', 'policy.examples/regenesis.json loads', POLICIES.regenesis]];
   for (const [id, label, file] of files) {
     if (!selected(id)) continue;
     const r = load(file);

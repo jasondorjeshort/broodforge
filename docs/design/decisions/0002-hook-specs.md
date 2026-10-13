@@ -209,14 +209,14 @@ agents run. The line shows model, context, both windows
 with their reset times, and ` HOLD` or ` STOP` at the policy's `usage.hold` and `usage.deny`; a
 cached window past its `resets_at` shows `n/a`.
 
-Gate. Usage is the higher of the two windows; a window past its `resets_at` has reset and does not
+Gate. Each window is judged against its own thresholds (`usage.fiveHour`, `usage.sevenDay`, else the shared `usage.hold` and `usage.deny`) and the worse verdict wins; a window past its `resets_at` has reset and does not
 count. No file, no `updatedAt`, or data older than `usage.staleSeconds` is stale: with `whenStale`
 `allow` the gate allows with a note on stderr; with `deny` it denies with `Usage gate: <what>, and
 the policy denies delegation without fresh data. Check usage with /usage in an interactive session;
 the status line refreshes the data while a session is open.` The hook never runs `claude -p`.
 
-At or above `usage.deny`: `Usage gate: 5h X%, 7d Y%. At or above <deny>%: <denyAdvice>`. At or above
-`usage.hold`: `Usage gate: 5h X%, 7d Y%. At or above <hold>%: <holdAdvice> Lifting this early is the
+At or above `usage.deny`: `Usage gate: 5h X%, 7d Y%. <meter> at or above <deny>%: <denyAdvice>`. At or above
+`usage.hold`: `Usage gate: 5h X%, 7d Y%. <meter> at or above <hold>%: <holdAdvice> Lifting this early is the
 user's decision (docs/design/decisions/0006-hook-policy-file.md).`, unless the override file lifts
 it (ADR 0006). A crash exits 1, which does not block: the gate fails open.
 
