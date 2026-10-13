@@ -189,7 +189,9 @@ write('docs/reference/big.md', `---\nverified: 2026-10-11\nsource: observed\n---
 write('docs/reference/clean.md', '---\nverified: 2026-10-11\nsource: observed\n---\n\n# Clean\n');
 write('docs/reference/noverified.md', '---\nsource: observed\n---\n# No verified\n');
 write('docs/reference/unlisted.md', '---\nverified: 2026-10-11\n---\n# Unlisted\n');
-const realHandoff = fs.readFileSync(path.join(HOOKS, '..', '..', 'docs', 'HANDOFF.md'), 'utf8');
+// Backticks dropped: the paths the real handoff names do not exist in the scratch tree, and this
+// case tests the line cap, not the path-anchor check.
+const realHandoff = fs.readFileSync(path.join(HOOKS, '..', '..', 'docs', 'HANDOFF.md'), 'utf8').replace(/`/g, '');
 const handoffLines = realHandoff.split('\n').filter((_, i, a) => i < a.length - 1 || a[i] !== '');
 while (handoffLines.length < 41) handoffLines.push('padding');
 write('docs/HANDOFF.md', handoffLines.slice(0, 41).join('\n') + '\n'); // 41-line copy of the real one
@@ -214,7 +216,7 @@ const P = [
   ['P01', '301-line docs/reference file', absOf('docs/reference/big.md'),
     'post-edit: docs/reference/big.md is 301 lines; cap is 300 (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.'],
   ['P02', '41-line docs/HANDOFF.md copy', absOf('docs/HANDOFF.md'),
-    'post-edit: docs/HANDOFF.md is 41 lines; cap is 40. Move detail to docs/backlog.md or a finding.'],
+    'post-edit: docs/HANDOFF.md is 41 lines; cap is 40. Move detail to docs/ideas/ or a finding.'],
   ['P03', 'findings file without frontmatter', absOf('docs/findings/2026-01-01-nofm.md'),
     'post-edit: docs/findings/2026-01-01-nofm.md lacks finding frontmatter (date, status, area). See the finding skill.'],
   ['P04', 'clean reference file', absOf('docs/reference/clean.md'), null],

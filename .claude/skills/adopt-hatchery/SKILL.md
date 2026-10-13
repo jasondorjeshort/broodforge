@@ -57,8 +57,9 @@ Everything below runs in a private clone of the project, on its default branch, 
    file. No: copy nothing, `## Licensing` is one line stating the terms, the ADR of step 10
    supersedes 0001. `LICENSE` present and different: keep it, copy nothing, supersede 0001 the same way.
 9. Caps. `git ls-files 'docs/*.md' | xargs wc -l | awk '$1>300 && $2!="total"'`: list every pre-existing file over
-   300 lines. Per file the user chooses split or exempt; an exemption is a `case` skip added to
-   pusher check 7 and `post-edit.js`, recorded in step 10 as the reason to differ.
+   300 lines. Per file the user chooses split or exempt; an exemption is the path added to
+   `edit.capExempt` in `.claude/hooks/policy.json` and a `case` skip added to pusher check 7,
+   recorded in step 10 as the reason to differ.
 10. The project's ADR: `docs/design/decisions/NNNN-adopt-hatchery.md` from `template-adr.md` beside
     this skill (NNNN: `adr` skill numbering). The line `Hatchery base: <BASE>` is required and living.
     Add it to "Decisions so far".
