@@ -5,19 +5,31 @@
 Three prompts, each self-contained. Every one needs Node (hooks and status line) and the GitHub
 CLI `gh` (pushing) on `PATH`, and stops at the first failed precondition instead of improvising.
 
-**Start a new project from Hatchery.** Replace the two placeholders, then paste into Claude Code:
+**Start a new project from Hatchery.** Run step one in a shell, then paste step two into the
+Claude Code session it opens.
+
+Step one: clone and start Claude Code inside the clone, so the session loads Hatchery's agents,
+skills, and hooks. `<project>` must not exist yet, or be empty, and the project's GitHub repository
+must already exist and be empty (no README or license initialised, or the first push is refused).
+
+```
+git clone https://github.com/jasondorjeshort/hatchery.git <project>
+cd <project>
+claude
+```
+
+Step two: replace `<new project remote URL>`, then paste:
 
 ```
 Create a new project from the Hatchery base. Preconditions, stop and tell me if one fails: `node
---version` and `gh --version` work; the directory <project> does not exist yet. Then clone
-https://github.com/jasondorjeshort/hatchery.git into <project> and work inside it from now on.
-Rename the remote `origin` to `hatchery`, add `origin` pointing at <new project remote URL>, and
-confirm both with `git remote -v`. Load the `decant` skill (it is in the clone) and follow it to the
-end: replace the README, retitle CLAUDE.md, set .claude/hooks/policy.json (ask me about
-thresholds), reset docs/HANDOFF.md and docs/ideas/, clear docs/findings/ and docs/reference/
-except the Windows reference, keep every Hatchery ADR and delete the proposals (my own ADRs start
-at 0020), and commit through the runner. Do not push. Report the remotes, the files you changed,
-the policy choices, and the first design step.
+--version` and `gh --version` work; `git status --porcelain` is empty; `git remote -v` shows
+`origin` pointing at the Hatchery repository; the `decant` skill is listed. Rename the remote
+`origin` to `hatchery`, add `origin` pointing at <new project remote URL>, and confirm both with
+`git remote -v`. Load the `decant` skill and follow it to the end: replace the README, retitle
+CLAUDE.md, set .claude/hooks/policy.json (ask me about thresholds), reset docs/HANDOFF.md and
+docs/ideas/, clear docs/findings/ and docs/reference/ except the Windows reference, keep every
+Hatchery ADR and delete the proposals (my own ADRs start at 0020), and commit through the runner.
+Do not push. Report the remotes, the files you changed, the policy choices, and the first design step.
 ```
 
 **Update a project that came from Hatchery** (decanted, or adopted with the third prompt). Paste
@@ -89,10 +101,12 @@ Layout and reasoning: [`docs/design/decisions/0002-repository-layout.md`](docs/d
 
 ## Starting a new project by hand
 
-The first prompt above does this for you. By hand: clone, rename `origin` to `hatchery`, add the
-project's `origin`, then run `/decant` in Claude Code and follow the `decant` skill. On GitHub, mark
-this repository as a template (Settings, "Template repository") if you prefer a clean history; a
-template copy has no shared history, so treat it as an adoption (third prompt), not a decant.
+The shell block in the first prompt's step one is the by-hand start: clone, `cd`, `claude`. The
+step-two prompt does the rest (remotes, then the `decant` skill). By hand from there: rename
+`origin` to `hatchery`, add the project's `origin`, then run `/decant` in Claude Code and follow
+the `decant` skill. On GitHub, mark this repository as a template (Settings, "Template
+repository") if you prefer a clean history; a template copy has no shared history, so treat it as
+an adoption (third prompt), not a decant.
 
 ## Pulling base improvements into a project
 
