@@ -1,4 +1,4 @@
-# Working agreement
+# Broodforge working agreement
 
 Read this before doing anything. It governs how Claude works in this repo.
 This file comes from the Hatchery base repository; a project decanted from it keeps the rules and

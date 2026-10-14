@@ -1,37 +1,33 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-14, at commit e75f048, by main session (Hatchery coordinator)
+Updated: 2026-10-14, at commit 9ded9ca (amended), by main session
 
 ## Now
 
-- The base is ready for its first decant. Four commits since bc76896, each reviewed once, unpushed:
-  the status line prints the working directory above the meters (takes effect at restart); ADR 0008
-  (Hatchery owns ADR numbers 0001 to 0019, decant keeps every ADR and the Windows reference, a
-  `policy.json` step); the Windows reference with a link-safe worktree removal and the finding that
-  robocopy purges through junctions; routing by need (settled edits go to `tester` or `coder`, the
-  architect decides) and a reviewer that tests destructive claims in isolation.
-- Owner answers of 2026-10-14 are recorded in ADR 0008 and on the verify-agent idea (`Waits:` on
-  proposal 0003).
+- Decanted from Hatchery (`decant` skill) in one reviewed commit on `main`, unpushed. Remotes:
+  `origin` is Broodforge, `hatchery` is the base. Policy: HOLD at 60% on the session meter and
+  75% on the weekly meter, no STOP line.
+- The project: a Discord frontend for Claude Code. The owner wants a detailed conversation before
+  design starts; `docs/design/00-vision.md` does not exist yet [no-check: not yet written].
 
 ## Next
 
-1. Pusher pushes `main` on the owner's words; then the first decant with the README prompt.
-2. Architect answers the critic reviews of proposals 0003 and 0005 (`docs/design/proposals/README.md`).
-   0005 objection 1a is answered by the reference's removal procedure and the robocopy finding; the
-   rest decides the `wave` skill, the verify-agent `Waits:`, and an ADR 0007 amendment.
-3. Critic review of ADR 0006 as a whole, with the escape-hatch question in `.claude/skills/proposal/brief-critic.md`.
-4. Triage `docs/ideas/` (`triage` skill): the files with no block.
-5. Sibling work in their own sessions: Regenesis review and push of its update; the first two-way
-   sync with the build-phase sibling (`docs/ideas/2026-10-13-first-sync-with-the-build-phase-sibling.md`).
-6. The open heredoc finding's Next steps are still undone (reproduce on Linux; check the changelog).
+1. Owner conversation on what Broodforge is (who uses it, what it does, what done looks like).
+   The coordinator records the answers; the architect then writes `docs/design/00-vision.md`
+   [no-check: not yet written].
+2. Architect: `01-requirements.md` and `02-domain.md` from the vision.
+3. Architect: `06-platforms.md`, then one proposal per major choice it lists (language, Discord
+   library, how it drives Claude Code, storage) through the `proposal` skill. Own ADRs start at 0020.
+4. Architect: `03-architecture.md`, `04-ux.md` (the owner reviews the flows and wording),
+   `05-debug-interface.md` with the `debug-interface` skill.
+5. Pusher pushes `main` to the Broodforge remote on the owner's words.
 
 ## Waiting on user
 
-- Push of the four commits.
-- Deletion of the merged `task/T94` branch on GitHub; the guard denies branch deletion for every
-  session here, so it is a plain terminal or the GitHub UI.
+- The vision conversation (Next 1).
+- When to push the decant commit.
 
 ## Open findings
 
-- `docs/findings/2026-10-11-bash-heredoc-apostrophes.md`
+none

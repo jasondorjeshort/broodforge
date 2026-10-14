@@ -69,24 +69,3 @@ One line per file; the post-edit hook warns about an unlisted one.
 
 | File | Kind | One line |
 |---|---|---|
-| `2026-10-13-coder-project-memory.md` | chore | Coder agent gets a project memory scope; waits on repeated facts |
-| `2026-10-13-debug-interface-doc-hooks-section.md` | chore | Debug-interface design doc gets a hooks section when it is written |
-| `2026-10-13-fable-per-model-usage-gate.md` | feature | Fable launches gated on a per-model meter; waits on statusline field |
-| `2026-10-13-first-install-on-real-device-lesson.md` | chore | First install on a real device before a release is called done |
-| `2026-10-13-first-sync-with-the-build-phase-sibling.md` | chore | First two-way sync with the build-phase sibling; what its first patch run needs |
-| `2026-10-13-github-issues-for-intake.md` | question | Intake in GitHub Issues; waits on a second contributor or public users |
-| `2026-10-13-haiku-runner-escalates-to-sonnet.md` | chore | Haiku runner escalates to Sonnet only when a sweep fails |
-| `2026-10-13-per-agent-port-emulator-allocation.md` | chore | Briefs allocate a distinct port and emulator per parallel agent |
-| `2026-10-13-post-edit-formatters-cmd-shims.md` | bug | post-edit formatters cannot spawn `.cmd` shims on Windows |
-| `2026-10-13-private-terms-guard-hook.md` | feature | Guard that scans commits, PR text and artifacts for private terms |
-| `2026-10-13-release-skill-tag-driven.md` | feature | Release skill driven by a tag, verified from the draft |
-| `2026-10-13-sessionstart-matcher-lists-fork.md` | chore | Any future SessionStart matcher list includes `fork` |
-| `2026-10-13-sessionstart-resume-context-hook.md` | feature | SessionStart hook reporting resume context; waits on a trigger |
-| `2026-10-13-shared-doc-caps-limits-json.md` | chore | Doc caps in a limits.json once a third enforcer exists |
-| `2026-10-13-stop-hook-stale-handoff-block.md` | feature | Stop hook blocks once when HANDOFF.md is stale; waits on evidence |
-| `2026-10-13-subagent-deny-protected-files-hook.md` | feature | Deny subagent writes to CLAUDE.md and settings in a PreToolUse hook |
-| `2026-10-13-sweep-skill-json-summary.md` | feature | Sweep skill: one command, JSON summary, contact sheet |
-| `2026-10-13-verify-agent-reads-reports-not-diffs.md` | question | Is a verify agent that runs the change still wanted beside the reviewer? |
-| `2026-10-13-malformed-policy-falls-back-silently.md` | bug | Usage gate and status line use base defaults on a malformed policy with only a stderr note |
-| `2026-10-13-override-file-is-machine-wide.md` | question | The override file lifts HOLD for every project on the machine; per-project scope? |
-| `2026-10-13-usage-gate-stale-deny-not-liftable.md` | bug | The stale-data deny has no lift; a headless session is not gated at all |
