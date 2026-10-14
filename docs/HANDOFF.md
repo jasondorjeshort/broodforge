@@ -1,36 +1,36 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-13, at commit 7c57730 plus the wrap-up commit, by main session (Hatchery coordinator)
+Updated: 2026-10-14, at commit e75f048, by main session (Hatchery coordinator)
 
 ## Now
 
-- Usage gate: the deny line is optional and the base ships none; the override file lifts HOLD per
-  meter; `usage.overrideEnv` names a session variable (ADR 0006, living key table). Pushed at
-  7c57730. The owner's override file lifts HOLD on the weekly meter, machine-wide, until the reset
-  on 2026-10-16 00:00 EDT. Root cause and sibling traps: `docs/findings/2026-10-13-usage-gate-deny-line-trap.md`.
-- Build-phase sibling (`../dystopo`): its PR #90 adopts the base gate; Hatchery PR #1 from it is
-  merged, so its worktree `../hatchery-wt/usage-gate` and the branch `task/T94` here can go.
-- Second sibling (`../regenesis`): updated to 7c57730 on `master` by patch plus an ours-merge
-  (2ce5ccd, 0ad0d5b), every deny line null. Unpushed and not yet reviewed there; its copies of
-  base ADRs 0002 and 0006 are still the 44f09a2 versions.
+- The base is ready for its first decant. Four commits since bc76896, each reviewed once, unpushed:
+  the status line prints the working directory above the meters (takes effect at restart); ADR 0008
+  (Hatchery owns ADR numbers 0001 to 0019, decant keeps every ADR and the Windows reference, a
+  `policy.json` step); the Windows reference with a link-safe worktree removal and the finding that
+  robocopy purges through junctions; routing by need (settled edits go to `tester` or `coder`, the
+  architect decides) and a reviewer that tests destructive claims in isolation.
+- Owner answers of 2026-10-14 are recorded in ADR 0008 and on the verify-agent idea (`Waits:` on
+  proposal 0003).
 
 ## Next
 
-1. Architect answers the critic reviews of proposals 0003 and 0005 (`docs/design/proposals/README.md`),
-   revises or promotes; this decides the `wave` skill and the verify-agent question.
-2. Critic review of ADR 0006 as a whole, with the escape-hatch question now in
-   `.claude/skills/proposal/brief-critic.md`.
-3. Triage `docs/ideas/` (`triage` skill): three new gate ideas from the finding above, plus the
-   files with no block.
-4. Regenesis: independent review and push of its update, in its own session.
-5. Adoption of the owner's other existing project.
+1. Pusher pushes `main` on the owner's words; then the first decant with the README prompt.
+2. Architect answers the critic reviews of proposals 0003 and 0005 (`docs/design/proposals/README.md`).
+   0005 objection 1a is answered by the reference's removal procedure and the robocopy finding; the
+   rest decides the `wave` skill, the verify-agent `Waits:`, and an ADR 0007 amendment.
+3. Critic review of ADR 0006 as a whole, with the escape-hatch question in `.claude/skills/proposal/brief-critic.md`.
+4. Triage `docs/ideas/` (`triage` skill): the files with no block.
+5. Sibling work in their own sessions: Regenesis review and push of its update; the first two-way
+   sync with the build-phase sibling (`docs/ideas/2026-10-13-first-sync-with-the-build-phase-sibling.md`).
+6. The open heredoc finding's Next steps are still undone (reproduce on Linux; check the changelog).
 
 ## Waiting on user
 
-- Push of the wrap-up commit (this file, the finding, three ideas, two skill fixes).
-- Removal of the merged `task/T94` branch and its worktree here.
-- The `Answer:` on the verify-agent idea, or leave it to proposal 0003.
+- Push of the four commits.
+- Deletion of the merged `task/T94` branch on GitHub; the guard denies branch deletion for every
+  session here, so it is a plain terminal or the GitHub UI.
 
 ## Open findings
 
