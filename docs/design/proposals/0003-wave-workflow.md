@@ -20,6 +20,8 @@ converged on so a decanted project can adopt it when it reaches the build phase.
 
 - Agents write all code and debug it; the coordinator plans, briefs, reviews and merges.
 - Usage gating: the plan must survive a stop at the gate mid-wave and resume next session.
+- What stops at the gate is the launch of new implementers; verification and merges of work
+  already in flight finish (downstream owner decision, 2026-10-10).
 - One owner, one coordinator session; verification must not depend on the owner reading diffs.
 - The debug interface rule: every feature is agent-drivable, so verification is a script, not a look.
 - Privacy and licensing rules are enforced by hooks and scanners that must see PR text as well as commits.

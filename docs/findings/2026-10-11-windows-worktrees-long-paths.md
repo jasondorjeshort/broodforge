@@ -1,6 +1,6 @@
 ---
 date: 2026-10-11
-status: resolved
+status: superseded
 area: tooling / git worktrees on Windows
 promoted_to: docs/reference/claude-code-on-windows.md
 ---

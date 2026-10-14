@@ -10,4 +10,4 @@ already certain. When a fact turns out to be wrong, fix it and bump `verified:`;
 
 | File | Topic | Verified |
 |---|---|---|
-| `claude-code-on-windows.md` | Processes, worktrees, shells, shared state and usage meters for parallel agents on Windows. | 2026-10-11 |
+| `claude-code-on-windows.md` | Processes, worktrees, shells, shared state and usage meters for parallel agents on Windows. Kept by decant (ADR 0008). | 2026-10-14 |

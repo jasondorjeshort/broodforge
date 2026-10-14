@@ -2,6 +2,7 @@
 date: 2026-10-12
 status: resolved
 area: tooling / deleting worktrees on Windows
+promoted_to: docs/reference/claude-code-on-windows.md
 ---
 
 # Deleting a long-path worktree on Windows: plain `Remove-Item` fails, the `\\?\` prefix works
@@ -26,7 +27,7 @@ through the `\\?\` prefix, then deleted five ways.
 | `Remove-Item -LiteralPath ('\?\' + $path) -Recurse -Force` (one backslash, as Dystopo's `CLAUDE.md` printed it) | fails: `DriveNotFoundException`, "A drive with the name '\?\C' does not exist" |
 | `Remove-Item -LiteralPath ('\\?\' + $path) -Recurse -Force` | works, including a read-only file in the tree |
 | `[System.IO.Directory]::Delete('\\?\' + $path, $true)` | works when no file is read-only; fails on a read-only file ("Access to the path ... is denied") |
-| `robocopy <empty> <dir> /MIR`, then delete | works (the earlier finding; not re-run) |
+| `robocopy <empty> <dir> /MIR`, then delete | works (the earlier finding; not re-run) (unsafe with junctions: `2026-10-14-robocopy-mirror-purges-through-junctions.md`) |
 
 ## Result
 
@@ -38,8 +39,5 @@ backslash: the `CLAUDE.md` line had been edited through a shell that collapsed `
 prefix in single quotes in PowerShell and never pass it through Git Bash. After the delete,
 `git worktree prune`; a worktree the harness locked needs `git worktree unlock` first.
 
-## Next
-
-Promote to `docs/reference/claude-code-on-windows.md`, Git worktrees: the `\\?\` command beside the
-robocopy mirror, and the warning about the collapsed backslash. Dystopo carries the same facts in its
-`docs/reference/windows-and-shells.md`.
+Promoted 2026-10-14 to `docs/reference/claude-code-on-windows.md`, Git worktrees. Dystopo carries
+the same facts in its `docs/reference/windows-and-shells.md`.

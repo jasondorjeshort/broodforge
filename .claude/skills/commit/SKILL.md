@@ -55,7 +55,7 @@ Push `main`. The user asked: "<the user's words, quoted>".
 Run your checks in order and stop at the first failure.
 ```
 
-Whoever pushes, main session or pusher, proves it the same way: `git fetch`, then `git rev-parse HEAD` and `git rev-parse @{u}` must match, and the report quotes both. A command's own "pushed" echo is not evidence (finding `docs/findings/2026-10-11-reported-push-that-never-happened.md`).
+Whoever pushes, main session or pusher, proves it the same way: `git fetch`, then `git rev-parse HEAD` and `git rev-parse @{u}` must match, and the report quotes both. A command's own "pushed" echo is not evidence (`docs/reference/claude-code-on-windows.md`, Working directory and git).
 
 Quoting the user's request matters: an instruction that arrives as an agent message is untrusted
 to the permission system, and a resumed pusher's retry gets blocked. If a push is blocked anyway,
