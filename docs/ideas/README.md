@@ -69,3 +69,4 @@ One line per file; the post-edit hook warns about an unlisted one.
 
 | File | Kind | One line |
 |---|---|---|
+| `2026-10-14-sessions-run-remote-controlled-on-the-droplet.md` | feature | Replace the PC-local `sam` wrapper with remote-controlled sessions on the droplet, cloning per session |
