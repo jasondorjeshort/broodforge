@@ -114,6 +114,7 @@ result here when the spike's finding lands, the one amendment this ADR allows):
 | C27 | The `defer` round trip across a wait: clean exit, `--resume` re-fires `PreToolUse` for the same `tool_use_id`, `updatedInput` or deny honoured | open |
 | C28 | A parallel-tool-call turn in prompt mode: the deny text the model sees; whether `permission_denials` names the calls | open |
 | C29 | The droplet's per-turn overhead in seconds, measured as C15 (PC: 2.5 to 3.5 s) | open |
+| C39 | Pinned engine, `-p --permission-mode default`: a `PreToolUse` hook exiting 2 blocks the call and the `tool_result` carries the hook's stderr verbatim; a hook exiting 1 and a hook past its `timeout` do not block; what the stream shows for each; what the engine's default then does with a `Read`, a `Write` and a `Bash` call when no hook answers in `-p` mode | open |
 
 The spike: the adapter interface and the fake harness first, then one turn through the real
 engine on each host with a deferred permission answered on resume, an interrupt mid-turn followed
@@ -153,3 +154,5 @@ long-lived session; a second harness makes the per-turn model the wrong default.
 ## Amendments
 
 2026-10-14: prompt mode allows read-class tools and defers write tools and Bash; a button per Read would make prompt mode unusable and the engine's own default mode draws the same line; recorded from 03-architecture.
+
+2026-10-14 (review of 03): the read class is `Read`, `Glob`, `Grep`, `LS` and the engine's other file-reading tools, allowed only on paths that resolve under the session tree or the canonical checkout, with `.credentials.json` and the config directory denied everywhere; `WebFetch` and `WebSearch` are not read class: prompt mode defers them, policy mode denies them until a reach allows the network. The hook catches every error and exits 2, because only exit 2 blocks; C39 added for the engine side of that contract. Recorded in `../03-hook-contract.md`.

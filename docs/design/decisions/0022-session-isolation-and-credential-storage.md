@@ -171,3 +171,11 @@ container runtime to the droplet; the owner reopens WSL2; Windows sessions must 
 - The `TOKEN`/`KEY`/`SECRET`/`PASSWORD` rule is scoped to the kept list, so `BROODFORGE_KEY_FILE` stands; "exactly one" credential variable here and in the companion.
 - `engine-entry` is the one subcommand in `sh`, so it can `exec` into the ELF and the `comm` walk finds `claude`; `DISABLE_AUTOUPDATER=1` set in the spawn to honour the pin.
 - Host setup commands live in `docs/reference/droplet-host-setup.md` once run; 0021's restore points there and rewrites the alternates file, which `git worktree repair` does not.
+
+Amendments from the review of 03 to 05 (2026-10-14):
+
+- `--mcp-config` names `<bf>/share/empty/mcp.json` (an empty map shipped with Broodforge), reached through the existing `<bf>` bind; no bind is added.
+- The hook environment gains `BROODFORGE_CANONICAL` (the canonical checkout, for the read-class path check); the kept list is generated from the same array, so the companion's sudoers block follows.
+- The systemd unit sets `KillMode=mixed` and the spawn starts each `sudo` child detached in its own process group, so `systemctl stop` and a terminal's Ctrl-C reach the bot alone and it interrupts turns through the signal path; a crashed bot's leftover engines are killed with the unit. On Windows a crash leaves engines running until they end: a job object is deferred.
+- `credential add --kind subscription` runs `harness-create` and records the credential `needs-login`; the status is the store's only (an auth error sets it, `credential login <id> --done` or the relay's success clears it); the bot never reads the config directory to infer it.
+- `credential init` refuses an existing key file; a scratch root ignores `BROODFORGE_KEY_FILE` and names its own key under the root.

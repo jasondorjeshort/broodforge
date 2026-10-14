@@ -9,9 +9,11 @@ Planned documents (added as we go):
 | `00-vision.md` | What the app is, who it is for, what "done" looks like |
 | `01-requirements.md` | Functional and non-functional requirements |
 | `02-domain.md` | Core concepts, vocabulary, data model |
-| `03-architecture.md` | Components and boundaries, the per-turn data flow, the engine adapter and hook contracts, configuration format, git naming and attribution, the process model per host, failure modes |
+| `03-architecture.md` | Components and boundaries, the per-turn data flow, the engine adapter, configuration format, git naming and attribution, the process model per host, failure modes |
+| `03-hook-contract.md` | Companion to 03: how the engine runs the PreToolUse hook and reads its exit codes, the hook environment, path checks, the policy table per reach and mode, the decision order |
 | `04-ux.md` | The Discord flows, venues, buttons and message wording, Ticket Tool as the reference; a proposal with every owner decision marked and collected at the end |
 | `05-debug-interface.md` | How agents drive, observe, and reproduce every feature from a terminal |
+| `05-cli-conventions.md` | Companion to 05: the one binary and its flags, the control-socket wire format, output and exit-code rules, `--expect`, the scratch root, the shared isolation rules |
 | `06-platforms.md` | Target hosts, what each asks of every part, the sharing strategy between hosts, and the major choices bundled into proposal loops |
 | `proposals/` | Draft proposals for major choices; each gets a critic pass before becoming an ADR |
 | `decisions/` | Architecture decision records (ADRs), one per decision |
