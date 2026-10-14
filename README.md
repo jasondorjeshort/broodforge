@@ -13,9 +13,11 @@ Create a new project from the Hatchery base. Preconditions, stop and tell me if 
 https://github.com/jasondorjeshort/hatchery.git into <project> and work inside it from now on.
 Rename the remote `origin` to `hatchery`, add `origin` pointing at <new project remote URL>, and
 confirm both with `git remote -v`. Load the `decant` skill (it is in the clone) and follow it to the
-end: replace the README, retitle CLAUDE.md, reset docs/HANDOFF.md and docs/ideas/, clear
-docs/findings/ and docs/reference/, keep ADRs 0001 and 0002, and commit through the runner.
-Do not push. Report the remotes, the files you changed, and the first design step.
+end: replace the README, retitle CLAUDE.md, set .claude/hooks/policy.json (ask me about
+thresholds), reset docs/HANDOFF.md and docs/ideas/, clear docs/findings/ and docs/reference/
+except the Windows reference, keep every Hatchery ADR and delete the proposals (my own ADRs start
+at 0020), and commit through the runner. Do not push. Report the remotes, the files you changed,
+the policy choices, and the first design step.
 ```
 
 **Update a project that came from Hatchery** (decanted, or adopted with the third prompt). Paste
@@ -98,8 +100,9 @@ The second prompt above does this for either kind of project. By hand, decanted 
 `git fetch hatchery && git merge hatchery/main`. Adopted project: `git fetch hatchery`, then apply
 `git diff <recorded Hatchery base> hatchery/main -- .claude CLAUDE.md` with `git apply --3way` and
 bump the base line in your `adopt-hatchery` ADR. Either way, resolve conflicts by the rule in
-`.claude/skills/update-from-hatchery/SKILL.md`: the base wins under `.claude/`, the project wins in
-its own README, design, handoff, ideas, findings, and reference.
+`.claude/skills/update-from-hatchery/SKILL.md`: the base wins under `.claude/` and on Hatchery's
+own ADRs (0001 to 0019, apart from lines the project added to them), the project wins in its own
+README, design, handoff, ideas, findings, and reference.
 
 ## Adopting the practice in an existing project
 

@@ -137,7 +137,8 @@ prefer skills). No `docs/active/`, `ideas/`, `future/`, `test/`, `journal/`, arc
 - Node is required for the status line, the gate, and both new hooks. With `onFailure: block`, a
   machine without `node` cannot run `Bash` until it is installed; the `decant` skill checks first.
 - A decanted project edits `CLAUDE.md`, `README.md`, `HANDOFF.md`, `backlog.md`, and empties
-  `findings/` and `reference/`; ADRs 0001 and 0002 still apply and are kept.
+  `findings/` and `reference/`; ADRs 0001 and 0002 still apply and are kept. Amended by ADR 0008:
+  every Hatchery ADR and the Windows reference are kept; the project numbers its own from 0020.
 - Two caps (300, 40) live in one rule file and one pusher check; hooks only warn. If a third
   enforcement point appears, move the numbers into a shared `limits.json` first.
 - Every deferred item above has a trigger. When one fires, the result is a new ADR superseding the

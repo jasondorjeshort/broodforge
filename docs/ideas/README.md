@@ -69,7 +69,6 @@ One line per file; the post-edit hook warns about an unlisted one.
 
 | File | Kind | One line |
 |---|---|---|
-| `2026-10-13-adr-number-collision-reserved-range.md` | question | Reserve ADR number ranges so Hatchery and its projects stop colliding |
 | `2026-10-13-coder-project-memory.md` | chore | Coder agent gets a project memory scope; waits on repeated facts |
 | `2026-10-13-debug-interface-doc-hooks-section.md` | chore | Debug-interface design doc gets a hooks section when it is written |
 | `2026-10-13-fable-per-model-usage-gate.md` | feature | Fable launches gated on a per-model meter; waits on statusline field |

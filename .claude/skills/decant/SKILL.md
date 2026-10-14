@@ -6,8 +6,9 @@ description: Turn a fresh clone of the Hatchery base repository into a new proje
 # Decant
 
 Hatchery is the base; a project is decanted from it. The result keeps the working agreement, the
-agents, the skills, the hooks, and ADRs 0001 and 0002, and starts its own design, handoff, and
-ideas. Everything below runs in the new project's clone.
+agents, the skills, the hooks, every Hatchery ADR (the record of the practice it inherits; its own
+ADRs start at 0020, ADR 0008) and the Windows reference, and starts its own design, handoff, ideas
+and findings. Everything below runs in the new project's clone.
 
 ## Steps
 
@@ -23,27 +24,40 @@ ideas. Everything below runs in the new project's clone.
 3. `README.md`: replace with the project's README, keeping the License section. Keep nothing about
    decanting; that lives here.
 4. `CLAUDE.md`: set the title line to the project name, keep the sentence saying it comes from
-   Hatchery, and review the project-specific parts: platform list reference, usage thresholds,
-   model routing. Change only what the project needs.
-5. `docs/HANDOFF.md`: rewrite with the `handoff` skill; Now is "decanting from Hatchery", Next is
+   Hatchery, and review the project-specific parts: platform list reference and model routing.
+   Thresholds are not here; they are policy (step 5), and the usage table reads them from there.
+   Change only what the project needs.
+5. `.claude/hooks/policy.json`: the project's choices for the hooks, never edits to the scripts
+   (ADR 0006): usage thresholds (`usage.hold`, `usage.deny`, per meter under `usage.fiveHour` and
+   `usage.sevenDay`), who commits and pushes (`git.commit.subagents`, `git.push.subagents`,
+   `git.push.mainSession`), and cap exemptions (`edit.capExempt`). Thresholds and overage are the
+   owner's money: ask, do not guess. `.claude/hooks/policy.examples/` has worked ones; copy the
+   closest and edit. `node .claude/hooks/policy.js` must print the effective policy, not an error.
+6. `docs/HANDOFF.md`: rewrite with the `handoff` skill; Now is "decanting from Hatchery", Next is
    the design sequence starting at `docs/design/00-vision.md`.
-6. `docs/ideas/`: delete every idea file except `README.md`; reset its index table to its empty row.
-7. `docs/findings/` and `docs/reference/`: delete every file except `README.md`; reset each index
-   table to its empty row. Hatchery's findings are about Hatchery.
-8. `docs/design/`: keep `README.md`, `decisions/0001-licensing.md`, `decisions/0002-*.md`, and
-   the `proposals/` and `decisions/` READMEs. Delete other proposals. Edit the "Decisions so far"
-   list to match. If the project wants a different license, supersede 0001 with the `adr` skill
-   and replace `LICENSE`.
-9. `.claude/settings.json`: keep as is. `.claude/rules/`: keep `docs.md`; add language rules
-   later per `.claude/rules/README.md`.
-10. Verify: `git status --short` shows only the intended edits; `wc -l CLAUDE.md docs/HANDOFF.md`
-    are at most 150 and 40.
-11. Commit via the runner (`commit` skill): subject `Decant <project> from Hatchery`, body listing
+7. `docs/ideas/` and `docs/operator/`: delete every file except `README.md`; reset each index
+   table to its empty row (`docs/operator/` is normally already at rest).
+8. `docs/findings/`: delete every file except `README.md`; reset its index table to its empty row.
+   Hatchery's findings are about Hatchery. `docs/reference/`: keep `README.md` and
+   `claude-code-on-windows.md` with its README row (it describes the tool and the machine, not
+   Hatchery); delete every other reference file and its row.
+9. `docs/design/`: keep `README.md`, every file under `decisions/`, and the `proposals/` README;
+   delete every proposal and reset the proposals index table to its header. The "Decisions so
+   far" list stays as it is: the project's own decisions are added below it from 0020 up. If the
+   project wants a different license, supersede 0001 with the `adr` skill (as 0020) and replace
+   `LICENSE`.
+10. `.claude/settings.json`: keep as is. `.claude/rules/`: keep `docs.md`; add language rules
+    later per `.claude/rules/README.md`.
+11. Verify: `git status --short` shows only the intended edits; `wc -l CLAUDE.md docs/HANDOFF.md`
+    are at most 150 and 40; `node .claude/hooks/policy.js` exits 0.
+12. Commit via the runner (`commit` skill): subject `Decant <project> from Hatchery`, body listing
     what was removed and kept. Do not push; the user decides when.
-12. Report: remotes, files changed, and the first design step for the architect.
+13. Report: remotes, files changed, the policy choices made, and the first design step for the
+    architect.
 
 ## Rules
 
 - Do not edit agent files, skills, or hooks during decanting. If something in them is wrong for
   the project, that is a change to make in Hatchery and pull back with `update-from-hatchery`.
+  `policy.json` is the project's file and is the one thing under `.claude/hooks/` this skill edits.
 - Use the Write tool for any file containing apostrophes or backticks.

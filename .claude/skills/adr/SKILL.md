@@ -12,7 +12,13 @@ proposal; major choices arrive here through the `proposal` skill.
 ## Write a new ADR
 
 1. Number: if promoting a proposal, reuse its `NNNN`; otherwise the highest number across
-   `decisions/` and `proposals/` plus one.
+   `decisions/` and `proposals/` plus one, within the range the tree is allowed (ADR 0008):
+   Hatchery itself uses `0001` to `0019`; a project decanted from Hatchery starts at `0020`, so its
+   first ADR is `0020` or the next free number above it, never one in Hatchery's range even when
+   that is free; a project that adopted Hatchery keeps its own numbering. A proposal takes the
+   number of the ADR it will become. Which case this tree is: Hatchery itself has no `hatchery`
+   remote; decanted means `git merge-base HEAD hatchery/main` succeeds; adopted means a
+   `Hatchery base:` line exists under `docs/design/decisions/`.
 2. Write from `template.md` in this directory with the Write tool. Status `accepted` (the
    coordinator settles technical decisions after the critic step; `proposed` only when the user
    must decide, which is anything humans see or touch).

@@ -128,7 +128,9 @@ literally.
 
 Deferred: ADR numbering collision between Hatchery and its projects (a project's next ADR and
 Hatchery's next ADR can both be `0003`); trigger: the first merge-mode update that brings an ADR whose
-number the project already used. Candidate fix: Hatchery reserves `0001`-`0019`.
+number the project already used. Candidate fix: Hatchery reserves `0001`-`0019`. Resolved by ADR
+0008: Hatchery uses `0001` to `0019`, a decanted project starts at `0020`, an adopted project
+keeps its own numbering.
 
 ## Consequences
 

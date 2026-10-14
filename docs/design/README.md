@@ -28,12 +28,17 @@ Decisions so far:
   [hook specifications](decisions/0002-hook-specs.md) for the hooks and the status line.
 - [0004 Adopting the Hatchery practice](decisions/0004-adopt-hatchery.md): an existing project takes
   the practice as files from `hatchery/main`, records the base commit in its own ADR, and updates by
-  three-way patch; merging stays the path for decanted projects. (0003 is reserved for proposal 0003.)
+  three-way patch; merging stays the path for decanted projects. (0003 and 0005 are proposals in
+  Hatchery not yet promoted; the numbers stay theirs.)
 - [0006 Hook policy file](decisions/0006-hook-policy-file.md): each project's choices for the hooks
   (who commits and pushes, deletable branches, usage lines, cap exemptions) live in
   `.claude/hooks/policy.json`, not in the scripts; the guard fails closed, the usage gate open.
 - [0007 Queues, triage and one review](decisions/0007-queues-triage-and-one-review.md): `docs/ideas/`
   and `docs/operator/` as delete-when-done queues with triage blocks; a `reviewer` agent and one
   independent review per change; amends ADR 0002 where it names `backlog.md`.
+- [0008 ADR numbers, and what a decant keeps](decisions/0008-adr-numbers-and-what-decant-keeps.md):
+  Hatchery uses `0001` to `0019` and a decanted project starts at `0020`; a decant keeps every
+  Hatchery ADR and the Windows reference, deletes proposals, findings, ideas and operator entries;
+  resolves the deferral in ADR 0004 and amends ADR 0002 where it says only 0001 and 0002 are kept.
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).

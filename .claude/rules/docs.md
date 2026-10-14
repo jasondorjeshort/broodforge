@@ -72,6 +72,6 @@ These load automatically when a file under `docs/` or `CLAUDE.md` is read or edi
   `[no-check: <reason>]`; closed records (proposals, decisions, findings) are exempt by policy.
   A moved paragraph leaves a pointer behind.
 - Write files that contain apostrophes or backticks with the Write or Edit tool, not a Bash heredoc
-  (open finding `docs/findings/2026-10-11-bash-heredoc-apostrophes.md`). The `git-guard` hook reads
+  (`docs/reference/claude-code-on-windows.md`, Shells). The `git-guard` hook reads
   quoted text and heredoc bodies as data, so text that only mentions a git command is not denied
   unless the command line hands it to a shell.

@@ -46,9 +46,14 @@ project's own `NNNN-adopt-hatchery.md` records the base commit).
      0006). If the base added a key, the project may add it by hand; `node .claude/hooks/policy.js`
      must then print the policy, not an error.
    - Project wins: `README.md`; the title and project-specific sections of `CLAUDE.md`
-     (phase, platforms, thresholds, routing, branch name, `## Project rules`, anything the project
+     (phase, platforms, routing, branch name, `## Project rules`, anything the project
      added); `docs/HANDOFF.md`; the files under `docs/ideas/` and `docs/operator/` (their `README.md`s are the base's, since the block grammar must stay identical across projects, ADR 0007); everything under `docs/design/`, `docs/findings/`,
-     `docs/reference/`.
+     `docs/reference/`. Exception, merge mode (ADR 0008): ADRs `0001` to `0019` under
+     `docs/design/decisions/` are Hatchery's records and the base wins there, except the project's
+     own lines, which are merged by hand as a mixed file: a `Status: superseded by NNNN` line and
+     its pointer, and rows the project added to a table the ADR calls living (ADR 0001's
+     components table). The "Decisions so far" list in `docs/design/README.md` takes both sides'
+     lines, Hatchery's new rows and the project's.
    - `CLAUDE.md` rule sections (This agreement, Where things live, Delegation, Debug interface,
      Major decisions, Usage gating, Git, Licensing): base wins unless the project has an ADR for
      the difference.
