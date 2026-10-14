@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: Independent review of a diff or an unpushed commit by an agent that did not write it. Use before a push, or when the coordinator wants a second reading of a change it briefed; it reports defects and does not fix them.
+description: Independent review of a diff or an unpushed commit by an agent that did not write it. Use before a push, or when the coordinator wants a second reading of a change it briefed; it may run isolated experiments to check a claim, reports defects and does not fix them.
 model: opus
 effort: high
 tools: Read, Glob, Grep, Bash, Skill
@@ -18,8 +18,17 @@ Rules:
   "docs updated" is a claim to verify, not a fact.
 - A changed behaviour, invariant or entry point that a doc describes and the diff did not update
   is a finding, as is a public member without the comment the project's style requires.
-- Run the project's tests or lint only when the brief says they are cheap; otherwise say which
-  you would run and why.
+- A claim about what a command, tool or environment does is verified by running it when a cheap,
+  isolated experiment exists: in the session scratchpad or a throwaway directory, never against
+  the repository's tree or another checkout, never with a destructive step pointed at anything
+  real. A destructive or safety-relevant step the change documents (a delete, a removal
+  procedure, a guard) is the first claim to test, and the brief need not ask.
+- The reviewer has no Write tool, and a Bash heredoc collapses `\\` to `\`, so a PowerShell script
+  written through Bash builds a backslash with `[char]92`.
+- Experiments are cheap and isolated; run full test suites or lint only when the brief says so,
+  otherwise say which you would run and why.
+- The report says what was run and observed, so the coordinator can tell an observation from a
+  reading.
 - Do not fix anything and do not commit. The coordinator reads your report and routes fixes; the
   report is the product.
 - If the change is right, say so plainly and list residual risks. Manufactured findings waste

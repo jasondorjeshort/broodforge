@@ -1,6 +1,6 @@
 ---
 name: brief
-description: Write a complete, short brief for launching a subagent (architect, critic, coder, tester, runner, pusher). Use when delegating work, launching an agent, or when a previous agent report shows the brief was missing context.
+description: Write a complete, short brief for launching a subagent (architect, critic, coder, tester, reviewer, runner, pusher). Use when delegating work, launching an agent, or when a previous agent report shows the brief was missing context.
 ---
 
 # Brief
@@ -33,17 +33,26 @@ the brief supplies what only this task knows.
   files with apostrophes".
 - tester: name the behaviours to cover and the test command; say whether failing tests are
   expected.
+- reviewer: name the claim most worth testing (a destructive step, a safety property); experiments
+  in the scratchpad are expected and it may run them unasked, but naming the claim focuses the review.
 - runner: give exact commands or the commit brief from the `commit` skill; nothing to interpret.
 - pusher: use the one-line brief from the `commit` skill, with the user's request quoted.
 
 ## Rules
 
+- A brief that carries a claim about what a destructive or safety-relevant command does (a delete,
+  a removal procedure, a guard) says "test it in isolation or drop it". An untested claim marked
+  "untested" is not a resolution: a later reader takes the procedure as safe.
+- Route by what the task needs, not by what it touches. A settled edit from a complete brief, even
+  to docs, skills or hooks, is `tester` or `coder` work; the `architect` is for the decision itself
+  (a proposal, an ADR, answers to the critic, a design doc, a plan). Fable costs two and a half
+  times Opus and five times Sonnet, and a settled edit does not need it.
 - Under 40 lines. If the brief needs more, the task is too big; split it.
 - Do not paste `docs/HANDOFF.md` or design docs into the brief; they are imported or indexed.
 - Say which model attribution the commit will carry if the agent's output will be committed by
   someone else.
 - Paths in a brief use forward slashes (`C:/Users/...`) even on Windows: the Bash tool is Git Bash
   and strips the backslashes from an unquoted path. A command meant for another repository says
-  `git -C <path>`, never `cd` (finding `docs/findings/2026-10-11-reported-push-that-never-happened.md`).
+  `git -C <path>`, never `cd` (`docs/reference/claude-code-on-windows.md`, Working directory and git).
 - Name only tools the agent has (`.claude/agents/<name>.md`): the runner has no Write tool, so a
   file it needs is written by the coordinator and the brief gives the path.

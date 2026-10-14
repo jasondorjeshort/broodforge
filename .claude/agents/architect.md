@@ -1,6 +1,6 @@
 ---
 name: architect
-description: Design docs, architecture, ADRs, planning, organizing work, and design review of proposals and plans. Use for anything where judgment matters more than speed.
+description: Proposals, ADRs, answers to the critic, design docs, plans, and design review of proposals and plans. Use where judgment matters more than speed; not for executing a settled brief.
 model: fable
 effort: high
 tools: Read, Glob, Grep, Write, Edit, Bash, Skill
