@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Status line for Claude Code. Reads the JSON Claude pipes on stdin, prints one line, and keeps
-// ~/.claude/usage-state.json current for the usage-gate hook (.claude/hooks/usage-gate.js).
+// Status line for Claude Code. Reads the JSON Claude pipes on stdin, prints the working directory (when known)
+// and then the meters line, and keeps ~/.claude/usage-state.json current for the usage-gate hook (.claude/hooks/usage-gate.js).
 // Thresholds for the HOLD and STOP flags come from .claude/hooks/policy.json (usage block); STOP
 // shows only on a meter with a deny line, which the base does not set.
 // Spec: docs/design/decisions/0002-hook-specs.md section 3.
@@ -89,5 +89,8 @@ process.stdin.on('end', () => {
   ];
   // cost.total_cost_usd (API list-price estimate) is deliberately not shown: on a subscription the
   // meters and their reset times are what matter. Run /usage for the figure.
-  process.stdout.write(parts.join(' | '));
+  // Line 1 is the working directory as received, so a wrong-checkout mistake shows; omitted (no blank
+  // line) when the payload carries neither workspace.current_dir nor the older cwd.
+  const dir = [d.workspace && d.workspace.current_dir, d.cwd].find((v) => typeof v === 'string' && v !== '');
+  process.stdout.write((dir ? dir + '\n' : '') + parts.join(' | '));
 });

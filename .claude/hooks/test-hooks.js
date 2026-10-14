@@ -758,6 +758,16 @@ const S = [
   ['S10', 'no deny line: both meters at 100 show HOLD, never STOP', rl(100, 100), null,
     (r) => (r.stdout.endsWith(' HOLD') && !r.stdout.includes('STOP')) || r.stdout],
   ['S11', 'a deny line set: 85 is STOP', rl(85, 10), deny80, (r) => r.stdout.endsWith(' STOP') || r.stdout],
+  ['S12', 'workspace.current_dir prints as line 1, meters line unchanged on line 2', JSON.stringify({ model: { display_name: 'M' }, workspace: { current_dir: 'C:/work/repo' }, cwd: 'C:/old' }), null,
+    (r) => r.stdout === 'C:/work/repo\n' + statusline(JSON.stringify({ model: { display_name: 'M' } })).stdout || r.stdout],
+  ['S15', 'empty current_dir falls back to cwd', JSON.stringify({ model: { display_name: 'M' }, workspace: { current_dir: '' }, cwd: 'C:/old' }), null,
+    (r) => r.stdout === 'C:/old\n' + statusline(JSON.stringify({ model: { display_name: 'M' } })).stdout || r.stdout],
+  ['S16', 'null workspace and no cwd: the meters line alone', JSON.stringify({ model: { display_name: 'M' }, workspace: null }), null,
+    (r) => r.stdout === statusline(JSON.stringify({ model: { display_name: 'M' } })).stdout || r.stdout],
+  ['S13', 'only the older cwd field: it is line 1', JSON.stringify({ model: { display_name: 'M' }, cwd: 'C:/old' }), null,
+    (r) => (r.stdout.split('\n')[0] === 'C:/old' && r.stdout.split('\n').length === 2 && r.stdout.split('\n')[1].startsWith('M | ctx')) || r.stdout],
+  ['S14', 'neither directory field: the meters line alone, no blank first line', JSON.stringify({ model: { display_name: 'M' } }), null,
+    (r) => (!r.stdout.includes('\n') && r.stdout.startsWith('M | ctx')) || r.stdout],
 ];
 fs.rmSync(slFile, { force: true });
 for (const [id, label, stdin, policy, check] of S) {

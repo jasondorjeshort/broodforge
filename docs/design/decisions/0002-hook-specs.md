@@ -205,8 +205,10 @@ present on stdin replaces the cached one, an absent window keeps it, and when ne
 nothing is written, so a refresh without `rate_limits` never replaces numbers with nulls. The write
 goes to a temporary file and is renamed; a failed rename removes the temporary file.
 `settings.json` sets `"refreshInterval": 60`, so the cache stays fresh while the user is idle and
-agents run. The line shows model, context, both windows
-with their reset times, and ` HOLD` or ` STOP` by the same per-meter judgement as the gate (the
+agents run. Line 1 is the working directory exactly as received
+(`workspace.current_dir`, else the older `cwd`; no shortening); when neither is a non-empty string the
+output is the meters line alone, with no blank first line. The meters line, after line 1's newline
+when there is one, shows model, context, both windows with their reset times, and ` HOLD` or ` STOP` by the same per-meter judgement as the gate (the
 helper in `policy.js`; ` STOP` only on a meter with a deny line); a cached window past its
 `resets_at` shows `n/a`.
 
@@ -231,4 +233,4 @@ Harness cases U (thresholds and the override file, with and without a deny line)
 override per meter, no deny line on one meter or both, `usage.overrideEnv`), UX (staleness both
 ways, a reset window, the example policies, per-meter thresholds, a malformed policy including a
 string `deny`, a pre-merge cache file), and S (the status line's merge, the untouched file without
-`rate_limits`, malformed stdin, policy flags, no STOP without a deny line, a failed rename).
+`rate_limits`, malformed stdin, the directory line from `current_dir`, from `cwd` alone, and absent, policy flags, no STOP without a deny line, a failed rename).
