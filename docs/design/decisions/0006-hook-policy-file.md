@@ -11,7 +11,8 @@ closed record even where a table in it is amended. The rest of the record stays 
 Record: proposal `../proposals/0005-rules-that-bit-downstream.md` (option B, and its two extra
 items: the PowerShell matcher and the base harness as a contract); Dystopo's ADRs 0020 and 0021
 (its alignment with the base and its `git-guard` exceptions); Dystopia's `CLAUDE.md`, section
-Git & Commits. Behaviour of each script: the companion `0002-hook-specs.md`. ADR 0007 is the docs
+Git & Commits. The proposal is in Hatchery's tree; a decanted project reads it with
+`git show hatchery/main:docs/design/proposals/<file>`. Behaviour of each script: the companion `0002-hook-specs.md`. ADR 0007 is the docs
 half of the same sitting.
 
 ## Context

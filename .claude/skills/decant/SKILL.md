@@ -21,6 +21,9 @@ and findings. Everything below runs in the new project's clone.
    `git remote rename origin hatchery`, then `git remote add origin <new project remote>`. If
    `origin` is already the project, add `git remote add hatchery https://github.com/jasondorjeshort/hatchery.git`.
    The second remote is always named `hatchery`; the `update-from-hatchery` skill relies on it.
+   After the rename run `git branch --unset-upstream` (step 11 checks it): the rename carries the branch's upstream
+   to `hatchery`, and a bare `git push` would then go to Hatchery. The first push sets `origin`
+   (the pusher's `git push -u origin <branch>`).
 3. `README.md`: replace with the project's README, keeping the License section. Keep nothing about
    decanting; that lives here.
 4. `CLAUDE.md`: set the title line to the project name, keep the sentence saying it comes from
@@ -49,7 +52,8 @@ and findings. Everything below runs in the new project's clone.
 10. `.claude/settings.json`: keep as is. `.claude/rules/`: keep `docs.md`; add language rules
     later per `.claude/rules/README.md`.
 11. Verify: `git status --short` shows only the intended edits; `wc -l CLAUDE.md docs/HANDOFF.md`
-    are at most 150 and 40; `node .claude/hooks/policy.js` exits 0.
+    are at most 150 and 40; `node .claude/hooks/policy.js` exits 0;
+    `git config --get branch.<branch>.remote` prints nothing or `origin`, never `hatchery`.
 12. Commit via the runner (`commit` skill): subject `Decant <project> from Hatchery`, body listing
     what was removed and kept. Do not push; the user decides when.
 13. Report: remotes, files changed, the policy choices made, and the first design step for the

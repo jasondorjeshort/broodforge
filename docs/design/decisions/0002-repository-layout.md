@@ -4,7 +4,8 @@ Date: 2026-10-11
 Status: accepted
 
 Record: proposal `../proposals/0002-repository-layout.md` (with the critic's objections answered),
-review `../proposals/0002-critic-review.md`. Hook behaviour for the implementer: `0002-hook-specs.md`.
+review `../proposals/0002-critic-review.md`. These proposals are in Hatchery's tree; a decanted
+project reads them with `git show hatchery/main:docs/design/proposals/<file>`. Hook behaviour for the implementer: `0002-hook-specs.md`.
 Verified against Claude Code 2.1.296. Docs cited: hooks (H) https://code.claude.com/docs/en/hooks,
 sub-agents (S) https://code.claude.com/docs/en/sub-agents, skills (K) https://code.claude.com/docs/en/skills,
 memory (M) https://code.claude.com/docs/en/memory, permissions (P) https://code.claude.com/docs/en/permissions.

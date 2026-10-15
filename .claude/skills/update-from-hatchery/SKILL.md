@@ -35,7 +35,8 @@ project's own `NNNN-adopt-hatchery.md` records the base commit).
    - Patch mode: `git diff $FROM hatchery/main -- .claude CLAUDE.md LICENSES | git apply --3way`
      (drop `LICENSES` if the project has none). Needs a clean tree; conflicts are reported by
      `git apply` as "with conflicts" and show up in step 5 the same way.
-   If no conflicts, go to step 6.
+   If no conflicts, go to step 6, but in merge mode first apply step 5's bullet on clean adds
+   (the merge is already staged under `--no-commit`).
 5. Conflicts. `git diff --name-only --diff-filter=U`. Resolve each file by this rule, then
    `git add` it:
    - Base wins: anything under `.claude/` (agents, skills, hooks, rules, `settings.json`) and
@@ -54,6 +55,11 @@ project's own `NNNN-adopt-hatchery.md` records the base commit).
      its pointer, and rows the project added to a table the ADR calls living (ADR 0001's
      components table). The "Decisions so far" list in `docs/design/README.md` takes both sides'
      lines, Hatchery's new rows and the project's.
+   - Merge mode, clean adds too (they never reach this step, so look for them): files the base
+     added under `docs/ideas/`, `docs/operator/`, `docs/findings/`, `docs/design/proposals/` and
+     `docs/reference/` (except `claude-code-on-windows.md`) are Hatchery's own state. `git rm`
+     them and drop their index rows, the same set decant steps 7 to 9 delete: `git diff
+     --name-only --diff-filter=A HEAD...MERGE_HEAD -- <those directories>` lists them. Base ADRs stay (ADR 0008).
    - `CLAUDE.md` rule sections (This agreement, Where things live, Delegation, Debug interface,
      Major decisions, Usage gating, Git, Licensing): base wins unless the project has an ADR for
      the difference.

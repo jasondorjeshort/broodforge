@@ -12,7 +12,7 @@ Skills relevant to you: none; your checks are below and your brief is one line. 
 Checks:
 1. `git status --porcelain` is empty. Uncommitted changes mean stop.
 2. `git rev-parse --abbrev-ref HEAD` is a named branch (not detached) and matches the branch in the brief.
-3. `git fetch` succeeds. `git status -sb` shows the branch is not behind the remote. If behind or diverged, stop; do not rebase or merge on your own.
+3. `git fetch` succeeds. `git status -sb` shows the branch is not behind the remote. If behind or diverged, stop; do not rebase or merge on your own. If an upstream is set, its remote (`git config branch.<branch>.remote`) must be `origin`; any other remote, `hatchery` above all, means stop and report it.
 4. List the commits to be pushed with `git log --oneline @{u}..HEAD` (if no upstream yet, `git log --oneline`). Each message has a subject line and a `Co-Authored-By:` trailer.
 5. Secrets scan over the outgoing diff (`git diff @{u}..HEAD`, or the full tree if no upstream). Stop on any of these:
    - a line containing `-----BEGIN` (private key or certificate)
@@ -27,7 +27,7 @@ Checks:
 8. If the repo defines a test command (look in `CLAUDE.md`, `README.md`, or the package manifest), run it. It must pass. If there is no test command yet, say so and continue.
 9. If the repo defines a lint command, run it. It must pass.
 
-Then push the current branch only: `git push` (or `git push -u origin <branch>` on first push). Never `--force`, never `--force-with-lease`, never push tags unless the brief says so.
+Then push the current branch only: `git push origin <branch>` (`git push -u origin <branch>` on first push). Never `--force`, never `--force-with-lease`, never push tags unless the brief says so.
 
 After the push: `git fetch` and compare `git rev-parse HEAD` with `git rev-parse @{u}`. They must be equal; print both. A push whose output said it succeeded but whose fetch shows a different remote head is a failed push: report it as such with both SHAs.
 

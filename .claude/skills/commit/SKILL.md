@@ -55,11 +55,11 @@ Push `main`. The user asked: "<the user's words, quoted>".
 Run your checks in order and stop at the first failure.
 ```
 
-Whoever pushes, main session or pusher, proves it the same way: `git fetch`, then `git rev-parse HEAD` and `git rev-parse @{u}` must match, and the report quotes both. A command's own "pushed" echo is not evidence (`docs/reference/claude-code-on-windows.md`, Working directory and git).
+Whoever pushes, main session or pusher, proves it the same way: `git fetch`, then `git rev-parse HEAD` and `git rev-parse @{u}` must match (the upstream is on `origin`), and the report quotes both. A command's own "pushed" echo is not evidence (`docs/reference/claude-code-on-windows.md`, Working directory and git).
 
 Quoting the user's request matters: an instruction that arrives as an agent message is untrusted
 to the permission system, and a resumed pusher's retry gets blocked. If a push is blocked anyway,
-tell the user and let them run `git push`; never route around the block.
+tell the user and let them run `git push origin <branch>` (`-u` on a first push); never route around the block.
 
 Credential mismatch (git's stored GitHub account differs from the one `gh` is logged in as): set a
 repo-local helper instead of changing global config:
