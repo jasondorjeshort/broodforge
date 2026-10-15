@@ -1,17 +1,19 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-15, at commit d44340e, by main session (Hatchery coordinator)
+Updated: 2026-10-15, at commit d9627a0, by main session (Hatchery coordinator)
 
 ## Now
 
-- Pushing `main` on the owner's words: 1c2e559 (carry-backs: hook paths, ADR 0009), 223bacc (status
-  line shows each meter's hold/stop and `HOLD lifted`), d44340e (ADR 0009 adopted test anchored to a
-  real `Hatchery base: <sha>` line; the loose test made a fresh decant number inside Hatchery's
-  range), and this handoff. Each was reviewed once. A pusher proves the push by HEAD equal to @{u}.
-- Override grants: this session (ca1449b1) has a session grant with a 12-hour backstop (ADR 0006,
-  The HOLD override). The weekly meter is at HOLD and resets Mon 06:00. The owner's global git
-  identity is Jason Dorje Short, a machine fact.
+- Unpushed, reviewed once, from an audit of `../broodforge`: 146dbff (decant unsets the upstream
+  the origin rename carries over; the pusher stops on an upstream not on origin; merge-mode updates
+  drop the base's own new ideas, findings and proposals; ADRs 0002 and 0006 say where their
+  proposals live) and d9627a0 (the Windows reference's npm section, carried back). Push on the
+  owner's words. Broodforge picks both up on its next update after that push.
+- `../broodforge` (unpushed, its own `origin` empty): upstream unset, hatchery/main merged as
+  58307e2, its handoff 5953647. Whether its decant commit is re-authored is the owner's call there.
+- Session 6c1640c4 has a weekly-meter grant until about 22:40 today (ADR 0006); the weekly meter
+  is at HOLD (76%), resets Mon 06:00. The owner's global git identity is a machine fact.
 
 ## Next
 
@@ -31,8 +33,7 @@ Updated: 2026-10-15, at commit d44340e, by main session (Hatchery coordinator)
 
 ## Waiting on user
 
-- Deletion of the merged `task/T94` branch on GitHub; the guard denies branch deletion for every
-  session here, so it is a plain terminal or the GitHub UI.
+- Deletion of the merged `task/T94` branch on GitHub (the guard denies it here; terminal or UI).
 
 ## Open findings
 
