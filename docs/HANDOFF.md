@@ -1,18 +1,20 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-15, at commit 99bcab1, by main session (Hatchery coordinator)
+Updated: 2026-10-15, at commit c36fe4a, by main session (Hatchery coordinator); pausing for usage
 
 ## Now
 
-- Pushed and fetch-confirmed at 99bcab1: 146dbff (decant unsets the upstream the origin rename
-  carries; the pusher stops on an upstream not on origin; merge-mode updates drop the base's own
-  new docs; ADRs 0002 and 0006 say where their proposals live) and d9627a0 (npm, Windows reference).
-- `../regenesis1` audited: base 6866d8a, patched and joined per its ADR 0014; nothing lost.
-- `../broodforge` (unpushed, its own `origin` empty): upstream unset, hatchery/main merged as
-  58307e2, its handoff 5953647. Whether its decant commit is re-authored is the owner's call there.
-- Session 6c1640c4 has a weekly-meter grant until about 22:40 today (ADR 0006); the weekly meter
-  is at HOLD (76%), resets Mon 06:00. The owner's global git identity is a machine fact.
+- origin/main is 99bcab1 (decant upstream fix, base-docs drop on merge, npm reference). Unpushed:
+  6f3ab3e (handoff), c36fe4a (ADR 0010: the anchored `Hatchery base:` line picks patch mode even
+  when merge-base succeeds; update skill step 3 and the README prompt match; reviewed once), and
+  this handoff. Push on the owner's words.
+- `../regenesis1` audited: nothing lost; its next update is patch mode by ADR 0010. Its own handoff
+  still asks for carry-backs that 1c2e559 already made, and its clone has diverged from origin.
+- `../broodforge` (its own session, unpushed): decant re-authored there (fd4bad2), base merged as
+  b4a7b4d, no upstream; its first push is `git push -u origin main`.
+- Session 6c1640c4 holds a grant on both meters until about 22:40 today (ADR 0006); the meters
+  read 5h 50%, 7d 79% (HOLD on both); the weekly one resets Mon 06:00.
 
 ## Next
 
@@ -21,19 +23,17 @@ Updated: 2026-10-15, at commit 99bcab1, by main session (Hatchery coordinator)
    0005 objection 1a is answered by the reference's removal procedure and the robocopy finding; the
    rest decides the `wave` skill, the verify-agent `Waits:`, and an ADR 0007 amendment.
 3. Critic review of ADR 0006 as a whole, with the escape-hatch question in `.claude/skills/proposal/brief-critic.md`.
-4. Research the owner's question `docs/ideas/2026-10-15-review-fixes-amend-or-follow-up.md`
-   (a finding first; the rule stays until then), and check
-   `docs/ideas/2026-10-15-statusline-command-cwd-relative.md`.
-5. Triage `docs/ideas/` (`triage` skill): the files with no block.
+4. Research `docs/ideas/2026-10-15-review-fixes-amend-or-follow-up.md` (a finding first), and
+   check `docs/ideas/2026-10-15-statusline-command-cwd-relative.md`.
+5. Triage `docs/ideas/` (`triage` skill): the files with no block. Also settle the post-edit
+   warning that `docs/design/decisions/README.md` lists no ADRs while `docs.md` says it should.
 6. Sibling work in its own session: the first two-way sync with the build-phase sibling
    (`docs/ideas/2026-10-13-first-sync-with-the-build-phase-sibling.md`).
-7. The open heredoc finding's Next steps (reproduce on Linux; check the changelog; a quoted
-   heredoc collapsed a doubled backslash in a Node snippet, 2026-10-15).
+7. The open heredoc finding's Next steps (reproduce on Linux; check the changelog).
 
 ## Waiting on user
 
 - Deletion of the merged `task/T94` branch on GitHub (the guard denies it here; terminal or UI).
-- Whether update-from-hatchery step 3 takes patch mode for a joined adopted tree (`../regenesis1`, its ADR 0014); amends ADR 0009.
 
 ## Open findings
 
