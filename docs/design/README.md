@@ -41,7 +41,7 @@ Decisions so far:
   Hatchery ADR and the Windows reference, deletes proposals, findings, ideas and operator entries;
   resolves the deferral in ADR 0004 and amends ADR 0002 where it says only 0001 and 0002 are kept.
 - [0009 ADR numbers when both tests pass](decisions/0009-adr-numbers-when-both-tests-pass.md): a
-  tree that is both joined to the base and holds a `Hatchery base:` line numbers as adopted; the
+  tree that is both joined to the base and holds a `Hatchery base: <sha>` line numbers as adopted; the
   line wins. Amends 0008, Numbers.
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).

@@ -10,20 +10,24 @@ rule into the base. Amends ADR 0008, Numbers, for the case below; the rest of 00
 
 ADR 0008 and the `adr` skill tell three trees apart: Hatchery itself (no `hatchery` remote), a
 decanted project (`git merge-base HEAD hatchery/main` succeeds) and an adopted one (a
-`Hatchery base:` line exists under `docs/design/decisions/`). A decanted project starts at `0020`;
-an adopted one keeps its own numbering.
+line matching `^Hatchery base: [0-9a-f]{7,40}` exists under `docs/design/decisions/`, the same
+line `update-from-hatchery` step 3 and ADR 0004 look for; the phrase in prose does not count,
+since a decant keeps ADRs that quote it). A decanted project starts at `0020`; an adopted one
+keeps its own numbering.
 
-A project that adopted Hatchery and later joined its history to the base, by an ours-merge made
-after an update (ADR 0004), passes both tests: `merge-base` succeeds, which says "decanted", and
-the `Hatchery base:` line exists, which says "adopted". The skill gave no answer. Taking "decanted"
-would renumber nothing but would start a tree that already holds ADRs in `0001` to `0019` at
-`0020`; taking "adopted" keeps the numbers it has.
+A project that adopted Hatchery and then joined its history to the base passes both tests. That
+join is not an ADR 0004 procedure (ADR 0004 rejected joining histories; `adopt-hatchery` forbids
+it and patch mode never does it); the case arises only when a project joined them against that
+rule. `merge-base` succeeds, which says "decanted", and the base line exists, which says
+"adopted". The skill gave no answer. Taking "decanted" would renumber nothing but would start a
+tree that already holds ADRs in `0001` to `0019` at `0020`; taking "adopted" keeps the numbers it
+has.
 
 ## Decision
 
-- When both tests pass, the `Hatchery base:` line wins: the project numbers as an adopted project.
-  Its next ADR is the next free number in its own `decisions/`, proposals included, and nothing is
-  renumbered. The "starts at `0020`" rule does not apply to it.
+- When both tests pass, the anchored `Hatchery base: <sha>` line wins: the project numbers as an
+  adopted project. Its next ADR is the next free number in its own `decisions/`, proposals included,
+  and nothing is renumbered. The "starts at `0020`" rule does not apply to it.
 - Why the line and not the merge: the line records how the project took the practice (files copied
   once, patches after); the join merge only keeps `merge-base` current for the next diff and says
   nothing about which numbers the project has used.
