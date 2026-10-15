@@ -13,6 +13,10 @@
 //       run one hook on the raw contents of <file> and print exit code, stdout, stderr.
 //       Use this to reproduce a bug: write the hook input JSON to a file with the Write
 //       tool (a command line containing e.g. a force push would itself trip git-guard).
+//   ... --input <file> usage-gate --home <dir>
+//       the same, with HOME and USERPROFILE set to <dir> for the hook, so it reads
+//       <dir>/.claude/usage-state.json and the grants in <dir>/.claude/usage-gate-overrides/
+//       instead of the real ~/.claude. Put session_id and cwd in <file> to test a grant's scope.
 //
 // Isolation: post-edit cases run against a scratch tree in the OS temp dir (deleted at
 // the end); git-guard cases run in two scratch repositories (one on main, one on task/T1);
@@ -31,13 +35,14 @@ const NODE = process.execPath;
 
 // ---------- CLI ----------
 const argv = process.argv.slice(2);
-const opt = { only: null, verbose: false, keep: false, input: null, hook: null };
+const opt = { only: null, verbose: false, keep: false, input: null, hook: null, home: null };
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--verbose') opt.verbose = true;
   else if (a === '--keep') opt.keep = true;
   else if (a === '--only' && argv[i + 1]) opt.only = argv[++i];
   else if (a === '--input' && argv[i + 1] && argv[i + 2]) { opt.input = argv[++i]; opt.hook = argv[++i]; }
+  else if (a === '--home' && argv[i + 1]) opt.home = path.resolve(argv[++i]);
   else { process.stderr.write(`test-hooks: unknown or incomplete argument: ${a}\n`); process.exit(2); }
 }
 
@@ -53,7 +58,8 @@ if (opt.input) {
     process.stderr.write(`test-hooks: unknown hook ${opt.hook}\n`);
     process.exit(2);
   }
-  const r = run(opt.hook, fs.readFileSync(opt.input, 'utf8'));
+  const env = opt.home ? Object.assign({}, process.env, { HOME: opt.home, USERPROFILE: opt.home }) : process.env;
+  const r = run(opt.hook, fs.readFileSync(opt.input, 'utf8'), env);
   process.stdout.write(`exit ${r.code}\nstdout: ${r.stdout}\nstderr: ${r.stderr}\n`);
   process.exit(0);
 }
@@ -573,10 +579,12 @@ fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
 const HOLD_MSG = 'Usage gate: 5h 55%, 7d 10%. 5h at or above 50%: Do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report. Lifting this early is the user\'s decision (docs/design/decisions/0006-hook-policy-file.md).';
 const STOP_MSG = 'Usage gate: 5h 85%, 7d 10%. 5h at or above 80%: Stop all work, run the handoff skill, commit WIP from the main session, end the turn.';
 const HOLD_85 = HOLD_MSG.replace('5h 55%', '5h 85%');
-// A HOLD deny with an override file that lifts nothing names why, in one clause before "Lifting".
+// A HOLD deny names each grant that does not apply, one clause each, before "Lifting". The U and UO
+// cases use the legacy file only, with no scope key: a user grant (ADR 0006, The HOLD override).
 const withClause = (msg, clause) => msg.replace(' Lifting this early', ` ${clause} Lifting this early`);
-const OV_EXPIRED = 'An override file exists but is expired.';
-const OV_MALFORMED = 'An override file exists but is malformed (see ADR 0006, The HOLD override).';
+const LEGACY = 'usage-gate-override.json';
+const OV_EXPIRED = `Expired override files: ${LEGACY}.`;
+const OV_MALFORMED = `An override file exists but is malformed (${LEGACY}; see ADR 0006, The HOLD override).`;
 const nowSec = Math.floor(Date.now() / 1000);
 // The base has no deny line, so the STOP cases run under the Hatchery fixture with deny at 80.
 const deny80 = scratchPolicy('deny-80', Object.assign({}, HATCHERY_POLICY, { usage: Object.assign({}, HATCHERY_POLICY.usage, { deny: 80 }) }));
@@ -718,6 +726,115 @@ for (const [id, label, state, override, policy, extraEnv, expect, stderrHas] of 
   if (ok && stderrHas && !r.stderr.includes(stderrHas)) { ok = false; detail = `stderr lacks ${JSON.stringify(stderrHas)}: ${r.stderr}`; }
   report(id, `${label} -> ${expect === null ? 'allow' : 'deny'}`, ok, detail, r.stdout);
 }
+fs.rmSync(ovFile, { force: true });
+
+// The grant directory (ADR 0006, The HOLD override): scope by session, project or user, matched
+// against session_id and cwd on stdin. All under the scratch HOME; ~/.claude is never read.
+// [id, label, state, grant files { name: contents } (a string is written raw, DIR makes a
+// subdirectory holding a user grant), legacy file contents or undefined, payload (an object merged
+// into the PreToolUse input, or a raw string), expected exact deny reason or null for allow,
+// stderr must include (string or list), policy or undefined for the Hatchery fixture]
+const grantDir = path.join(home, '.claude', 'usage-gate-overrides');
+const DIR = Symbol('subdirectory');
+const PROJ = path.join(scratch, 'proj');
+const back = (p) => p.replace(/\//g, '\\');
+const g = (extra) => Object.assign({ until: nowSec + 3600, reason: 'test: owner' }, extra);
+const at = { session_id: 'abc', cwd: PROJ };
+const withClauses = (msg, ...clauses) => withClause(msg, clauses.join(' '));
+const C = {
+  session: (id) => `An override exists for session ${id}, not this one.`,
+  project: (p) => `An override exists for project ${p}, not this one.`,
+  expired: (...names) => `Expired override files: ${names.join(', ')}.`,
+  malformed: (n) => `An override file exists but is malformed (${n}; see ADR 0006, The HOLD override).`,
+};
+const HOLD_BOTH = HOLD_MSG.replace('5h 55%, 7d 10%. 5h at or above 50%', '5h 60%, 7d 70%. 5h at or above 50%, 7d at or above 50%');
+const isWin = process.platform === 'win32';
+const UG = [
+  ['UG01', 'session grant for this session lifts HOLD', fresh(55, 10), { 'session-abc.json': g({ session: 'abc' }) }, undefined, at, null,
+    'lifted on 5h and 7d by override session-abc.json (session abc)'],
+  ['UG02', 'session grant for another session: not this one', fresh(55, 10), { 'session-abc.json': g({ session: 'abc' }) }, undefined,
+    { session_id: 'xyz', cwd: PROJ }, withClauses(HOLD_MSG, C.session('abc'))],
+  ['UG03', 'project grant, cwd at the path', fresh(55, 10), { 'project-proj.json': g({ project: PROJ }) }, undefined, at, null, `(project ${PROJ})`],
+  ['UG04', 'project grant, cwd under the path', fresh(55, 10), { 'project-proj.json': g({ project: PROJ }) }, undefined,
+    { cwd: path.join(PROJ, 'sub', 'deeper') }, null],
+  ['UG05', 'project grant, cwd beside it with the path as a prefix', fresh(55, 10), { 'project-proj.json': g({ project: PROJ }) }, undefined,
+    { cwd: `${PROJ}-other` }, withClauses(HOLD_MSG, C.project(PROJ))],
+  ['UG06', 'project written with / and a trailing /, cwd with \\', fresh(55, 10), { 'p.json': g({ project: `${fwd(PROJ)}/` }) }, undefined,
+    { cwd: `${back(PROJ)}\\sub` }, null],
+  ['UG07', 'project written with \\, cwd with /', fresh(55, 10), { 'p.json': g({ project: back(PROJ) }) }, undefined,
+    { cwd: `${fwd(PROJ)}/sub` }, null],
+  ['UG08', `project in another case: ${isWin ? 'applies on Windows' : 'out of scope off Windows'}`, fresh(55, 10),
+    { 'p.json': g({ project: PROJ }) }, undefined, { cwd: PROJ.toUpperCase() }, isWin ? null : withClauses(HOLD_MSG, C.project(PROJ))],
+  ['UG09', 'user grant applies with any session and cwd', fresh(55, 10), { 'user.json': g() }, undefined,
+    { session_id: 'xyz', cwd: path.join(scratch, 'elsewhere') }, null, 'by override user.json (user)'],
+  ['UG10', 'legacy file beside a directory grant: the legacy user grant lifts', fresh(55, 10), { 'session-other.json': g({ session: 'other' }) }, g(),
+    at, null, `by override ${LEGACY} (user)`],
+  ['UG11', 'the legacy file is classified last, after a later-named directory file', fresh(55, 10),
+    { 'zz-session.json': g({ session: 'other' }) }, g({ until: nowSec - 1 }), at, withClauses(HOLD_MSG, C.session('other'), C.expired(LEGACY))],
+  ['UG12', 'both scope keys: malformed', fresh(55, 10), { 'both.json': g({ session: 'abc', project: PROJ }) }, undefined, at,
+    withClauses(HOLD_MSG, C.malformed('both.json'))],
+  ['UG13', 'a relative project: malformed', fresh(55, 10), { 'rel.json': g({ project: 'rel/proj' }) }, undefined, { cwd: path.join(PROJ, 'rel', 'proj') },
+    withClauses(HOLD_MSG, C.malformed('rel.json'))],
+  ['UG14', 'an empty session and a numeric project: malformed', fresh(55, 10), { 'a.json': g({ session: '' }), 'b.json': g({ project: 5 }) }, undefined, at,
+    withClauses(HOLD_MSG, C.malformed('a.json'), C.malformed('b.json'))],
+  ['UG15', 'two files lifting one meter each lift both', fresh(60, 70),
+    { 'a-5h.json': g({ meters: ['5h'], session: 'abc' }), 'b-7d.json': g({ meters: ['7d'], project: PROJ }) }, undefined, at, null,
+    ['lifted on 5h by override a-5h.json (session abc)', `lifted on 7d by override b-7d.json (project ${PROJ})`]],
+  ['UG16', 'one of two meter grants out of scope: the lift in force and the clause', fresh(60, 70),
+    { 'a-5h.json': g({ meters: ['5h'], session: 'other' }), 'b-7d.json': g({ meters: ['7d'], session: 'abc' }) }, undefined, at,
+    withClauses(HOLD_BOTH, 'The override in force lifts only 7d.', C.session('other'))],
+  ['UG17', 'clauses in file-name order across out of scope, expired and malformed', fresh(55, 10),
+    { 'a-session.json': g({ session: 'other' }), 'b-expired.json': g({ until: nowSec - 1 }), 'c-malformed.json': 'not json' }, undefined, at,
+    withClauses(HOLD_MSG, C.session('other'), C.expired('b-expired.json'), C.malformed('c-malformed.json'))],
+  ['UG18', 'each file classified once: malformed before expired, expired before out of scope', fresh(55, 10),
+    { 'a.json': g({ until: nowSec - 1, session: 'abc', project: PROJ }), 'b.json': g({ until: nowSec - 1, session: 'other' }) }, undefined, at,
+    withClauses(HOLD_MSG, C.malformed('a.json'), C.expired('b.json'))],
+  ['UG19', 'stdin without session_id: no session grant applies', fresh(55, 10), { 'session-abc.json': g({ session: 'abc' }) }, undefined,
+    { cwd: PROJ }, withClauses(HOLD_MSG, C.session('abc'))],
+  ['UG20', 'stdin without cwd: no project grant applies', fresh(55, 10), { 'project-proj.json': g({ project: PROJ }) }, undefined,
+    { session_id: 'abc' }, withClauses(HOLD_MSG, C.project(PROJ))],
+  ['UG21', 'unparseable stdin: a session grant does not apply', fresh(55, 10), { 'session-abc.json': g({ session: 'abc' }) }, undefined,
+    'not json', withClauses(HOLD_MSG, C.session('abc'))],
+  ['UG22', 'unparseable stdin: a user grant still applies', fresh(55, 10), { 'user.json': g() }, undefined, 'not json', null, '(user)'],
+  ['UG23', 'other names and subdirectories in the directory are ignored', fresh(55, 10), { 'notes.txt': 'not json', 'nested.json': DIR }, undefined, at,
+    HOLD_MSG],
+  ['UG24', 'a session grant does not lift the deny line', fresh(85, 10), { 'session-abc.json': g({ session: 'abc' }) }, undefined, at, STOP_MSG,
+    undefined, deny80],
+  ['UG25', 'every expired file shares one clause, placed where the first falls', fresh(55, 10),
+    { 'a-expired.json': g({ until: nowSec - 1 }), 'b-malformed.json': 'not json', 'c-expired.json': g({ until: nowSec - 1, session: 'abc' }) },
+    g({ until: nowSec - 1 }), at, withClauses(HOLD_MSG, C.expired('a-expired.json', 'c-expired.json', LEGACY), C.malformed('b-malformed.json'))],
+  ['UG26', 'a reason that is not a string: the lift still notes, with no reason given', fresh(55, 10), { 'user.json': g({ reason: 5 }) }, undefined, at, null,
+    ['by override user.json (user) until', ': no reason given']],
+];
+for (const [id, label, state, files, legacy, payload, expect, stderrHas, policy] of UG) {
+  if (!selected(id)) continue;
+  fs.writeFileSync(stateFile, JSON.stringify(state));
+  fs.rmSync(grantDir, { recursive: true, force: true });
+  fs.mkdirSync(grantDir, { recursive: true });
+  for (const [name, contents] of Object.entries(files)) {
+    if (contents === DIR) {
+      fs.mkdirSync(path.join(grantDir, name));
+      fs.writeFileSync(path.join(grantDir, name, 'user.json'), JSON.stringify(g()));
+    } else fs.writeFileSync(path.join(grantDir, name), typeof contents === 'string' ? contents : JSON.stringify(contents));
+  }
+  if (legacy === undefined) fs.rmSync(ovFile, { force: true }); else fs.writeFileSync(ovFile, JSON.stringify(legacy));
+  const stdin = typeof payload === 'string' ? payload
+    : JSON.stringify(Object.assign({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {} }, payload));
+  const r = run('usage-gate', stdin, envWith({ HOME: home, USERPROFILE: home, HOOK_POLICY_FILE: policy || POLICIES.hatchery }));
+  let ok;
+  let detail;
+  if (expect === null) { ok = r.code === 0 && r.stdout === ''; detail = 'expected allow (exit 0, no stdout)'; }
+  else {
+    const d = parseDecision(r.stdout);
+    ok = r.code === 0 && !!d && d.decision === 'deny' && d.reason === expect;
+    detail = `expected reason ${JSON.stringify(expect)}`;
+  }
+  for (const want of [].concat(stderrHas || [])) {
+    if (ok && !r.stderr.includes(want)) { ok = false; detail = `stderr lacks ${JSON.stringify(want)}: ${r.stderr}`; }
+  }
+  report(id, `${label} -> ${expect === null ? 'allow' : 'deny'}`, ok, detail, r.stdout);
+}
+fs.rmSync(grantDir, { recursive: true, force: true });
 fs.rmSync(ovFile, { force: true });
 
 // ---------- statusline ----------

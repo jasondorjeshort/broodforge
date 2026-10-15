@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // PreToolUse hook for the Agent and Workflow tools, the only calls it sees.
 // Denies launching a subagent or workflow when plan usage (the higher of the 5-hour and 7-day
-// windows) is at or above usage.hold in .claude/hooks/policy.json, unless the owner's override
-// lifts it, and at or above usage.deny, where a deny line is set, without exception (null, the
-// base, means none: HOLD is then the only line). Other tools are never gated here.
+// windows) is at or above usage.hold in .claude/hooks/policy.json, unless an override grant that
+// applies to this call lifts it, and at or above usage.deny, where a deny line is set, without
+// exception (null, the base, means none: HOLD is then the only line). Other tools are never gated.
 // Usage comes from ~/.claude/usage-state.json, which .claude/statusline.js writes.
 // Spec: docs/design/decisions/0002-hook-specs.md section 3; policy: ADR 0006.
 //
@@ -16,12 +16,15 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { load, usageVerdict, overrideMeters } = require('./policy');
+const { load, usageVerdict, classifyGrant } = require('./policy');
 
 const STATE_FILE = path.join(os.homedir(), '.claude', 'usage-state.json');
-// Lifts HOLD (not the deny line) until `until`, epoch seconds, on the meters in `meters` ("5h",
-// "7d"; both when absent); written only on the user's word. Format: ADR 0006, The HOLD override.
-const OVERRIDE_FILE = path.join(os.homedir(), '.claude', 'usage-gate-override.json');
+// Override grants, written only on the owner's word and never written or deleted here: every
+// *.json file directly in GRANT_DIR, then the legacy single file. Each lifts HOLD (never the deny
+// line) until "until" on its meters, for one session, one project or the user. Format and
+// matching: ADR 0006, The HOLD override.
+const GRANT_DIR = path.join(os.homedir(), '.claude', 'usage-gate-overrides');
+const LEGACY_FILE = path.join(os.homedir(), '.claude', 'usage-gate-override.json');
 const POLICY_DOC = 'docs/design/decisions/0006-hook-policy-file.md';
 
 function readJson(file) {
@@ -35,7 +38,41 @@ function deny(reason) {
 }
 const note = (msg) => process.stderr.write(`usage-gate: ${msg}\n`);
 
-function main() {
+// session_id and cwd from the PreToolUse payload; unparseable stdin is an empty payload.
+function readPayload(raw) {
+  let p = null;
+  try { p = JSON.parse(raw); } catch (_) { /* empty payload */ }
+  if (!p || typeof p !== 'object') p = {};
+  const str = (v) => (typeof v === 'string' && v !== '' ? v : null);
+  return { sessionId: str(p.session_id), cwd: str(p.cwd) };
+}
+
+// [{ name, grant }] in file-name order, the legacy file last. Other names and subdirectories are
+// ignored; an absent directory is no grants. An unreadable file has grant null (malformed).
+function readGrants() {
+  const out = [];
+  let names = [];
+  try { names = fs.readdirSync(GRANT_DIR).filter((n) => n.endsWith('.json')).sort(); } catch (_) { /* no directory */ }
+  for (const name of names) {
+    const file = path.join(GRANT_DIR, name);
+    let isFile = false;
+    try { isFile = fs.statSync(file).isFile(); } catch (_) { /* vanished or a broken link */ }
+    if (isFile) out.push({ name, grant: readJson(file) });
+  }
+  if (fs.existsSync(LEGACY_FILE)) out.push({ name: path.basename(LEGACY_FILE), grant: readJson(LEGACY_FILE) });
+  return out;
+}
+
+const scopeText = (s) => (s.kind === 'user' ? 'user' : `${s.kind} ${s.value}`);
+
+// One clause per malformed or out-of-scope grant; every expired grant shares one clause, placed where
+// the first one falls, so leftover files do not lengthen each deny. The format lives in the ADR.
+function clause(name, c) {
+  if (c.status === 'malformed') return `An override file exists but is malformed (${name}; see ADR 0006, The HOLD override).`;
+  return `An override exists for ${c.scope.kind} ${c.scope.value}, not this one.`;
+}
+
+function main(raw) {
   const loaded = load();
   if (loaded.error) note(`${loaded.error}; using the base defaults.`);
   const u = loaded.policy.usage;
@@ -70,20 +107,24 @@ function main() {
       note(`HOLD (${detail}) lifted for this session by ${u.overrideEnv}=1.`);
       return;
     }
-    const o = readJson(OVERRIDE_FILE);
-    const lifted = overrideMeters(o, now);
-    if (lifted.length && v.hits.every((h) => lifted.includes(h.label))) {
-      note(`HOLD (${detail}) lifted on ${lifted.join(' and ')} by override until ${new Date(o.until * 1000).toLocaleString()}: ${o.reason || 'no reason given'}`);
+    const ctx = readPayload(raw);
+    const grants = readGrants().map((g) => Object.assign(g, { c: classifyGrant(g.grant, now, ctx) }));
+    const applying = grants.filter((g) => g.c.status === 'applies');
+    const lifted = ['5h', '7d'].filter((m) => applying.some((g) => g.c.meters.includes(m)));
+    const labels = v.hits.map((h) => h.label);
+    if (lifted.length && labels.every((l) => lifted.includes(l))) {
+      // The reason of every grant used, that is every applying grant that lifts a tripped meter.
+      for (const g of applying.filter((a) => a.c.meters.some((m) => labels.includes(m)))) {
+        note(`HOLD (${detail}) lifted on ${g.c.meters.join(' and ')} by override ${g.name} (${scopeText(g.c.scope)}) until ${new Date(g.grant.until * 1000).toLocaleString()}: ${typeof g.grant.reason === 'string' && g.grant.reason ? g.grant.reason : 'no reason given'}`);
+      }
       return;
     }
     const partial = lifted.length ? ` The override in force lifts only ${lifted.join(' and ')}.` : '';
-    // A file that lifts nothing says why in one clause; the format lives in the ADR, not here.
-    let unused = '';
-    if (!lifted.length && fs.existsSync(OVERRIDE_FILE)) {
-      unused = o && typeof o === 'object' && typeof o.until === 'number' && o.until <= now
-        ? ' An override file exists but is expired.'
-        : ' An override file exists but is malformed (see ADR 0006, The HOLD override).';
-    }
+    const expired = grants.filter((g) => g.c.status === 'expired');
+    const unused = grants.filter((g) => g.c.status !== 'applies').map((g) => {
+      if (g.c.status !== 'expired') return ` ${clause(g.name, g.c)}`;
+      return g === expired[0] ? ` Expired override files: ${expired.map((e) => e.name).join(', ')}.` : '';
+    }).join('');
     deny(`Usage gate: ${detail}. ${tripped}: ${u.holdAdvice}${partial}${unused} Lifting this early is the user's decision (${POLICY_DOC}).`);
   }
 }
@@ -92,6 +133,6 @@ let raw = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (c) => (raw += c));
 process.stdin.on('end', () => {
-  main();
+  main(raw);
   process.exit(0);
 });

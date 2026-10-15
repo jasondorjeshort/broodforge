@@ -221,16 +221,31 @@ the status line refreshes the data while a session is open.` The hook never runs
 At or above a deny line, where one is set: `Usage gate: 5h X%, 7d Y%. <meter> at or above <deny>%: <denyAdvice>`.
 `usage.deny` `null`, the base, sets none, so a meter at 100% is a HOLD like any other. At or above
 `usage.hold`: `Usage gate: 5h X%, 7d Y%. <meter> at or above <hold>%: <holdAdvice>[ The override in force
-lifts only <meters>.][ An override file exists but is expired.| An override file exists but is
-malformed (see ADR 0006, The HOLD override).] Lifting this early is the user's decision
-(docs/design/decisions/0006-hook-policy-file.md).` The first bracket appears when an override in
-force lifts some meters but not every one that tripped; the second when an override file exists
-but lifts nothing. There is no HOLD deny when the override file lifts every meter that tripped, or
+lifts only <meters>.][ An override exists for session <id>, not this one.| An override exists for
+project <path>, not this one.| Expired override files: <name>[, <name>]*.| An override file
+exists but is malformed (<name>; see ADR 0006, The HOLD override).]* Lifting this early is the
+user's decision (docs/design/decisions/0006-hook-policy-file.md).` Grants are every `*.json` in
+`~/.claude/usage-gate-overrides/` plus the legacy `~/.claude/usage-gate-override.json`, matched
+against `session_id` and `cwd` from the PreToolUse payload on stdin by the rules in ADR 0006, The
+HOLD override. The first bracket appears when the grants that apply lift some meters but not every
+one that tripped; the starred group holds one clause per malformed or out-of-scope grant file, in
+file-name order with the legacy file last, each file classified once as malformed, else expired,
+else out of scope, `<id>` and `<path>` as written in the grant and `<name>` the file's basename;
+every expired file shares one `Expired override files:` clause, its names in the same order, placed
+where the first expired file falls. A lift notes each grant used on stderr with its `reason`, or
+`no reason given` when `reason` is not a non-empty string.
+There is no HOLD deny when the grants that apply together lift every meter that tripped, or
 `usage.overrideEnv` names a variable set to exactly `1` (ADR 0006). A crash exits 1, which does not
 block: the gate fails open.
 
-Harness cases U (thresholds and the override file, with and without a deny line), UO (the
-override per meter, no deny line on one meter or both, `usage.overrideEnv`), UX (staleness both
+Harness cases U (thresholds and the legacy override file, with and without a deny line), UO (the
+override per meter, no deny line on one meter or both, `usage.overrideEnv`), UG (the grant
+directory: a session grant for this session and for another; a project grant with `cwd` at the
+path, under it, and beside it with the path as a prefix, with either separator and, on Windows,
+differing case; a user grant; the legacy file beside a directory grant; both scope keys; a relative
+`project`; two files lifting one meter each; the clause order across a malformed, an expired and an
+out-of-scope file; several expired files in one clause; a `reason` that is not a string; stdin
+without `session_id`, without `cwd`, and unparseable), UX (staleness both
 ways, a reset window, the example policies, per-meter thresholds, a malformed policy including a
 string `deny`, a pre-merge cache file), and S (the status line's merge, the untouched file without
 `rate_limits`, malformed stdin, the directory line from `current_dir`, from `cwd` alone, and absent, policy flags, no STOP without a deny line, a failed rename).

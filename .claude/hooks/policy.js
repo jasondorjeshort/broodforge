@@ -150,16 +150,53 @@ function usageVerdict(usage, readings) {
   return out;
 }
 
-// The meters an override file lifts HOLD on at time now (epoch seconds): [] when the file is
-// absent, expired or malformed, else its "meters" list ("5h", "7d"), both when the list is absent.
-// An unknown meter name or a list that is not one makes the whole file malformed, so a typo lifts
-// nothing rather than something the user did not ask for.
+// A HOLD override grant (ADR 0006, The HOLD override), classified for one hook call. grant is the
+// parsed file (null when unreadable or not JSON), now is epoch seconds, ctx is { sessionId, cwd }
+// from the PreToolUse payload, each a non-empty string or null. Returns { status, meters, scope }:
+// status is checked in order "malformed", "expired", "out" (out of scope), else "applies"; meters
+// is the list it lifts ("5h", "7d"; both when "meters" is absent); scope is { kind: "user" },
+// { kind: "session", value } or { kind: "project", value }, value as written in the grant.
+// Malformed: not an object, no numeric "until", an unknown meter name or a "meters" that is not a
+// non-empty list (a typo lifts nothing rather than something the user did not ask for), both scope
+// keys, a scope value that is not a non-empty string, or a "project" that is not absolute.
 const METERS = ['5h', '7d'];
-function overrideMeters(override, now) {
-  if (!override || typeof override !== 'object' || typeof override.until !== 'number' || override.until <= now) return [];
-  if (override.meters === undefined) return METERS.slice();
-  if (!Array.isArray(override.meters) || override.meters.length === 0 || !override.meters.every((m) => METERS.includes(m))) return [];
-  return METERS.filter((m) => override.meters.includes(m));
+// Paths are compared with every "\" made "/", one trailing "/" dropped, and on Windows lower-cased.
+// Symlinks and junctions are not resolved.
+function normScopePath(p) {
+  let s = p.replace(/\\/g, '/');
+  if (s.endsWith('/')) s = s.slice(0, -1);
+  return process.platform === 'win32' ? s.toLowerCase() : s;
+}
+function classifyGrant(grant, now, ctx) {
+  const malformed = { status: 'malformed', meters: [], scope: null };
+  if (!grant || typeof grant !== 'object' || Array.isArray(grant) || typeof grant.until !== 'number') return malformed;
+  let meters = METERS.slice();
+  if (grant.meters !== undefined) {
+    if (!Array.isArray(grant.meters) || grant.meters.length === 0 || !grant.meters.every((m) => METERS.includes(m))) return malformed;
+    meters = METERS.filter((m) => grant.meters.includes(m));
+  }
+  const has = (k) => Object.prototype.hasOwnProperty.call(grant, k);
+  if (has('session') && has('project')) return malformed;
+  let scope = { kind: 'user' };
+  for (const kind of ['session', 'project']) {
+    if (!has(kind)) continue;
+    const value = grant[kind];
+    if (typeof value !== 'string' || value === '') return malformed;
+    // Judged by the host's own rules after the separator swap: off Windows, path.posix.isAbsolute
+    // rejects a drive path such as C:/a/b, so a Windows project grant read there is malformed and
+    // lifts nothing (fails closed).
+    if (kind === 'project' && !path.isAbsolute(value.replace(/\\/g, '/'))) return malformed;
+    scope = { kind, value };
+  }
+  if (grant.until <= now) return { status: 'expired', meters, scope };
+  let inScope = true;
+  if (scope.kind === 'session') inScope = !!ctx.sessionId && ctx.sessionId === scope.value;
+  if (scope.kind === 'project') {
+    const p = normScopePath(scope.value);
+    const c = ctx.cwd ? normScopePath(ctx.cwd) : null;
+    inScope = c !== null && (c === p || c.startsWith(`${p}/`));
+  }
+  return { status: inScope ? 'applies' : 'out', meters, scope };
 }
 
 // True when name matches one of the patterns; "*" matches any run of characters, "/" included.
@@ -167,7 +204,7 @@ function matches(patterns, name) {
   return patterns.some((p) => new RegExp(`^${p.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`).test(name));
 }
 
-module.exports = { load, matches, usageVerdict, meterThresholds, overrideMeters, DEFAULTS };
+module.exports = { load, matches, usageVerdict, meterThresholds, classifyGrant, DEFAULTS };
 
 if (require.main === module) {
   const r = load(process.argv[2]);
