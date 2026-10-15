@@ -1,15 +1,14 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-15, at commit d9627a0, by main session (Hatchery coordinator)
+Updated: 2026-10-15, at commit 99bcab1, by main session (Hatchery coordinator)
 
 ## Now
 
-- Unpushed, reviewed once, from an audit of `../broodforge`: 146dbff (decant unsets the upstream
-  the origin rename carries over; the pusher stops on an upstream not on origin; merge-mode updates
-  drop the base's own new ideas, findings and proposals; ADRs 0002 and 0006 say where their
-  proposals live) and d9627a0 (the Windows reference's npm section, carried back). Push on the
-  owner's words. Broodforge picks both up on its next update after that push.
+- Pushed and fetch-confirmed at 99bcab1: 146dbff (decant unsets the upstream the origin rename
+  carries; the pusher stops on an upstream not on origin; merge-mode updates drop the base's own
+  new docs; ADRs 0002 and 0006 say where their proposals live) and d9627a0 (npm, Windows reference).
+- `../regenesis1` audited: base 6866d8a, patched and joined per its ADR 0014; nothing lost.
 - `../broodforge` (unpushed, its own `origin` empty): upstream unset, hatchery/main merged as
   58307e2, its handoff 5953647. Whether its decant commit is re-authored is the owner's call there.
 - Session 6c1640c4 has a weekly-meter grant until about 22:40 today (ADR 0006); the weekly meter
@@ -26,14 +25,15 @@ Updated: 2026-10-15, at commit d9627a0, by main session (Hatchery coordinator)
    (a finding first; the rule stays until then), and check
    `docs/ideas/2026-10-15-statusline-command-cwd-relative.md`.
 5. Triage `docs/ideas/` (`triage` skill): the files with no block.
-6. Sibling work in their own sessions: Regenesis review and push of its update; the first two-way
-   sync with the build-phase sibling (`docs/ideas/2026-10-13-first-sync-with-the-build-phase-sibling.md`).
+6. Sibling work in its own session: the first two-way sync with the build-phase sibling
+   (`docs/ideas/2026-10-13-first-sync-with-the-build-phase-sibling.md`).
 7. The open heredoc finding's Next steps (reproduce on Linux; check the changelog; a quoted
    heredoc collapsed a doubled backslash in a Node snippet, 2026-10-15).
 
 ## Waiting on user
 
 - Deletion of the merged `task/T94` branch on GitHub (the guard denies it here; terminal or UI).
+- Whether update-from-hatchery step 3 takes patch mode for a joined adopted tree (`../regenesis1`, its ADR 0014); amends ADR 0009.
 
 ## Open findings
 
