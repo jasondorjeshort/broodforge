@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+node_modules/
+# tsc output sits beside the sources so that <bf>/run.js is the plan's path
+*.js

@@ -152,8 +152,11 @@ no `<settings>`, and `HOME` set to `/tmp`:
    `claude`; the entry wrapper exec'd into the engine). The name is `claude` because the engine
    is the native ELF; the npm shim would show `node`, which is one reason ADR 0020 names the ELF.
 3. `sudo -n -u broodforge-engine /usr/bin/kill -INT <pid>`; wait for the `result` (ADR 0020).
-4. After the interrupt timeout (instance config; default 20 s): kill the sudo child; bwrap dies
-   and `--die-with-parent` kills the tree; the turn is recorded as interrupted per ADR 0020.
+4. After the interrupt timeout (instance config; default 20 s): find the outer `bwrap` process
+   (the `sudo` pid's child, from `pgrep -P <sudo pid>`) and run `sudo -n -u broodforge-engine
+   /usr/bin/kill -KILL <bwrap pid>` through the sudoers kill line, never against the sudo pid;
+   sudo then exits on its own, `--die-with-parent` kills the tree, and the turn is recorded as
+   interrupted per ADR 0020.
 
 Never signal `sudo` or `bwrap` with SIGINT expecting a `result`; both end in a SIGKILL of the engine.
 
@@ -192,3 +195,11 @@ the bot never runs `git gc --prune` with a date that could remove objects reacha
 The bot never runs git with `<sess>/tree` as the repository: no `fetch <path>`, no `-C <sess>`,
 no `safe.directory` for anything engine-owned. On Windows the same five steps run with the
 `same-account` backend (no sudo, no bwrap), so the code path is one.
+
+## Amendments
+
+- 2026-10-14, review of the spike harness: Interrupt step 4 sent SIGKILL to the `sudo` process,
+  but sudo runs as full root, so the bot's user cannot signal it and the kill fails with EPERM.
+  Step 4 now targets the outer `bwrap` process through the sudoers kill line. Spike claim C32
+  checks it: `sudo -n -u broodforge-engine sleep 60 & kill -KILL $!` (expected EPERM), then the
+  bwrap-pid form (expected to succeed).

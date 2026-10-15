@@ -1,0 +1,11 @@
+{
+  "//": "SPDX-License-Identifier: GPL-3.0-or-later. Spike template; setup.js drops every key starting with // and replaces <bf>.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "node <bf>/hook.js", "timeout": 10 }]
+      }
+    ]
+  }
+}

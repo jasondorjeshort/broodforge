@@ -84,7 +84,7 @@ first `/proc/<pid>/comm` equal to `claude` and sends the kill; then `$RUN --spaw
 --resume <id> --prompt "Continue."`. Evidence: the `comm` chain printed (`sudo`, `bwrap`,
 `bwrap`, `claude`); a `result` with `modelUsage` within the 20 s default; the exit code; the
 resumed turn reaches a `result`. Refuted (no `result`): the companion's Interrupt step 4 (kill
-the sudo child) is the only path, every Linux interrupt is recorded with output unknown (ADR
+the bwrap child of sudo) is the only path, every Linux interrupt is recorded with output unknown (ADR
 0020), and the `kill` sudoers line goes; (no resume): the Linux line of ADR 0020 Interrupt gets
 S2's fallback, a new engine session per interrupted turn.
 

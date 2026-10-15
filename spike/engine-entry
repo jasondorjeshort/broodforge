@@ -1,0 +1,86 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# The spike's copy of the companion's entry wrapper (docs/design/decisions/0022-linux-spawn-and-handoff.md,
+# "broodforge engine-entry"). Runs as broodforge-engine inside the sandbox; bwrap.sh invokes it
+# as `sh <bf>/engine-entry ...`, so no exec bit is needed.
+#
+#   engine-entry --kept                         print the kept list (the one array; bwrap.sh reads it)
+#   engine-entry --check                        print every kept name set here, one per line; exit 0
+#   engine-entry [--strace <log>] -- <cmd...>   checks, then exec <cmd> (strace -f -e trace=file first)
+#   engine-entry harness-create <cfg>
+#   engine-entry worktree-create <sess> <canon> <branch> <base>
+#   engine-entry worktree-bundle <sess> <branch> [<base>]
+#   engine-entry worktree-remove <sess>
+#
+# The spike implements the maintenance commands in sh; production runs them as Node.
+
+set -eu
+umask 027
+
+KEPT="ANTHROPIC_API_KEY CLAUDE_CONFIG_DIR CLAUDE_CODE_SUBPROCESS_ENV_SCRUB GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL BROODFORGE_SESSION BROODFORGE_MODE BROODFORGE_REACH BROODFORGE_TREE BROODFORGE_CANONICAL BROODFORGE_ANSWER BROODFORGE_SESSION_ALLOW BROODFORGE_HOOK_LOG"
+PER_SESSION="projects shell-snapshots todos"
+
+isset() { eval "[ -n \"\${$1+x}\" ]"; }
+fail() { echo "engine-entry: $1 missing; check sudoers env_keep (spawn preflight prints it)" >&2; exit 1; }
+
+case "${1:-}" in
+  --kept)
+    for n in $KEPT; do echo "$n"; done
+    exit 0 ;;
+  --check)
+    for n in $KEPT; do if isset "$n"; then echo "$n"; fi; done
+    exit 0 ;;
+  harness-create)
+    [ $# -eq 2 ] || { echo "usage: engine-entry harness-create <cfg>" >&2; exit 2; }
+    mkdir -m 0750 "$2"
+    echo "engine-entry: created $2"
+    exit 0 ;;
+  worktree-create)
+    [ $# -eq 5 ] || { echo "usage: engine-entry worktree-create <sess> <canon> <branch> <base>" >&2; exit 2; }
+    sess=$2 canon=$3 branch=$4 base=$5
+    mkdir -m 0750 "$sess" "$sess/home" "$sess/home/.claude" "$sess/cfg"
+    for n in $PER_SESSION; do mkdir -m 0750 "$sess/cfg/$n"; done
+    git -c safe.directory="$canon" clone --shared --branch "$base" "$canon" "$sess/tree"
+    git -C "$sess/tree" checkout -b "$branch"
+    echo "engine-entry: created $sess, tree on $branch from $base"
+    exit 0 ;;
+  worktree-bundle)
+    [ $# -ge 3 ] || { echo "usage: engine-entry worktree-bundle <sess> <branch> [<base>]" >&2; exit 2; }
+    sess=$(cd "$2" && pwd) branch=$3 base=${4:-base}  # absolute: the bundle path is read after git -C
+    if [ -z "$(git -C "$sess/tree" rev-list "$base..$branch")" ]; then
+      echo "engine-entry: no commits on $branch since $base; no bundle written"
+      exit 0
+    fi
+    git -C "$sess/tree" bundle create "$sess/out.bundle" "$base..$branch"
+    exit 0 ;;
+  worktree-remove)
+    [ $# -eq 2 ] || { echo "usage: engine-entry worktree-remove <sess>" >&2; exit 2; }
+    rm -rf -- "$2"
+    exit 0 ;;
+esac
+
+strace_log=
+if [ "${1:-}" = "--strace" ]; then
+  [ $# -ge 2 ] || { echo "usage: engine-entry --strace <log> -- <cmd...>" >&2; exit 2; }
+  strace_log=$2
+  shift 2
+fi
+[ "${1:-}" = "--" ] || { echo "usage: engine-entry [--strace <log>] -- <cmd...>" >&2; exit 2; }
+shift
+[ $# -ge 1 ] || { echo "engine-entry: no command" >&2; exit 2; }
+
+# Exactly one credential name.
+if isset CLAUDE_CONFIG_DIR && isset ANTHROPIC_API_KEY; then
+  echo "engine-entry: both CLAUDE_CONFIG_DIR and ANTHROPIC_API_KEY set; exactly one is allowed" >&2; exit 1
+fi
+isset CLAUDE_CONFIG_DIR || isset ANTHROPIC_API_KEY || fail "CLAUDE_CONFIG_DIR or ANTHROPIC_API_KEY"
+isset HOME || fail HOME
+[ -w "$HOME" ] || { echo "engine-entry: HOME ($HOME) not writable" >&2; exit 1; }
+if [ "${BROODFORGE_REACH:-code}" = "code" ] && [ ! -w . ]; then
+  echo "engine-entry: cwd $(pwd) not writable for code reach" >&2; exit 1
+fi
+
+if [ -n "$strace_log" ]; then
+  exec strace -f -e trace=file -o "$strace_log" "$@"
+fi
+exec "$@"

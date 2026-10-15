@@ -1,0 +1,17 @@
+{
+  "name": "broodforge-spike",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Throwaway spike harness for claims C25 to C39 (docs/design/07-spike-plan.md)",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "^7.0.2"
+  }
+}
