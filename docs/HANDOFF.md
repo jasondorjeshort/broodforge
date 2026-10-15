@@ -1,13 +1,13 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-15, after the Hatchery merge 0da3f38, by main session
+Updated: 2026-10-15, after the Hatchery merge 58307e2, by Hatchery's main session
 
 ## Now
 
-- `main` is unpushed past the decant `ee08842`, through the C25/C36 findings `4121c44` and the
-  merge of hatchery/main `0da3f38` (scoped override grants, ADR 0006). `origin` is Broodforge,
-  `hatchery` the base. HOLD 60% session, 75% weekly; at 09:30 the meters read 17% and 70%.
+- `main` is unpushed past the decant `ee08842`, through the hatchery/main merge `58307e2` (hook
+  paths, ADR 0009). `origin` (empty) is Broodforge, `hatchery` the base; `main` no longer tracks
+  hatchery/main, so the first push is `git push -u origin main`. HOLD 60% session, 75% weekly.
 - Owner is Jason Dorje Short <jdorje@gmail.com>, repo-local git identity. Push only at session
   end on his words; his UX decisions are applied. Design complete: `00` to `07`, ADRs 0020 to 0022.
 - The spike is live on the PC: C25 login done, fixtures in place, C25 and C36 confirmed in
@@ -15,9 +15,8 @@ Updated: 2026-10-15, after the Hatchery merge 0da3f38, by main session
 - The spike config directory holds the PC owner's Claude Max account (her PC), not the owner's; every
   PC claim spends it. Moving to his account means deleting `$CFG` and running C25 again. The
   owner drives the claim runs himself with a Fable agent (the table says `coder`; his call).
-- 2026-10-14: a bare `npm install` wiped the global npm folder; restored except two local links
-  (`bot-folder`, `project`) whose targets the owner must name. Safe form:
-  `docs/reference/claude-code-on-windows.md`, "npm on this PC".
+- 2026-10-14: a bare `npm install` wiped the global npm folder, restored but for two links
+  (`bot-folder`, `project`) the owner must name. Safe form: Windows reference, "npm on this PC".
 
 ## Next
 
@@ -32,7 +31,8 @@ Updated: 2026-10-15, after the Hatchery merge 0da3f38, by main session
 
 ## Waiting on user
 
-- Whose Claude account the PC claims spend; the npm link targets; the droplet entries; the push.
+- Whose Claude account the PC claims spend; npm link targets; droplet entries; the push; whether
+  the decant `ee08842` (author Sam, before the identity fix) is re-authored before that push.
 
 ## Open findings
 
