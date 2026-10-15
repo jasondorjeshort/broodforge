@@ -56,7 +56,7 @@ per model seen downstream (task branches, single branch, per-meter thresholds), 
 | `usage.fiveHour` / `usage.sevenDay` | `{ "hold", "deny" }`, each percent or `null` | both `null` | Per-meter thresholds; `null` inherits `usage.hold` / `usage.deny`, so a meter has no deny line when its own and the shared `deny` are both `null`. Each meter is judged by its own pair and the worse verdict wins (ReGenesis, its ADR 0004). |
 | `usage.staleSeconds` | seconds | `7200` | Older usage data is stale. |
 | `usage.whenStale` | `"allow"` or `"deny"` | `"allow"` | What the gate does with stale or missing data. |
-| `usage.overrideEnv` | variable name or `null` | `null` | An environment variable that, set to `1` when the session starts, lifts HOLD on both meters for that session (never the deny line). |
+| `usage.overrideEnv` | variable name or `null` | `null` | An environment variable that, set to `1` when the session starts, lifts HOLD on both meters for that session (never the deny line): the launch-time form of a session grant (The HOLD override). |
 | `usage.holdAdvice` / `usage.denyAdvice` | text | the base's wording | The sentence after the threshold in each deny. |
 | `edit.capExempt` | path patterns | `[]` | Docs exempt from the 300-line cap. |
 | `edit.anchorExempt` | path patterns | proposals, decisions, findings | Docs whose backtick-quoted paths are not checked: closed records that name paths as they were. |
@@ -91,23 +91,60 @@ waits until a session's status line has written fresh data (the hook never runs 
 
 ### The HOLD override
 
-`~/.claude/usage-gate-override.json`, `{"until": <epoch seconds>, "reason": "<who asked and
-why>", "meters": ["7d"]}`, lifts HOLD (never the deny line) until `until`, and the gate prints the
-reason each time it is used. `meters` (`"5h"`, `"7d"`; both when absent) names the meters it lifts,
-so a user who says to ignore the weekly meter and follow the session one gets exactly that; a HOLD
-on a meter not named still denies, and says which meters the override lifts. An unknown meter name,
-`"meters": null` or `"meters": []` makes the file lift nothing (added 2026-10-13 for Dystopo's T94,
-with `usage.overrideEnv`). A HOLD deny says when an override file exists but is expired or
-malformed, and points here rather than teaching the format. With
-no deny line, the base since 2026-10-13, the override lifts every HOLD, including on a meter at
-100%; a project that forbids overage sets `deny` and keeps a ceiling the override cannot lift. A
-deny of 100 is not the same as none: it trips exactly when a meter saturates, with no lift. The
-override file is written only on the user's explicit instruction, and the same rule holds for `usage.overrideEnv`:
-it is set in a policy file, and its variable set in a session, only on the owner's instruction. The file is machine-wide, like the
-usage cache beside it: one override lifts HOLD for every project on the machine, not only the one
-where it was asked for, so the reason should name the scope the user gave. The deny text no longer
-explains how to write it; it points here, because a deny message is read by the agent that was
-refused.
+Scoped grants replaced the single file on 2026-10-15, on the owner's decision, after one lift
+written for the base on 2026-10-13 also lifted its two siblings (the idea
+`override-file-is-machine-wide`, resolved by this amendment). A single file holding a list of grants
+was ruled out: two sessions editing it read-modify-write over each other, and a session-only grant
+could clobber another session's.
+
+Grants. A grant is one JSON file in `~/.claude/usage-gate-overrides/`: every `*.json` directly in
+that directory is a grant, other names and subdirectories are ignored, and an absent directory is
+no grants. `{"until": <epoch seconds>, "reason": "<who asked and why>", "meters": ["7d"],
+"session": "<session id>"}`. `until` is required on every grant; the grant lifts HOLD (never the
+deny line) until then, `until` at or before now is expired, and the gate prints the reason each
+time a grant is used. `meters` (`"5h"`, `"7d"`; both when absent) names the meters it lifts, so a
+user who says to ignore the weekly meter and follow the session one gets exactly that; a HOLD on a
+meter not named still denies, and says which meters the grants lift. An unknown meter name,
+`"meters": null` or `"meters": []` makes the grant malformed, lifting nothing (2026-10-13, Dystopo's
+T94, with `usage.overrideEnv`). Scope is at most one key: `"session": "<session id>"` or
+`"project": "<absolute path>"`; neither key is user scope; both keys, a value that is not a
+non-empty string, or a relative `project` is malformed. `~/.claude` is one user's, so the widest
+scope is the user, not the machine. The legacy single file `~/.claude/usage-gate-override.json` is
+still read, by the same rules as a directory file, so a legacy file with no scope key is a user
+grant; writers write only to the directory. The gate never writes or deletes a grant.
+
+Matching. The gate parses the PreToolUse payload on stdin for `session_id` and `cwd`;
+unparseable stdin is an empty payload. A session grant applies when `session_id` equals its
+`session`; with no `session_id`, no session grant applies. A project grant applies when `cwd` is
+its `project` or under it: both are compared after every `\` becomes `/`, a trailing `/` is
+dropped, and, on Windows (`process.platform` is `win32`), both are lower-cased; under means the
+cwd begins with the project path followed by `/`. Symlinks and junctions are not resolved. Matching
+is textual against the resolved `cwd` Claude Code supplies (the gate resolves no symlink or `..`),
+so a session that moves into another directory holding its own project grant is covered by that
+grant. A `project` is judged absolute by the host's rules, so a Windows drive path read on Linux or
+macOS is malformed and lifts nothing. With no `cwd`, no project grant applies. A user grant applies to every session. Each file is classified
+once, in this order: malformed, else expired, else out of scope, else it applies; the meters lifted
+are the union over every grant that applies. A HOLD deny names each grant that does not apply, with
+its scope (an override exists for session such-and-such, not this one; for project such-and-such)
+or as malformed, lists every expired file in one clause, and points here rather than teaching the format, because a deny
+message is read by the agent that was refused. Exact grammar: `0002-hook-specs.md`, section 3.
+
+Writing a grant. Only on the owner's explicit instruction, by the coordinator from the main
+session, as a new file: `session-<id>.json`, `project-<slug>.json` or `user.json`. The owner's
+bare "OVERRIDE" is a session grant; project or user scope takes the owner's words. Whoever writes
+a grant first deletes every expired grant file in the directory, so leftover files never pile up
+in each deny; the gate never deletes, the coordinator does at write time. The session id
+is `CLAUDE_CODE_SESSION_ID` in the Bash tool's environment, the same id the hook receives as
+`session_id`. `until` is the time the owner gives, else about twelve hours ahead for a session
+grant, and for a project or user grant the weekly meter's `seven_day.resets_at` in
+`~/.claude/usage-state.json`, else twelve hours. `reason` names who asked and the scope they gave.
+`usage.overrideEnv` is the launch-time form of a session grant: set in a policy file, and its
+variable set when the session starts, only on the owner's instruction, it lifts HOLD on both meters
+for that session and nothing else.
+
+With no deny line, the base since 2026-10-13, a grant lifts every HOLD, including on a meter at
+100%; a project that forbids overage sets `deny` and keeps a ceiling no scope lifts. A deny of 100
+is not the same as none: it trips exactly when a meter saturates, with no lift.
 
 ### Test seams
 
@@ -128,6 +165,8 @@ project whose root `package.json` declares `"type": "module"` makes Node load th
   when a project needs different wording, as an `advice` map keyed by rule number.
 - The pusher agent's check 7 keeps its own list of cap exemptions in `.claude/agents/pusher.md`.
   Revive when the first project exempts a file: the check should read `edit.capExempt`.
+- The gate still reads the legacy `~/.claude/usage-gate-override.json`. Drop that read, and its
+  harness cases, once every project that copied the gate has taken the 2026-10-15 version.
 
 ## Consequences
 

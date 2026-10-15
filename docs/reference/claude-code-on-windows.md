@@ -1,6 +1,6 @@
 ---
-verified: 2026-10-14
-source: observed (npm behaviour tested 2026-10-14; twelve waves of parallel agents on a downstream project; Windows 10 and 11, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1); hook and status line code read 2026-10-14; robocopy and Remove-Item behaviour with junctions observed 2026-10-14
+verified: 2026-10-15
+source: observed (npm behaviour tested 2026-10-14; twelve waves of parallel agents on a downstream project; Windows 10 and 11, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1); hook and status line code read 2026-10-14, usage-gate grants 2026-10-15; robocopy and Remove-Item behaviour with junctions observed 2026-10-14
 ---
 
 # Claude Code on Windows: what holds
@@ -93,10 +93,13 @@ source: observed (npm behaviour tested 2026-10-14; twelve waves of parallel agen
   inherited separately (a meter may set its own `hold` and inherit the shared `deny`). Each meter
   is judged against its own lines and the worse verdict wins. The base ships HOLD at 50 and no
   deny line; a project that wants a ceiling sets `deny`.
-- Two lifts, for HOLD only, never a deny line: the override file `~/.claude/usage-gate-override.json`
-  (until when, for which meters, why; machine-wide) and an environment variable named by
-  `usage.overrideEnv`, set to `1` when the session starts, which lifts HOLD on both meters for
-  that session. Both exist only on the owner's instruction. Format, fail modes and the reasoning:
+- Two lifts, for HOLD only, never a deny line: grant files in `~/.claude/usage-gate-overrides/`
+  (one `*.json` each: until when, for which meters, why, and a scope of one session, one project
+  path, or the user; the gate matches them against `session_id` and `cwd` on its stdin) and an
+  environment variable named by `usage.overrideEnv`, set to `1` when the session starts, which
+  lifts HOLD on both meters for that session. The legacy single file
+  `~/.claude/usage-gate-override.json` is still read, as a user grant when it names no scope. Both
+  lifts exist only on the owner's instruction. Format, fail modes and the reasoning:
   ADR 0006 and `../design/decisions/0002-hook-specs.md`.
 - Claude Code sends `rate_limits` to the status line only after the session's first response.
   Until then the status line writes nothing new and the cache keeps its last reading, which the
