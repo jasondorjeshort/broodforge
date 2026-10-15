@@ -89,3 +89,5 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-13-verify-agent-reads-reports-not-diffs.md` | question | Is a verify agent that runs the change still wanted beside the reviewer? |
 | `2026-10-13-malformed-policy-falls-back-silently.md` | bug | Usage gate and status line use base defaults on a malformed policy with only a stderr note |
 | `2026-10-13-usage-gate-stale-deny-not-liftable.md` | bug | The stale-data deny has no lift; a headless session is not gated at all |
+| `2026-10-15-review-fixes-amend-or-follow-up.md` | question | Review fixes before a push: amend, fixup and autosquash, or a follow-up commit |
+| `2026-10-15-statusline-command-cwd-relative.md` | bug | Status line command is cwd-relative, unlike the hooks; plain or `:-.` project-dir form |
