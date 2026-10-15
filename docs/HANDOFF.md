@@ -1,13 +1,14 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-15, after the Hatchery merge 58307e2, by Hatchery's main session
+Updated: 2026-10-15, after the decant re-author, by main session
 
 ## Now
 
-- `main` is unpushed past the decant `ee08842`, through the hatchery/main merge `58307e2` (hook
-  paths, ADR 0009). `origin` (empty) is Broodforge, `hatchery` the base; `main` no longer tracks
-  hatchery/main, so the first push is `git push -u origin main`. HOLD 60% session, 75% weekly.
+- `main` is unpushed past the decant `fd4bad2`, through the hatchery/main merge `b4a7b4d` (hook
+  paths, ADR 0009), all the owner's since the 2026-10-15 re-author (backup branch
+  `backup/main-before-reauthor`, delete after the push). `origin` (empty) is Broodforge, `hatchery`
+  the base; `main` tracks nothing, so the first push is `git push -u origin main`. HOLD 60%/75%.
 - Owner is Jason Dorje Short <jdorje@gmail.com>, repo-local git identity. Push only at session
   end on his words; his UX decisions are applied. Design complete: `00` to `07`, ADRs 0020 to 0022.
 - The spike is live on the PC: C25 login done, fixtures in place, C25 and C36 confirmed in
@@ -31,8 +32,7 @@ Updated: 2026-10-15, after the Hatchery merge 58307e2, by Hatchery's main sessio
 
 ## Waiting on user
 
-- Whose Claude account the PC claims spend; npm link targets; droplet entries; the push; whether
-  the decant `ee08842` (author Sam, before the identity fix) is re-authored before that push.
+- Whose Claude account the PC claims spend; npm link targets; droplet entries; the push.
 
 ## Open findings
 
