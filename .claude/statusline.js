@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Status line for Claude Code. Reads the JSON Claude pipes on stdin, prints the working directory (when known)
 // and then the meters line, and keeps ~/.claude/usage-state.json current for the usage-gate hook (.claude/hooks/usage-gate.js).
-// Thresholds for the HOLD and STOP flags come from .claude/hooks/policy.json (usage block); STOP
-// shows only on a meter with a deny line, which the base does not set.
+// Thresholds for the HOLD and STOP flags come from .claude/hooks/policy.json (usage block) and are
+// shown per meter, "(hold 50)" or "(hold 50 stop 90)"; STOP shows only on a meter with a deny line,
+// which the base does not set. "HOLD lifted" replaces HOLD when an override lifts it for this session.
 // Spec: docs/design/decisions/0002-hook-specs.md section 3.
 //
 // Fields: https://code.claude.com/docs/en/statusline. rate_limits appears only on claude.ai
@@ -59,8 +60,8 @@ process.stdin.on('end', () => {
   let d = {};
   try { d = JSON.parse(raw) || {}; } catch (_) { /* print what we can */ }
   let usage = null;
-  let usageVerdict = null;
-  try { ({ usageVerdict } = require('./hooks/policy')); usage = require('./hooks/policy').load().policy.usage; } catch (_) { /* no flags */ }
+  let policy = null;
+  try { policy = require('./hooks/policy'); usage = policy.load().policy.usage; } catch (_) { usage = null; /* no flags */ }
 
   const state = update(d.rate_limits);
   const now = Math.floor(Date.now() / 1000);
@@ -69,8 +70,22 @@ process.stdin.on('end', () => {
   const sevenD = live(state.seven_day);
   const pct = (v) => (typeof v === 'number' ? `${Math.round(v)}%` : 'n/a');
   // Same judgement as the gate: each meter against its own thresholds, the worse one wins.
-  const level = usage ? usageVerdict(usage, { '5h': fiveH ? fiveH.used_percentage : null, '7d': sevenD ? sevenD.used_percentage : null }).level : 0;
-  const flag = level === 2 ? ' STOP' : level === 1 ? ' HOLD' : '';
+  const verdict = usage ? policy.usageVerdict(usage, { '5h': fiveH ? fiveH.used_percentage : null, '7d': sevenD ? sevenD.used_percentage : null }) : { level: 0, hits: [] };
+  // "HOLD lifted" exactly when the gate would let a launch through (policy.holdLifted); any error
+  // reading the grants just means not lifted.
+  let lifted = false;
+  if (verdict.level === 1) {
+    const str = (v) => (typeof v === 'string' && v !== '' ? v : null);
+    const ctx = { sessionId: str(d.session_id), cwd: str((d.workspace && d.workspace.current_dir) || d.cwd) };
+    try { lifted = policy.holdLifted(usage, verdict, ctx, now, process.env); } catch (_) { lifted = false; }
+  }
+  const flag = verdict.level === 2 ? ' STOP' : verdict.level === 1 ? (lifted ? ' HOLD lifted' : ' HOLD') : '';
+  // Each meter's thresholds, "(hold 50)" or "(hold 50 stop 90)"; none when the policy did not load.
+  const limits = (label) => {
+    if (!usage) return '';
+    const t = policy.meterThresholds(usage).find(([l]) => l === label)[1];
+    return ` (hold ${t.hold}${t.deny !== null ? ` stop ${t.deny}` : ''})`;
+  };
 
   // resets_at is epoch seconds. Show the clock time if the reset is within 24h, else the weekday.
   const resetAt = (w) => {
@@ -84,8 +99,8 @@ process.stdin.on('end', () => {
   const parts = [
     (d.model && d.model.display_name) || '?',
     `ctx ${pct(d.context_window && d.context_window.used_percentage)}`,
-    `5h ${pct(fiveH && fiveH.used_percentage)}${resetAt(fiveH)}`,
-    `7d ${pct(sevenD && sevenD.used_percentage)}${resetAt(sevenD)}${flag}`,
+    `5h ${pct(fiveH && fiveH.used_percentage)}${limits('5h')}${resetAt(fiveH)}`,
+    `7d ${pct(sevenD && sevenD.used_percentage)}${limits('7d')}${resetAt(sevenD)}${flag}`,
   ];
   // cost.total_cost_usd (API list-price estimate) is deliberately not shown: on a subscription the
   // meters and their reset times are what matter. Run /usage for the figure.
