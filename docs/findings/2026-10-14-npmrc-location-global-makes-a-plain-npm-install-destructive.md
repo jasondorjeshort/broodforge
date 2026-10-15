@@ -14,17 +14,17 @@ npm folder?
 
 ## What was tried
 
-Observed 2026-10-14. `~\.npmrc` contains `location=global`.
+Observed 2026-10-14. `~/.npmrc` contains `location=global`.
 
 1. A coder ran a plain `npm install` in `spike/` (a new package with `typescript` and
    `@types/node` as dependencies). npm linked the package globally as
    `AppData\Roaming\npm\node_modules\broodforge-spike` and created no `spike/node_modules`.
 2. `npm install --location=project` and `npm_config_location=project npm install` both failed
    with "global requires add, rm, or update option".
-3. `npm install --no-global` treated the global prefix `~\AppData\Roaming\npm` as the
+3. `npm install --no-global` treated the global prefix `~/AppData/Roaming/npm` as the
    project. It wrote a `package.json` and `package-lock.json` there listing only
    `broodforge-spike`, and removed 296 packages ("added 1 package, and removed 296 packages").
-   Log: `~\AppData\Local\npm-cache\_logs\2026-10-15T01_36_50_698Z-debug-0.log`.
+   Log: `~/AppData/Local/npm-cache/_logs/2026-10-15T01_36_50_698Z-debug-0.log`.
 
 ## Result
 

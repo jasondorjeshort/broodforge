@@ -16,7 +16,7 @@ claims are a separate finding.
 
 | Claim | Host | Verdict | When |
 |---|---|---|---|
-| C25 headless login with `CLAUDE_CONFIG_DIR` | PC | confirmed, piped form | 2026-10-15 |
+| C25 headless login with `CLAUDE_CONFIG_DIR` | PC | holds, piped form | 2026-10-15 |
 | C26 `--settings` with `--setting-sources user` | PC | open | |
 | C27 `defer` round trip | PC, then droplet | open | |
 | C28 parallel calls in prompt mode | PC | open | |
@@ -44,7 +44,7 @@ C25 on the droplet is a separate run of the same claim and is still open.
 
 ## Result
 
-C25 is confirmed in its first form. No TTY was needed, and neither retry was used.
+C25 holds in its first form. No TTY was needed, and neither retry was used.
 
 - The engine printed the authorize URL on its piped stdout, and `login.js` relayed it to the owner.
 - `login: paste the code from the browser here and press Enter:` appeared; the pasted code reached
@@ -58,7 +58,7 @@ So the relay sentence in ADR 0020's Credentials section stands on Windows. The `
 the direct terminal login, the ADR's other path, were not needed and remain untested on this host.
 
 The account is not the owner's, which matters for everything after this row. The login signed in as
-the PC owner's Claude Max account on the PC owner's PC; the owner is Jason Dorje Short. C25's verdict does
+the PC owner's Claude Max account; the project owner is a different person. C25's verdict does
 not depend on whose code was pasted, but every later PC claim spends the subscription of whichever
 account `$CFG` holds, and the owner may move the spike to his own account. Switching means deleting
 `$CFG` and running C25 again, which re-tests the claim rather than wasting the work.

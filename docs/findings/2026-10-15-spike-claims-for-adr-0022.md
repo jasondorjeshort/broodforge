@@ -17,7 +17,7 @@ Rows are taken from the host and prerequisite table in `07-spike-plan.md`.
 
 | Claim | Host | Verdict | When |
 |---|---|---|---|
-| C36 what `.claude.json` holds after a login | PC | confirmed, metadata only | 2026-10-15 |
+| C36 what `.claude.json` holds after a login | PC; droplet | holds on the PC, metadata only | 2026-10-15 |
 | C30 binds per reach | droplet | open | |
 | C31 settings file read-only mid-turn | droplet | open | |
 | C32 SIGINT yields a `result`, then a resume | droplet | open | |
@@ -26,6 +26,8 @@ Rows are taken from the host and prerequisite table in `07-spike-plan.md`.
 | C35 shared clone and bundle | PC half, then droplet | open | |
 | C37 instance from a scheduled task | PC | open | |
 | C38 config-directory lists | droplet | open | |
+
+C36 on the droplet is a separate run of the same claim and is still open.
 
 ## What was tried
 
@@ -37,7 +39,7 @@ Rows are taken from the host and prerequisite table in `07-spike-plan.md`.
 
 ## Result
 
-C36 is confirmed on the metadata side. The file is 56693 bytes and the listing is 1284 lines. No key
+C36 holds on the metadata side. The file is 56693 bytes and the listing is 1284 lines. No key
 name contains token, refresh, secret, api, key or credential, and no access or refresh token appears
 by name. The credential lives in the separate `.credentials.json` (524 bytes), which was not opened.
 
@@ -67,4 +69,5 @@ tool-results file and was not committed.
   feature-flag cache that churns, so a backup would copy personal data and noise rather than a
   secret. That is an ADR decision, not a spike verdict.
 - Whether `machineID` and `userID` are identifiers or secrets, if it changes the answer above.
-- The open rows, which all wait on the droplet operator entries or the PC account entry.
+- The open rows. On the PC today: the C35 and C34 PC halves (C35 spends nothing); the rest wait on
+  the droplet operator entries or the PC account entry.

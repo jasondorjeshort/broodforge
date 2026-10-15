@@ -25,21 +25,21 @@ recorded fixtures move to `fixtures/engine/<name>/` after a person reads them.
 
 The owner's `~/.npmrc` has `location=global`: never a bare `npm install`, `npm ci`, `-g` or
 `--no-global` (`docs/reference/claude-code-on-windows.md`, "npm on this PC"). Create an empty
-file first (`: > <empty.npmrc>`), then:
+file first (`: > <empty.npmrc>`), and set `B=<repo>/spike` (this clone's path, forward slashes), then:
 
 ```
-npm_config_userconfig=<empty.npmrc> npm --prefix ~/Documents/src/broodforge/spike install
-~/Documents/src/broodforge/spike/node_modules/.bin/tsc -p ~/Documents/src/broodforge/spike/tsconfig.json
+npm_config_userconfig=<empty.npmrc> npm --prefix $B install
+$B/node_modules/.bin/tsc -p $B/tsconfig.json
 ```
 
 ## PC run order
 
-`B=~/Documents/src/broodforge/spike`, `S=$TEMP/bf-spike` (`BF_SPIKE` overrides),
+`B` as above, `S=$TEMP/bf-spike` (`BF_SPIKE` overrides),
 `RUN="node $B/run.js"`. Every real turn spends the owner's subscription; read both meters from
 `~/.claude/usage-state.json` before and after each group.
 
 1. `node $B/setup.js pc` (tree, canon, `$S/cfg`, settings, hook mode `allow`); `$RUN --version-only`.
-2. C25, the owner: `docs/operator/2026-10-14-spike-login-on-the-pc.md`. C36: `node $B/keys.js $S/cfg/.claude.json`.
+2. C25, the owner (see Login below). C36: `node $B/keys.js $S/cfg/.claude.json`.
 3. S1: `$RUN --out $S/fx/basic --prompt "Read hello.txt and reply with its one word."`, then
    `$RUN --out $S/fx/basic --resume last --prompt "Say the word again."`.
 4. C27: `node $B/hook.js mode defer`; `$RUN --mode prompt --out $S/fx/defer --prompt "Create a file named hi.txt containing hi."`;
@@ -55,5 +55,32 @@ npm_config_userconfig=<empty.npmrc> npm --prefix ~/Documents/src/broodforge/spik
    C26 (`node $B/setup.js settings --no-hook`; `node $B/setup.js settings --out $S/alt-settings.json`;
    `--settings $S/alt-settings.json`, then add `--setting-sources ""`; restore with `node $B/setup.js settings`).
 9. Replay every fixture: `$RUN --replay $S/fx/<name>`; no `unknown` for a kind 03 lists.
+
+## Login
+
+C25, run by the owner on the PC because the code is theirs; each login adds one device to the
+subscription. Fixtures first if `$S/cfg` does not exist (`node $B/setup.js pc`, spends nothing).
+The piped form, the relay's shape (a `login:` line, the engine's URL, then the prompt to paste the
+code; expect `login: engine exited 0`, `login: auth status: ...`, and `.credentials.json` listed):
+
+```
+CLAUDE_CONFIG_DIR="$S/cfg" node $B/login.js
+```
+
+If the engine complains of a terminal, prints no URL within about 15 seconds or refuses the code,
+retry with the console form (the engine writes to the window, only the code goes through the pipe;
+`--console` is the spike's flag, never the engine's, whose own `auth login --console` bills the
+Anthropic Console API):
+
+```
+CLAUDE_CONFIG_DIR="$S/cfg" node $B/login.js --console
+```
+
+If that fails too, C25 is refuted on the PC; log in directly in the terminal and say so:
+`CLAUDE_CONFIG_DIR="$S/cfg" ~/AppData/Roaming/npm/node_modules/@anthropic-ai/claude-code/bin/claude.exe auth login`.
+Check with `... claude.exe auth status --text` (same variable) and `ls -la "$S/cfg"`: logged in, with
+`.credentials.json` and `.claude.json`. Report which form worked, with the `login:` lines and
+engine messages minus the code and the URL's query string. A different account means deleting
+`$S/cfg` and logging in again.
 
 The droplet order is the companion's; there `$RUN --spawn bwrap` and `hookmode.sh` replace the PC forms.
