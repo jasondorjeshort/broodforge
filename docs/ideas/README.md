@@ -72,3 +72,4 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-14-git-guard-could-scope-commits-by-repository-location.md` | chore | A policy key exempting repositories under the scratchpad or temp directory from the commit rule, so spikes, reviews and hook tests can make scratch commits; base work |
 | `2026-10-14-sessions-run-remote-controlled-on-the-droplet.md` | feature | Replace the PC-local wrapper script with remote-controlled sessions on the droplet, cloning per session |
 | `2026-10-14-ux-choices-that-could-become-options.md` | feature | Venue, footer, trace, allow-session button, mode names, model switch, dot aliases as user or channel options |
+| `2026-10-15-carry-back-pusher-check-5a-and-adr-0009-row.md` | chore | Hatchery takes the pusher's personal-data check 5a and the missing ADR 0009 index row; base work |

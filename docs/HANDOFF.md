@@ -6,9 +6,9 @@ Updated: 2026-10-15, after the decant re-author, by main session
 ## Now
 
 - `main` is unpushed past the decant `fd4bad2`, through two hatchery/main merges (grants, ADR
-  0006; hook paths, ADR 0009), all the owner's since the 2026-10-15 re-author (backup branch
-  `backup/main-before-reauthor`, delete after the push). `origin` (empty) is Broodforge, `hatchery`
-  the base; `main` tracks nothing, so the first push is `git push -u origin main`. HOLD 60%/75%.
+  0006; hook paths, ADR 0009); history rewritten 2026-10-15 to the owner's identity and to roles
+  instead of names (owner deletes `backup/*` and `refs/original` after the push). `origin` (empty)
+  is Broodforge, `hatchery` the base; first push is `git push -u origin main`. HOLD 60%/75%.
 - Owner is Jason Dorje Short <jdorje@gmail.com>, repo-local git identity. Push only at session
   end on his words; his UX decisions are applied. Design complete: `00` to `07`, ADRs 0020 to 0022.
 - The spike is live on the PC: C25 login done, fixtures in place, C25 and C36 hold in
