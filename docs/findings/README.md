@@ -11,3 +11,4 @@ Open items are marked in the Status column; `HANDOFF.md` links the open ones.
 
 | File | Status | Area | One line |
 |---|---|---|---|
+| `2026-10-14-npmrc-location-global-makes-a-plain-npm-install-destructive.md` | resolved | environment | `location=global` in the user `.npmrc` turns `npm install` global; `--no-global` pruned 296 global packages. |

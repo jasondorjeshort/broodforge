@@ -1,6 +1,6 @@
 ---
 verified: 2026-10-14
-source: observed (twelve waves of parallel agents on a downstream project; Windows 10 and 11, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1); hook and status line code read 2026-10-14; robocopy and Remove-Item behaviour with junctions observed 2026-10-14
+source: observed (npm behaviour tested 2026-10-14; twelve waves of parallel agents on a downstream project; Windows 10 and 11, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1); hook and status line code read 2026-10-14; robocopy and Remove-Item behaviour with junctions observed 2026-10-14
 ---
 
 # Claude Code on Windows: what holds
@@ -63,6 +63,15 @@ source: observed (twelve waves of parallel agents on a downstream project; Windo
 - Prove a push: after `git push`, `git fetch` and compare `git rev-parse HEAD` with the remote ref;
   report both SHAs. A command's own success output is not evidence of what reached the remote.
 - Never truncate a status check to its first line; `git status --short` in full.
+
+## npm on this PC
+
+- The owner's `~/.npmrc` has `location=global`, so a plain `npm install` is a global install and
+  `npm install --no-global` prunes the global folder. Never run a bare `npm install`, `npm ci` or
+  `npm install --no-global`; `--location=project` and `npm_config_location` do not override it.
+- Working form, tested: `npm_config_userconfig=<path to an empty file> npm --prefix <dir> install`.
+  The empty user config hides the setting; the global folder was unchanged and `node_modules`
+  appeared in `<dir>`. Evidence: `../findings/2026-10-14-npmrc-location-global-makes-a-plain-npm-install-destructive.md`.
 
 ## Shared state
 
