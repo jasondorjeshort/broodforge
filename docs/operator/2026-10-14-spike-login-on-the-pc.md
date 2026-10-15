@@ -1,6 +1,6 @@
 **Log the spike's own Claude Code config directory into your subscription on the PC, through the spike's piped login (claim C25).** It waits on you because the login code is yours: an agent must not complete a login on your account. The claim, its evidence and what a refutation changes are `docs/design/07-spike-plan.md` (C25); every later PC spike run uses the directory this creates, and the owner's own `~/.claude` is never read. This login adds one device to your subscription.
 
-Status: waiting. Checked when filed: `$TEMP/bf-spike` does not exist on the PC, so no login has been made.
+Status: done 2026-10-15, in the piped form, on the Claude Max account belonging to the PC owner. `$TEMP/bf-spike/cfg` now holds `.credentials.json` and `.claude.json`, and the result is recorded as C25 in `docs/findings/2026-10-15-spike-claims-for-adr-0020.md`. Not deleted yet: if the spike moves to a different Claude account, delete `$CFG` and run this entry again.
 
 Runs in Git Bash as you, on the PC. True first: the spike is built (`spike/README.md`, Build). If `$TEMP/bf-spike/cfg` does not exist yet, create the fixtures first (no engine, spends nothing):
 
