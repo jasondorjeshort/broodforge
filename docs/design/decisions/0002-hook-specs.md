@@ -210,7 +210,16 @@ agents run. Line 1 is the working directory exactly as received
 output is the meters line alone, with no blank first line. The meters line, after line 1's newline
 when there is one, shows model, context, both windows with their reset times, and ` HOLD` or ` STOP` by the same per-meter judgement as the gate (the
 helper in `policy.js`; ` STOP` only on a meter with a deny line); a cached window past its
-`resets_at` shows `n/a`.
+`resets_at` shows `n/a`. Each window carries its thresholds from `meterThresholds`, `(hold 50)` or
+`(hold 50 stop 90)`, also when it reads `n/a`, so a line reads
+`Opus 5.5 | ctx n/a | 5h 24% (hold 50) ->12:20 | 7d 72% (hold 50) ->Mon 06:00 HOLD`; a missing or malformed `policy.json`
+falls back to the base values, as the gate does (ADR 0006), and only a `policy.js` that cannot be required drops
+the parentheses and the flag. At HOLD the flag reads ` HOLD lifted` when the gate's grant rules would let a launch
+through, judged on the readings the line shows; the status line does not judge staleness, the gate does, so on stale
+data under `whenStale` `deny` the line can read ` HOLD lifted` while the gate denies (`usage.overrideEnv` set to `1`, or the grants that apply to the `session_id` and
+`workspace.current_dir` (else `cwd`) on stdin lift every tripped meter; the grant logic is `policy.js`'s,
+shared with the gate); a partial lift stays ` HOLD`, ` STOP` is never lifted, and a failure reading the
+grants means not lifted.
 
 Gate. Each window is judged against its own thresholds (`usage.fiveHour`, `usage.sevenDay`, else the shared `usage.hold` and `usage.deny`) and the worse verdict wins; a window past its `resets_at` has reset and does not
 count. No file, no `updatedAt`, or data older than `usage.staleSeconds` is stale: with `whenStale`
@@ -248,4 +257,4 @@ out-of-scope file; several expired files in one clause; a `reason` that is not a
 without `session_id`, without `cwd`, and unparseable), UX (staleness both
 ways, a reset window, the example policies, per-meter thresholds, a malformed policy including a
 string `deny`, a pre-merge cache file), and S (the status line's merge, the untouched file without
-`rate_limits`, malformed stdin, the directory line from `current_dir`, from `cwd` alone, and absent, policy flags, no STOP without a deny line, a failed rename).
+`rate_limits`, malformed stdin, the directory line from `current_dir`, from `cwd` alone, and absent, policy flags, no STOP without a deny line, the thresholds beside each meter, `HOLD lifted` for a grant for this session and `HOLD` for another session's, a partial lift or STOP, a failed rename).

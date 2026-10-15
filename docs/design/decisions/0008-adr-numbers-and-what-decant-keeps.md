@@ -2,6 +2,7 @@
 
 Date: 2026-10-14
 Status: accepted
+Amended by [0009](0009-adr-numbers-when-both-tests-pass.md) for a tree that passes both numbering tests.
 
 Record: no proposal; owner decision of 2026-10-14 against a real case, as ADR 0004 was. The case:
 the base was being readied to decant a new project, and the decant as written (ADR 0002,

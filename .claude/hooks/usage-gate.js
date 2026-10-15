@@ -16,15 +16,12 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { load, usageVerdict, classifyGrant } = require('./policy');
+const { load, usageVerdict, readGrants, judgeGrants, holdCovered } = require('./policy');
 
 const STATE_FILE = path.join(os.homedir(), '.claude', 'usage-state.json');
-// Override grants, written only on the owner's word and never written or deleted here: every
-// *.json file directly in GRANT_DIR, then the legacy single file. Each lifts HOLD (never the deny
-// line) until "until" on its meters, for one session, one project or the user. Format and
+// Override grants (read and judged in policy.js, shared with the status line) lift HOLD, never the
+// deny line, until "until" on their meters, for one session, one project or the user. Format and
 // matching: ADR 0006, The HOLD override.
-const GRANT_DIR = path.join(os.homedir(), '.claude', 'usage-gate-overrides');
-const LEGACY_FILE = path.join(os.homedir(), '.claude', 'usage-gate-override.json');
 const POLICY_DOC = 'docs/design/decisions/0006-hook-policy-file.md';
 
 function readJson(file) {
@@ -45,22 +42,6 @@ function readPayload(raw) {
   if (!p || typeof p !== 'object') p = {};
   const str = (v) => (typeof v === 'string' && v !== '' ? v : null);
   return { sessionId: str(p.session_id), cwd: str(p.cwd) };
-}
-
-// [{ name, grant }] in file-name order, the legacy file last. Other names and subdirectories are
-// ignored; an absent directory is no grants. An unreadable file has grant null (malformed).
-function readGrants() {
-  const out = [];
-  let names = [];
-  try { names = fs.readdirSync(GRANT_DIR).filter((n) => n.endsWith('.json')).sort(); } catch (_) { /* no directory */ }
-  for (const name of names) {
-    const file = path.join(GRANT_DIR, name);
-    let isFile = false;
-    try { isFile = fs.statSync(file).isFile(); } catch (_) { /* vanished or a broken link */ }
-    if (isFile) out.push({ name, grant: readJson(file) });
-  }
-  if (fs.existsSync(LEGACY_FILE)) out.push({ name: path.basename(LEGACY_FILE), grant: readJson(LEGACY_FILE) });
-  return out;
 }
 
 const scopeText = (s) => (s.kind === 'user' ? 'user' : `${s.kind} ${s.value}`);
@@ -108,11 +89,9 @@ function main(raw) {
       return;
     }
     const ctx = readPayload(raw);
-    const grants = readGrants().map((g) => Object.assign(g, { c: classifyGrant(g.grant, now, ctx) }));
-    const applying = grants.filter((g) => g.c.status === 'applies');
-    const lifted = ['5h', '7d'].filter((m) => applying.some((g) => g.c.meters.includes(m)));
+    const { grants, applying, lifted } = judgeGrants(readGrants(), now, ctx);
     const labels = v.hits.map((h) => h.label);
-    if (lifted.length && labels.every((l) => lifted.includes(l))) {
+    if (holdCovered(lifted, v)) {
       // The reason of every grant used, that is every applying grant that lifts a tripped meter.
       for (const g of applying.filter((a) => a.c.meters.some((m) => labels.includes(m)))) {
         note(`HOLD (${detail}) lifted on ${g.c.meters.join(' and ')} by override ${g.name} (${scopeText(g.c.scope)}) until ${new Date(g.grant.until * 1000).toLocaleString()}: ${typeof g.grant.reason === 'string' && g.grant.reason ? g.grant.reason : 'no reason given'}`);

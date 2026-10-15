@@ -17,6 +17,7 @@
 // Test seam: HOOK_POLICY_FILE names another file (test-hooks.js sets it; unset in normal use).
 'use strict';
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const DEFAULTS = {
@@ -199,12 +200,62 @@ function classifyGrant(grant, now, ctx) {
   return { status: inScope ? 'applies' : 'out', meters, scope };
 }
 
+// Override grants, written only on the owner's word and never written or deleted by a hook: every
+// *.json file directly in ~/.claude/usage-gate-overrides/, then the legacy single file. Resolved at
+// call time from the home directory, so a test's scratch HOME applies.
+function readJson(file) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return null; }
+}
+// [{ name, grant }] in file-name order, the legacy file last. Other names and subdirectories are
+// ignored; an absent directory is no grants. An unreadable file has grant null (malformed).
+function readGrants() {
+  const dir = path.join(os.homedir(), '.claude', 'usage-gate-overrides');
+  const legacy = path.join(os.homedir(), '.claude', 'usage-gate-override.json');
+  const out = [];
+  let names = [];
+  try { names = fs.readdirSync(dir).filter((n) => n.endsWith('.json')).sort(); } catch (_) { /* no directory */ }
+  for (const name of names) {
+    const file = path.join(dir, name);
+    let isFile = false;
+    try { isFile = fs.statSync(file).isFile(); } catch (_) { /* vanished or a broken link */ }
+    if (isFile) out.push({ name, grant: readJson(file) });
+  }
+  if (fs.existsSync(legacy)) out.push({ name: path.basename(legacy), grant: readJson(legacy) });
+  return out;
+}
+
+// Classifies each grant from readGrants for this call. Returns { grants, applying, lifted }: grants
+// with a .c (classifyGrant result) added, those whose status is "applies", and the meters ("5h",
+// "7d") the applying grants lift between them.
+function judgeGrants(grants, now, ctx) {
+  const judged = grants.map((g) => Object.assign(g, { c: classifyGrant(g.grant, now, ctx) }));
+  const applying = judged.filter((g) => g.c.status === 'applies');
+  const lifted = METERS.filter((m) => applying.some((g) => g.c.meters.includes(m)));
+  return { grants: judged, applying, lifted };
+}
+
+// True when the lifted meters cover every meter a HOLD verdict tripped (never for STOP: the caller
+// asks only at level 1).
+function holdCovered(lifted, verdict) {
+  const labels = verdict.hits.map((h) => h.label);
+  return lifted.length > 0 && labels.every((l) => lifted.includes(l));
+}
+
+// Would the gate let a launch through at this HOLD verdict: usage.overrideEnv names a variable in env
+// set to "1", or the grants that apply lift every tripped meter. Level 2 is never lifted. Reads the
+// grant files; throws only if they cannot be classified, so a caller that must not fail wraps it.
+function holdLifted(usage, verdict, ctx, now, env) {
+  if (verdict.level !== 1) return false;
+  if (usage.overrideEnv && (env || process.env)[usage.overrideEnv] === '1') return true;
+  return holdCovered(judgeGrants(readGrants(), now, ctx).lifted, verdict);
+}
+
 // True when name matches one of the patterns; "*" matches any run of characters, "/" included.
 function matches(patterns, name) {
   return patterns.some((p) => new RegExp(`^${p.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`).test(name));
 }
 
-module.exports = { load, matches, usageVerdict, meterThresholds, classifyGrant, DEFAULTS };
+module.exports = { load, matches, usageVerdict, meterThresholds, classifyGrant, readGrants, judgeGrants, holdCovered, holdLifted, DEFAULTS };
 
 if (require.main === module) {
   const r = load(process.argv[2]);

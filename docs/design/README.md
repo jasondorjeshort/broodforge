@@ -44,6 +44,9 @@ Decisions so far:
   Hatchery uses `0001` to `0019` and a decanted project starts at `0020`; a decant keeps every
   Hatchery ADR and the Windows reference, deletes proposals, findings, ideas and operator entries;
   resolves the deferral in ADR 0004 and amends ADR 0002 where it says only 0001 and 0002 are kept.
+- [0009 ADR numbers when both tests pass](decisions/0009-adr-numbers-when-both-tests-pass.md): a
+  tree that is both joined to the base and holds a `Hatchery base: <sha>` line numbers as adopted; the
+  line wins. Amends 0008, Numbers.
 - [0020 Harness, language, library, toolchain](decisions/0020-harness-language-library-toolchain.md):
   the Claude Code CLI the owner installs, run as one `-p` stream-json process per turn and
   resumed by session id, behind an adapter interface with a recorded-transcript fake; TypeScript

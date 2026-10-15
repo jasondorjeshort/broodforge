@@ -844,10 +844,10 @@ const slHome = path.join(scratch, 'sl-home');
 fs.mkdirSync(path.join(slHome, '.claude'), { recursive: true });
 const slFile = path.join(slHome, '.claude', 'usage-state.json');
 const readSl = () => { try { return fs.readFileSync(slFile, 'utf8'); } catch (_) { return null; } };
-function statusline(stdin, policy) {
+function statusline(stdin, policy, extraEnv) {
   const r = spawnSync(NODE, [path.join(HOOKS, '..', 'statusline.js')], {
     input: stdin, encoding: 'utf8', timeout: 30000,
-    env: envWith({ HOME: slHome, USERPROFILE: slHome, HOOK_POLICY_FILE: policy || POLICIES.hatchery }),
+    env: envWith(Object.assign({ HOME: slHome, USERPROFILE: slHome, HOOK_POLICY_FILE: policy || POLICIES.hatchery }, extraEnv)),
   });
   return { code: r.status, stdout: r.stdout || '' };
 }
@@ -895,6 +895,45 @@ for (const [id, label, stdin, policy, check] of S) {
   let res;
   try { res = check(r, before, after); } catch (e) { res = e.message; }
   report(id, label, res === true, res, r.stdout);
+}
+// Thresholds beside each meter, and "HOLD lifted" when a grant for this session lifts every tripped
+// meter. Grants live in the scratch HOME, as the gate's UG cases do.
+{
+  const slGrants = path.join(slHome, '.claude', 'usage-gate-overrides');
+  const withSession = (five, seven, sid) => JSON.stringify(Object.assign(JSON.parse(rl(five, seven)), { session_id: sid }));
+  const withDir = (five, seven, dir) => JSON.stringify(Object.assign(JSON.parse(rl(five, seven)), { workspace: { current_dir: dir } }));
+  const envPolicy = scratchPolicy('sl-override-env', Object.assign({}, HATCHERY_POLICY, { usage: Object.assign({}, HATCHERY_POLICY.usage, { overrideEnv: 'SL_TEST_OVERRIDE' }) }));
+  const proj = path.join(scratch, 'sl-project');
+  const SL = [
+    ['S17', 'base policy shows (hold 50) beside both meters, no stop part', rl(24, 72), null, {},
+      (o) => (o.includes('5h 24% (hold 50) ->') && o.includes('7d 72% (hold 50) ->') && !o.includes('stop')) || o],
+    ['S18', 'per-meter policy shows each meter its own hold and stop', rl(24, 72), POLICIES.perMeter, {},
+      (o) => (o.includes('5h 24% (hold 60 stop 80) ->') && o.includes('7d 72% (hold 75 stop 90) ->')) || o],
+    ['S19', 'HOLD with a grant for this session reads HOLD lifted', withSession(55, 20, 'x'), null, { 'sess.json': { until: nowSec + 3600, session: 'x' } },
+      (o) => o.endsWith(' HOLD lifted') || o],
+    ['S20', 'HOLD with a grant for another session reads HOLD', withSession(55, 20, 'x'), null, { 'sess.json': { until: nowSec + 3600, session: 'y' } },
+      (o) => (o.endsWith(' HOLD') && !o.includes('lifted')) || o],
+    ['S21', 'HOLD on 5h with a grant lifting only 7d stays HOLD', withSession(55, 20, 'x'), null, { 'sess.json': { until: nowSec + 3600, session: 'x', meters: ['7d'] } },
+      (o) => (o.endsWith(' HOLD') && !o.includes('lifted')) || o],
+    ['S22', 'STOP with a grant for this session stays STOP', withSession(85, 10, 'x'), deny80, { 'sess.json': { until: nowSec + 3600, session: 'x' } },
+      (o) => (o.endsWith(' STOP') && !o.includes('lifted')) || o],
+    ['S23', 'HOLD with a project grant matching workspace.current_dir reads HOLD lifted', withDir(55, 20, path.join(proj, 'sub')), null, { 'proj.json': { until: nowSec + 3600, project: proj } },
+      (o) => o.endsWith(' HOLD lifted') || o],
+    ['S24', 'HOLD with a project grant for another directory reads HOLD', withDir(55, 20, path.join(scratch, 'elsewhere')), null, { 'proj.json': { until: nowSec + 3600, project: proj } },
+      (o) => (o.endsWith(' HOLD') && !o.includes('lifted')) || o],
+    ['S25', 'HOLD with usage.overrideEnv set to 1 in the environment reads HOLD lifted', rl(55, 20), envPolicy, {},
+      (o) => o.endsWith(' HOLD lifted') || o, { SL_TEST_OVERRIDE: '1' }],
+  ];
+  for (const [id, label, stdin, policy, grants, check, extraEnv] of SL) {
+    if (!selected(id)) continue;
+    fs.rmSync(slGrants, { recursive: true, force: true });
+    fs.mkdirSync(slGrants, { recursive: true });
+    for (const [name, contents] of Object.entries(grants)) fs.writeFileSync(path.join(slGrants, name), JSON.stringify(contents));
+    const r = statusline(stdin, policy, extraEnv);
+    const res = check(r.stdout);
+    report(id, label, res === true, res, r.stdout);
+  }
+  fs.rmSync(slGrants, { recursive: true, force: true });
 }
 // A cached window past its reset reads as n/a rather than its old number.
 if (selected('S08')) {

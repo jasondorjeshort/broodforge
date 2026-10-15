@@ -17,8 +17,11 @@ proposal; major choices arrive here through the `proposal` skill.
    first ADR is `0020` or the next free number above it, never one in Hatchery's range even when
    that is free; a project that adopted Hatchery keeps its own numbering. A proposal takes the
    number of the ADR it will become. Which case this tree is: Hatchery itself has no `hatchery`
-   remote; decanted means `git merge-base HEAD hatchery/main` succeeds; adopted means a
-   `Hatchery base:` line exists under `docs/design/decisions/`.
+   remote; decanted means `git merge-base HEAD hatchery/main` succeeds; adopted means a real
+   base line exists, not the phrase in prose (a decant keeps ADRs that quote it):
+   `grep -rhE "^Hatchery base: [0-9a-f]{7,40}" docs/design/decisions/` matches. If both tests pass
+   (an adopted project whose history was later joined to the base), that line wins and the tree
+   numbers as adopted (ADR 0009).
 2. Write from `template.md` in this directory with the Write tool. Status `accepted` (the
    coordinator settles technical decisions after the critic step; `proposed` only when the user
    must decide, which is anything humans see or touch).

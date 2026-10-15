@@ -13,6 +13,7 @@ reasoning map are in `../README.md`, Decisions so far; this list is the one-line
 | `0006-hook-policy-file.md` | Per-project hook choices in `.claude/hooks/policy.json` (Hatchery) |
 | `0007-queues-triage-and-one-review.md` | Delete-when-done queues, triage, one review per change (Hatchery) |
 | `0008-adr-numbers-and-what-decant-keeps.md` | Hatchery owns 0001 to 0019; what a decant keeps (Hatchery) |
+| `0009-adr-numbers-when-both-tests-pass.md` | ADR numbers when a tree is both joined and has a base line (Hatchery) |
 | `0020-harness-language-library-toolchain.md` | Claude Code CLI as one process per turn, TypeScript on Node 24, discord.js, npm; policy and prompt modes through a `PreToolUse` hook; credential shapes under the terms |
 | `0021-storage.md` | SQLite store with an audit table, file configuration, temp-directory scratch |
 | `0021-backup-and-restore.md` | Companion to 0021: snapshot, backup set, restore per host, rehearsal |
