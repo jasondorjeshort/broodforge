@@ -1,7 +1,7 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-14, at the owner-decisions commit on top of 56eea04, by main session
+Updated: 2026-10-14, at the amended spike-plan commit on top of 8ddc962, by main session
 
 ## Now
 
@@ -13,23 +13,25 @@ Updated: 2026-10-14, at the owner-decisions commit on top of 56eea04, by main se
   each commit reviewed once with fixes amended. The owner answered every UX decision on
   2026-10-14; they are applied in `04-ux.md` and the config keys in `03-architecture.md`. UX
   choices that may become options later are one idea in `docs/ideas/`.
-- Spike claims C25 to C39 in ADRs 0020 and 0022 are untested; nothing runs until they are.
+- Spike claims C25 to C39 in ADRs 0020 and 0022 are untested; `07-spike-plan.md` and its droplet
+  companion say how, in the order that hurts most if refuted, reviewed once. Nothing in `src/`
+  until the stop claims hold. The session hit HOLD on the 5-hour meter at the end of 2026-10-14.
 
 ## Next
 
-1. Reviewer reads the owner-decisions commit (small; 03, 04, 05, one idea).
-2. Architect: a spike plan for claims C25 to C39 (which host, which claim, what evidence
-   settles it, what each refutation would change), as `docs/design/07-spike-plan.md`
-   [no-check: being written].
-3. Owner runs the operator entries for the droplet and the PC; a tester then writes
+1. Pusher pushes `main` on the owner's words, at session end; nothing else is queued before it.
+2. Owner completes the device logins the plan names and runs the operator entries; the
+   coder runs the PC claims first (C25, C36, S1, C27, C39, S2, C28, C26) in `spike/`
+   [no-check: created by the coder], filing one finding per ADR.
+3. After the droplet entries: the droplet claims (C30 to C35, C38, C29); a tester writes
    `docs/reference/droplet-host-setup.md` from them [no-check: written when the owner reports].
 4. Coder: the engine adapter and the fake engine first (05 drives them without Discord), then
    the hook, then storage; Discord last.
-5. Pusher pushes `main` on the owner's words, at session end.
 
 ## Waiting on user
 
-- Running the operator entries (`docs/operator/README.md`).
+- Running the operator entries (`docs/operator/README.md`) and the spike logins; the spike
+  spends Haiku one-line turns on the owner's subscription, under the usage gate's HOLD line.
 - When to push.
 
 ## Open findings

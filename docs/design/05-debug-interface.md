@@ -132,7 +132,7 @@ yet]). Adapter alone, no store, no session: `broodforge engine run --fake <fixtu
 <n>] [--cwd <dir>] --prompt "<text>"` streams `EngineEvent`s as JSONL to stdout exactly as the
 adapter parsed them and exits with the fixture's `exit` code; `engine run --real --credential
 <id> --cwd <dir> --prompt "<text>" [--resume <engine session id>]` does the same through the
-configured spawn backend and is how the spike checks C25 to C29. `engine record --credential
+configured spawn backend; it is the production form of the spike's throwaway runner, which comes first (`07-spike-plan.md`). `engine record --credential
 <id> --cwd <dir> --out <fixture dir> --prompt "<text>"` runs the real engine and writes the raw
 lines as `turn-<n>.jsonl` (`n` counting up in an existing directory, `--resume` taken from the
 previous turn's `init`) plus a `fixture.json` without delays. The recorder redacts nothing: a

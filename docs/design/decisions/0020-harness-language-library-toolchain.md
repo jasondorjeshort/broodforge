@@ -158,3 +158,9 @@ long-lived session; a second harness makes the per-turn model the wrong default.
 2026-10-14 (review of 03): the read class is `Read`, `Glob`, `Grep`, `LS` and the engine's other file-reading tools, allowed only on paths that resolve under the session tree or the canonical checkout, with `.credentials.json` and the config directory denied everywhere; `WebFetch` and `WebSearch` are not read class: prompt mode defers them, policy mode denies them until a reach allows the network. The hook catches every error and exits 2, because only exit 2 blocks; C39 added for the engine side of that contract. Recorded in `../03-hook-contract.md`.
 
 2026-10-14 (review of 184412c): models used by subagents appear in `modelUsage`, verified by the critic (claim C8, `proposals/0020-critic-review.md`), so the trailer rule covers them.
+
+2026-10-14 (review of 043382f): engine 2.1.296 defaults `--permission-prompts` to `host`, so a call that no hook answers in `-p` with stdin closed may emit a `control_request` and wait for an answer that never comes; observed by the reviewer in help text; the spike confirms (C39, C28 in `../07-spike-plan.md`). If it does, `--permission-prompts none` joins the flag list in Decision, Mechanism, on every process.
+
+2026-10-14 (review of 043382f): `--bare` skips the hooks in settings files on engine 2.1.296, observed by the reviewer in help text, so the deferral of `--bare` for API-key turns is withdrawn and C26 no longer gates it; `--bare` is never used, as Settings sources already says.
+
+2026-10-14 (07-spike-plan): the spike's throwaway runner precedes the adapter interface and the fake harness named in the spike paragraph above, not the other way round; its recorded fixtures are the fake's first input, and `engine run --real` is the runner's production form (`../07-spike-plan.md`).
