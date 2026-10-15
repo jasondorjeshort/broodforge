@@ -42,8 +42,8 @@ never came from Hatchery: stop and tell me to use the "Adopt the Hatchery practi
 the Hatchery README); `git status --porcelain` is empty; I am on this project's working branch.
 Then load the `update-from-hatchery` skill and follow it: add the remote `hatchery`
 (https://github.com/jasondorjeshort/hatchery.git) if missing, fetch it, pick the mode the skill
-describes (merge when there is a merge-base, patch when the project's adopt-hatchery ADR records a
-Hatchery base commit), and resolve conflicts by the skill's rule: this project's own text wins in
+describes (patch when the project's adopt-hatchery ADR records a Hatchery base commit, even if
+there is a merge-base; otherwise merge when there is a merge-base), and resolve conflicts by the skill's rule: this project's own text wins in
 README.md, the project-specific sections of CLAUDE.md, docs/HANDOFF.md, docs/ideas/, and
 everything under docs/design/, docs/findings/, docs/reference/; the base wins under .claude/
 unless an ADR here records a reason to differ. Leave no conflict markers. Re-run the project's

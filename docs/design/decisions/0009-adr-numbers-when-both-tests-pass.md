@@ -5,6 +5,8 @@ Status: accepted
 
 Record: no proposal; a downstream project met the case and settled it for itself; this carries the
 rule into the base. Amends ADR 0008, Numbers, for the case below; the rest of 0008 stands.
+Amended by [0010](0010-update-mode-when-both-tests-pass.md): the update procedure, put out of
+scope below, now takes the same tie-break.
 
 ## Context
 

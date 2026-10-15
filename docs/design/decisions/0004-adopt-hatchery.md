@@ -109,7 +109,8 @@ rule for new files, put the retrofit of existing files in `docs/backlog.md`. No:
 
 One update skill, two modes, chosen by step 1: `git merge-base HEAD hatchery/main` succeeds, merge
 mode (decanted project, unchanged); it fails and a `Hatchery base:` line exists, patch mode; neither,
-stop and name the adoption prompt. Patch mode: `git log --oneline <base>..hatchery/main` is the
+stop and name the adoption prompt. Amended by ADR 0010: the base line is tested first and wins
+over `merge-base`. Patch mode: `git log --oneline <base>..hatchery/main` is the
 incoming list; `git diff <base> hatchery/main -- .claude CLAUDE.md` (plus `LICENSES` when present) is
 piped to `git apply --3way`; conflicts are resolved by the same rule as merge mode; the base line is
 bumped; the runner commits. Why not re-run `adopt-hatchery`: adoption makes one-time decisions with

@@ -43,5 +43,8 @@ Decisions so far:
 - [0009 ADR numbers when both tests pass](decisions/0009-adr-numbers-when-both-tests-pass.md): a
   tree that is both joined to the base and holds a `Hatchery base: <sha>` line numbers as adopted; the
   line wins. Amends 0008, Numbers.
+- [0010 Update mode when both tests pass](decisions/0010-update-mode-when-both-tests-pass.md): the
+  anchored `Hatchery base: <sha>` line means patch mode from that sha whatever `merge-base` says;
+  a join merge is a project's recorded departure, not base procedure. Amends 0009 and 0004.
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).

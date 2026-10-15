@@ -20,11 +20,15 @@ project's own `NNNN-adopt-hatchery.md` records the base commit).
    in the project's `CLAUDE.md` Git section, or the one the user named; never assume `main`).
 2. Remote: `git remote -v`. If `hatchery` is missing,
    `git remote add hatchery https://github.com/jasondorjeshort/hatchery.git`. `git fetch hatchery`.
-3. Mode. `git merge-base HEAD hatchery/main` succeeds: merge mode, `FROM=$(git merge-base HEAD
-   hatchery/main)`. It fails: `FROM=$(grep -rho "Hatchery base: [0-9a-f]\{7,40\}" docs/
-   | head -1 | cut -d' ' -f3)`; non-empty means patch mode. Both empty: stop, the project has no
-   relation to Hatchery; name the adoption prompt. Record `git log --oneline $FROM..hatchery/main` as
-   the incoming base commits; if empty, report "already up to date" and stop.
+3. Mode (ADR 0010). First the anchored base line, the same test as the `adr` skill's step 1:
+   `FROM=$(grep -rhE "^Hatchery base: [0-9a-f]{7,40}" docs/design/decisions/ | head -1 | cut -d' ' -f3)`;
+   non-empty means patch mode, even when `git merge-base HEAD hatchery/main` succeeds (a project
+   that joined histories by its own recorded decision has a merge-base too, and merge mode would
+   bring the base's docs into it; the line wins, ADR 0010). Else, if `git merge-base HEAD
+   hatchery/main` succeeds: merge mode, `FROM=$(git merge-base HEAD hatchery/main)`. Neither:
+   stop, the project has no relation to Hatchery; name the adoption prompt. Record
+   `git log --oneline $FROM..hatchery/main` as the incoming base commits; if empty, report
+   "already up to date" and stop.
 4. Bring the changes in.
    - Merge mode: `git merge --no-ff hatchery/main -m "Merge hatchery/main into <project>"`.
      `git merge` counts as a commit under `git.commit.subagents` (ADR 0006), so under the base
