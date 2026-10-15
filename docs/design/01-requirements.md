@@ -197,10 +197,11 @@ reverse any of them by saying so, and a proposal may argue against one with its 
 The vision's open questions, with the requirements they touch:
 
 1. Subscription terms exposure: R-38, R-39. Answered by ADR 0020.
-2. Push or pull request as the default: R-34.
-3. Threads, private channels or the project channel for a session: R-12, R-20, R-23.
-4. The author rule when several people drove: R-33.
-5. Mode, model and effort switching from Discord: R-28, R-29.
+2. Push or pull request as the default: R-34. Answered 2026-10-14 in `04-ux.md`.
+3. Threads, private channels or the project channel for a session: R-12, R-20, R-23. Answered
+   2026-10-14 in `04-ux.md`.
+4. The author rule when several people drove: R-33. Answered 2026-10-14 in `04-ux.md`.
+5. Mode, model and effort switching from Discord: R-28, R-29. Answered 2026-10-14 in `04-ux.md`.
 
 Also the owner's, because they decide what is spent: the cap thresholds of R-46, when it comes.
 

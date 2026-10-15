@@ -14,7 +14,7 @@ is open. It decides nothing the vision left open; it names what is pending and w
 - Backend means a harness plus a credential, always both. "Engine" is the vision's older word for
   harness; use harness.
 - Channel always means a Discord text channel bound to a project. Where a session's messages go
-  (a thread, a private channel or the channel itself) is its venue, which is still open.
+  (a thread, a private channel or the channel itself) is its venue: a private channel per session, a thread later (04).
 - Turn means what Claude Code means by it: one input from a person and everything the agent does
   until it waits for input again.
 - Reach is what a channel lets a session touch; permission mode (prompt or policy) is how a session
@@ -72,7 +72,7 @@ pushed branch name or a pull-request URL). States: starting, waiting for input, 
 waiting for a permission answer, ending, ended, interrupted. Relations: one worktree; one
 backend; participants; turns in order; permission decisions; usage records; audit events; the
 commits it made. Open: whether a session can change harness, model or effort mid-way (vision
-Q 5); whether a session can outlive its venue (a thread archived by Discord).
+Q 5); whether a session can outlive its venue (a private channel deleted by hand).
 
 ## Participant, driver and contributor
 
@@ -238,8 +238,7 @@ model name on a commit or a usage record.
 
 ## What this doc leaves open, and where it is settled
 
-- Session venue (thread, private channel, the channel itself): `04-ux.md` with the owner
-  [no-check: not yet written].
+- Session venue (thread, private channel, the channel itself): `04-ux.md` with the owner.
 - End-of-session default, commit author rule, mode and model switching: the same UX doc, from the
   vision's questions 2, 4 and 5.
 - Credential store, how the harness gets the secret, what a session can see: the

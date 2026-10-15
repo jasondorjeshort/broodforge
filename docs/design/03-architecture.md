@@ -5,7 +5,7 @@ Date: 2026-10-14. Status: first draft, written from `01-requirements.md`, `02-do
 (with `decisions/0022-linux-spawn-and-handoff.md`). It settles what those ADRs handed to it and
 cites them for the rest; where it disagrees with an ADR, the ADR wins. What humans see is
 `04-ux.md`'s; the debug commands and wire format are `05-debug-interface.md`'s; the hook's
-environment, path checks and policy table are the companion `03-hook-contract.md`'s.
+environment, path checks and policy table are `03-hook-contract.md`'s.
 
 ## Components and boundaries
 
@@ -41,9 +41,9 @@ Registration and participants (R-01 to R-04, R-13, R-25, N-18). `discord` owns t
 command: one registration per Discord user id; registering again replaces name and email with an
 audit event (R-02). `session` owns participants: the driver is the starter, fixed for the session;
 a writer becomes a contributor on their first accepted message (R-13). Interrupt and end are
-permitted to the channel's `answer` list in this draft (owner decision 8 in 04, pending: the
-alternative is the driver only); `setMode` is the driver's. `discord` looks up the roles held at
-that moment on every message and click (R-25, N-18), never writes one (R-04); the role check is
+permitted to the channel's `answer` list (owner decision 8 in 04); `setMode` is the driver's.
+`discord` looks up the roles held at that moment on every message and click (R-25, N-18), never
+writes one (R-04); the role check is
 `policy`'s pure function of the roles supplied and the channel's `start`, `contribute` or
 `answer` list, called by `discord` and `control` alike. An unregistered writer gets the register
 flow, an unpermitted one the refused flow (R-03). Inviting is 04's.
@@ -124,8 +124,8 @@ Stream-json subset consumed: `system` subtype `init` (session id, model, tools, 
 `assistant` (`message.id`, `message.model`, `message.usage`, text and `tool_use` content,
 `parent_tool_use_id`); `user` with `tool_result` content; `result` (`stop_reason`, `is_error`,
 `num_turns`, `deferred_tool_use`, `permission_denials`, `modelUsage`, `usage`). Everything else
-is `unknown`. Partial messages are not requested: one edit per second needs no finer grain. A
-`capabilities` set missing a name the adapter relies on is a refusal at instance start, exit 1.
+is `unknown`. Partial messages are not requested. A `capabilities` set missing a name the
+adapter relies on is a refusal at instance start, exit 1.
 
 Usage delta: `modelUsage` is cumulative per engine session; the turn's record per model is the
 cumulative value minus the sum of the usage rows already written for that `engineSessionId`,
@@ -134,13 +134,13 @@ counts deduplicated by `messageId`, output unknown, flagged interrupted (ADR 002
 worked are the keys of `modelUsage`, or the distinct `model` values seen when interrupted.
 
 The command line is ADR 0020's; the stdin message is one stream-json `user` line with one text
-block; the system prompt append is passed per process; `--mcp-config` names
+block; the system prompt append is per process; `--mcp-config` names
 `<bf>/share/empty/mcp.json`, an empty map shipped with Broodforge and reached through the
 existing `<bf>` bind (ADR 0022 companion). The `fake` replays a fixture directory:
 `turn-<n>.jsonl` files of verbatim stream-json lines, an optional per-line delay in
 `fixture.json`, each `TurnRequest` received written as `received-<n>.json` for assertions;
 `interrupt()` ends the current file early with `exit` carrying `interrupted: true`. A recorded
-transcript of the real engine is a fixture as captured; ADR 0020's spike makes the first set.
+real-engine transcript is a fixture as captured (ADR 0020's spike).
 
 ## The PreToolUse hook
 
@@ -175,7 +175,8 @@ is a new file plus `worktree forget` for the old rows.
 { "id": "broodforge", "name": "Broodforge",
   "repo": { "canonical": "<root>/projects/broodforge", "remote": "origin", "defaultBranch": "main",
             "forge": "github", "gitCredentialId": "cred-…" },
-  "endOfSession": "pull-request",
+  "handoff": "pull-request",
+  "venue": { "category": "<category id>", "summaryChannel": null },
   "channels": { "<discord channel id>": {
       "reach": "code", "roles": { "start": ["trusted"], "contribute": ["members"], "answer": ["driver"] },
       "mode": "prompt", "harness": "claude-code", "idleTimeoutMinutes": 60, "model": null, "effort": null } } }
@@ -183,8 +184,12 @@ is a new file plus `worktree forget` for the old rows.
 
 Rules: a role list holds group names from `roleGroups` or raw role ids; `"driver"` under `answer`
 means the driver only (R-25). A channel inherits `defaults` for a key it omits. `harness` is
-`claude-code` or `fake`; `discord.mode` is `live` or `dry-run`; `engine.fakeFixtures` is the
-`fake`'s fixture directory. `credentials.keyFile` names the store key (ADR 0022; the default
+`claude-code` or `fake`; `handoff` is `pull-request` (default) or `push`; `venue.category` is
+the category id sessions are created under, `venue.summaryChannel` optional, also receiving each
+summary and transcript; `discord.mode` is `live` or `dry-run`; `engine.fakeFixtures` is the
+`fake`'s fixture directory. The panel message id is recorded per project channel in the store
+when `panel post <channel id>` runs: a project has several channels, and the bot never writes
+the owner's config files (ADR 0021). `credentials.keyFile` names the store key (ADR 0022; the default
 per host and the `BROODFORGE_KEY_FILE` override are the ADR's). `engine.version` must equal the
 version parsed from the binary's `--version` output (the leading dotted number of
 `2.1.296 (Claude Code)`), else a refusal naming both. A channel id in two project files is a
@@ -192,12 +197,11 @@ version parsed from the binary's `--version` output (the leading dotted number o
 
 ## Git: trees, branches, attribution, handoff
 
-Session id: `s` plus the base-36 value of the session row's autoincrement, at least four digits
-(`s0001`); unique per instance, short enough for Discord and a branch. Branch:
-`broodforge/<instanceName>/<session id>` (two instances pushing one remote cannot collide; the
-instance name matches the project-id pattern); tree: `sessions/<session id>/tree`; the
-canonical's ref: `refs/sessions/<session id>` (ADR 0022); the remote branch equals the local
-one. Subagent worktrees are the engine's own, inside the clone; only the session branch is
+Session id: `s` plus the base-36 session row id, at least four digits (`s0001`), unique per
+instance. Branch: `broodforge/<instanceName>/<session id>` (two instances pushing one remote
+cannot collide; the instance name matches the project-id pattern); tree:
+`sessions/<session id>/tree`; the canonical's ref: `refs/sessions/<session id>` (ADR 0022); the
+remote branch equals the local one. Subagent worktrees are the engine's own, inside the clone; only the session branch is
 bundled, so subagent work reaches the push once merged or cherry-picked into it (R-31); unmerged
 subagent branches are listed in the end-of-session summary and removed with the tree.
 
@@ -205,10 +209,12 @@ Attribution (R-32, R-33). Author and committer of every commit: the driver's reg
 through the four git identity variables (ADR 0022). Trailers, one `Co-Authored-By: <name>
 <email>` each, in this order: every other participant who wrote a message before the commit's
 committer time, in join order; then every model with a usage row in the session before that
-time, by display name with `noreply@anthropic.com`. The display name comes from the map in
-`policy` (model id prefix to name); an unmapped id is used verbatim. A model that only compacted
-is a co-author: the stream cannot tell compaction from work, and a guess would misattribute
-either way. Two helps, neither the enforcement: the system prompt append lists the exact trailer
+time, by display name with `noreply@anthropic.com`. Models used by subagents are contributors
+too: `modelUsage` from the engine's result covers them (ADR 0020, Amendments), so every model with non-zero
+usage in the session gets a line (an Opus agent that ran a Haiku subagent yields both). The
+display name comes from the map in `policy` (model id prefix to name); an unmapped id is used
+verbatim. A model that only compacted is a co-author: the stream cannot tell compaction from
+work. Two helps, neither the enforcement: the system prompt append lists the exact trailer
 lines, and `worktree-create` sets `core.hooksPath` in the clone to a Broodforge-owned
 `commit-msg` hook that appends any line of `sessions/<id>/home/trailers` that is missing.
 
@@ -218,13 +224,17 @@ for the commit's time is present (extra trailers are fine). A failing commit is 
 is missing, the push is refused, and the session stays open in waiting-for-input so the driver
 can ask the agent to amend and `end` again. The bot never rewrites history (ADR 0022 defers it).
 
-End of session: interrupt a running turn, bundle, verify, fetch, check, then per project
-`push` pushes `refs/sessions/<id>` to `refs/heads/<session branch>` on the remote;
-`pull-request` pushes the same and opens the request through the forge's HTTP API with the
-project's git credential in that one call (`forge: "github"` is the only value in the first
-version; title and body are a 04 flow). No commits: the tree is removed and the session says so.
-The tree is removed only after `done` on the push or the request (R-35); a refused or failed
-handoff keeps it and `status` lists it with its unpushed count.
+End of session: interrupt a running turn; when `handoff` is `pull-request` and the credential is
+usable, run one closing engine turn with a fixed prompt that returns the pull request title and
+body (skipped on `push` projects, on an auth error, or when the credential is marked
+needs-login; the fallback title is `Session <id>: <first message, truncated>`, the summary the
+body); then bundle, verify, fetch, check, and hand off per the project's `handoff` (default
+`pull-request`): `push` pushes `refs/sessions/<id>` to `refs/heads/<session branch>` on the
+remote; `pull-request` pushes the same and opens the request through the forge's HTTP API with
+the project's git credential in that one call (`forge: "github"` only in the first version;
+title and body are a 04 flow). No commits: the
+tree is removed and the session says so. The tree is removed only after `done` on the push or the
+request (R-35); a refused or failed handoff keeps it and `status` lists it with its unpushed count.
 
 ## Process model per host
 
@@ -250,25 +260,23 @@ in its own process group, so a terminal's Ctrl-C reaches the bot alone and the b
 each turn through the backend; `KillMode=mixed` makes `systemctl stop` do the same (SIGTERM to
 the bot only, SIGKILL to the rest of the cgroup after `TimeoutStopSec`). After a bot crash,
 systemd kills the leftover engines with the unit; on Windows they run on until they end (a Task
-Scheduler stop ends the tree), a gap that stands until a job object is added. The next start
-records those turns interrupted either way.
+Scheduler stop ends the tree), a gap until a job object exists. The next start records those
+turns interrupted either way.
 
 Shutdown (`SIGTERM`, Ctrl-C, or `stop` over the control socket): stop accepting messages and
-clicks, interrupt every running turn through the spawn backend (a `result` lands and is
-recorded), mark every open session interrupted (R-17; R-18 is later; `end` still runs the
-handoff, no new turns), post the interrupted notice where the gateway still allows, close the
-store, exit 0. After thirty seconds, exit 1 with the sessions still open listed on stderr;
-reconciliation covers them at the next start.
+clicks, interrupt every running turn through the spawn backend, mark every open session
+interrupted (R-17; R-18 is later; `end` still runs the handoff, no new turns), post the
+interrupted notice where the gateway allows, close the store, exit 0. After thirty seconds, exit
+1, listing open sessions on stderr; reconciliation covers them at the next start.
 
 ## Debug surface attachment
 
 Every CLI command but `serve` is a control-socket client; with no socket, read commands open the
 store file read-only (ADR 0021) and write commands exit 1 saying the bot is not running. Linux: a
 unix socket sessions cannot reach (`data/` is unbound and `0700`). Windows: a named pipe a
-same-account session can reach, the gap ADR 0022 states; a token would not close it, the session
-reads the same files. No TCP listener. A scratch root puts the socket under its root; the pipe
-name comes from `instanceName` in every case (a scratch root's generated name is unique, so no
-path is hashed). 05 specifies the line shapes (`cmd` is `<group>.<command>`) and the error codes.
+same-account session can reach, the gap ADR 0022 states. No TCP listener. A scratch root puts the socket under its root; the pipe
+name comes from `instanceName` in every case. 05 specifies the line shapes (`cmd` is
+`<group>.<command>`) and the error codes.
 
 ## Failure modes and what the user sees
 
@@ -290,11 +298,3 @@ The last column names a 04 flow, not its wording.
 | `config` | Invalid at start or reload | last-good or refusal (ADR 0021) | notice channel |
 | `session` | Idle timeout | the end-of-session sequence; a refused handoff keeps the tree | session-ended |
 | `backup` | Snapshot or rehearsal fails | the nightly job's exit code; `status` shows the last good snapshot's age | notice channel |
-
-## Owner questions
-
-1. End-of-session default for a new project: `pull-request` or `push` (vision Q 2, R-34).
-2. The first version has one driver for the whole session (R-33); a driver who leaves cannot
-   hand over. Acceptable for now, or does the handover (vision Q 4) move into the first version?
-3. Model co-author lines use the form `Claude Opus 5.5 <noreply@anthropic.com>`, as this
-   repository's own commits do; confirm or name another, since it lands in every project's history.

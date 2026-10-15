@@ -102,7 +102,9 @@ scratch and dry-run only. `session send <id> --as <user id> [--roles <ids>] [--w
 "<text>"` (or `-` for stdin) calls `SessionService.submit` and prints `turn <n> queued|started`;
 `--wait` returns at `turn-ended` or `waiting-for-answer`, exit 0 either way, printing which;
 `--tail` streams the events meanwhile. `session mode <id> prompt|policy`, `session interrupt
-<id>`, `session end <id>` (the end-of-session sequence; prints the outcome line) and `session
+<id>`, `session end <id>` (the end-of-session sequence; prints the outcome line; it runs the closing
+turn against the fake engine when a fixture named `closing` exists, `--no-closing-turn` skips
+it) and `session
 invite <id> --user <user id>` take `--as` and `--roles` as above (`mode` and `invite` need the
 driver, `interrupt` and `end` the `answer` list). `session list [--state <state>]` prints `<id>
 <state>  <channel>  <driver>  <mode>  <reach>  <turns>  <started at>`; `session show <id>`
@@ -112,7 +114,8 @@ summary is the text's first 80 characters, the tool name and target, or the stop
 `session outbox <id> [--follow]` prints the dry-run renderer's posts: `<seq>  <time>
 create|edit|attach  <message id>  <length>  <first line>`, `--json` with the full body. `session
 transcript <id> [--out <file>]` prints 04's Markdown transcript as the summary would attach it.
-`broodforge panel post <channel id>` posts or refreshes the project channel's panel (04); on a
+`broodforge panel post <channel id>` posts or refreshes the project channel's panel (04) and
+records its message id in the store, which `panel show <channel id>` prints back; on a
 dry-run instance it lands in the outbox. `session reach-report <id>` is below, Spawn and reach.
 Observe. `session show`, `session tail --json`, `session outbox`, `usage --session <id>`.
 Reproduce. A whole R-51 run in one line: `scratch run -- bash tests/repro/full-session.sh`
@@ -218,7 +221,7 @@ Reproduce. In a scratch root, commit in the session tree with a wrong author (`g
 <root>/sessions/s0001/tree commit --author "X <x@example.com>" -m t` after a change) and run
 `worktree handoff s0001 --expect handoff-refused-attribution`. A pull request cannot complete
 offline: `--dry-run` is the reproduction, the forge call the one step left.
-Isolation. The scratch remote is a local bare repository with `endOfSession` `push`; the bot's
+Isolation. The scratch remote is a local bare repository with `handoff` `push`; the bot's
 git never opens the session tree (ADR 0022); `worktree check` reads `refs/sessions/<id>`.
 
 ## Usage and audit queries
@@ -254,7 +257,7 @@ Drive. `broodforge discord check [--guild <id>]` connects once with the bot cred
 store, prints `guild <id> <name>` then one line per configured channel `<id>  present|missing
 <reach>  perms:ok|missing:<names>` (view, send, embed, attach, add-reactions, manage-messages
 for pins and deleting a pasted key, manage-channels for a private-channel venue, manage-threads
-for a thread venue), disconnects, exit 1 on any missing; the credential is used for that
+later, the thread venue is not in the first version), disconnects, exit 1 on any missing; the credential is used for that
 connection and never printed. On a dry-run instance the gateway is never opened and the renderer
 writes to the outbox; `broodforge discord render --events <jsonl> [--clock fake]` feeds a file of
 `SessionEvent`s into the renderer alone and prints the outbox lines with the virtual time of each
@@ -270,7 +273,7 @@ Reproduce. `discord render --events tests/discord/burst.jsonl --clock fake --exp
 Isolation. Dry-run opens no connection; `check` is the only command besides `serve` that
 connects, and only to the guild it is told. Not exercisable without a guild the owner creates:
 the gateway's reconnect and rate-limit paths (N-25), slash-command registration, real button
-rendering, thread and private-channel creation, the direct-message relay (Discord error `50007`)
+rendering, private-channel creation (thread creation: later, the thread venue is not in the first version), the direct-message relay (Discord error `50007`)
 and what a human sees. There, `serve --discord live` on a scratch-shaped root is the test: the
 owner clicks, the agent reads `session tail` and `audit`.
 
@@ -283,6 +286,6 @@ broodforge [--root <path>] [--json]
   credential init|add|login|list|remove|show         session start|send|answer|mode|interrupt|end|invite
   session list|show|tail|outbox|transcript|reach-report   engine run|record
   hook pre-tool-use|try|cases                        worktree list|check|bundle|handoff|forget|adopt
-  usage  audit  panel post                           backup snapshot|verify|rehearse
+  usage  audit  panel post|show                        backup snapshot|verify|rehearse
   discord check|render|inject                        spawn preflight   engine-entry (internal)
 ```

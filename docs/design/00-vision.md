@@ -141,16 +141,19 @@ before any code (`CLAUDE.md`, the `proposal` and `adr` skills; ADRs for this pro
    the risk, ask Anthropic first, or ship API keys first and subscriptions once answered. The
    owner decides; the design supports either credential kind.
 2. Pull request or direct push as the default at the end of a session. The owner said either,
-   probably configurable; the default for a new project still needs a pick.
+   probably configurable; the default for a new project still needs a pick. Answered 2026-10-14
+   in `04-ux.md`.
 3. Channels or threads for sessions. Threads have the right lifecycle but hide badly; a private
    channel per session, Ticket Tool style, may be better. This shapes the first flow the owner
-   sees, so it is settled with the owner in the UX doc.
+   sees, so it is settled with the owner in the UX doc. Answered 2026-10-14 in `04-ux.md`.
 4. The primary-author rule. Commits carry one primary author and further attributions; who is
    primary when several people drove the session, or when the owner started it and someone else
    finished. The owner noted nobody cares that much; a simple default needs choosing anyway.
+   Answered 2026-10-14 in `04-ux.md`.
 5. Switching mode, model or effort from Discord. The owner called this the harder question: it
    does not map well to chat and invites people to switch repeatedly and lose context. Whether
-   the first version exposes any of it, and how, goes to the UX doc with the owner.
+   the first version exposes any of it, and how, goes to the UX doc with the owner. Answered
+   2026-10-14 in `04-ux.md`.
 
 ## What comes next
 
