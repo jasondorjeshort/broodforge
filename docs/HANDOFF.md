@@ -11,7 +11,7 @@ Updated: 2026-10-16, at commit 36d023a, by main session
 - Owner: Jason Dorje Short <jdorje@gmail.com>, repo-local identity; UX is his, technical calls mine.
 - Go settled 2026-10-16 (ADR 0023); design docs and the plan are in Go form; P0 is committed.
 - PC spike closed: every PC row holds; droplet rows and C37 open. Since 2026-10-16 the spike
-  directory and this PC's Claude Code are both the owner's account (ids compared, not his words),
+  directory and this PC's Claude Code are both the owner's account (his words, 2026-10-16),
   so the status-line meters are the spike's cost too.
 - Prior-art verdict: build. Relay decided 2026-10-16: off by default, API keys the droplet
   fallback, Anthropic asked once the droplet has users (ADR 0020 last amendment). L1-L4 are mine.
@@ -31,7 +31,7 @@ Updated: 2026-10-16, at commit 36d023a, by main session
 
 ## Waiting on user
 
-- Droplet entries; a word that this PC's session is his account; the next push.
+- Droplet entries; the PC account entry; the next push.
 
 ## Open findings
 
