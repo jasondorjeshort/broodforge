@@ -5,9 +5,9 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
+	"errors"
 
+	"github.com/jasondorjeshort/broodforge/internal/config"
 	"github.com/jasondorjeshort/broodforge/internal/control"
 )
 
@@ -44,25 +44,23 @@ func socketAddress(root string) (string, error) {
 	return addr, nil
 }
 
-func instancePath(root string) string { return filepath.Join(root, "config", "instance.json") }
+func instancePath(root string) string { return config.InstancePath(root) }
 
-// instanceName reads the one key the socket address needs from config/instance.json, so the
-// pipe name is the same on every host and no path is hashed. Until P4's config package exists
-// this is the whole read: no validation beyond the key, no last-good fallback.
+// instanceName is the one key the socket address needs, read through the config package so
+// the pipe name is the same on every host and no path is hashed. It reads only that key (a
+// client still reaches a bot running on its last-good copy after a bad edit, ADR 0021) and
+// keeps the codes of 05-cli-conventions.md: no-config without the file, bad-config otherwise.
 func instanceName(root string) (string, error) {
-	p := instancePath(root)
-	b, err := os.ReadFile(p)
-	if err != nil {
-		return "", control.NewError(CodeNoConfig, err.Error())
+	name, err := config.InstanceName(root)
+	var nf *config.NotFoundError
+	var inv *config.InvalidError
+	switch {
+	case err == nil:
+		return name, nil
+	case errors.As(err, &nf):
+		return "", control.NewError(CodeNoConfig, nf.Error())
+	case errors.As(err, &inv):
+		return "", control.NewError(CodeBadConfig, inv.Error())
 	}
-	var cfg struct {
-		InstanceName string `json:"instanceName"`
-	}
-	if err := json.Unmarshal(b, &cfg); err != nil {
-		return "", control.NewError(CodeBadConfig, p+": "+err.Error())
-	}
-	if cfg.InstanceName == "" {
-		return "", control.NewError(CodeBadConfig, p+": no instanceName")
-	}
-	return cfg.InstanceName, nil
+	return "", err
 }

@@ -11,3 +11,7 @@ One line per file below, added with the file.
 
 | File | What it covers |
 |---|---|
+| `config/valid/` | A valid instance and project pair with `//` comments at several levels; channel `100` inherits every default, `200` overrides them (`config check` exit 0, `config show --effective`) |
+| `config/dup-channel/` | Channel `100` in two project files, R-07 (`config check` exit 1 naming both files) |
+| `config/unknown-key/` | A channel key that is not 03's, `idleTimeout` (`config check` exit 1 naming the key path) |
+| `config/dup-key/` | Channel `100` twice in one project file (`config check` exit 1, `duplicate key channels.100`) |

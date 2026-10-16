@@ -1,0 +1,10 @@
+{
+  "//": "Channel 100 twice in one file: a map keeps the last, so without the check the first is lost.",
+  "id": "alpha",
+  "name": "Alpha",
+  "repo": { "canonical": "<root>/projects/alpha", "defaultBranch": "main" },
+  "channels": {
+    "100": { "reach": "code", "roles": { "start": ["trusted"] } },
+    "100": { "reach": "read-only", "roles": { "start": ["trusted"] } }
+  }
+}

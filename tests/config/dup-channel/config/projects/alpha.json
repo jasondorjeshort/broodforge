@@ -1,0 +1,6 @@
+{
+  "id": "alpha",
+  "name": "Alpha",
+  "repo": { "canonical": "<root>/projects/alpha", "defaultBranch": "main" },
+  "channels": { "100": { "reach": "code", "roles": { "start": ["trusted"] } } }
+}

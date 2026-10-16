@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "instanceName": "test-dup-channel",
+  "discord": { "mode": "dry-run" },
+  "spawn": { "backend": "same-account" },
+  "roleGroups": { "trusted": ["10"] },
+  "defaults": { "idleTimeoutMinutes": 60, "promptTimeoutMinutes": 5, "mode": "prompt", "harness": "fake" }
+}

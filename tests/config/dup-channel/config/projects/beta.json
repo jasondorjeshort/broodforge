@@ -1,0 +1,7 @@
+{
+  "//": "Channel 100 is also in alpha.json: a config check error (R-07).",
+  "id": "beta",
+  "name": "Beta",
+  "repo": { "canonical": "<root>/projects/beta", "defaultBranch": "main" },
+  "channels": { "100": { "reach": "read-only", "roles": { "start": ["trusted"] } } }
+}

@@ -1,0 +1,15 @@
+{
+  "//": "A valid instance file: every key of 03 (Configuration), comments at several levels.",
+  "schemaVersion": 1,
+  "instanceName": "test-valid",
+  "credentials": { "keyFile": "/home/user/.config/broodforge/test.key" },
+  "discord": { "mode": "dry-run", "applicationId": "", "guildId": "", "botCredentialId": "cred-bot", "noticeChannelId": "" },
+  "engine": { "path": "/home/user/.local/bin/claude", "version": "2.1.300",
+              "gitBashPath": "", "fakeFixtures": "fixtures/engine" },
+  "spawn": { "backend": "same-account", "interruptTimeoutSeconds": 20 },
+  "paths": { "install": "/home/user/broodforge" },
+  "audit": { "fileSink": null },
+  "relay": { "loginByDirectMessage": false },
+  "roleGroups": { "//": "group names map to Discord role ids", "trusted": ["10"], "members": ["10", "11"] },
+  "defaults": { "idleTimeoutMinutes": 60, "promptTimeoutMinutes": 5, "mode": "prompt", "harness": "fake" }
+}

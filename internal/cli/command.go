@@ -146,6 +146,8 @@ func camel(name string) string {
 // commands is the command tree; a pass adds its commands here.
 var commands = []*Command{
 	&controlEcho,
+	&configCheck,
+	&configShow,
 }
 
 // lookup finds the command named by the first one or two words of args and returns it with

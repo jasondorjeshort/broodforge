@@ -1,0 +1,17 @@
+{
+  "//": "Channel 100 omits mode, harness and the timeouts, so it inherits defaults; 200 sets its own.",
+  "id": "scratch",
+  "name": "Scratch",
+  "repo": { "canonical": "<root>/projects/scratch", "remote": "origin", "defaultBranch": "main",
+            "forge": "github", "gitCredentialId": "cred-git" },
+  "handoff": "push",
+  "venue": { "category": "300", "summaryChannel": null },
+  "channels": {
+    "100": { "//": "code reach, prompt mode from defaults",
+      "reach": "code", "roles": { "start": ["trusted"], "contribute": ["members"], "answer": ["driver"] },
+      "model": null, "effort": null },
+    "200": {
+      "reach": "read-only", "roles": { "start": ["10"], "contribute": ["10"], "answer": ["10"] },
+      "mode": "policy", "harness": "fake", "idleTimeoutMinutes": 30, "promptTimeoutMinutes": 2, "model": "sonnet", "effort": "low" }
+  }
+}

@@ -36,18 +36,24 @@ bot owns <socket>`); scratch uses the same-account backend on both hosts.
 
 ## Configuration
 
-Drive. `broodforge config check (file)` validates `config/` without the bot, one error per line,
-exit 1 on any (a channel id in two project files is one, R-07); warnings go to stdout prefixed
-`warning:` with exit 0. `broodforge config show [--effective] [--channel <id>] [--project <id>]
-[--last-good] (file)` prints the parsed files; `--effective` merges `defaults` into each channel
-as the bot sees it; `--last-good` reads `data/config-last-good/`. `broodforge config reload`
-asks the running bot; on failure the old config stays and the errors are the stderr lines, exit 1.
+Drive. `broodforge config check (file)` validates `config/` without the bot: `ok  <projects>
+<channels>`, exit 0, then warnings prefixed `warning:`; on any problem one `error: bad-config:
+<file>: <what>` line each, exit 1 (a channel id in two project files is one, R-07; an unknown or
+repeated key names its dotted path, `duplicate key channels.100`); paths print with `/` on both
+hosts; no `config/instance.json` is `no-config`. `broodforge config show [--effective] [--channel
+<id>] [--project <id>] [--last-good] (file)` prints the parsed files, one `<file>  <content>`
+record each, comments removed; `--effective` prints each channel with
+`defaults` merged in as the bot sees it; `--channel` and `--project` narrow either
+(`unknown-channel`, `unknown-project`); `--last-good` reads `data/config-last-good/`.
+`broodforge config reload` asks the running bot; on failure the old config stays and the errors
+are the stderr lines, exit 1.
 Observe. `status` line one; `audit --kind configuration-changed --limit 1 --json` shows the file
 hash and changed keys; `config show --effective --channel 100 --json` returns the channel object
 of 03 with `defaults` merged in (`{"id":"100","project":"scratch","reach":"code",...}`).
 Reproduce. Last-good: in a scratch root start the bot, `config reload` once, write invalid JSON
 over `config/instance.json`, `stop`, `serve`, `status --expect config=last-good`. A validation
-bug is `config check --root <kept scratch root>`.
+bug is a tree beside `tests/config/valid/` and `tests/config/dup-key/`, or `config check --root
+<kept scratch root>`.
 Isolation. `config` reads the credential store for id existence only (03).
 
 ## Registration and participants
@@ -130,7 +136,7 @@ Drive. Through a session: `session send` on a scratch root, where the channel's 
 and `--fixture <dir>` picks the directory (default `fixtures/engine/basic/` [no-check: no code
 yet]). Adapter alone, no store, no session: `broodforge engine run --fake <fixture dir> [--turn
 <n>] [--cwd <dir>] --prompt "<text>"` streams `EngineEvent`s as JSONL to stdout exactly as the
-adapter parsed them and exits with the fixture's `exit` code; `engine run --real --credential
+adapter parsed them and exits 0 when the fixture's `exit` is 0, else 1 with `error: engine-exit`; `engine run --real --credential
 <id> --cwd <dir> --prompt "<text>" [--resume <engine session id>]` does the same through the
 configured spawn backend; it is the production form of the spike's throwaway runner, which comes first (`07-spike-plan.md`). `engine record --credential
 <id> --cwd <dir> --out <fixture dir> --prompt "<text>"` runs the real engine and writes the raw
@@ -147,7 +153,8 @@ Observe. `session tail --json` for the mapped events; the fixture's `received-<n
 exact `TurnRequest` the fake saw (delivery kind, hook variable names, `systemPromptAppend`,
 `answer`); `engine run --fake <dir> --prompt x | grep '"type":"result"'` for the usage input.
 Reproduce. A failing parse is a fixture: copy the offending `turn-<n>.jsonl` into a new directory
-and run `engine run --fake <dir> --prompt x --expect result`; exit 1 names the rejected line.
+and run `engine run --fake <dir> --prompt x --expect result` (no `fixture.json`: every turn exits
+0); a stream without a `result` exits 1, `error: expect: wanted result, got no-result`.
 Isolation. The fake reads the fixture directory and writes only `received-<n>.json` there
 (`--received-dir <dir>` for a read-only tree); `engine record` needs a real credential, not scratch.
 
