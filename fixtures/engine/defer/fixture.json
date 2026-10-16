@@ -1,0 +1,27 @@
+{
+  "claim": "C27",
+  "engineVersion": "2.1.296",
+  "recorded": "2026-10-16",
+  "turns": [
+    {
+      "n": 1,
+      "exit": 0,
+      "engineSessionId": "93ab3f0d-b9f2-40b7-8921-a95858da0251"
+    },
+    {
+      "n": 2,
+      "exit": 0,
+      "engineSessionId": "93ab3f0d-b9f2-40b7-8921-a95858da0251"
+    },
+    {
+      "n": 3,
+      "exit": 0,
+      "engineSessionId": "c8922a32-fb6f-4ab5-ab21-e9c38b9b0bd4"
+    },
+    {
+      "n": 4,
+      "exit": 0,
+      "engineSessionId": "c8922a32-fb6f-4ab5-ab21-e9c38b9b0bd4"
+    }
+  ]
+}

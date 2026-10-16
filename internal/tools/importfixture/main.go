@@ -1,0 +1,420 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Command importfixture copies one spike fixture directory into fixtures/engine/<name>/,
+// rewriting every PC home and spike-root path to a placeholder (docs/design/08-implementation-plan.md, P1).
+//
+//	go run ./internal/tools/importfixture [--force] <src> <dst>
+//
+// <src> is C:/Users/<pc user>/AppData/Local/Temp/bf-spike/fx/<name>; the PC user is read from it.
+// Only turn-<n>.jsonl is copied; meta-<n>.json feeds fixture.json. The rewrite is textual: every
+// byte outside a rewritten path token or project slug is kept, so the fake replays the real stream.
+// Exit codes: 0 done, 1 failure with one line on stderr, 2 usage.
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+// claims names the spike claim each fixture records (the findings for ADRs 0020 and 0022).
+var claims = map[string]string{
+	"basic":       "S1",
+	"defer":       "C27",
+	"interrupted": "S2",
+	"parallel":    "C28",
+	"hook-exit2":  "C39",
+	"hook-exit1":  "C39",
+	"hook-sleep":  "C39",
+	"scrub":       "C34",
+	"settings-a":  "C26",
+	"settings-b":  "C26",
+}
+
+const (
+	homePlaceholder  = "/home/user"
+	spikePlaceholder = "/home/user/bf-spike"
+)
+
+// spikeUnderHome is the spike root's path below the PC home, one segment per entry.
+var spikeUnderHome = []string{"AppData", "Local", "Temp", "bf-spike"}
+
+var srcPattern = regexp.MustCompile(`(?i)^[a-z]:/Users/([^/]+)/AppData/Local/Temp/bf-spike/fx/([^/]+)$`)
+
+var turnPattern = regexp.MustCompile(`^turn-([0-9]+)\.jsonl$`)
+
+func main() {
+	os.Exit(run(os.Args[1:]))
+}
+
+func run(args []string) int {
+	fs := flag.NewFlagSet("importfixture", flag.ContinueOnError)
+	force := fs.Bool("force", false, "write into a non-empty <dst>, replacing its turn files and fixture.json")
+	fs.SetOutput(os.Stderr)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "usage: importfixture [--force] <src> <dst>")
+	}
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 2 {
+		fs.Usage()
+		return 2
+	}
+	if err := importDir(fs.Arg(0), fs.Arg(1), *force); err != nil {
+		fmt.Fprintln(os.Stderr, "error: "+err.Error())
+		return 1
+	}
+	return 0
+}
+
+// fixture is fixture.json, read by the fake engine (P3).
+type fixture struct {
+	Claim         string `json:"claim"`
+	EngineVersion string `json:"engineVersion"`
+	Recorded      string `json:"recorded"`
+	Turns         []turn `json:"turns"`
+}
+
+type turn struct {
+	N               int    `json:"n"`
+	Exit            *int   `json:"exit"`
+	EngineSessionID string `json:"engineSessionId"`
+}
+
+// meta is the subset of the spike's meta-<n>.json that fixture.json takes.
+type meta struct {
+	EngineVersion   string `json:"engineVersion"`
+	StartedAt       string `json:"startedAt"`
+	EngineSessionID string `json:"engineSessionId"`
+	Exit            struct {
+		Code *int `json:"code"`
+	} `json:"exit"`
+}
+
+func importDir(src, dst string, force bool) error {
+	abs, err := filepath.Abs(src)
+	if err != nil {
+		return err
+	}
+	m := srcPattern.FindStringSubmatch(filepath.ToSlash(abs))
+	if m == nil {
+		return fmt.Errorf("source %s is not <drive>:/Users/<user>/AppData/Local/Temp/bf-spike/fx/<name>", src)
+	}
+	user, name := m[1], m[2]
+	claim, ok := claims[name]
+	if !ok {
+		return fmt.Errorf("no claim known for fixture %q", name)
+	}
+
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	var ns []int
+	for _, e := range entries {
+		if t := turnPattern.FindStringSubmatch(e.Name()); t != nil && e.Type().IsRegular() {
+			n, _ := strconv.Atoi(t[1])
+			ns = append(ns, n)
+		}
+	}
+	if len(ns) == 0 {
+		return fmt.Errorf("no turn-<n>.jsonl in %s", src)
+	}
+	sort.Ints(ns)
+
+	if err := checkDst(abs, dst); err != nil {
+		return err
+	}
+
+	// Everything is rewritten and scanned in memory first, so a refusal leaves dst untouched.
+	r := newRewriter(user)
+	outs := map[string][]byte{}
+	fx := fixture{Claim: claim}
+	for _, n := range ns {
+		raw, err := os.ReadFile(filepath.Join(src, fmt.Sprintf("turn-%d.jsonl", n)))
+		if err != nil {
+			return err
+		}
+		outs[fmt.Sprintf("turn-%d.jsonl", n)] = r.rewrite(raw)
+		mb, err := os.ReadFile(filepath.Join(src, fmt.Sprintf("meta-%d.json", n)))
+		if err != nil {
+			return err
+		}
+		var md meta
+		if err := json.Unmarshal(mb, &md); err != nil {
+			return fmt.Errorf("meta-%d.json: %w", n, err)
+		}
+		if fx.EngineVersion == "" {
+			fx.EngineVersion = md.EngineVersion
+			if len(md.StartedAt) >= len("2006-01-02") {
+				fx.Recorded = md.StartedAt[:len("2006-01-02")]
+			}
+		} else if md.EngineVersion != fx.EngineVersion {
+			return fmt.Errorf("meta-%d.json: engine %s, turn %d had %s", n, md.EngineVersion, ns[0], fx.EngineVersion)
+		}
+		fx.Turns = append(fx.Turns, turn{N: n, Exit: md.Exit.Code, EngineSessionID: md.EngineSessionID})
+	}
+	out, err := json.MarshalIndent(fx, "", "  ")
+	if err != nil {
+		return err
+	}
+	outs["fixture.json"] = append(out, '\n')
+	if err := scanLeak(user, outs); err != nil {
+		return err
+	}
+
+	if err := prepareDst(dst, force); err != nil {
+		return err
+	}
+	for _, n := range ns {
+		f := fmt.Sprintf("turn-%d.jsonl", n)
+		if err := os.WriteFile(filepath.Join(dst, f), outs[f], 0o644); err != nil {
+			return err
+		}
+	}
+	return os.WriteFile(filepath.Join(dst, "fixture.json"), outs["fixture.json"], 0o644)
+}
+
+// checkDst refuses a destination that is the source or lies under the spike root (the bf-spike
+// ancestor of src), where --force would delete the only copy of the recordings.
+func checkDst(absSrc, dst string) error {
+	d, err := filepath.Abs(dst)
+	if err != nil {
+		return err
+	}
+	d = strings.ToLower(filepath.ToSlash(d))
+	s := strings.ToLower(filepath.ToSlash(absSrc))
+	root := s
+	if i := strings.Index(s, "/bf-spike/"); i >= 0 {
+		root = s[:i+len("/bf-spike")]
+	}
+	if d == s || d == root || strings.HasPrefix(d, root+"/") {
+		return fmt.Errorf("destination %s is the source or under the spike root %s", dst, root)
+	}
+	return nil
+}
+
+// scanLeak refuses output that still contains the PC user name in any form, case-insensitively:
+// the rewrite covers known path forms only.
+func scanLeak(user string, outs map[string][]byte) error {
+	needle := []byte(strings.ToLower(user))
+	names := make([]string, 0, len(outs))
+	for name := range outs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		b := outs[name]
+		low := bytes.ToLower(b)
+		if k := bytes.Index(low, needle); k >= 0 {
+			line := bytes.Count(low[:k], []byte("\n")) + 1
+			return fmt.Errorf("the PC user name survives the rewrite in %s line %d; extend the rewrite", name, line)
+		}
+	}
+	return nil
+}
+
+// prepareDst creates dst, refusing a non-empty one unless force, which removes only the files
+// this tool writes so no stale turn survives.
+func prepareDst(dst string, force bool) error {
+	entries, err := os.ReadDir(dst)
+	if errors.Is(err, os.ErrNotExist) {
+		return os.MkdirAll(dst, 0o755)
+	}
+	if err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+	if !force {
+		return fmt.Errorf("destination %s is not empty (pass --force to replace it)", dst)
+	}
+	for _, e := range entries {
+		if turnPattern.MatchString(e.Name()) || e.Name() == "fixture.json" {
+			if err := os.Remove(filepath.Join(dst, e.Name())); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// rewriter replaces PC paths and the engine's project slugs for one PC user.
+type rewriter struct {
+	user  string
+	slugs [][2][]byte // longest first
+}
+
+func newRewriter(user string) *rewriter {
+	home := "C--Users-" + user
+	return &rewriter{user: user, slugs: [][2][]byte{
+		{[]byte(home + "-" + strings.Join(spikeUnderHome, "-")), []byte(slug(spikePlaceholder))},
+		{[]byte(home), []byte(slug(homePlaceholder))},
+	}}
+}
+
+// slug is the engine's project directory name for a path: every separator becomes "-".
+func slug(p string) string { return strings.ReplaceAll(p, "/", "-") }
+
+func (r *rewriter) rewrite(in []byte) []byte {
+	return r.rewriteSlugs(r.rewritePaths(in))
+}
+
+// rewritePaths replaces every path token that starts with the PC home in any of its forms:
+// C:/Users/<user>, C:\Users\<user>, and the JSON-escaped forms with 2 or 4 backslashes. The
+// separator form is fixed by the first separator after the drive; inside the token that form or
+// "/" separates, and a backslash run of any other length (a JSON escape such as \n) ends it.
+func (r *rewriter) rewritePaths(in []byte) []byte {
+	var out bytes.Buffer
+	i := 0
+	for i < len(in) {
+		if repl, end, ok := r.matchPath(in, i); ok {
+			out.WriteString(repl)
+			i = end
+			continue
+		}
+		out.WriteByte(in[i])
+		i++
+	}
+	return out.Bytes()
+}
+
+// matchPath reports whether a home path token starts at i, its replacement, and where it ends.
+func (r *rewriter) matchPath(in []byte, i int) (string, int, bool) {
+	if i+2 >= len(in) || !isLetter(in[i]) || in[i+1] != ':' || (i > 0 && isWordByte(in[i-1])) {
+		return "", 0, false
+	}
+	j := i + 2
+	sepLen := 0 // 0: "/"; n: a run of n backslashes
+	if in[j] == '\\' {
+		for j+sepLen < len(in) && in[j+sepLen] == '\\' {
+			sepLen++
+		}
+	} else if in[j] != '/' {
+		return "", 0, false
+	}
+	// Split the token into segments; trailing is a separator with no segment after it.
+	var segs []string
+	var trailing bool
+	for {
+		n := sepAt(in, j, sepLen)
+		if n == 0 {
+			break
+		}
+		j += n
+		k := j
+		for k < len(in) && isSegmentByte(in[k]) {
+			k++
+		}
+		if k == j {
+			trailing = true
+			break
+		}
+		segs = append(segs, string(in[j:k]))
+		j = k
+	}
+	if len(segs) < 2 || !strings.EqualFold(segs[0], "Users") || !strings.EqualFold(segs[1], r.user) {
+		return "", 0, false
+	}
+	root, rest := homePlaceholder, segs[2:]
+	if hasPrefixFold(rest, spikeUnderHome) {
+		root, rest = spikePlaceholder, rest[len(spikeUnderHome):]
+	}
+	repl := root
+	for _, s := range rest {
+		repl += "/" + s
+	}
+	if trailing {
+		repl += "/"
+	}
+	return repl, j, true
+}
+
+// sepAt returns the length of a separator at j in the token's form, or 0.
+func sepAt(in []byte, j, sepLen int) int {
+	if j >= len(in) {
+		return 0
+	}
+	if in[j] == '/' {
+		return 1
+	}
+	if sepLen == 0 || in[j] != '\\' {
+		return 0
+	}
+	n := 0
+	for j+n < len(in) && in[j+n] == '\\' {
+		n++
+	}
+	if n != sepLen {
+		return 0
+	}
+	return n
+}
+
+func hasPrefixFold(segs, prefix []string) bool {
+	if len(segs) < len(prefix) {
+		return false
+	}
+	for k, p := range prefix {
+		if !strings.EqualFold(segs[k], p) {
+			return false
+		}
+	}
+	return true
+}
+
+// rewriteSlugs replaces the engine's project slugs, spike root first. A slug must not be
+// preceded or followed by a letter or digit, so a longer user name is left alone.
+func (r *rewriter) rewriteSlugs(in []byte) []byte {
+	for _, s := range r.slugs {
+		var out bytes.Buffer
+		i := 0
+		for {
+			k := bytes.Index(in[i:], s[0])
+			if k < 0 {
+				out.Write(in[i:])
+				break
+			}
+			at, end := i+k, i+k+len(s[0])
+			if (at > 0 && isAlnum(in[at-1])) || (end < len(in) && isAlnum(in[end])) {
+				out.Write(in[i : at+1])
+				i = at + 1
+				continue
+			}
+			out.Write(in[i:at])
+			out.Write(s[1])
+			i = end
+		}
+		in = out.Bytes()
+	}
+	return in
+}
+
+func isLetter(b byte) bool { return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') }
+
+func isAlnum(b byte) bool { return isLetter(b) || (b >= '0' && b <= '9') }
+
+func isWordByte(b byte) bool { return isAlnum(b) || b == '_' }
+
+// isSegmentByte is true for a byte that may sit inside one path segment. Quotes, backticks,
+// whitespace, separators and the punctuation that closes a path in prose or a command line end it.
+func isSegmentByte(b byte) bool {
+	if b < 0x20 || b == 0x7f {
+		return false
+	}
+	switch b {
+	case ' ', '"', '\'', '`', '/', '\\', ',', ';', ':', '*', '?', '<', '>', '|', '(', ')', '[', ']', '{', '}':
+		return false
+	}
+	return true
+}

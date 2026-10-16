@@ -1,0 +1,12 @@
+{
+  "claim": "C34",
+  "engineVersion": "2.1.296",
+  "recorded": "2026-10-16",
+  "turns": [
+    {
+      "n": 1,
+      "exit": 0,
+      "engineSessionId": "5305d0f8-21fa-4951-9520-6dc9beb9a7c0"
+    }
+  ]
+}

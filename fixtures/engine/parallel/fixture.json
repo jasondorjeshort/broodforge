@@ -1,0 +1,17 @@
+{
+  "claim": "C28",
+  "engineVersion": "2.1.296",
+  "recorded": "2026-10-16",
+  "turns": [
+    {
+      "n": 1,
+      "exit": 0,
+      "engineSessionId": "bc31c3ca-5ef2-4dbe-ae49-8387a22c3274"
+    },
+    {
+      "n": 2,
+      "exit": 0,
+      "engineSessionId": "bc31c3ca-5ef2-4dbe-ae49-8387a22c3274"
+    }
+  ]
+}

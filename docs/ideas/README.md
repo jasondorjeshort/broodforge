@@ -74,5 +74,4 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-14-ux-choices-that-could-become-options.md` | feature | Venue, footer, trace, allow-session button, mode names, model switch, dot aliases as user or channel options |
 | `2026-10-15-carry-back-pusher-check-5a-and-adr-0009-row.md` | chore | Hatchery takes the pusher's personal-data check 5a and the missing ADR 0009 index row; base work |
 | `2026-10-16-acp-as-the-second-harness-boundary.md` | feature | ACP (OpenAB, `claude-agent-acp`) as a candidate boundary for the R-42 and R-43 second harness; the first-version `Engine` stays bespoke |
-| `2026-10-16-fixtures-need-a-path-rewrite-before-they-move-into-the-repo.md` | chore | Rewrite the PC username in recorded fixture paths to a placeholder before the person reads them and they enter the repo |
 | `2026-10-16-rate-limit-events-carry-plan-usage-per-credential.md` | feature | The stream's `rate_limit_event` carries five-hour and seven-day utilization per credential; a source for R-44, R-45, R-46 and the usage-gate hook |

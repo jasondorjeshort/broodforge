@@ -1,0 +1,22 @@
+{
+  "claim": "S1",
+  "engineVersion": "2.1.296",
+  "recorded": "2026-10-16",
+  "turns": [
+    {
+      "n": 1,
+      "exit": 0,
+      "engineSessionId": "f0451bd7-4428-40b5-a52e-ad6b604c210a"
+    },
+    {
+      "n": 2,
+      "exit": 0,
+      "engineSessionId": "f0451bd7-4428-40b5-a52e-ad6b604c210a"
+    },
+    {
+      "n": 3,
+      "exit": 0,
+      "engineSessionId": "f0451bd7-4428-40b5-a52e-ad6b604c210a"
+    }
+  ]
+}

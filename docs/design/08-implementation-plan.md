@@ -64,7 +64,7 @@ separators normalised to `/`; the engine's project slug
 `-home-user-bf-spike-tree`. Only `turn-<n>.jsonl` is imported; `meta-<n>.json` yields `fixture.json`
 (engine version, date, claim, exit code per turn: `interrupted` turns 1 and 2 exit 1). No test
 asserts on an original path. Proof: one `go run ./internal/tools/importfixture <src>
-fixtures/engine/<name>` per name; `grep -rlE "<pc user>|[A-Za-z]:\\\\" fixtures/` empty. Depends on:
+fixtures/engine/<name>` per name; `grep -rliE "<pc user>|[A-Za-z]:(/|\\\\)+Users" fixtures/` empty. Depends on:
 P0. Must not touch: `spike/`.
 
 ## P2. CLI conventions, the control socket, the in-process harness (medium)
