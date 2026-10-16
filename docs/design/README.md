@@ -50,5 +50,15 @@ Decisions so far:
   the status line caches the meters per `session_id` with the account as a label, the gate treats a
   changed login as stale, and at HOLD it reports the pool account with room through `usage.pool`;
   rotation happens at session boundaries. Amends 0006 and the hook specs, section 3.
+- [0012 Decision practices for long-lived software](decisions/0012-decision-practices-for-long-lived-software.md):
+  each project names its promised surfaces (additions free, an incompatible change a major
+  choice); dependencies by checklist, a copy under a page keeps its licence; fitness checks with a
+  skip entry as the lift; ADR triggers, dated predictions and fitness lines scanned by `triage`,
+  the architect called on a hit; four lines in `CLAUDE.md`, the rest in the file that applies.
+  Amends the living table of ADR 0001.
+- [0013 Hatchery's promised surfaces](decisions/0013-hatchery-promised-surfaces.md): the policy
+  file, grant files, the idea grammar, the base line, the usage cache and the hook seams, with
+  what is not promised; the reference fitness check (hooks require only Node built-ins) in the
+  harness, group `F`. Proposed until the owner confirms the list.
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).

@@ -15,7 +15,8 @@ record of the alternatives and the objections.
 | `0005-critic-review.md` | Companion to 0005: the critic's review (one serious, two minor; most of 0005 is already built through ADR 0006). Awaits the architect's answers. |
 | `0011-usage-gate-under-account-switching.md` | Under review, revised after the critic: a usage cache per session with the account as a label, the status line naming the account, the gate reporting the pool account with room at HOLD through `usage.pool`, rotation at session boundaries; the per-model meter deferred. |
 | `0011-critic-review.md` | Companion to 0011: the critic's review (one blocking, six serious, six minor; all accepted in the revision). |
-| `0012-decision-practices-for-long-lived-software.md` | Draft: practices that make the loop optimise for software that lasts (promised surfaces and deep modules, fitness checks, boring as reviewability and dependency default no, a standing design pass, template and critic changes), with a change-nothing baseline; says which lines go in `CLAUDE.md`, which in skills, which wait for code. Awaits the critic. |
+| `0012-decision-practices-for-long-lived-software.md` | Promoted to ADR 0012 (`../decisions/0012-decision-practices-for-long-lived-software.md`); revised in place after the critic review: evidence corrected, four `CLAUDE.md` lines, surfaces scoped to incompatible change, a skip entry as the fitness lift, the design pass replaced by a trigger scan, dependency default evaluate, Hatchery's own surfaces first (ADR 0013). |
+| `0012-critic-review.md` | Companion to 0012: the critic's review (two blocking, seven serious, six minor), all answered in the proposal's last section; every objection accepted, two with a change. |
 
 Template:
 
