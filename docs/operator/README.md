@@ -39,7 +39,7 @@ rather than trusting a status line, and drop a step already done.
 |---|---|
 | `2026-10-14-droplet-users-and-sudoers.md` | Create the `broodforge` and `broodforge-engine` accounts, the instance root with its owners and modes, and the sudoers lines on the droplet. |
 | `2026-10-14-droplet-bubblewrap-and-apparmor.md` | Install bubblewrap, socat and, on Ubuntu 24.04, the unconfined-userns AppArmor profile. |
-| `2026-10-14-droplet-engine-node-and-broodforge.md` | Install the pinned engine as its native ELF, Node and Broodforge at paths both users read. |
+| `2026-10-14-droplet-engine-go-and-broodforge.md` | Install the pinned engine as its native ELF, Go and `gcc`, and the Broodforge binary at paths both users read. |
 | `2026-10-14-pc-broodforge-account-and-task.md` | Create the PC `broodforge` account, log in once, install Claude Code, register the Task Scheduler task. |
 | `2026-10-14-credential-store-key-per-host.md` | Run `credential init` per host and store the key in the password manager. |
 | `2026-10-16-pc-mingw-for-go-race.md` | Install mingw-w64 through MSYS2 on the PC and put it on the owner's `PATH` so `go test -race` can run there (ADR 0023). |

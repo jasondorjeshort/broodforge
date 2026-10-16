@@ -8,7 +8,7 @@ commands and wire format `05-debug-interface.md`'s; the hook's environment, path
 
 ## Components and boundaries
 
-One Node process per instance (ADR 0020), one directory per component under `src/`
+One Go binary, one process per instance (ADRs 0020, 0023), one directory per component under `src/`
 [no-check: no code yet] named by the first column. A component talks only to the ones its row
 names; everything else goes through `SessionService`. Host differences live in `spawn`,
 `worktree-remove`, `control` (the socket path) and nowhere else (`06-platforms.md`, Sharing).
@@ -70,7 +70,7 @@ infer it. A session start naming anything but `usable` is refused (R-41).
    prefix), deferred, dropped (a parallel call, below), or decided by the engine alone (`decidedBy`
    `config`: the hook was bypassed, `03-hook-contract.md`). The hook writes nothing; the stream is the record.
 6. `discord` renders: one working message per turn edited through the coalescer (at most one
-   create or edit per second per session, nothing dropped, overflow split or attached, R-20 to
+   create or edit per second per session and 50 REST requests per second per bot across all, nothing dropped, overflow split or attached, R-20 to
    R-22); a new message for a turn end, a wait or an error (R-23). The outbound mask: all posted
    text (trace lines, prompts, results, transcript) first has credential-shaped tokens replaced by
    `[masked]`: `sk-` prefixed keys, bearer and OAuth tokens, strings over 40 characters that are
@@ -94,32 +94,32 @@ Button custom ids, parsed by one function in `discord`:
 
 ## The engine adapter
 
-```ts
-interface Engine { readonly name: 'claude-code' | 'fake'; startTurn(req: TurnRequest): TurnHandle; }
-interface TurnRequest {
-  sessionId: string; engineSessionId?: string;        // --resume when present
-  cwd: string;                                        // sessions/<id>/tree
-  delivery: { kind: 'config-dir'; path: string } | { kind: 'api-key'; credentialId: string };
-  gitIdentity: { name: string; email: string };       // the driver's, all four variables
-  hookEnv: HookEnv;                                   // the BROODFORGE_* names of the hook contract
-  input: string;                                      // the From-prefixed blocks
-  answer?: { toolUseId: string; decision: 'allow' | 'deny' };
-  model?: string; effort?: string;                    // per process (ADR 0020)
-  systemPromptAppend: string;                         // one call at a time, trailers, reach
-  spawn: SpawnBackend;
+```go
+type Engine interface { Name() string; StartTurn(req TurnRequest) TurnHandle } // "claude-code" | "fake"
+type TurnRequest struct {
+	SessionID, EngineSessionID string // --resume when EngineSessionID is set
+	Cwd         string              // sessions/<id>/tree
+	Delivery    Delivery            // Kind "config-dir" (Path) | "api-key" (CredentialID)
+	GitIdentity struct{ Name, Email string } // the driver's, all four variables
+	HookEnv     HookEnv             // the BROODFORGE_* names of the hook contract
+	Input       string              // the From-prefixed blocks
+	Answer      *struct{ ToolUseID, Decision string } // Decision "allow" | "deny"
+	Model, Effort string            // per process (ADR 0020)
+	SystemPromptAppend string       // one call at a time, trailers, reach
+	Spawn       SpawnBackend
 }
-interface TurnHandle { events: AsyncIterable<EngineEvent>; interrupt(): Promise<void>; }
-type EngineEvent =
-  | { type: 'init'; engineSessionId: string; model: string; tools: string[]; capabilities: string[] }
-  | { type: 'assistant'; messageId: string; model: string; parentToolUseId?: string;
-      blocks: ({ kind: 'text'; text: string } | { kind: 'tool-use'; id: string; name: string; input: unknown })[];
-      usage: { input: number; cacheRead: number; cacheWrite: number } }
-  | { type: 'tool-result'; toolUseId: string; isError: boolean; text: string; decidedBy?: string } // tool_result_meta source
-  | { type: 'result'; stopReason: string; isError: boolean; numTurns: number;
-      deferred?: { toolUseId: string; name: string; input: unknown };
-      permissionDenials: unknown[]; modelUsage: Record<string, ModelUsage>; usage: unknown }
-  | { type: 'exit'; code: number | null; signal: string | null; interrupted: boolean }
-  | { type: 'unknown'; raw: string };                 // logged at debug level, never fatal
+type TurnHandle struct { Events <-chan EngineEvent; Interrupt func() error }
+// A sum type is a struct with a Kind enum and one pointer payload per kind (ADR 0023);
+// every switch on Kind is checked by the exhaustive linter.
+type EngineEvent struct {
+	Kind       EventKind // init | assistant | tool-result | result | exit | unknown
+	Init       *struct{ EngineSessionID, Model string; Tools, Capabilities []string }
+	Assistant  *struct{ MessageID, Model, ParentToolUseID string; Blocks []Block; Usage Usage } // Block: text | tool-use (ID, Name, Input)
+	ToolResult *struct{ ToolUseID string; IsError bool; Text, DecidedBy string } // tool_result_meta source
+	Result     *struct{ StopReason string; IsError bool; NumTurns int; Deferred *DeferredTool; PermissionDenials []json.RawMessage; ModelUsage map[string]ModelUsage; Usage json.RawMessage }
+	Exit       *struct{ Code *int; Signal string; Interrupted bool }
+	Unknown    string    // raw line; logged at debug level, never fatal
+}
 ```
 
 Stream-json subset consumed: `system` subtype `init` (session id, model, tools, `capabilities`);
@@ -169,7 +169,7 @@ is a new file plus `worktree forget` for the old rows.
   "engine": { "path": "C:/Users/broodforge/.local/bin/claude.exe", "version": "2.1.300",
               "gitBashPath": "C:/Program Files/Git/bin/bash.exe", "fakeFixtures": null },
   "spawn": { "backend": "same-account", "interruptTimeoutSeconds": 20 },
-  "paths": { "node": "…", "install": "…" }, "audit": { "fileSink": null },
+  "paths": { "install": "…" }, "audit": { "fileSink": null },
   "relay": { "loginByDirectMessage": false },
   "roleGroups": { "trusted": ["role id"], "members": ["role id"] },
   "defaults": { "idleTimeoutMinutes": 60, "promptTimeoutMinutes": 5, "mode": "prompt", "harness": "claude-code" } }
@@ -262,8 +262,8 @@ Signals and leftovers. The spawn backend starts every engine (the `sudo` child o
 in its own process group, so a terminal's Ctrl-C reaches the bot alone and the bot interrupts each
 turn through the backend; `KillMode=mixed` makes `systemctl stop` do the same (SIGTERM to the bot
 only, SIGKILL to the rest of the cgroup after `TimeoutStopSec`). After a bot crash, systemd kills
-the leftover engines with the unit; on Windows they run on until they end (a Task Scheduler stop
-ends the tree), a gap until a job object exists. The next start records those turns interrupted either way.
+the leftover engines with the unit; on Windows the bot sits in a kill-on-close job object and each engine in its own, so a crash
+or `stop` ends them (ADR 0023). The next start records those turns interrupted.
 
 Shutdown (`SIGTERM`, Ctrl-C, or `stop` over the control socket): stop accepting messages and clicks,
 interrupt every running turn through the spawn backend, mark every open session interrupted (R-17;
@@ -284,7 +284,7 @@ The last column names a 04 flow, not its wording.
 
 | Where | Failure | Behaviour | Flow |
 |---|---|---|---|
-| `discord` | Gateway drops, rate limited | discord.js reconnects; events buffer per session and coalesce on return; a buffer over its cap drops only intermediate edits, never a new message (N-25) | none |
+| `discord` | Gateway drops, rate limited | disgo reconnects; events buffer per session and coalesce on return; a buffer over its cap drops only intermediate edits, never a new message (N-25) | none |
 | `engine` | Binary missing, version or capability mismatch | refusal at start, exit 1 | operator |
 | `engine` | Exit without `result` | turn interrupted, partial usage recorded, exit code kept | turn-failed |
 | `engine` | `result` with `is_error` | turn ended as error; an auth error also ends the session through the normal ending sequence (summary, bundle handoff), discarding no work, and sets the credential `needs-login` (an API key keeps its status) | credential-needs-login |

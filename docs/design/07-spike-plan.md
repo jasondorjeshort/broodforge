@@ -255,7 +255,7 @@ turns), `defer` (C27), `interrupted` (S2), `parallel-deny` (C28), `hook-exit2` (
 afterwards: the fixtures, moved to `fixtures/engine/<name>/` [no-check: created with the
 adapter] as 05's fake expects, each read by a person before the commit (the recorder redacts
 nothing), and the two findings. The rest of `spike/` is deleted in the commit that lands
-`engine run --real` and `engine record`.
+`engine run --real` and `engine record`. The spike stays TypeScript as the record; its parser is ported to Go in the plan's engine pass (ADR 0023).
 
 ## Cost
 

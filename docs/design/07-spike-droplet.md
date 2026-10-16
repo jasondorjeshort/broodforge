@@ -20,7 +20,7 @@ from the template; `<canon>` is `<root>/projects/spike`, bot-owned as the owners
 `<ecfg>` is `<cfg>` for `sub` and `<sess>/home/.claude` for `key`. `<bf>` is `/opt/broodforge/spike`:
 the owner runs `sudo install -d -o broodforge -g broodforge-engine -m 0750 /opt/broodforge/spike`
 once, then `broodforge` copies the compiled `spike/` there without root, and the engine user reads
-it as a group member. `<engine>` and `<node>` are the engine entry's. `$TREE` is `<sess>/tree`,
+it as a group member. `<engine>` is the engine entry's; the spike's own `node` is a system install, as the bot is one static binary that binds none (ADR 0023). `$TREE` is `<sess>/tree`,
 the clone `worktree-create` makes of `<canon>`, whose `base` commit carries `hello.txt`.
 
 The bwrap route. `<bf>/bwrap.sh` [no-check: created by the coder] builds the companion's
@@ -28,7 +28,7 @@ The bwrap route. `<bf>/bwrap.sh` [no-check: created by the coder] builds the com
 place of Broodforge's install: `bwrap.sh --reach code|read-only --cred sub|key -- <command>`
 is the session sandbox (binds by reach and credential kind, `HOME=<sess>/home`, cwd `<sess>/tree`,
 the command run under `engine-entry`); `bwrap.sh --maintenance <dir> -- <command>` is the
-maintenance shape (system, Node and `<bf>` binds, no config directory, no `<settings>`,
+maintenance shape (system and `<bf>` binds, the spike's `node` from the system, no config directory, no `<settings>`,
 `HOME=/tmp`, `<dir>` bound read-write), which is how `engine-entry harness-create`,
 `worktree-create` and `worktree-bundle` run. `engine-entry` is the companion's `sh` wrapper
 copied into `<bf>`. Before any claim: `bwrap.sh --check` runs the `namei -m` walk over every

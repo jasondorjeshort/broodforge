@@ -17,7 +17,7 @@ Planned documents (added as we go):
 | `06-platforms.md` | Target hosts, what each asks of every part, the sharing strategy between hosts, and the major choices bundled into proposal loops |
 | `07-spike-plan.md` | The spike that tests claims C25 to C39 of ADRs 0020 and 0022 before application code: per claim the host, the owner step first, the commands, the evidence, the fallback; the throwaway `spike/` code and the fixtures kept; cost; exit criterion |
 | `07-spike-droplet.md` | Companion to 07: the droplet half of the spike: packages and layout under the instance root, the bwrap route for setup and hook mode, and the claims that need the two users (C30 to C35, C38, C29, the droplet repeats of C27 and C39) |
-| `08-implementation-plan.md` | The ordered coder passes for `src/`, from the toolchain to the held Linux backend: per pass what it implements, the files, the proof command, dependencies, size, and whether the owner sees its output; the facts the findings hold that the design docs do not |
+| `08-implementation-plan.md` | The ordered coder passes for `cmd/` and `internal/`, from the toolchain to the held Linux backend: per pass what it implements, the files, the proof command, dependencies, size, and whether the owner sees its output; the facts the findings hold that the design docs do not |
 | `proposals/` | Draft proposals for major choices; each gets a critic pass before becoming an ADR |
 | `decisions/` | Architecture decision records (ADRs), one per decision |
 
