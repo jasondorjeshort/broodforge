@@ -1,40 +1,40 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-16, at commit 94b1eaa, by main session
+Updated: 2026-10-16, at commit 163e7f0, by main session
 
 ## Now
 
-- `main` is two commits ahead of `origin/main` (`762e6c5` is pushed): the prior-art finding and
-  the design edits folding its lessons in, reviewed once with all ten items fixed. HOLD 60%/75%.
-- Owner is Jason Dorje Short <jdorje@gmail.com>, repo-local git identity. Push only at session
-  end on his words; his UX decisions are applied.
-- Prior-art verdict: build. One owner question left, in ADR 0020's 2026-10-16 amendment and
-  vision question 1: whether the DM login relay counts as "Anthropic's own flow".
-- Owner decided 2026-10-16 to move the spike to his own account; the login has not been re-run,
-  so `$CFG` still holds the PC owner's Max login. Nothing spends an engine turn until it has.
-- Spike otherwise live on the PC: C25 and C36 hold, fixtures in place. Two global npm links
-  from the 2026-10-14 restore still need the owner's names.
+- `main` is twenty commits ahead of `origin/main` (`762e6c5` is pushed), every one read by an
+  agent that did not write it. Push only on the owner's words. HOLD 60%/75%.
+- Owner: Jason Dorje Short <jdorje@gmail.com>, repo-local identity; UX is his, technical calls mine.
+- Language settled 2026-10-16: Go, ADR 0023 under the owner's long-term principle (vision). Design
+  docs and `08-implementation-plan.md` are in Go form; P0 (module skeleton) is committed.
+- PC spike closed: every PC row holds; droplet rows and C37 open. Since 2026-10-16 the spike
+  directory and this PC's Claude Code are both the owner's account (ids compared, not his words),
+  so the status-line meters are the spike's cost too.
+- Prior-art verdict: build. Open owner question: is the DM login relay "Anthropic's own flow"
+  (ADR 0020 amendment of 2026-10-16, vision question 1).
 
 ## Next
 
-1. Owner deletes `$CFG`, runs `spike/login.ts` as himself in a terminal, then `setup.js settings`;
-   tester adds the second-login row to the ADR 0020 finding and fixes its account paragraph.
-2. PC claims in `07-spike-plan.md` order: S1 (now with the AskUserQuestion observable), C27, C39,
-   S2, C35 and C34 PC halves, C28, C26; each `$RUN` against `$CFG` and `$TREE`.
-3. Owner answers the login-relay question; architect records it as an ADR 0020 amendment.
-4. Owner runs the droplet operator entries and names the two npm link targets.
-5. Droplet claims (`07-spike-droplet.md`); tester then writes a droplet host-setup reference.
-6. Spike exit met: architect records refutations as ADR amendments; coder starts `src/` (engine
-   adapter, fake engine, hook with `BROODFORGE_ANSWER_REASON`, outbound mask, storage, Discord).
-7. Pusher pushes `main` on the owner's words, at session end.
+1. Coder: P1 fixture import per `08-implementation-plan.md` (path rewrite incl. the project slug;
+   a person reads every fixture before the commit; the idea file is deleted in that commit).
+2. Coder: P2 CLI conventions and control socket, then P3 engine events and the fake engine.
+3. Tester: split the ADR 0020 finding by topic (login; stream and process; hook flow) first.
+4. Owner: `docs/operator/2026-10-16-pc-mingw-for-go-race.md`; the droplet entries (Go, gcc, Node
+   for the spike); the two npm link names; the login-relay answer.
+5. Droplet claims (`07-spike-droplet.md`), then P14 (held) and the deletion of `spike/`.
+6. Pusher pushes `main` on the owner's words, at session end (the module path carries his
+   GitHub handle, already public in the repository URL).
 
 ## Waiting on user
 
-- The C25 login as himself; the login-relay answer; npm link targets; droplet entries; the push.
+- The push; the login-relay answer; the mingw entry; droplet entries; npm link targets; a word
+  that this PC's Claude Code session is his account.
 
 ## Open findings
 
+- `docs/findings/2026-10-15-spike-claims-for-adr-0020.md` (PC rows hold, droplet rows open)
+- `docs/findings/2026-10-15-spike-claims-for-adr-0022.md` (PC rows hold, droplet, C37, key half)
 - `docs/findings/2026-10-16-prior-art-chat-front-ends-for-coding-agents.md` (relay question open)
-- `docs/findings/2026-10-15-spike-claims-for-adr-0020.md` (C25 closed, seven rows open)
-- `docs/findings/2026-10-15-spike-claims-for-adr-0022.md` (C36 closed, eight rows open)
