@@ -19,6 +19,7 @@ reasoning map are in `../README.md`, Decisions so far; this list is the one-line
 | `0021-backup-and-restore.md` | Companion to 0021: snapshot, backup set, restore per host, rehearsal |
 | `0022-session-isolation-and-credential-storage.md` | Two users and bubblewrap on the droplet, one service account on the PC, an encrypted store with the key outside the backup set, shared clones handed back as bundles; a table of spike claims |
 | `0022-linux-spawn-and-handoff.md` | Companion to 0022: ownership table, sudoers, the bwrap bind list, entry wrapper, signal path, clone and handoff steps |
+| `0023-language-for-the-long-term.md` | Go with a pinned toolchain, disgo (arikawa the exit), zombiezen SQLite, x/sys job objects, the standard library, one static binary per host; replaces 0020's language bundle under the owner's principle of 2026-10-16; eight conditions from the review |
 
 Template:
 

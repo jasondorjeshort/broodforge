@@ -148,3 +148,7 @@ handling or the service units change; the additive columns above in the domain d
 
 Supersede when: a second concurrent writer process is required, several hosts share one state,
 or WAL mode is shown to misbehave on a target filesystem.
+
+## Amendments
+
+2026-10-16 (ADR 0023, `0023-language-for-the-long-term.md`): the Decision sentence "The binding is the language's standard one with bundled or prebuilt natives (for TypeScript the example is `better-sqlite3`); 0020 names it." is replaced: the binding is `zombiezen.com/go/sqlite` (ISC) over `modernc.org/sqlite` (BSD-3-Clause, cgo-free, no native build on either host), named by ADR 0023; the optional `sqlite3_set_authorizer` hardening in the same paragraph is taken through `SetAuthorizer` on the bot's connection; PRAGMAs are per connection and set at open, one writer connection and a small read pool. The deferred item "B behind the same data-access interface (0020 picks a language whose only binding cannot build on the owner's Windows)" is closed: the binding builds everywhere without a C compiler.

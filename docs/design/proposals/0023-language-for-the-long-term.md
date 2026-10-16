@@ -1,7 +1,7 @@
 # 0023. Language, runtime and library bundle for the long term
 
-Date: 2026-10-16
-Status: under review
+Date: 2026-10-16 (responses added the same day after `0023-critic-review.md`)
+Status: promoted to ADR 0023 (accepted by the coordinator, 2026-10-16)
 
 ## Question
 
@@ -296,4 +296,50 @@ No web tool was available to the architect; every library claim above is unverif
 
 ## Critic's objections and responses
 
-(none yet)
+The review's verification table is authoritative over the body where the two differ; the body is
+not re-scored, the corrections below are the record. The coordinator decided Go on 2026-10-16.
+
+1. **Serious, `-race` unavailable on the PC.** Accepted with change: `-race` runs on Linux always
+   (`CGO_ENABLED=1` for that run, `gcc` on the droplet) and on the PC only after the operator
+   entry `../../operator/2026-10-16-pc-mingw-for-go-race.md` installs mingw-w64; criterion 4 reads
+   "no C compiler for the build". The Recommendation's "narrowed by the race detector" holds on
+   the droplet, where the Linux backend is proved, and on the PC once the entry is done.
+2. **Serious, criterion 7 over-weighted.** Accepted: measured 9 ms against 48 ms on the PC, three
+   orders below the timeout, recorded in ADR 0023 as a fact, not a reason; "closing the C39 bypass
+   as a load phenomenon" is withdrawn. At weight 1 B still leads A.
+3. **Serious, criterion 6 separates nothing.** Accepted: the engine's memory decides the sessions
+   axis; the choice rests on longevity and engines, which is how ADR 0023 states it.
+4. **Serious, the Go Discord library is one person deep.** Accepted with change: ADR 0023 pins
+   disgo by version with gorilla/websocket listed, names arikawa as the exit, confines both to 03's
+   `discord` package so a swap touches one package, and names an in-house gateway and REST client
+   as the last resort.
+5. **Serious, Go closes the Agent SDK path.** Accepted: ADR 0023 closes 0020's deferred SDK
+   route (a Node sidecar is a second runtime and is rejected) and moves the injection trigger to
+   a long-lived-process variant of mechanism B; a raw-API second engine is unaffected. The owner
+   hears that the engines axis loses the in-process shape.
+6. **Serious, switching cost absent.** Accepted: ADR 0023's Context names the files and the
+   passes (about two architect, one tester, one coder); the owner's principle says it does not
+   decide, and the coordinator accepted it with the ADR.
+7. **Minor, unknown-field refusal.** Accepted: refusal on configuration files only; the engine
+   stream never refuses an unknown field or kind; every fixture is replayed by the test command,
+   so a toolchain major that changes the parser fails there.
+8. **Minor, the binding needs one decision.** Accepted: zombiezen (ISC, `SetAuthorizer`) over
+   modernc, one writer connection and a small read pool, PRAGMAs set per connection at open.
+9. **Minor, job objects.** Accepted: the bot joins a kill-on-close job at start so every engine
+   dies with a crashed bot; each engine is assigned to its own job after `Start`, the microsecond
+   window accepted; `taskkill /T` stays the fallback.
+10. **Minor, toolchain download refusal.** Accepted: the lift (install that Go, or
+    `GOTOOLCHAIN=local` with the pin lowered) goes in the host references; the droplet builds
+    with network.
+11. **Minor, D not promoted.** Accepted; D stays third.
+12. **Minor, the Rust path is heavier on the PC.** Accepted as a correction to option C; Rust is
+    not taken, so no further change.
+13. **Minor, `node:sqlite` not yet stable.** Accepted as a correction to option A; A's scores stand.
+14. **Minor, criterion 1 under-scores TypeScript on the event type.** Accepted as stated: both at
+    3, the compiler-exhaustive union noted for A and nil and discarded errors for B; the order
+    does not change. ADR 0023 models events as a tagged struct so the verified lint applies.
+15. **Minor, the global budget has its number.** Accepted: 50 requests per second per bot,
+    per-route limits keyed on the channel id, no documented per-channel edit limit; handed to 03.
+
+Standing after revision: every objection resolved. Promoted to
+`../decisions/0023-language-for-the-long-term.md`.

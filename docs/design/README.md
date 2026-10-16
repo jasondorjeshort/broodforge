@@ -72,5 +72,13 @@ Decisions so far:
   repository; WSL2 and a per-turn cross-account Windows spawn deferred. A table of spike claims.
   Companion [Linux spawn and handoff](decisions/0022-linux-spawn-and-handoff.md): the bind list,
   sudoers, entry wrapper, signal path, clone and bundle steps.
+- [0023 Language for the long term](decisions/0023-language-for-the-long-term.md): under the
+  owner's principle of 2026-10-16, Go replaces 0020's TypeScript bundle for the bot, the debug
+  CLI, the hook and the tests: a pinned toolchain, disgo behind a narrow `discord` package with
+  arikawa as the exit, zombiezen over modernc for SQLite with the audit authorizer, x/sys job
+  objects on Windows, the standard library elsewhere, one static binary per host that is also the
+  sandbox entry wrapper; `-race` on Linux always and on the PC after an operator step; the engine
+  stream never refuses an unknown field; 0020's Agent SDK route closed. Amends 0020, 0021 and the
+  0022 companion.
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).

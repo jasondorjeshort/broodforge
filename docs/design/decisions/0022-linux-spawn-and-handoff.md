@@ -203,3 +203,16 @@ no `safe.directory` for anything engine-owned. On Windows the same five steps ru
   Step 4 now targets the outer `bwrap` process through the sudoers kill line. Spike claim C32
   checks it: `sudo -n -u broodforge-engine sleep 60 & kill -KILL $!` (expected EPERM), then the
   bwrap-pid form (expected to succeed).
+- 2026-10-16, ADR 0023 (`0023-language-for-the-long-term.md`): Broodforge is one static Go
+  binary, so the runtime bind and the shell wrapper go. The sentence "`<bf>/bin/broodforge` is a
+  POSIX `sh` script that dispatches `engine-entry` to a shell implementation and every other
+  subcommand to Node, because the entry wrapper must `exec` into the engine, which Node cannot"
+  is replaced: `<bf>/bin/broodforge` is the binary, `engine-entry` is a subcommand of it that
+  runs its checks and `syscall.Exec`s the engine, so the engine is still the process directly
+  below the inner `bwrap` and the `comm` walk still finds `claude`. In the spawn block the line
+  `--ro-bind <node> <node>` is dropped and `PATH` becomes `<engine>:/usr/bin:/bin`; in the
+  ownership table the row `<engine>, <node>, <bf>` loses `<node>`; "Maintenance commands run as
+  Node" reads "run as the binary"; the operator prerequisite "the engine as the native ELF, Node
+  and Broodforge installed" loses Node. `<bf>` holds the binary and `share/`; the droplet builds
+  it from the pinned source (ADR 0023). The Windows gap "a crashed bot's leftover engines run on
+  until they end" in the 0022 ADR's 03-review amendments is closed by ADR 0023's job object.
