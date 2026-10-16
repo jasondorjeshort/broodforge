@@ -22,8 +22,8 @@ Updated: 2026-10-16, at commit 163e7f0, by main session
    a person reads every fixture before the commit; the idea file is deleted in that commit).
 2. Coder: P2 CLI conventions and control socket, then P3 engine events and the fake engine.
 3. Tester: split the ADR 0020 finding by topic (login; stream and process; hook flow) first.
-4. Owner: `docs/operator/2026-10-16-pc-mingw-for-go-race.md`; the droplet entries (Go, gcc, Node
-   for the spike); the two npm link names; the login-relay answer.
+4. Owner: the droplet entries (Go, gcc, Node for the spike); the two npm link names; the
+   login-relay answer. The mingw entry closed 2026-10-16; `-race` now runs on the PC too.
 5. Droplet claims (`07-spike-droplet.md`), then P14 (held) and the deletion of `spike/`.
 6. Pusher pushes `main` on the owner's words, at session end (the module path carries his
    GitHub handle, already public in the repository URL).

@@ -10,5 +10,5 @@ already certain. When a fact turns out to be wrong, fix it and bump `verified:`;
 
 | File | Topic | Verified |
 |---|---|---|
-| `claude-code-on-windows.md` | Processes, worktrees, shells, shared state and usage meters for parallel agents on Windows. Kept by decant (ADR 0008). | 2026-10-14 |
+| `claude-code-on-windows.md` | Processes, worktrees, shells, npm, Go, shared state and usage meters for parallel agents on Windows. Kept by decant (ADR 0008). | 2026-10-16 |
 | `go-dependencies.md` | Every module in `go.mod`: version, licence, which component or tool needs it; commands to check one. | 2026-10-16 |

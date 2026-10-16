@@ -42,4 +42,3 @@ rather than trusting a status line, and drop a step already done.
 | `2026-10-14-droplet-engine-go-and-broodforge.md` | Install the pinned engine as its native ELF, Go and `gcc`, and the Broodforge binary at paths both users read. |
 | `2026-10-14-pc-broodforge-account-and-task.md` | Create the PC `broodforge` account, log in once, install Claude Code, register the Task Scheduler task. |
 | `2026-10-14-credential-store-key-per-host.md` | Run `credential init` per host and store the key in the password manager. |
-| `2026-10-16-pc-mingw-for-go-race.md` | Install mingw-w64 through MSYS2 on the PC and put it on the owner's `PATH` so `go test -race` can run there (ADR 0023). |

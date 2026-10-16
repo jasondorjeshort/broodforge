@@ -1,6 +1,6 @@
 ---
-verified: 2026-10-15
-source: observed (npm behaviour tested 2026-10-14; twelve waves of parallel agents on a downstream project; Windows 10 and 11, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1); hook and status line code read 2026-10-14, usage-gate grants 2026-10-15; robocopy and Remove-Item behaviour with junctions observed 2026-10-14
+verified: 2026-10-16
+source: observed (Go toolchain and mingw-w64 observed 2026-10-16; npm behaviour tested 2026-10-14; twelve waves of parallel agents on a downstream project; Windows 10 and 11, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1); hook and status line code read 2026-10-14, usage-gate grants 2026-10-15; robocopy and Remove-Item behaviour with junctions observed 2026-10-14
 ---
 
 # Claude Code on Windows: what holds
@@ -72,6 +72,15 @@ source: observed (npm behaviour tested 2026-10-14; twelve waves of parallel agen
 - Working form, tested: `npm_config_userconfig=<path to an empty file> npm --prefix <dir> install`.
   The empty user config hides the setting; the global folder was unchanged and `node_modules`
   appeared in `<dir>`. Evidence: `../findings/2026-10-14-npmrc-location-global-makes-a-plain-npm-install-destructive.md`.
+
+## Go on this PC
+
+- The C compiler for the race detector is MSYS2 UCRT64 gcc, `C:\msys64\ucrt64\bin\gcc.exe`, with
+  `C:\msys64\ucrt64\bin` on the owner's user `PATH` (installed 2026-10-16).
+- With a compiler present cgo defaults on (`go env CGO_ENABLED` prints `1`), so the build line
+  forces `CGO_ENABLED=0 go build ./...` and the test line sets `CGO_ENABLED=1 go test -race ./...`
+  (ADR 0023).
+- `CGO_ENABLED=1 go test -race ./...` is the check that the compiler still works.
 
 ## Shared state
 

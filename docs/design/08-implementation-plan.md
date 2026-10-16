@@ -20,8 +20,7 @@ on Windows) from `CGO_ENABLED=0 go build -o bin/ ./cmd/broodforge` at the reposi
 directory form: `-o bin/broodforge` writes no `.exe` on Windows), or `go run ./cmd/broodforge`
 (same usage output; its exit code is not the binary's, so exit codes are proven on the binary);
 nothing goes on `PATH`, `go install` is never used. Build before test, always:
-`CGO_ENABLED=0 go build ./...`, the check line, then `CGO_ENABLED=1 go test -race ./...` on Linux and plain `go
-test ./...` on the PC until `../operator/2026-10-16-pc-mingw-for-go-race.md` is done; every pass
+`CGO_ENABLED=0 go build ./...`, the check line, then `CGO_ENABLED=1 go test -race ./...` on Linux and on the PC; every pass
 report states which ran. Command classes are `05-cli-conventions.md`'s (Surface); write commands are
 socket clients that exit `not-running` until P10's `serve`, so before P10 a write command is proven
 through P2's harness.
