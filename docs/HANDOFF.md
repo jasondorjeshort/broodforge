@@ -1,15 +1,15 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-16, at commit d3a0b73, by main session
+Updated: 2026-10-16, at commit 94e7667, by main session
 
 ## Now
 
-- `origin/main` is at `3156472` (pushed 2026-10-16). Unpushed: the mingw close-out `dcb845f` and
-  the git-guard quoted-git fix `d3a0b73`, under review. Push only on the owner's words. HOLD 60%/75%.
+- `origin/main` is at `3156472`. Unpushed through `94e7667` (mingw close-out, git-guard quoted-git
+  fix, both reviewed and fixed, handoffs). Push only on the owner's words. HOLD 60%/75%. Sessions
+  older than the mingw install need a restart for `-race` (Windows reference, Go section).
 - Owner: Jason Dorje Short <jdorje@gmail.com>, repo-local identity; UX is his, technical calls mine.
-- Language settled 2026-10-16: Go, ADR 0023 under the owner's long-term principle (vision). Design
-  docs and `08-implementation-plan.md` are in Go form; P0 (module skeleton) is committed.
+- Go settled 2026-10-16 (ADR 0023); design docs and the plan are in Go form; P0 is committed.
 - PC spike closed: every PC row holds; droplet rows and C37 open. Since 2026-10-16 the spike
   directory and this PC's Claude Code are both the owner's account (ids compared, not his words),
   so the status-line meters are the spike's cost too.
