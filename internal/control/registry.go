@@ -22,9 +22,30 @@ type Call struct {
 	Cmd  string
 	Args json.RawMessage
 
-	mu   sync.Mutex
-	done bool
-	emit func(json.RawMessage) error
+	mu    sync.Mutex
+	done  bool
+	emit  func(json.RawMessage) error
+	after []func()
+}
+
+// AfterResponse runs f once the call's final line has been written to the client (or failed
+// to be): how `stop` answers before the bot closes its own server. f runs on the call's own
+// goroutine, which Server.Close waits for, so it must signal, never wait for Close itself.
+func (c *Call) AfterResponse(f func()) {
+	c.mu.Lock()
+	c.after = append(c.after, f)
+	c.mu.Unlock()
+}
+
+// responded runs the AfterResponse functions, in order.
+func (c *Call) responded() {
+	c.mu.Lock()
+	after := c.after
+	c.after = nil
+	c.mu.Unlock()
+	for _, f := range after {
+		f()
+	}
 }
 
 // ErrCallDone is returned by Emit after the handler has returned.

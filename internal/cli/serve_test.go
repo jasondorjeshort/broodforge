@@ -1,0 +1,134 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+package cli_test
+
+import (
+	"bytes"
+	"os"
+	"os/exec"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jasondorjeshort/broodforge/internal/cli/clitest"
+)
+
+// The P10 half (a) Proof on the built binary: serve on a scratch root, register, one
+// policy-mode turn against fixtures/engine/basic through the fake, the reads, stop.
+
+// startServe runs `serve` on root in the background and returns its stdout and its exit.
+func startServe(t *testing.T, env []string, root string, args ...string) (*bytes.Buffer, <-chan int) {
+	t.Helper()
+	cmd := exec.Command(clitest.Binary(t), append([]string{"--root", root, "serve"}, args...)...)
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(strings.ToUpper(kv), "BROODFORGE_ROOT=") {
+			cmd.Env = append(cmd.Env, kv)
+		}
+	}
+	cmd.Env = append(cmd.Env, env...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	exit := make(chan int, 1)
+	go func() {
+		err := cmd.Wait()
+		code := 0
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		} else if err != nil {
+			code = -1
+		}
+		t.Logf("serve exited %d\nstdout: %q\nstderr: %q", code, stdout.String(), stderr.String())
+		exit <- code
+	}()
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+	})
+	return &stdout, exit
+}
+
+func TestProofServeSession(t *testing.T) {
+	_, env := scratchEnv(t)
+	root, name := scratchNew(t, env)
+	run := func(args ...string) clitest.Result {
+		return clitest.Run(t, env, append([]string{"--root", root}, args...)...)
+	}
+
+	want(t, run("serve", "--discord", "live"), 1, "", "error: start-discord: the live gateway is not built yet (P12); run serve --discord dry-run\n")
+	stdout, exit := startServe(t, env, root)
+	if r := run("status", "--wait", "10", "--expect", "ok"); r.Code != 0 || !strings.HasPrefix(r.Stdout, "config: ok\ndiscord: dry-run connected\nsessions: 0 open,") {
+		t.Fatalf("status: exit %d %q %q", r.Code, r.Stdout, r.Stderr)
+	}
+	r := run("serve")
+	if r.Code != 1 || !strings.HasPrefix(r.Stderr, "error: start-control: another bot owns ") || !strings.Contains(r.Stderr, name) {
+		t.Errorf("a second serve: exit %d %q", r.Code, r.Stderr)
+	}
+
+	if r := run("register", "1001", "--name", "Ada Example", "--email", "ada@example.com"); r.Code != 0 ||
+		!strings.HasPrefix(r.Stdout, "1001  Ada Example  ada@example.com  ") || !strings.HasSuffix(r.Stdout, "  -\n") {
+		t.Errorf("register: %d %q %q", r.Code, r.Stdout, r.Stderr)
+	}
+	if r := run("register", "list"); r.Code != 0 || !strings.HasPrefix(r.Stdout, "1001  Ada Example  ada@example.com  ") {
+		t.Errorf("register list: %q", r.Stdout)
+	}
+	want(t, run("session", "start", "--channel", "100", "--as", "1001", "--roles", "11", "--credential", "cred-scratch", "--expect", "refused"), 0, "", "")
+	want(t, run("session", "start", "--channel", "100", "--as", "1001", "--roles", "10", "--credential", "cred-scratch",
+		"--mode", "policy", "--fixture", "basic"), 0, "s0001\n", "")
+	want(t, run("session", "send", "s0001", "--as", "1001", "--wait", "Read hello.txt and reply with its one word."), 0,
+		"turn-ended  1  completed\n", "")
+
+	tail := run("session", "tail", "s0001").Stdout
+	for _, w := range []string{"  tool-call  [Read] /home/user/bf-spike/tree/hello.txt\n",
+		"  permission-decision  allow [Read] /home/user/bf-spike/tree/hello.txt (policy)\n", "  text  hello\n", "  turn-ended  end_turn\n"} {
+		if !strings.Contains(tail, w) {
+			t.Errorf("session tail lacks %q:\n%s", w, tail)
+		}
+	}
+	if r := run("session", "show", "s0001"); !strings.HasPrefix(r.Stdout, "session: s0001  waiting-for-input  100  scratch  1001  policy  code  fake\n") ||
+		!strings.Contains(r.Stdout, "\nparticipants: 1001  driver  ") || !strings.Contains(r.Stdout, "\npending: -\n") {
+		t.Errorf("session show:\n%s", r.Stdout)
+	}
+	if r := run("session", "list"); !strings.HasPrefix(r.Stdout, "s0001  waiting-for-input  100  1001  policy  code  1  ") {
+		t.Errorf("session list (the store through a running bot): %q %q", r.Stdout, r.Stderr)
+	}
+	if r := run("audit", "--kind", "permission-decision", "--json"); !strings.Contains(r.Stdout, `"decidedBy":"policy","decision":"allow"`) {
+		t.Errorf("audit: %q", r.Stdout)
+	}
+	// --tail streams the second turn (basic's resumed turn) and prints the start line last.
+	r = run("session", "send", "s0001", "--as", "1001", "--tail", "Say it again.")
+	if r.Code != 0 || !strings.Contains(r.Stdout, "  turn-started  From: Ada Example (driver) Say it again.\n") ||
+		!strings.HasSuffix(r.Stdout, "  turn-ended  end_turn\nturn  2  started\n") {
+		t.Errorf("send --tail: exit %d\n%s%s", r.Code, r.Stdout, r.Stderr)
+	}
+
+	want(t, run("stop"), 0, "stopped  1\n", "")
+	select {
+	case code := <-exit:
+		if code != 0 {
+			t.Errorf("serve exited %d", code)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("serve did not exit after stop")
+	}
+	if !strings.HasPrefix(stdout.String(), "serving  ") {
+		t.Errorf("serve printed %q", stdout.String())
+	}
+	if r := run("status"); r.Code != 1 || !strings.HasPrefix(r.Stderr, "error: not-running: ") {
+		t.Errorf("status after stop: %d %q", r.Code, r.Stderr)
+	}
+	if r := run("session", "tail", "s0001"); r.Code != 1 || !strings.HasPrefix(r.Stderr, "error: not-running: ") {
+		t.Errorf("tail without the bot: %d %q", r.Code, r.Stderr)
+	}
+	if r := run("session", "show", "s0001"); !strings.HasPrefix(r.Stdout, "session: s0001  interrupted  ") {
+		t.Errorf("show from the store file: %q %q", r.Stdout, r.Stderr)
+	}
+	// A second start reconciles nothing new and stops again.
+	_, exit = startServe(t, env, root)
+	want(t, run("status", "--wait", "10", "--expect", "ok"), 0, "config: ok\ndiscord: dry-run connected\nsessions: 0 open, 0 waiting-for-answer, 1 interrupted\nworktrees: 0 kept with unpushed commits\nbackup: none\nengine: - -\n", "")
+	want(t, run("stop"), 0, "stopped  0\n", "")
+	if code := <-exit; code != 0 {
+		t.Errorf("second serve exited %d", code)
+	}
+}

@@ -155,6 +155,7 @@ func (s *Server) serveConn(c io.ReadWriteCloser) {
 		go func() {
 			defer calls.Done()
 			_ = write(runCall(ctx, h, call))
+			call.responded()
 		}()
 	}
 	if err := sc.Err(); err != nil {

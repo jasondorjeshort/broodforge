@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Package controltest is the in-process harness: a control server on a temporary root with the
-// services built so far, for tests that drive the binary (or control.Do) against it before
-// `serve` exists. It retires into `serve` (08-implementation-plan.md, P10).
+// Package controltest is the in-process harness: a control server on a temporary root with only
+// the services a test registers, for a test of one handler that drives the binary (or
+// control.Do) against it. The bot itself is `serve` (P10), which registers every handler.
 package controltest
 
 import (

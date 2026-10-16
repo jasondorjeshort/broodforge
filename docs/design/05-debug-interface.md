@@ -20,21 +20,29 @@ that widens a live session), the hidden probe `control echo`. Sections below giv
 ## Bot lifecycle
 
 Drive. `broodforge serve [--discord live|dry-run]` runs the bot in the foreground through 03's
-startup steps; a failed step is `error: start-<step name>: <reason>`, exit 1; the flag overrides
-the config key for this run. `broodforge status [--wait <seconds>]` waits for the socket to
-answer and prints, in order: `config: ok` or `config: last-good from <time>`, `discord:
-live|dry-run connected|disconnected`, `sessions: <open> open, <waiting> waiting-for-answer,
-<interrupted> interrupted`, `worktrees: <kept> kept with unpushed commits`, `backup: last good
-<age> ago|none`, `engine: <path> <version>`; `--json` nests the same under those keys.
-`broodforge stop [--timeout 30]` is 03's shutdown, exit 1 after the timeout with the open
-sessions listed. `broodforge reconcile [--report-only]` runs ADR 0021's reconciliation on
-demand; `--report-only` works on the file without the bot, writes nothing and prints `<kind>
-<subject>  <session>  <detail>` per finding (`interrupt`, `missing`, `present`, `unrecorded`).
+startup steps and prints `serving  <socket>` once the socket listens; a failed step is `error:
+start-<step>: <reason>`, exit 1 (`root`, `config`, `discord`, `credentials`, `store`, `engine`,
+`preflight`, `reconcile`, `control`); the flag overrides the config key for this run. Until P12
+the gateway is not built: live is `start-discord`. With only `fake` channels, steps 5 and 6 skip
+the engine checks. `broodforge status [--wait <seconds>] [--expect ok|last-good]` waits for the
+socket to answer and prints, in order: `config: ok` or `config: last-good from <time>`, `discord:
+live|dry-run connected|disconnected` (dry-run is always connected), `sessions: <open> open,
+<waiting> waiting-for-answer, <interrupted> interrupted`, `worktrees: <kept> kept with unpushed
+commits`, `backup: last good <age> ago|none` (age `45s`, `12m`, `3h`, `2d`), `engine: <path>
+<version>` (`-` when unset); `--json` nests the same under those keys; the outcome token is the
+config value. `broodforge stop [--timeout 30]` is 03's shutdown: every running turn interrupted,
+every open session marked interrupted, `stopped  <sessions marked>`, then the bot exits 0; past
+the timeout `error: stop-timeout: open sessions: <ids>` and the bot exits 1. `broodforge
+reconcile [--report-only]` runs ADR 0021's reconciliation on demand; `--report-only` works on the
+file without the bot, writes nothing and prints `<kind>  <subject>  <session>  <detail>` per
+finding (`interrupt`, `missing`, `present`, `unrecorded`). A read the bot does not serve itself
+(`audit`, `usage`, `session list`, `register list|show`) reads the store file while it runs.
 Observe. `status`; `audit --kind instance-started --limit 1` and the events after it (the report).
 Reproduce. `broodforge scratch run -- broodforge serve --discord dry-run` with a second shell
-running `status --wait 10 --expect config=ok`; a start refusal keeps the scratch root.
+running `status --wait 10 --expect ok`; a start refusal keeps the scratch root.
 Isolation. `serve` refuses a root whose socket already answers (`error: start-control: another
-bot owns <socket>`); scratch uses the same-account backend on both hosts.
+bot owns <socket>`; any failure but `not-running` refuses the same way), probed right after step 2,
+before any write, so a second bot never touches the first's sessions or audit log; scratch uses the same-account backend on both hosts.
 
 ## Configuration
 
@@ -53,27 +61,14 @@ Observe. `status` line one; `audit --kind configuration-changed --limit 1 --json
 hash and changed keys; `config show --effective --channel 100 --json` returns the channel object
 of 03 with `defaults` merged in (`{"id":"100","project":"scratch","reach":"code",...}`).
 Reproduce. Last-good: in a scratch root start the bot, `config reload` once, write invalid JSON
-over `config/instance.json`, `stop`, `serve`, `status --expect config=last-good`. A validation
+over `config/instance.json`, `stop`, `serve`, `status --expect last-good`. A validation
 bug is a tree beside `tests/config/valid/` and `tests/config/dup-key/`, or `config check --root
 <kept scratch root>`.
 Isolation. `config` reads the credential store for id existence only (03).
 
 ## Registration and participants
 
-Drive. `broodforge register <discord user id> --name "<git name>" --email <email>`; again
-replaces and writes `registration-changed` (R-02). `register list` and `register show <user id>`
-print `<user id>  <name>  <email>  <registered at>  <default credential id or ->`; `register
-set-default <user id> <credential id>`. Participants are read per session: `session show <id>`
-lists `participants: <user id>  driver|contributor  <joined at>`. Roles without Discord: every
-session command that acts for a person takes `--as <user id> [--roles <id,...>]`; given, the
-channel's `start`, `contribute` or `answer` list (or the driver, for `mode` and `invite`) is
-checked against them with `policy`'s role check (03), and a miss is `error: refused: <action>
-needs a role in <list>`, exit 1, plus the `action refused` audit event; `--as` absent, the
-action is the owner's from the host (actor `host`), unchecked.
-Observe. `register list --json`; `audit --kind registration-changed`.
-Reproduce. `scratch run -- bash tests/repro/<name>.sh` [no-check: no code yet]: the script
-registers, starts with `--roles 11 --expect refused`, then with `--roles 10`.
-Isolation. A scratch root has no registrations; the ids above are not Discord's.
+Moved to `05-debug-interface-session.md`: `register <user id>|list|show|set-default`, participants, and the `--as` and `--roles` every session command takes.
 
 ## Credentials
 
@@ -104,34 +99,7 @@ string and refuses any other value with exit 1.
 
 ## Session lifecycle without Discord
 
-Drive. `broodforge session start --channel <id> --as <user id> [--roles <ids>] [--credential
-<id>] [--mode prompt|policy] [--reach read-only|code] [--fixture <dir>] [--idle-timeout-seconds
-<n>] [--prompt-timeout-seconds <n>]` prints the session id (`s0001`); `--reach`, `--fixture`,
-`--idle-timeout-seconds` and `--prompt-timeout-seconds` are scratch and dry-run only. `session send <id> --as <user id> [--roles <ids>] [--wait] [--tail]
-"<text>"` (or `-` for stdin) calls `SessionService.submit` and prints `turn <n> queued|started`;
-`--wait` returns at `turn-ended` or `waiting-for-answer`, exit 0 either way, printing which;
-`--tail` streams the events meanwhile. `session mode <id> prompt|policy`, `session interrupt
-<id>`, `session end <id>` (the end-of-session sequence; prints the outcome line; it runs the closing
-turn against the fake engine when a fixture named `closing` exists, `--no-closing-turn` skips
-it) and `session
-invite <id> --user <user id>` take `--as` and `--roles` as above (`mode` and `invite` need the
-driver, `interrupt` and `end` the `answer` list). `session list [--state <state>]` prints `<id>
-<state>  <channel>  <driver>  <mode>  <reach>  <turns>  <started at>`; `session show <id>`
-prints participants, worktree, credential id, engine session id, pending answer; `session tail
-<id> [--follow] [--since <seq>] [--all]` prints `<seq>  <time>  <type>  <summary>` where the
-summary is the text's first 80 characters, the tool name and target, or the stop reason.
-`session outbox <id> [--follow]` prints the dry-run renderer's posts: `<seq>  <time>
-create|edit|attach  <message id>  <length>  <first line>`, `--json` with the full body. `session
-transcript <id> [--out <file>]` prints 04's Markdown transcript as the summary would attach it.
-`broodforge panel post <channel id>` posts or refreshes the project channel's panel (04) and
-records its message id in the store, which `panel show <channel id>` prints back; on a
-dry-run instance it lands in the outbox. `session reach-report <id>` is below, Spawn and reach.
-Observe. `session show`, `session tail --json`, `session outbox`, `usage --session <id>`.
-Reproduce. A whole R-51 run in one line: `scratch run -- bash tests/repro/full-session.sh`
-[no-check: no code yet]: `serve --discord dry-run &`, `status --wait 10`, `register 1001 ...`,
-`session start --channel 100 --as 1001 --roles 10`, `session send s0001 --as 1001 --wait "..."`,
-`session answer ...`, `session outbox s0001`, `session end s0001`, `stop`.
-Isolation. All of it in the scratch root against the fake; the socket under the root.
+Moved to `05-debug-interface-session.md`: `session start|send|mode|interrupt|end|invite|list|show|tail`, the event types and summaries `session tail` prints, who decided a call, `tests/repro/full-session.sh`, and P11's `session outbox|transcript` and `panel post|show`.
 
 ## A turn against the fake engine
 
@@ -193,19 +161,7 @@ Isolation. Pure: no socket, no store, no root; `--tree` is any directory; only t
 
 ## Prompt-mode defer and resume
 
-Drive. On a prompt-mode session with the fixture `fixtures/engine/defer/` [no-check: no code
-yet] (turn 1 ends `stop_reason: tool_deferred`, turn 2 is the resumed turn): `session send s0001
---as 1001 --wait "edit a.ts"` prints `waiting-for-answer toolu_01 Write a.ts`; `session answer
-s0001 toolu_01 allow|deny [--as <user id>] [--roles <ids>]` calls `SessionService.answer` and the
-resumed turn's events follow in `session tail`. The idle timeout is driven with
-`--idle-timeout-seconds 2` at start and observed as `session-ended` with reason `idle`; `--prompt-timeout-seconds 2` with no answer
-shows the timeout trace line (`denied: the prompt timed out`) in `session outbox`.
-Observe. `session show` prints `pending: toolu_01 Write a.ts since <time> until <deadline>`; `received-2.json`
-carries `answer` and `engineSessionId`; `session outbox` has the buttons post, custom id
-`bf:s0001:toolu_01:allow`.
-Reproduce. `scratch run -- bash tests/repro/defer-resume.sh` [no-check: no code yet]; an answer
-refused for roles is `session answer ... --roles 11 --expect refused`.
-Isolation. Against the real engine this is spike C27 (`engine run --real --resume`), not scratch.
+Moved to `05-debug-interface-session.md` (P10 half b builds it): `session answer`, the idle and prompt timeouts, the pending answer in `session show`.
 
 ## Spawn preflight and reach
 

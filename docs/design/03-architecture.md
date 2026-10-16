@@ -28,7 +28,7 @@ names; everything else goes through `SessionService`. Host differences live in `
 | `spawn` | `SpawnBackend`: `same-account` and `linux-sudo-bwrap`; interrupt; `engine-entry`; preflight | the OS |
 | `backup` | `backup snapshot`, `verify`, `rehearse` (never scheduled by the bot) | `store` |
 | `config` | Loading, validation, last-good, `reload`, `config check` | `credentials` (id existence) |
-| `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control`; `credentials` (`credential init`, the reads' store fallback, the bot's handlers); `git` and `policy` (the worktree handlers until `session`, P10) |
+| `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control`; `credentials` (`credential init`, the reads' store fallback, the bot's handlers); `session` (`serve` builds the service and serves it); `git` and `policy` (the worktree handlers) |
 
 `SessionService` is the boundary N-11 names: `start`, `submit`, `answer`, `setMode`, `interrupt`,
 `end`, `invite`, `status`, `subscribe(sessionId)`. The Discord adapter and the control socket call
@@ -250,13 +250,13 @@ flow). No commits: the tree is removed and the session says so. The tree is remo
 | Debug CLI | any shell as `broodforge` | the `broodforge` account; the owner's own account for scratch runs |
 | Control socket | `data/control.sock`, directory `0700` | named pipe `\\.\pipe\broodforge-<instanceName>` |
 
-Startup, in order; a failure at any step is a refusal naming the step, exit 1: (1) the instance
-root from the flag or environment variable (ADR 0021); (2) `config/` or last-good (ADR 0021),
-parsed and validated except for credential ids; (3) the key file the config names or
-`BROODFORGE_KEY_FILE`, the credential store, then the config's credential ids against it (ADR
-0022); (4) `data/store.sqlite` and migrations; (5) the engine binary and version; (6) `spawn
-preflight`; (7) reconciliation (ADR 0021); (8) the control socket; (9) the Discord gateway;
-(10) the interrupted notice in each interrupted session's venue, the start-up report to the notice channel if set.
+Startup, in order; a failure at any step is a refusal naming the step, exit 1: (1) the instance root from the flag or
+environment variable (ADR 0021); (2) `config/` or last-good (ADR 0021), parsed and validated except for credential ids,
+then a probe of step 8's address: anything but nothing listening refuses `start-control` before any write, so a second
+bot never reconciles the first's sessions; (3) the key file the config names or `BROODFORGE_KEY_FILE`, the credential
+store, then the config's credential ids against it (ADR 0022); (4) `data/store.sqlite` and migrations; (5) the engine
+binary and version; (6) `spawn preflight`; (7) reconciliation (ADR 0021); (8) the control socket; (9) the Discord
+gateway; (10) the interrupted notice in each interrupted session's venue, the start-up report to the notice channel if set.
 
 Signals and leftovers. The spawn backend starts every engine (the `sudo` child on Linux) detached
 in its own process group, so a terminal's Ctrl-C reaches the bot alone and the bot interrupts each

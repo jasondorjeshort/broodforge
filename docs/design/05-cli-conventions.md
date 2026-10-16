@@ -51,11 +51,13 @@ Probe and harness. Every server answers the hidden `broodforge control echo [--t
 [--events <n>] [--fail <code>] [--expect <value>]`: `<n>` events `{"seq":i,"text":<s>}` (text
 `<s>  <i>`), then the result `{"text":<s>}` (`<s>` defaults to `ok`), or after the events the
 refusal `error: <code>: echo was asked to fail`; `<n>` above 1000 or a `<code>` that is not
-kebab-case is `error: bad-args`. Until `serve` exists, tests drive the binary
-through `internal/control/controltest` (a server on a temporary root whose
-`config/instance.json` names `test-<12 hex>`) and `internal/cli/clitest` (builds the binary
-with the plan's build line once per test package, into a temporary directory, and runs it);
-`go test -v -run TestProof ./internal/cli/` shows each command and its exit code.
+kebab-case is `error: bad-args`. Since P10 the bot is `serve`, which registers every
+handler; a test of one handler alone still drives the binary through
+`internal/control/controltest` (a server on a temporary root whose `config/instance.json` names
+`test-<12 hex>`, with only the services the test registers), and every test runs the binary
+through `internal/cli/clitest` (builds it with the plan's build line once per test package, into
+a temporary directory); `go test -v -run TestProof ./internal/cli/` shows each command and its
+exit code, `TestProofServeSession` against `serve` itself.
 
 Scratch (N-09, ADR 0021). `broodforge scratch new [--project <path or url>]` creates a
 root `<temp>/scratch-<12 hex>`, prints its path (`--json`: `{"root":"...","instanceName":

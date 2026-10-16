@@ -51,7 +51,7 @@ func ReadFixture(dir string) (Fixture, error) {
 		return fx, err
 	}
 	if err := json.Unmarshal(b, &fx); err != nil {
-		return fx, fmt.Errorf("%s: %w", filepath.Join(dir, FixtureFile), err)
+		return fx, fixtureError(filepath.ToSlash(filepath.Join(dir, FixtureFile)), b, err)
 	}
 	return fx, nil
 }
@@ -215,4 +215,15 @@ func (f *Fake) StartTurn(req TurnRequest) (TurnHandle, error) {
 		Events:    events,
 		Interrupt: func() error { once.Do(func() { close(stop) }); return nil },
 	}, nil
+}
+
+// fixtureError says what is wrong with fixture.json in one sentence, its path slash-separated:
+// a syntax error by its line, anything else as the decoder put it.
+func fixtureError(path string, src []byte, err error) error {
+	var se *json.SyntaxError
+	if errors.As(err, &se) {
+		off := min(int(se.Offset), len(src))
+		return fmt.Errorf("%s is not valid JSON at line %d", path, 1+bytes.Count(src[:off], []byte("\n")))
+	}
+	return fmt.Errorf("%s: %w", path, err)
 }

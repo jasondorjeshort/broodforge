@@ -4,6 +4,7 @@ package git
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/jasondorjeshort/broodforge/internal/spawn"
@@ -43,4 +44,16 @@ func Base(ctx context.Context, s Session) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(out), nil
+}
+
+// Discard undoes Create for a session whose start failed after the clone: the tree and its
+// bundle go through the backend's worktree-remove, then refs/sessions/<id> is deleted from the
+// canonical. Both are attempted; the errors are joined.
+func Discard(ctx context.Context, b spawn.Backend, s Session) error {
+	if err := s.check(); err != nil {
+		return err
+	}
+	rerr := b.WorktreeRemove(s.Dir())
+	_, derr := run(ctx, CodeCreate, s.Canonical, nil, "update-ref", "-d", SessionRef(s.ID))
+	return errors.Join(rerr, derr)
 }

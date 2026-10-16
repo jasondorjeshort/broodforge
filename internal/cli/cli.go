@@ -224,9 +224,11 @@ func execute(ctx context.Context, cmd *Command, env *Env) error {
 	case ClassWrite:
 		return socketCall(ctx, cmd, env)
 	case ClassRead:
+		// No bot, or a bot that does not serve this read (it registers only the reads it
+		// answers from memory): the read opens the store file read-only (ADR 0021, WAL).
 		err := socketCall(ctx, cmd, env)
 		var ce *control.Error
-		if cmd.Local != nil && errors.As(err, &ce) && ce.Code == control.CodeNotRunning {
+		if cmd.Local != nil && errors.As(err, &ce) && (ce.Code == control.CodeNotRunning || ce.Code == control.CodeUnknownCommand) {
 			return cmd.Local(ctx, env)
 		}
 		return err

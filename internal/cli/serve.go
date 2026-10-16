@@ -1,0 +1,518 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+package cli
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"sort"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/jasondorjeshort/broodforge/internal/audit"
+	"github.com/jasondorjeshort/broodforge/internal/config"
+	"github.com/jasondorjeshort/broodforge/internal/control"
+	"github.com/jasondorjeshort/broodforge/internal/credentials"
+	"github.com/jasondorjeshort/broodforge/internal/engine"
+	"github.com/jasondorjeshort/broodforge/internal/git"
+	"github.com/jasondorjeshort/broodforge/internal/session"
+	"github.com/jasondorjeshort/broodforge/internal/spawn"
+	"github.com/jasondorjeshort/broodforge/internal/store"
+)
+
+// serveCmd is `broodforge serve [--discord live|dry-run]` (05-debug-interface.md, Bot
+// lifecycle): the bot in the foreground through 03's startup steps 1 to 8, then the control
+// socket until `stop`, SIGTERM or Ctrl-C. A failed step is `error: start-<step>: <reason>`,
+// exit 1. It prints `serving  <socket>` once the socket answers. Only dry-run is built: the
+// gateway (steps 9 and 10) is P12's, so live is refused at the start.
+var serveCmd = Command{
+	Name:  "serve",
+	Class: ClassFile,
+	Flags: []Flag{
+		{Name: "discord", Kind: FlagString, Value: "live|dry-run", Usage: "override discord.mode for this run"},
+	},
+	Columns: serveColumns,
+	Local:   runServe,
+}
+
+var serveColumns = []string{"result", "socket"}
+
+func init() { commands = append(commands, &serveCmd) }
+
+// Start step names: `error: start-<step>: <reason>` (03-architecture.md, Startup).
+const (
+	stepRoot        = "start-root"
+	stepConfig      = "start-config"
+	stepDiscord     = "start-discord"
+	stepCredentials = "start-credentials"
+	stepStore       = "start-store"
+	stepEngine      = "start-engine"
+	stepPreflight   = "start-preflight"
+	stepReconcile   = "start-reconcile"
+	stepControl     = control.CodeStartControl
+)
+
+// defaultStopTimeout is how long shutdown waits for the running turns (03, Shutdown).
+const defaultStopTimeout = 30 * time.Second
+
+// bot is one running instance: what the startup steps opened and the handlers serve.
+type bot struct {
+	root       string
+	cfg        *config.Config
+	lastGood   *time.Time // set when the bot runs on data/config-last-good/
+	discord    string
+	st         *store.Store
+	aud        *audit.Writer
+	creds      *credentials.Service
+	backend    spawn.Backend
+	svc        *session.Service
+	srv        *control.Server
+	addr       string
+	stopReq    chan stopRequest
+	engineName string
+}
+
+// stopRequest is `stop` asking the main loop to shut down.
+type stopRequest struct {
+	timeout   time.Duration
+	outcome   chan stopOutcome
+	responded chan struct{}
+}
+
+type stopOutcome struct {
+	marked []string
+	err    error
+}
+
+func stepError(step string, err error) error {
+	var ce *control.Error
+	if errors.As(err, &ce) && strings.HasPrefix(ce.Code, "start-") {
+		return ce
+	}
+	msg := err.Error()
+	var inv *config.InvalidError
+	if errors.As(err, &inv) && len(inv.Problems) > 0 {
+		msg = inv.Problems[0].String()
+		if len(inv.Problems) > 1 {
+			msg += fmt.Sprintf(" (and %d more)", len(inv.Problems)-1)
+		}
+	}
+	return control.NewError(step, msg)
+}
+
+func runServe(_ context.Context, env *Env) error {
+	b, err := startBot(env)
+	if err != nil {
+		return err
+	}
+	served := make(chan error, 1)
+	go func() { served <- b.srv.Serve() }()
+	// The socket prints as the not-running error names it, unescaped.
+	if env.JSON {
+		line, err := json.Marshal(map[string]string{"result": "serving", "socket": b.addr})
+		if err == nil {
+			err = env.Out.Record(line, serveColumns)
+		}
+		if err != nil {
+			return err
+		}
+	} else {
+		env.Out.SetToken("serving")
+		fmt.Fprintln(env.Out.w, "serving  "+b.addr)
+	}
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigs)
+	var req *stopRequest
+	timeout := defaultStopTimeout
+	select {
+	case r := <-b.stopReq:
+		req, timeout = &r, r.timeout
+	case <-sigs:
+	case err := <-served:
+		b.close()
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	marked, serr := b.svc.Shutdown(ctx)
+	cancel()
+	if req != nil {
+		req.outcome <- stopOutcome{marked, serr}
+		select {
+		case <-req.responded:
+		case <-time.After(5 * time.Second):
+		}
+	}
+	b.close()
+	if err := <-served; err != nil && serr == nil {
+		serr = err
+	}
+	if serr != nil {
+		var se *session.Error
+		if errors.As(serr, &se) {
+			return control.NewError(se.Code, se.Message)
+		}
+		return serr
+	}
+	return nil
+}
+
+func (b *bot) close() {
+	_ = b.srv.Close()
+	_ = b.st.Close()
+}
+
+// startBot runs 03's startup steps 1 to 8; a failure closes what was opened.
+func startBot(env *Env) (*bot, error) {
+	// (1) The instance root.
+	root, err := filepath.Abs(env.Root)
+	if err != nil {
+		return nil, stepError(stepRoot, err)
+	}
+	root = filepath.ToSlash(root)
+	if st, err := os.Stat(root); err != nil || !st.IsDir() {
+		return nil, control.NewError(stepRoot, root+" is not a directory")
+	}
+	b := &bot{root: root, stopReq: make(chan stopRequest)}
+
+	// (2) config/, or the last-good copy (ADR 0021); credential ids are checked at step 3.
+	c, loadErr := config.Load(root, config.AnyCredential)
+	if loadErr != nil {
+		lg, err := config.LoadLastGood(root, config.AnyCredential)
+		if err != nil {
+			return nil, stepError(stepConfig, loadErr)
+		}
+		t, _ := config.LastGoodTime(root)
+		c, b.lastGood = lg, &t
+	}
+	b.discord = c.Instance.Discord.Mode
+	if f := env.String("discord"); f != "" {
+		b.discord = f
+	}
+	switch b.discord {
+	case config.DiscordDryRun:
+	case config.DiscordLive:
+		return nil, control.NewError(stepDiscord, "the live gateway is not built yet (P12); run serve --discord dry-run")
+	default:
+		return nil, control.NewError(stepDiscord, "discord mode "+quoteArg(b.discord)+": want live or dry-run")
+	}
+
+	// The control address is probed as soon as instanceName is known, before anything is
+	// written: a second bot on this root must neither rewrite the last-good copy and the audit
+	// log nor reconcile the first bot's open sessions as interrupted (step 7).
+	addr, err := control.Address(root, c.Instance.InstanceName)
+	if err != nil {
+		return nil, stepError(stepControl, err)
+	}
+	if err := probeControl(context.Background(), addr, control.Dial); err != nil {
+		return nil, err
+	}
+	b.addr = addr
+
+	// (3) The key file and the credential store.
+	keyPath, err := credentials.KeyPath(root, c.Instance.InstanceName, c.Instance.Credentials.KeyFile, os.LookupEnv)
+	if err != nil {
+		return nil, stepError(stepCredentials, err)
+	}
+	if _, err := credentials.OpenVault(credentials.StorePath(root), keyPath); err != nil {
+		return nil, stepError(stepCredentials, err)
+	}
+
+	// (4) data/store.sqlite and its migrations.
+	if b.st, err = store.Create(root); err != nil {
+		return nil, stepError(stepStore, localError(err))
+	}
+	fail := func(step string, err error) (*bot, error) {
+		_ = b.st.Close()
+		return nil, stepError(step, err)
+	}
+	var sink audit.Sink
+	if p := c.Instance.Audit.FileSink; p != nil && *p != "" {
+		sink = audit.NewFileSink(*p)
+	}
+	b.aud = audit.NewWriter(sink)
+	// Step 3's second half: the configuration's credential ids against the store's records.
+	if c, err = config.LoadDir(c.Dir, credentials.Exists(b.st)); err != nil {
+		return fail(stepCredentials, err)
+	}
+	b.cfg = c
+	if err := b.recordConfig(loadErr); err != nil {
+		return fail(stepConfig, err)
+	}
+
+	// (5) The engine binary and its version, when a channel runs the real engine.
+	needEngine := false
+	for _, ch := range c.Channels() {
+		needEngine = needEngine || ch.Harness == config.HarnessClaudeCode
+	}
+	b.engineName = config.HarnessFake
+	if needEngine {
+		b.engineName = config.HarnessClaudeCode
+		_, got, err := spawn.EngineVersion(c.Instance.Engine.Path)
+		if err != nil {
+			return fail(stepEngine, spawnError(err))
+		}
+		if got != c.Instance.Engine.Version {
+			return fail(stepEngine, fmt.Errorf("engine.version is %s, %s --version says %s", c.Instance.Engine.Version, c.Instance.Engine.Path, got))
+		}
+	}
+
+	// (6) spawn preflight; with only fake channels the engine checks do not apply.
+	if b.backend, err = spawn.New(spawnConfig(c)); err != nil {
+		return fail(stepPreflight, spawnError(err))
+	}
+	for _, chk := range b.backend.Preflight() {
+		if chk.OK || (!needEngine && (chk.Name == "engine-path" || chk.Name == "engine-version")) {
+			continue
+		}
+		return fail(stepPreflight, fmt.Errorf("%s: %s", chk.Code(), chk.Detail))
+	}
+	if err := spawn.JoinKillOnCloseJob(); err != nil {
+		fmt.Fprintf(env.Stderr, "warning: serve: the bot is in no job of its own: %v\n", err)
+	}
+	if b.creds, err = credentials.NewService(b.st, b.aud, credentials.Config{Root: root, KeyFile: keyPath,
+		EnginePath: c.Instance.Engine.Path, Spawn: b.backend}); err != nil {
+		return fail(stepCredentials, credentialError(err))
+	}
+
+	// (7) Reconciliation (ADR 0021): instance-started, then the report's events after it.
+	if err := b.started(); err != nil {
+		return fail(stepReconcile, err)
+	}
+	if _, err := session.Reconcile(b.st, b.aud, root, time.Now()); err != nil {
+		return fail(stepReconcile, err)
+	}
+
+	b.svc = session.New(session.Config{
+		Root: root, Instance: c.Instance.InstanceName, DryRun: b.discord == config.DiscordDryRun,
+		RoleGroups: c.Instance.RoleGroups, Channel: b.channel, Fixtures: fixturesDir(c),
+		Engine: b.engine, CreateTree: func(ctx context.Context, s git.Session) (string, error) {
+			return git.Create(ctx, b.backend, s)
+		},
+		RemoveTree: func(ctx context.Context, s git.Session) error { return git.Discard(ctx, b.backend, s) },
+		Store:      b.st, Audit: b.aud,
+	})
+
+	// (8) The control socket.
+	reg := control.NewRegistry()
+	b.register(reg)
+	if b.srv, err = control.Listen(b.addr, reg); err != nil {
+		return fail(stepControl, err)
+	}
+	return b, nil
+}
+
+func quoteArg(s string) string { return `"` + s + `"` }
+
+func fixturesDir(c *config.Config) string {
+	if f := c.Instance.Engine.FakeFixtures; f != nil {
+		return *f
+	}
+	return ""
+}
+
+// channel translates one configured channel for the session service, defaults merged in.
+func (b *bot) channel(id string) (session.Channel, bool) {
+	p := b.cfg.ChannelProject(id)
+	if p == nil {
+		return session.Channel{}, false
+	}
+	e := b.cfg.Effective(p, id)
+	deref := func(s *string) string {
+		if s == nil {
+			return ""
+		}
+		return *s
+	}
+	return session.Channel{ID: id, Project: p.ID, ProjectName: p.Name, Reach: e.Reach, Mode: e.Mode, Harness: e.Harness,
+		Roles:       session.Roles{Start: e.Roles.Start, Contribute: e.Roles.Contribute, Answer: e.Roles.Answer},
+		IdleTimeout: time.Duration(e.IdleTimeoutMinutes) * time.Minute, PromptTimeout: time.Duration(e.PromptTimeoutMinutes) * time.Minute,
+		Model: deref(e.Model), Effort: deref(e.Effort),
+		Repo: session.Repo{Canonical: p.Repo.Canonical, Remote: p.Repo.Remote, DefaultBranch: p.Repo.DefaultBranch}}, true
+}
+
+// engine is the session service's engine factory: the fake per session (its turn counter is
+// the session's), the real engine through the configured backend.
+func (b *bot) engine(harness, fixture, received string) (engine.Engine, error) {
+	switch harness {
+	case config.HarnessFake:
+		return engine.NewFake(fixture, received)
+	case config.HarnessClaudeCode:
+		return &engine.ClaudeCode{Backend: b.backend, Secret: b.creds.Secret}, nil
+	}
+	return nil, fmt.Errorf("harness %s: want %s or %s", quoteArg(harness), config.HarnessClaudeCode, config.HarnessFake)
+}
+
+// recordConfig is ADR 0021's load record: on a valid config/, the last-good copy rewritten and
+// configuration-changed with the file hash and the changed top-level keys; on the last-good
+// fallback, configuration-invalid with the errors.
+func (b *bot) recordConfig(loadErr error) error {
+	if b.lastGood != nil {
+		return b.st.Write(func(tx *store.Tx) error {
+			_, err := b.aud.Append(tx, audit.Event{Kind: audit.KindConfigurationInvalid, Actor: session.ActorInstance,
+				Details: session.Details("errors", control.OneLine(loadErr.Error()), "using", "last-good")})
+			return err
+		})
+	}
+	var prev *config.Config
+	if lg, err := config.LoadLastGood(b.root, config.AnyCredential); err == nil {
+		prev = lg
+	}
+	if err := config.WriteLastGood(b.root, b.cfg); err != nil {
+		return err
+	}
+	h := sha256.New()
+	for _, f := range b.cfg.Files {
+		h.Write([]byte(f.Name + "\n"))
+		h.Write(f.Raw)
+	}
+	changed := strings.Join(changedKeys(prev, b.cfg), ",")
+	return b.st.Write(func(tx *store.Tx) error {
+		_, err := b.aud.Append(tx, audit.Event{Kind: audit.KindConfigurationChanged, Actor: session.ActorInstance,
+			Details: session.Details("hash", hex.EncodeToString(h.Sum(nil)), "changed", changed)})
+		return err
+	})
+}
+
+// changedKeys names what differs from the previous load: instance.json's top-level keys, and
+// each project file added, removed or changed. With no previous load every key is new.
+func changedKeys(prev, cur *config.Config) []string {
+	files := func(c *config.Config) map[string]json.RawMessage {
+		m := map[string]json.RawMessage{}
+		if c != nil {
+			for _, f := range c.Files {
+				m[f.Name] = f.Stripped
+			}
+		}
+		return m
+	}
+	before, after := files(prev), files(cur)
+	keys := func(raw json.RawMessage) map[string]json.RawMessage {
+		m := map[string]json.RawMessage{}
+		_ = json.Unmarshal(raw, &m)
+		return m
+	}
+	var out []string
+	bi, ai := keys(before["instance.json"]), keys(after["instance.json"])
+	for k, v := range ai {
+		if !bytes.Equal(bi[k], v) {
+			out = append(out, k)
+		}
+	}
+	for k := range bi {
+		if _, ok := ai[k]; !ok {
+			out = append(out, k)
+		}
+	}
+	for name, v := range after {
+		if name != "instance.json" && !bytes.Equal(before[name], v) {
+			out = append(out, name)
+		}
+	}
+	for name := range before {
+		if _, ok := after[name]; !ok && name != "instance.json" {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// started writes instance-started, the head of the start-up report.
+func (b *bot) started() error {
+	cfgState := "ok"
+	if b.lastGood != nil {
+		cfgState = "last-good"
+	}
+	return b.st.Write(func(tx *store.Tx) error {
+		_, err := b.aud.Append(tx, audit.Event{Kind: audit.KindInstanceStarted, Actor: session.ActorInstance,
+			Details: session.Details("instance", b.cfg.Instance.InstanceName, "discord", b.discord,
+				"config", cfgState, "engine", b.engineName, "backend", b.backend.Name())})
+		return err
+	})
+}
+
+// register puts every command the bot serves on the registry: the session service, status
+// and stop, and the write handlers of earlier passes (credential, worktree). Reads the bot
+// does not register (audit, usage, reconcile, session list, register list|show) read the
+// store file (cli.go, execute).
+func (b *bot) register(reg *control.Registry) {
+	CredentialHandlers(b.creds)(reg)
+	WorktreeHandlers(&WorktreeService{Root: b.root, Config: b.cfg, Store: b.st, Audit: b.aud, Backend: b.backend,
+		Secret: b.creds.Secret})(reg)
+	SessionHandlers(b.svc)(reg)
+	reg.Handle("status", b.status)
+	reg.Handle("stop", b.stop)
+}
+
+// stop is `stop [--timeout 30]`: 03's shutdown, answered after the sessions are interrupted
+// and before the socket closes.
+func (b *bot) stop(ctx context.Context, call *control.Call) (json.RawMessage, error) {
+	var a struct{ Timeout int }
+	if err := json.Unmarshal(call.Args, &a); err != nil {
+		return nil, control.NewError(control.CodeBadArgs, err.Error())
+	}
+	timeout := defaultStopTimeout
+	if a.Timeout > 0 {
+		timeout = time.Duration(a.Timeout) * time.Second
+	}
+	req := stopRequest{timeout: timeout, outcome: make(chan stopOutcome, 1), responded: make(chan struct{})}
+	select {
+	case b.stopReq <- req:
+	default:
+		return nil, control.NewError(session.CodeShuttingDown, "the bot is stopping already")
+	}
+	call.AfterResponse(func() { close(req.responded) })
+	var out stopOutcome
+	select {
+	case out = <-req.outcome:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	if out.err != nil {
+		var se *session.Error
+		if errors.As(out.err, &se) {
+			return nil, control.NewError(se.Code, se.Message)
+		}
+		return nil, out.err
+	}
+	sessions := out.marked
+	if sessions == nil {
+		sessions = []string{}
+	}
+	return json.Marshal(struct {
+		Result      string   `json:"result"`
+		Interrupted int      `json:"interrupted"`
+		Sessions    []string `json:"sessions"`
+	}{"stopped", len(out.marked), sessions})
+}
+
+// dialFunc opens a control connection: control.Dial, or a test's.
+type dialFunc func(ctx context.Context, addr string) (io.ReadWriteCloser, error)
+
+// probeControl lets the start go on only when nothing listens at addr (not-running). A bot
+// answering is `start-control: another bot owns <addr>`; any other failure (connect-failed:
+// access denied, every pipe instance busy) may be a live bot too, so it refuses with the reason.
+func probeControl(ctx context.Context, addr string, dial dialFunc) error {
+	conn, err := dial(ctx, addr)
+	if err == nil {
+		_ = conn.Close()
+		return control.NewError(stepControl, "another bot owns "+addr)
+	}
+	var ce *control.Error
+	if errors.As(err, &ce) && ce.Code == control.CodeNotRunning {
+		return nil
+	}
+	return control.NewError(stepControl, "cannot tell whether a bot owns "+addr+": "+err.Error())
+}

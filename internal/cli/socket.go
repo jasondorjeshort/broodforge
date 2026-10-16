@@ -33,8 +33,16 @@ func socketCall(ctx context.Context, cmd *Command, env *Env) error {
 	if err != nil {
 		return err
 	}
+	if render := renderers[cmd]; render != nil {
+		return render(env, result)
+	}
 	return env.Out.Result(result, cmd.Columns)
 }
+
+// renderers prints, per command, a result whose text form is not one record of Columns: one
+// object as several labelled lines (`status`, `session show`), the same object in --json. A
+// command file fills it from its own init().
+var renderers = map[*Command]func(env *Env, result json.RawMessage) error{}
 
 // extraArgs adds, per command, request args that come from somewhere other than a flag: a
 // credential value from stdin, which is never an argument (05-debug-interface.md,
