@@ -12,6 +12,7 @@ Open items are marked in the Status column; `HANDOFF.md` links the open ones.
 | File | Status | Area | One line |
 |---|---|---|---|
 | `2026-10-14-npmrc-location-global-makes-a-plain-npm-install-destructive.md` | resolved | environment | `location=global` in the user `.npmrc` turns `npm install` global; `--no-global` pruned 296 global packages. |
+| `2026-10-16-go-evalsymlinks-does-not-follow-windows-junctions.md` | resolved | go / windows paths | `filepath.EvalSymlinks` leaves a directory junction unresolved while `os.Readlink` reads it; the hook walks links itself and denies one it cannot read. |
 | `2026-10-16-go-named-pipes-on-windows-two-stdlib-pitfalls.md` | resolved | go / windows named pipes | `os.NewFile` on a pipe races under `-race` (shared offset); a stack `Overlapped` completes into a stale copy (`ERROR_IO_INCOMPLETE`); a stack handle array for `WaitForMultipleObjects` hands the kernel freed memory (`ERROR_INVALID_HANDLE`); the pipe uses heap ops over `x/sys/windows`. |
 | `2026-10-16-sqlite-facts-seen-while-building-the-store.md` | resolved | go / sqlite | A read-only open of a WAL store leaves `-wal`/`-shm`; `VACUUM INTO` works read-only and writes a `delete`-mode file; pragmas must run one statement each, not in `ExecuteScript`; a truncated store opens and fails only at its first statement. |
 | `2026-10-15-spike-login-claims-for-adr-0020.md` | open | spike / login | C25 holds twice on the PC: the piped login with `CLAUDE_CONFIG_DIR` needs no TTY; the droplet repeat is still open. |

@@ -15,3 +15,5 @@ One line per file below, added with the file.
 | `config/dup-channel/` | Channel `100` in two project files, R-07 (`config check` exit 1 naming both files) |
 | `config/unknown-key/` | A channel key that is not 03's, `idleTimeout` (`config check` exit 1 naming the key path) |
 | `config/dup-key/` | Channel `100` twice in one project file (`config check` exit 1, `duplicate key channels.100`) |
+| `hook/cases.jsonl` | Every cell of `docs/design/03-hook-contract.md`'s policy table in both modes and reaches, answers and the session allow list, hook errors, credential paths (`.credentials.json`, the config directory `transcript` implies, a `Grep` above it), and links out of the tree, one host each through `needs` (`hook cases tests/hook/cases.jsonl`: every line `ok` or `skip`) |
+| `hook/linkworld/` | The tree, canonical, outside and config directories `hook/cases.jsonl` resolves against; long names so Windows keeps 8.3 aliases for the short-name cases; its `.credentials.json` files hold no secret, only the name |

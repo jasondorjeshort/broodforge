@@ -22,6 +22,11 @@ func socketCall(ctx context.Context, cmd *Command, env *Env) error {
 	if err != nil {
 		return err
 	}
+	if extra := extraArgs[cmd]; extra != nil {
+		if args, err = addArgs(args, env, extra); err != nil {
+			return err
+		}
+	}
 	result, err := control.Do(ctx, addr, cmd.wireCmd(), args, func(ev json.RawMessage) error {
 		return env.Out.Event(ev, cmd.EventColumns)
 	})
@@ -29,6 +34,30 @@ func socketCall(ctx context.Context, cmd *Command, env *Env) error {
 		return err
 	}
 	return env.Out.Result(result, cmd.Columns)
+}
+
+// extraArgs adds, per command, request args that come from somewhere other than a flag: a
+// credential value from stdin, which is never an argument (05-debug-interface.md,
+// Credentials). A command file fills it from its own init().
+var extraArgs = map[*Command]func(*Env) (map[string]string, error){}
+
+func addArgs(args json.RawMessage, env *Env, extra func(*Env) (map[string]string, error)) (json.RawMessage, error) {
+	more, err := extra(env)
+	if err != nil || len(more) == 0 {
+		return args, err
+	}
+	m := map[string]json.RawMessage{}
+	if err := json.Unmarshal(args, &m); err != nil {
+		return nil, err
+	}
+	for k, v := range more {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		m[k] = b
+	}
+	return json.Marshal(m)
 }
 
 // socketAddress is the control address of the instance at root.

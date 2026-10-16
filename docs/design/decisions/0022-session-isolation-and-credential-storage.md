@@ -191,3 +191,4 @@ Source: `../../findings/2026-10-15-spike-claims-for-adr-0022.md`, the PC rows, e
 ## Amendments from ADR 0023 (2026-10-16)
 
 - 2026-10-16, source `0023-language-for-the-long-term.md` (Decision): the Decision sentence "engine, Node, Broodforge" (the binds per reach) is replaced. The bot is one static binary that binds no Node and no runtime of its own, so the binds are system, engine, Broodforge's binary and the canonical checkout; the companion's bind list is edited to match. Only the droplet spike binds a Node, as `/usr/bin/node` inside the system bind, removed with `spike/`.
+- 2026-10-16, source the P6 review (`../08-implementation-plan.md`, P6): the key's "32 bytes" in Decision (Both hosts) are 32 random bytes stored as 64 hex digits and a newline, so the copy `credential init` prints once pastes back as the file; `credential init` writes it `0400`.

@@ -87,10 +87,25 @@ hook; the hook reads none of them: `BROODFORGE_TREE` is the tree.
 ## Paths
 
 Every path in `tool_input` (`file_path`, `path`, `notebook_path`; a search with no path means
-`cwd`) is resolved against `BROODFORGE_TREE`, then canonicalised: symlinks are followed on the
-longest prefix that exists, so a link planted in the tree cannot point a check outside it. "Under
-the tree" and "under the canonical" are prefix tests on the canonical form. Credential paths are
-denied to every class in both reaches and both modes: any file named `.credentials.json`, and
+`cwd`; `Glob`'s `pattern` up to the last separator before its first `*?[{`, per brace alternative,
+joined to its search root when relative; a pattern with a `..` segment, a segment matching `..`
+without a wildcard, a `{`/`[` group holding a separator, or a `:` after a drive is a hook error)
+is first expanded as the engine expands it (engine 2.1.296, its `file_path` function): whitespace
+trimmed as JavaScript's `trim()` trims (U+FEFF included, U+200B not), `~`, `~/` and `~\` to the home directory, on a host with drive letters `/<letter>/` to
+`<LETTER>:\`; `~user` is a hook error. A relative path resolves against the hook input's `cwd`, as
+the engine resolves it, else `BROODFORGE_TREE`; then it is canonicalised: links (symlinks,
+and Windows junctions) are followed on the longest prefix that exists, so a link planted in the tree
+cannot point a check outside it, twice: `..` applied as text first, as Windows opens a path, and
+after the link before it, as POSIX does; the stricter answer wins. A spelling the checks cannot
+compare is a hook error: a device or network volume (`\\?\`, `\\.\`, UNC), a drive-relative path,
+any `:` after the volume (an NTFS stream). "Under the tree" and "under the canonical" are prefix
+tests on the canonical form or, for another spelling of an existing directory (an 8.3 name), the
+same file (`os.SameFile`) on an ancestor; a base name is the one its directory lists. Credential paths are
+denied to every class in both reaches and both modes, with the reason `Denied by Broodforge: <path>
+is a credential file`: any file named `.credentials.json` (any case, trailing dots and spaces
+dropped), a hard link to any `.credentials.json` or `.claude.json` the hook can name (the config
+directory's, and every `<root>/harness/<id>/` one when ADR 0022's layout yields the root from the
+config directory; a hard link elsewhere passes), a `Grep` or `Glob` rooted above the config directory, and
 anything under the config directory, which the hook derives from `transcript_path` on stdin
 because `CLAUDE_CONFIG_DIR` is scrubbed (C34): the parent of the nearest ancestor directory named
 `projects` (the engine writes `<cfg>/projects/<encoded cwd>/<session>.jsonl` for both credential

@@ -21,14 +21,14 @@ names; everything else goes through `SessionService`. Host differences live in `
 | `engine` | The `Engine` interface, the `claude-code` implementation (one process per turn through `spawn`), the `fake`, the stream parser, usage deltas | `spawn`, `credentials` (secret handed to the spawn only) |
 | `hook` | `broodforge hook pre-tool-use`, run by the engine inside the session; a pure function of stdin and environment (`03-hook-contract.md`) | nothing in the bot process |
 | `policy` | The reach table, the decision function the hook and `session` share, the deny text, the role check (a pure function of supplied roles and a channel's role list), the model display-name map | nothing (pure) |
-| `credentials` | `CredentialStore` over `credentials/store.json`, credential status, harness config directories through `engine-entry`, `credential login`, the DM relay (off by default) (ADR 0022) | `spawn`, `audit` |
+| `credentials` | `CredentialStore` over `credentials/store.json`, credential status, harness config directories through `engine-entry`, `credential login`, the DM relay (off by default) (ADR 0022) | `spawn`, `store` (the credential rows), `audit` |
 | `store` | The SQLite data layer, migrations, reconciliation, scratch roots (ADR 0021) | `audit` writes in a `store` transaction; the import is `audit` to `store`, one direction |
 | `audit` | The sink interface: the `audit_event` table first, the optional file sink second | `store` |
 | `git` | Canonical checkouts, `refs/sessions/*`, clone and bundle through the spawn backend, the attribution check, push and pull request | `spawn`, `credentials`, `audit` |
 | `spawn` | `SpawnBackend`: `same-account` and `linux-sudo-bwrap`; interrupt; `engine-entry`; preflight | the OS |
 | `backup` | `backup snapshot`, `verify`, `rehearse` (never scheduled by the bot) | `store` |
 | `config` | Loading, validation, last-good, `reload`, `config check` | `credentials` (id existence) |
-| `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control` |
+| `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control`; `credentials` (`credential init`, the reads' store fallback, the bot's handlers) |
 
 `SessionService` is the boundary N-11 names: `start`, `submit`, `answer`, `setMode`, `interrupt`,
 `end`, `invite`, `status`, `subscribe(sessionId)`. The Discord adapter and the control socket call

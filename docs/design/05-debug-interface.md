@@ -77,16 +77,17 @@ Isolation. A scratch root has no registrations; the ids above are not Discord's.
 ## Credentials
 
 Drive. `broodforge credential init (file)` writes the store key file the instance config names
-and prints the key once on stdout, at init, so the owner can put it in a password manager (a
+and prints `<key hex>  <key file>` once, at init, so the owner can put it in a password manager (a
 restore from an empty host needs it; ADR 0022); never again: `credential show` and every other
 command print the path only. An existing key file is `error: key-exists: <path>`, exit 1, and
 nothing is written. `credential add --kind api-key --user <user id> --label <text>` reads the
-value from stdin (never an argument) and prints the new id `cred-<base36>`. `credential add
+value from stdin (never an argument) and prints the new id `cred-<base36>`; the user must be
+registered (`unknown-user`). `credential add
 --kind subscription --user <user id> --label <text>` runs `engine-entry harness-create` through
-the spawn backend (ADR 0022 companion), records the credential as `needs-login` and prints the
+the spawn backend (ADR 0022 companion; until P7 it names `<root>/harness/<id>` and creates nothing), records the credential as `needs-login` and prints the
 id; it writes no settings, since the hook's settings file is per session. `credential login
 <id>` prints the exact command the user runs to complete the engine's own login into that
-directory (spike C25's text); `credential login <id> --done` records `usable` once the owner
+directory (spike C25's, `CLAUDE_CONFIG_DIR=<dir> <engine.path> auth login`, sh quoting); `credential login <id> --done` records `usable` once the owner
 has run it; `--relay` runs ADR 0022's relay, refused unless `relay.loginByDirectMessage` is
 true, and records `usable` itself on success. `credential list [--user <id>]` prints `<id>
 <kind>  <user id>  <label>  usable|needs-login|removed  <last used or ->`; the status is the
@@ -162,27 +163,31 @@ Isolation. The fake reads the fixture directory and writes only `received-<n>.js
 ## The PreToolUse hook
 
 Drive. Standalone, exactly as the engine runs it: the engine's JSON on stdin and every
-`BROODFORGE_*` variable of the contract (`03-hook-contract.md`) in the environment:
+`BROODFORGE_*` variable of the contract (`03-hook-contract.md`) in the environment (Git Bash
+on Windows: prefix `MSYS_NO_PATHCONV=1`, or it rewrites the variables' `/tmp` paths but not the JSON's):
 `printf '{"tool_name":"Write","tool_input":{"file_path":"/tmp/x/a.ts","content":""},
 "tool_use_id":"toolu_01","cwd":"/tmp/x","transcript_path":"/tmp/cfg/projects/x/s.jsonl"}' |
 BROODFORGE_SESSION=s0001 BROODFORGE_MODE=prompt
 BROODFORGE_REACH=code BROODFORGE_TREE=/tmp/x BROODFORGE_CANONICAL=/tmp/c
 BROODFORGE_HOOK_LOG=/dev/null broodforge hook pre-tool-use` prints `{"hookSpecificOutput":
 {"hookEventName":"PreToolUse","permissionDecision":"defer","permissionDecisionReason":
-"<reason>"}}`, exit 0. Any error, a missing variable or malformed stdin included, is exit 2
-with `hook: <what>` on stderr, the one exit the engine reads as a block. The same code path
-with flags: `broodforge hook try --tool <name> --input '<json>' --mode prompt|policy --reach
-read-only|code --tree <path> --canonical <path> --transcript-path <path> [--answer
-<tool_use_id>:allow|deny] [--session-allow <names>] [--expect allow|deny|defer]` prints
-`<decision>  <reason>`; `--transcript-path` is what the hook derives the config directory from
-(`03-hook-contract.md`, Paths), so a case can read inside it.
+"<reason>"}}`, exit 0. Any error, a missing variable, malformed stdin or an unwritable log
+included, is exit 2 with `hook: <what>` on stderr, the one exit the engine reads as a block.
+The same code path with flags, nothing logged: `broodforge hook try --tool <name> [--input
+'<json>'] [--tool-use-id <id>] [--cwd <path>] [--mode prompt|policy] [--reach read-only|code]
+[--tree <path>] [--canonical <path>] --transcript-path <path> [--answer <id>:allow|deny]
+[--answer-reason <text>] [--session-allow <names>] [--expect allow|deny|defer|hook]` prints
+`<decision>  <reason>` (defaults: `{}`, `toolu_01`, the tree, `prompt`, `code`, `.`, the tree); a
+hook error is `error: hook: <what>`, exit 1; `--transcript-path` is what the hook derives the
+config directory from (`03-hook-contract.md`, Paths), so a case can read inside it.
 Observe. The decision line; `BROODFORGE_HOOK_LOG` (`sessions/<id>/home/hook.log`), one line per
 decision; in a session, `audit --kind permission-decision --session <id>`.
 Reproduce. One `hook try` line with `--expect`, or a case file: `broodforge hook cases <file>`
-runs a JSONL of `{"tool","input","mode","reach","tree","canonical","transcript","answer","expect"}` objects,
-prints one `ok|FAIL` line each, exit 1 on any FAIL; the shipped set `tests/hook/cases.jsonl`
-[no-check: no code yet] covers every cell of the contract's table in both modes, a symlink out
-of the tree, and a read of `.credentials.json` and of the config directory.
+runs a JSONL of `{"tool","input","toolUseId","cwd","mode","reach","tree","canonical","transcript",
+"answer","answerReason","sessionAllow","expect","needs","note"}` objects (try's defaults; `expect`
+also `error`; `needs` a path whose absence skips the case; relative paths but `input`'s from the
+file's directory; `{dir}` is that directory, `{posixdir}` its `/c/...` form), prints `ok|FAIL|skip  <line>  <tool>  <mode>  <reach>  <got>  <want>  <note>`,
+exit 1 `cases-failed` on a FAIL; `tests/hook/cases.jsonl` (over `tests/hook/linkworld/`) covers every cell, links, the refused spellings and 8.3 names.
 Isolation. Pure: no socket, no store, no root; `--tree` is any directory; only the log is written.
 
 ## Prompt-mode defer and resume

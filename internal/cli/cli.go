@@ -44,6 +44,7 @@ func (e *usageError) Error() string { return e.msg }
 
 // invocation holds the flags every command shares.
 type invocation struct {
+	hookStyle bool // the command fails as the hook does: `hook: <what>`, exit 2
 	root      string
 	json      bool
 	expect    string
@@ -79,20 +80,36 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if cmd == nil {
 		return inv.fail(&usageError{"unknown command " + strconv.Quote(strings.Join(rest[:min(2, len(rest))], " "))})
 	}
+	inv.hookStyle = hookStyle[cmd]
 	env := &Env{Stdin: stdin, Stderr: stderr, values: map[string]*flagValue{}}
 	fs, err := inv.flagSet(cmd, env)
 	if err != nil {
 		return inv.fail(err)
 	}
-	if err := fs.Parse(rest[n:]); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			fmt.Fprintln(stdout, commandUsage(cmd))
-			return ExitOK
+	// A command's arguments (positionals) may stand among its flags: each argument taken,
+	// parsing resumes after it, so `credential show <id> --json` reads as written.
+	names := positionals[cmd]
+	args, taken := rest[n:], 0
+	for {
+		if err := fs.Parse(args); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				fmt.Fprintln(stdout, commandUsage(cmd))
+				return ExitOK
+			}
+			return inv.fail(&usageError{cmd.Name + ": " + err.Error()})
 		}
-		return inv.fail(&usageError{cmd.Name + ": " + err.Error()})
+		if fs.NArg() == 0 {
+			break
+		}
+		if taken == len(names) {
+			return inv.fail(&usageError{cmd.Name + ": unexpected argument " + strconv.Quote(fs.Arg(0))})
+		}
+		env.values[names[taken]].s = fs.Arg(0)
+		taken++
+		args = fs.Args()[1:]
 	}
-	if fs.NArg() > 0 {
-		return inv.fail(&usageError{cmd.Name + ": unexpected argument " + strconv.Quote(fs.Arg(0))})
+	if taken < len(names) {
+		return inv.fail(&usageError{cmd.Name + ": missing <" + names[taken] + ">"})
 	}
 	if inv.root == "" {
 		inv.root = os.Getenv(RootEnv)
@@ -126,6 +143,12 @@ func (inv *invocation) flagSet(cmd *Command, env *Env) (*flag.FlagSet, error) {
 	for _, f := range cmd.Flags {
 		v := &flagValue{kind: f.Kind}
 		env.values[f.Name] = v
+		if isPositional(cmd, f.Name) {
+			if f.Kind != FlagString {
+				return nil, fmt.Errorf("%s: argument %s must be a string flag", cmd.Name, f.Name)
+			}
+			continue
+		}
 		switch f.Kind {
 		case FlagString:
 			fs.StringVar(&v.s, f.Name, f.Default, f.Usage)
@@ -144,6 +167,33 @@ func (inv *invocation) flagSet(cmd *Command, env *Env) (*flag.FlagSet, error) {
 	}
 	return fs, nil
 }
+
+// positionals names, per command, the flags given as arguments instead, in order, such as
+// `credential show <id>`: they are declared in Flags (so the request's args carry them) with
+// kind FlagString, are not accepted as --flags, and are all required. A command file fills it
+// from its own init().
+var positionals = map[*Command][]string{}
+
+func isPositional(cmd *Command, name string) bool {
+	for _, n := range positionals[cmd] {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
+// hookStyle marks the commands the engine runs as its hook (`hook pre-tool-use`): every
+// failure of theirs, a usage error included, is `hook: <what>` on stderr and exit 2, the one
+// exit the engine reads as a block (03-hook-contract.md, Failure). A command file fills it
+// from its own init().
+var hookStyle = map[*Command]bool{}
+
+// exitError ends a command with its own exit code and no error line: the command has written
+// its own stderr (hook pre-tool-use's `hook: <what>`, exit 2, 03-hook-contract.md).
+type exitError struct{ code int }
+
+func (e *exitError) Error() string { return "exit " + strconv.Itoa(e.code) }
 
 // execute runs the command by its class.
 func execute(ctx context.Context, cmd *Command, env *Env) error {
@@ -169,6 +219,10 @@ func execute(ctx context.Context, cmd *Command, env *Env) error {
 // finish turns the outcome into the exit code, the error line and the --expect comparison.
 func (inv *invocation) finish(out *Printer, err error) int {
 	expecting := inv.expectSet
+	var xe *exitError
+	if errors.As(err, &xe) {
+		return xe.code
+	}
 	if err == nil {
 		if expecting && out.Token() != inv.expect {
 			return inv.fail(control.NewError(CodeExpect, "wanted "+inv.expect+", got "+orDash(out.Token())))
@@ -192,6 +246,15 @@ func (inv *invocation) finish(out *Printer, err error) int {
 // fail prints the one error line and returns its exit code: `error: <code>: <message>`, or the
 // wire error object with --json.
 func (inv *invocation) fail(err error) int {
+	if inv.hookStyle {
+		msg := err.Error()
+		var ue *usageError
+		if errors.As(err, &ue) {
+			msg = "usage: " + ue.msg
+		}
+		fmt.Fprintln(inv.stderr, "hook: "+control.OneLine(msg))
+		return ExitUsage
+	}
 	exit := ExitFailure
 	e := toWire(err)
 	var ue *usageError
@@ -253,6 +316,9 @@ func commandUsage(c *Command) string {
 	var b strings.Builder
 	b.WriteString("usage: broodforge " + c.Name)
 	for _, f := range c.Flags {
+		if isPositional(c, f.Name) {
+			continue
+		}
 		if f.Kind == FlagBool {
 			b.WriteString(" [--" + f.Name + "]")
 		} else {
@@ -264,6 +330,9 @@ func commandUsage(c *Command) string {
 	}
 	if c.List {
 		b.WriteString(" [--limit <n>|--all]")
+	}
+	for _, n := range positionals[c] {
+		b.WriteString(" <" + n + ">")
 	}
 	return b.String()
 }

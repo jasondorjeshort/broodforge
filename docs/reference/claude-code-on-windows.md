@@ -91,6 +91,7 @@ source: observed (Go toolchain and mingw-w64 observed 2026-10-16; npm behaviour 
   user-scope append (no other entry is touched):
   `[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\msys64\ucrt64\bin", "User")`.
   Check in a new shell: `gcc --version`; `go env CGO_ENABLED` prints `1`.
+- `filepath.EvalSymlinks` does not follow directory junctions (Go 1.27) while `os.Readlink` reads both junctions and symlinks; resolve links by hand where a junction matters (`docs/findings/2026-10-16-go-evalsymlinks-does-not-follow-windows-junctions.md`).
 - The `broodforge` instance account never runs tests and needs none of this.
 
 ## Shared state
