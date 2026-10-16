@@ -17,6 +17,8 @@ record of the alternatives and the objections.
 | `0011-critic-review.md` | Companion to 0011: the critic's review (one blocking, six serious, six minor; all accepted in the revision). |
 | `0012-decision-practices-for-long-lived-software.md` | Promoted to ADR 0012 (`../decisions/0012-decision-practices-for-long-lived-software.md`); revised in place after the critic review: evidence corrected, four `CLAUDE.md` lines, surfaces scoped to incompatible change, a skip entry as the fitness lift, the design pass replaced by a trigger scan, dependency default evaluate, Hatchery's own surfaces first (ADR 0013). |
 | `0012-critic-review.md` | Companion to 0012: the critic's review (two blocking, seven serious, six minor), all answered in the proposal's last section; every objection accepted, two with a change. |
+| `0014-handoff-layout.md` | Promoted to ADR 0014 (`../decisions/0014-handoff-layout.md`); revised in place after the critic review: the import spelling `@handoff/<file>.md`, four hops, a resolving chain check in the hook and the pusher, a 120-line total, the switch trigger in the pusher's terms as a Deferred item, no README and no fixed files under `docs/handoff/`, the split procedure in one skill file. |
+| `0014-critic-review.md` | Companion to 0014: the critic review (one blocking, four serious, five minor; claim 2 fails by experiment, the downstream map loads nothing), all answered in the proposal's last section; every objection accepted, five with a change. |
 
 Template:
 
