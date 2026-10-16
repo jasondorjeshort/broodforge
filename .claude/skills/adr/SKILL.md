@@ -45,5 +45,16 @@ proposal; major choices arrive here through the `proposal` skill.
 
 ## Amend without superseding
 
-Only for tables the ADR itself says are living (ADR 0001 components table is one). Edit the table,
-nothing else, and say so in the commit message.
+An accepted ADR's Decision sentences are never edited in place. A change that keeps the Decision's
+core is an amendment: a dated entry under a `## Amendments` section at the end of that ADR (add
+the section if absent; ADRs 0020 and 0022 are the model).
+
+1. Date the entry (`2026-10-16:`) and cite its source: a finding by path and claim (for example
+   `docs/findings/...-0022.md`, C35), or an owner decision and its date.
+2. Quote or name the Decision sentence it replaces, so a reader of the old text finds the new one.
+3. State the replacement in the entry. The original sentence stays as written; the entry is the
+   correction.
+4. If the change reverses the Decision's core, it is a supersede (section above), not an amendment.
+
+Tables the ADR itself says are living (ADR 0001 components table is one) may be edited in place;
+say so in the commit message.
