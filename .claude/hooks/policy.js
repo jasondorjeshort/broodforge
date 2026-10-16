@@ -43,6 +43,10 @@ const DEFAULTS = {
     // meters for that whole session (never the deny line); null for none. For a project that
     // relaunches in-flight work past HOLD from a session started for that purpose.
     overrideEnv: null,
+    // The account pool (ADR 0011): null, or { command: argv, timeoutSeconds } run only when the
+    // gate is about to deny at HOLD, its stdout read as the `cswap list --json` contract, to name
+    // another account with room. timeoutSeconds defaults to 15 when the object omits it.
+    pool: null,
     holdAdvice: 'Do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report.',
     denyAdvice: 'Stop all work, run the handoff skill, commit WIP from the main session, end the turn.',
   },
@@ -66,6 +70,13 @@ const TYPES = {
   seconds: (v) => Number.isInteger(v) && v > 0,
   stale: (v) => v === 'allow' || v === 'deny',
   text: (v) => typeof v === 'string' && v !== '',
+  // null, or an object with a non-empty argv "command" and an optional "timeoutSeconds", an integer
+  // from 1 to 60 (under Claude Code's own hook timeout, so a hung command ends in a deny); any
+  // other key (other than "$..." comments) is wrong.
+  pool: (v) => v === null || (typeof v === 'object' && !Array.isArray(v) &&
+    Object.keys(v).every((k) => k.startsWith('$') || k === 'command' || k === 'timeoutSeconds') &&
+    isStrings(v.command) && v.command.length > 0 &&
+    (v.timeoutSeconds === undefined || (TYPES.seconds(v.timeoutSeconds) && v.timeoutSeconds <= 60))),
   formatters: (v) => v !== null && typeof v === 'object' && !Array.isArray(v) &&
     Object.keys(v).every((k) => /^\.[A-Za-z0-9]+$/.test(k) && isStrings(v[k]) && v[k].length > 0),
 };
@@ -80,7 +91,7 @@ const SCHEMA = {
     hold: 'percent', deny: 'percentOrNull',
     fiveHour: { hold: 'percentOrNull', deny: 'percentOrNull' },
     sevenDay: { hold: 'percentOrNull', deny: 'percentOrNull' },
-    staleSeconds: 'seconds', whenStale: 'stale', overrideEnv: 'envNameOrNull', holdAdvice: 'text', denyAdvice: 'text',
+    staleSeconds: 'seconds', whenStale: 'stale', overrideEnv: 'envNameOrNull', pool: 'pool', holdAdvice: 'text', denyAdvice: 'text',
   },
   edit: { capExempt: 'patterns', anchorExempt: 'patterns', formatters: 'formatters' },
 };
@@ -119,6 +130,13 @@ function load(file) {
     const policy = merge(SCHEMA, JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text), DEFAULTS, '');
     for (const [label, t] of meterThresholds(policy.usage)) {
       if (t.deny !== null && t.hold > t.deny) throw new Error(`usage hold is above deny for the ${label} meter`);
+    }
+    // The pool's defaults filled in, "$" keys dropped, so callers see { command, timeoutSeconds }.
+    const pool = policy.usage.pool;
+    if (pool) {
+      policy.usage = Object.assign({}, policy.usage, {
+        pool: { command: pool.command.slice(), timeoutSeconds: pool.timeoutSeconds === undefined ? 15 : pool.timeoutSeconds },
+      });
     }
     return { policy, error: null, source };
   } catch (e) {
@@ -279,11 +297,14 @@ function accountLabel(a) {
   const str = (v) => (typeof v === 'string' && v !== '' ? v : null);
   return { uuid: a.uuid, organizationUuid: str(a.organizationUuid), email: str(a.email) };
 }
-// True when both labels are known and name different accounts (uuid or organizationUuid differ).
+// True when both labels are known and name different accounts: the uuids (known on both sides,
+// since a label has one) differ, or both organizationUuids are known and differ. A field unknown on
+// either side does not differ (ADR 0011).
 function accountsDiffer(a, b) {
   const x = accountLabel(a);
   const y = accountLabel(b);
-  return !!x && !!y && (x.uuid !== y.uuid || x.organizationUuid !== y.organizationUuid);
+  if (!x || !y) return false;
+  return x.uuid !== y.uuid || (x.organizationUuid !== null && y.organizationUuid !== null && x.organizationUuid !== y.organizationUuid);
 }
 
 // True when name matches one of the patterns; "*" matches any run of characters, "/" included.

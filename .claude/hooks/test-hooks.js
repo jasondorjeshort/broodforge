@@ -933,6 +933,148 @@ for (const [id, label, state, files, legacy, payload, expect, stderrHas, policy]
 fs.rmSync(grantDir, { recursive: true, force: true });
 fs.rmSync(ovFile, { force: true });
 
+// The account pool (ADR 0011, usage.pool): asked only when the gate is about to deny at HOLD. The
+// command is [node, stub, fixture, ...flags] with the stub and fixtures in the scratch dir, never a
+// program on PATH; the missing-program case names one that does not exist. The session is a@ (file
+// label and login) unless the case makes the label unknown. A marker file shows whether the stub ran.
+// [id, label, fixture (object, raw string, or null for no stub), stub flags or a whole argv
+// (command), pool extra (timeoutSeconds), state five-hour %, label known, policy extra, expected exact
+// deny reason or null for allow, marker expected (true/false/undefined for not checked)]
+{
+  const stub = path.join(scratch, 'pool-stub.js');
+  fs.writeFileSync(stub, [
+    '// SPDX-License-Identifier: GPL-3.0-or-later',
+    '// Test stub for usage.pool: prints the fixture file; --exit N, --sleep MS, --marker FILE.',
+    'const fs = require("fs");',
+    'const a = process.argv.slice(2);',
+    'const opt = (k) => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : null; };',
+    'if (opt("--marker")) fs.writeFileSync(opt("--marker"), "ran");',
+    'const out = fs.readFileSync(a[0], "utf8");',
+    'const finish = () => { process.stdout.write(out); process.exit(Number(opt("--exit") || 0)); };',
+    'if (opt("--sleep")) setTimeout(finish, Number(opt("--sleep"))); else finish();',
+    '',
+  ].join('\n'));
+  const A_EMAIL = 'a@example.com';
+  const row = (number, email, p5, p7, extra) => Object.assign({ number, email, active: number === 1, alias: null, disabled: false, usageStatus: 'ok',
+    usage: { fiveHour: { pct: p5, resetsAt: '2026-10-16T12:00:00Z' }, sevenDay: { pct: p7, resetsAt: '2026-10-19T06:00:00Z', expectedPct: 40 } },
+    usageFetchedAt: '2026-10-16T10:00:00Z', usageAgeSeconds: 120, loginExpiresAt: null, futureField: { x: 1 } }, extra);
+  const list = (...rows) => ({ schemaVersion: 1, activeAccountNumber: 1, accounts: rows });
+  const HOLD_A = HOLD_MSG.replace('Usage gate:', `Usage gate (${A_EMAIL}):`);
+  const room = (email, n, m, p5, p7, unknown) => ` Report to the owner: account ${email} (slot ${n}) had room ${m} min ago: 5h ${p5}%, 7d ${p7}%` +
+    `${unknown ? ' (this session\'s account not excluded)' : ''}. The next session is the owner's to start there (cswap switch ${n}, or cswap run ${n}).`;
+  const noRoom = (readings, unknown) => ` No other account has room (${readings})${unknown ? ' (this session\'s account not excluded)' : ''}; an override grant is still the lift (ADR 0006).`;
+  const MISSING = 'hatchery-no-such-program-0011';
+  const UP = [
+    ['UP01', 'pool null (the base): the HOLD deny has no pool text', null, [], {}, 55, true, {}, HOLD_A],
+    ['UP02', 'room: the other account with the largest margin is named', list(row(1, A_EMAIL, 5, 5), row(2, 'b@example.com', 20, 30), row(3, 'c@example.com', 10, 45, { usageAgeSeconds: 600 })),
+      [], {}, 55, true, {}, HOLD_A + room('b@example.com', 2, 2, 20, 30), true],
+    ['UP03', 'no room: every other account at or above a hold', list(row(1, A_EMAIL, 5, 5), row(2, 'b@example.com', 60, 10, { usageAgeSeconds: 300 }), row(3, 'c@example.com', 10, 50, { usageAgeSeconds: 600 })),
+      [], {}, 55, true, {}, HOLD_A + noRoom('pool readings up to 10 min old')],
+    ['UP04', 'disabled and non-ok rows never have room', list(row(2, 'b@example.com', 5, 5, { disabled: true }), row(3, 'c@example.com', 5, 5, { usageStatus: 'token_expired' }),
+      row(4, 'd@example.com', 30, 30, { usageAgeSeconds: 60 })), [], {}, 55, true, {}, HOLD_A + room('d@example.com', 4, 1, 30, 30)],
+    ['UP05', 'the session\'s email is excluded, every row with it, in any case', list(row(1, A_EMAIL, 5, 5), row(5, 'A@Example.com', 1, 1, { usageAgeSeconds: 9000 }),
+      row(2, 'b@example.com', 60, 60)), [], {}, 55, true, {}, HOLD_A + noRoom('pool readings up to 2 min old')],
+    ['UP06', 'label unknown: the session\'s account is not excluded, and the text says so', list(row(1, A_EMAIL, 5, 5), row(2, 'b@example.com', 60, 60)),
+      [], {}, 55, false, {}, HOLD_MSG + room(A_EMAIL, 1, 2, 5, 5, true)],
+    ['UP07', 'label unknown, no room', list(row(2, 'b@example.com', 60, 60)), [], {}, 55, false, {}, HOLD_MSG + noRoom('pool readings up to 2 min old', true)],
+    ['UP08', 'only the session\'s rows: no other account, no readings', list(row(1, A_EMAIL, 5, 5)), [], {}, 55, true, {}, HOLD_A + noRoom('no pool readings')],
+    ['UP09', 'per-meter holds judge room (7d 70 is under its own hold of 75)', list(row(2, 'b@example.com', 10, 70)), [], {}, 65, true,
+      { fiveHour: { hold: 60, deny: null }, sevenDay: { hold: 75, deny: null } },
+      HOLD_A.replace('5h 55%, 7d 10%. 5h at or above 50%', '5h 65%, 7d 10%. 5h at or above 60%') + room('b@example.com', 2, 2, 10, 70)],
+    ['UP10', 'a missing program: no pool reading', null, { command: [MISSING] }, {}, 55, true, {}, HOLD_A + ` No pool reading (${MISSING} not found).`],
+    ['UP11', 'a stub that sleeps past the timeout: no pool reading', list(row(2, 'b@example.com', 5, 5)), ['--sleep', '10000'], { timeoutSeconds: 1 }, 55, true, {},
+      HOLD_A + ' No pool reading (no answer within 1 s).'],
+    ['UP12', 'a non-zero exit: no pool reading', list(row(2, 'b@example.com', 5, 5)), ['--exit', '3'], {}, 55, true, {}, HOLD_A + ` No pool reading (${NODE} exited 3).`],
+    ['UP13', 'bad JSON: no pool reading', 'not json {', [], {}, 55, true, {}, HOLD_A + ' No pool reading (output is not the list --json shape).'],
+    ['UP14', 'JSON without accounts[]: no pool reading', { schemaVersion: 1 }, [], {}, 55, true, {}, HOLD_A + ' No pool reading (output is not the list --json shape).'],
+    ['UP21', 'a last-good reading within an hour has room, with its own age', list(row(2, 'b@example.com', null, null, { usageStatus: 'unavailable', usage: null,
+      usageAgeSeconds: undefined, lastGoodUsage: { fiveHour: { pct: 10 }, sevenDay: { pct: 20 } }, lastGoodAgeSeconds: 1800 })), [], {}, 55, true, {},
+      HOLD_A + room('b@example.com', 2, 30, 10, 20)],
+    ['UP22', 'a last-good reading older than an hour has none', list(row(2, 'b@example.com', null, null, { usageStatus: 'unavailable', usage: null,
+      usageAgeSeconds: undefined, lastGoodUsage: { fiveHour: { pct: 10 }, sevenDay: { pct: 20 } }, lastGoodAgeSeconds: 3700 })), [], {}, 55, true, {},
+      HOLD_A + noRoom('no pool readings')],
+    ['UP23', 'same email, another known organization: not the session\'s account', list(row(1, A_EMAIL, 5, 5, { organizationUuid: 'org-1' }),
+      row(6, A_EMAIL, 10, 10, { organizationUuid: 'org-2' })), [], {}, 55, true, {}, HOLD_A + room(A_EMAIL, 6, 2, 10, 10)],
+    ['UP24', 'same email, organization unknown on one side: excluded', list(row(1, A_EMAIL, 5, 5, { organizationUuid: 'org-1' }), row(6, A_EMAIL, 5, 5),
+      row(2, 'b@example.com', 60, 60)), [], {}, 55, true, {}, HOLD_A + noRoom('pool readings up to 2 min old')],
+    ['UP25', 'a room row whose email is not an address is named by its slot alone', list(row(7, 'not an\naddress', 10, 10)), [], {}, 55, true, {},
+      HOLD_A + room('b@example.com', 7, 2, 10, 10).replace('account b@example.com (slot 7)', 'slot 7')],
+    ['UP15', 'an allowed launch spawns nothing', list(row(2, 'b@example.com', 5, 5)), [], {}, 20, true, {}, null, false],
+    ['UP16', 'a HOLD lifted by a grant spawns nothing', list(row(2, 'b@example.com', 5, 5)), [], {}, 55, true, {}, null, false, true],
+    ['UP17', 'a deny line spawns nothing, and its text has no pool part', list(row(2, 'b@example.com', 5, 5)), [], {}, 85, true, { deny: 80 },
+      STOP_MSG.replace('Usage gate:', `Usage gate (${A_EMAIL}):`), false],
+  ];
+  for (const [id, label, fixture, flagsOrCmd, poolExtra, five, known, usageExtra, expect, marker, grant] of UP) {
+    if (!selected(id)) continue;
+    const markerFile = path.join(scratch, `up-marker-${id}`);
+    fs.rmSync(markerFile, { force: true });
+    let usage = Object.assign({}, usageExtra);
+    if (fixture !== null || !Array.isArray(flagsOrCmd)) {
+      let command = flagsOrCmd.command;
+      if (!command) {
+        const fx = path.join(scratch, `up-fixture-${id}.json`);
+        fs.writeFileSync(fx, typeof fixture === 'string' ? fixture : JSON.stringify(fixture));
+        command = [NODE, stub, fx, ...flagsOrCmd, '--marker', markerFile];
+      }
+      usage.pool = Object.assign({ command }, poolExtra);
+    }
+    const policy = scratchPolicy(`up-${id}`, { usage });
+    fs.rmSync(stateDir, { recursive: true, force: true });
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify(Object.assign(fresh(five, 10), known ? { account: { uuid: 'uuid-a', organizationUuid: 'org-1', email: A_EMAIL } } : {})));
+    const loginFile = path.join(home, '.claude.json');
+    if (known) fs.writeFileSync(loginFile, JSON.stringify({ oauthAccount: { accountUuid: 'uuid-a', organizationUuid: 'org-1', emailAddress: A_EMAIL } }));
+    else fs.rmSync(loginFile, { force: true });
+    fs.rmSync(grantDir, { recursive: true, force: true });
+    if (grant) { fs.mkdirSync(grantDir, { recursive: true }); fs.writeFileSync(path.join(grantDir, 'user.json'), JSON.stringify(g())); }
+    const r = run('usage-gate', gateInput(), gateEnv({ HOOK_POLICY_FILE: policy }));
+    let ok;
+    let detail;
+    if (expect === null) { ok = r.code === 0 && r.stdout === ''; detail = `expected allow (exit 0, no stdout); stderr ${r.stderr}`; }
+    else {
+      const d = parseDecision(r.stdout);
+      ok = r.code === 0 && !!d && d.decision === 'deny' && d.reason === expect;
+      detail = `expected reason ${JSON.stringify(expect)}; stderr ${r.stderr}`;
+    }
+    if (ok && marker !== undefined && fs.existsSync(markerFile) !== marker) { ok = false; detail = `the pool stub ${marker ? 'did not run' : 'ran'}`; }
+    report(id, `${label} -> ${expect === null ? 'allow' : 'deny'}`, ok, detail, r.stdout);
+  }
+  fs.rmSync(path.join(home, '.claude.json'), { force: true });
+  fs.rmSync(grantDir, { recursive: true, force: true });
+
+  // The key itself: validated like the others, defaults filled in by the loader.
+  const { load } = require('./policy');
+  const loadUsage = (name, pool) => load(scratchPolicy(`up-load-${name}`, { usage: { pool } }));
+  const KEYS = [
+    ['UP18', 'pool without timeoutSeconds loads with 15', () => {
+      const r = loadUsage('default', { command: ['cswap', 'list', '--json'], $comment: 'x' });
+      return (r.error === null && JSON.stringify(r.policy.usage.pool) === '{"command":["cswap","list","--json"],"timeoutSeconds":15}') || `${r.error} ${JSON.stringify(r.policy.usage.pool)}`;
+    }],
+    ['UP19', 'pool null loads; the base default is null', () => {
+      const r = loadUsage('null', null);
+      return (r.error === null && r.policy.usage.pool === null && load(POLICIES.none).policy.usage.pool === null) || r.error;
+    }],
+    ['UP26', 'timeoutSeconds 1 and 60 load (the integer range ends)', () => {
+      const r = [1, 60].map((t) => loadUsage(`t${t}`, { command: ['x'], timeoutSeconds: t }));
+      return r.every((x) => x.error === null) || r.map((x) => x.error).join('; ');
+    }],
+    ['UP20', 'malformed pools: empty command, a string command, an empty word, timeoutSeconds 0, 0.5, 61, 600 or a string, an unknown key, an array', () => {
+      const bad = [{ command: [] }, { command: 'cswap list' }, { command: ['cswap', ''] }, { command: ['x'], timeoutSeconds: 0 },
+        { command: ['x'], timeoutSeconds: 0.5 }, { command: ['x'], timeoutSeconds: 61 }, { command: ['x'], timeoutSeconds: 600 },
+        { command: ['x'], timeoutSeconds: '15' }, { command: ['x'], shell: true }, ['cswap'], {}];
+      const loaded = bad.map((p, i) => loadUsage(`bad-${i}`, p));
+      const accepted = loaded.map((r, i) => (r.error === null ? JSON.stringify(bad[i]) : null)).filter((x) => x);
+      return accepted.length === 0 || `accepted: ${accepted.join(', ')}`;
+    }],
+  ];
+  for (const [id, label, check] of KEYS) {
+    if (!selected(id)) continue;
+    let res;
+    try { res = check(); } catch (e) { res = e.message; }
+    report(id, label, res === true, res);
+  }
+}
+
 // ---------- statusline ----------
 // Runs .claude/statusline.js with a scratch HOME. The cache must merge per window and never lose
 // numbers to a refresh that carries no rate_limits.
@@ -1023,6 +1165,8 @@ for (const [id, label, stdin, policy, check] of S) {
       (o) => (o.endsWith(' HOLD') && !o.includes('lifted')) || o],
     ['S25', 'HOLD with usage.overrideEnv set to 1 in the environment reads HOLD lifted', rl(55, 20), envPolicy, {},
       (o) => o.endsWith(' HOLD lifted') || o, { SL_TEST_OVERRIDE: '1' }],
+    ['S42', 'no session_id: a session grant does not lift, the line reads HOLD', JSON.stringify(Object.assign(JSON.parse(rl(55, 20)), { session_id: undefined })), null,
+      { 'sess.json': { until: nowSec + 3600, session: SL_SID } }, (o) => (o.endsWith(' HOLD') && !o.includes('lifted') && o.includes('5h 55%')) || o],
   ];
   for (const [id, label, stdin, policy, grants, check, extraEnv] of SL) {
     if (!selected(id)) continue;
@@ -1056,21 +1200,24 @@ if (selected('S09')) {
 // (and config dir): setup(h, cfg) writes what it needs, the renders run in order through
 // render(stdin, env), and check(ctx) returns true or a failure detail.
 {
-  const login = (uuid, email, org) => JSON.stringify({ oauthAccount: Object.assign({ accountUuid: uuid, organizationUuid: org || 'org-1' },
-    email === null ? {} : { emailAddress: email }) });
+  // org undefined is org-1, null leaves organizationUuid out.
+  const login = (uuid, email, org) => JSON.stringify({ oauthAccount: Object.assign({ accountUuid: uuid },
+    org === null ? {} : { organizationUuid: org || 'org-1' }, email === null ? {} : { emailAddress: email }) });
   const stFile = (h, sid) => path.join(h, '.claude', 'usage-state', `${sid}.json`);
   const readJ = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { return null; } };
-  const pay = (sid, five, seven) => JSON.stringify(Object.assign({ model: { display_name: 'M' } }, sid ? { session_id: sid } : {},
+  // apiMs given: the payload carries cost.total_api_duration_ms; omitted: no cost at all.
+  const pay = (sid, five, seven, apiMs) => JSON.stringify(Object.assign({ model: { display_name: 'M' } }, sid ? { session_id: sid } : {},
+    apiMs === undefined ? {} : { cost: { total_cost_usd: 0.1, total_api_duration_ms: apiMs } },
     five === null && seven === null ? {} : { rate_limits: Object.assign({},
       five === null ? {} : { five_hour: { used_percentage: five, resets_at: nowSec + 3600 } },
       seven === null ? {} : { seven_day: { used_percentage: seven, resets_at: nowSec + 86400 * 3 } }) }));
   const ago = (f, days) => { const t = nowSec - days * 86400; fs.utimesSync(f, t, t); };
   const SN = [
-    ['S26', 'session_id present: writes usage-state/<id>.json, no label, no acct segment', () => {}, (c) => {
+    ['S26', 'session_id present: writes usage-state/<id>.json, no label, no account segment', () => {}, (c) => {
       c.render(pay('s1', 55, 20));
       const j = readJ(stFile(c.h, 's1'));
       return (j && j.account === null && j.five_hour.used_percentage === 55 && j.seven_day.used_percentage === 20 && typeof j.updatedAt === 'number' &&
-        !c.out.includes('acct') && c.out.includes('5h 55%')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+        c.out.startsWith('M | ctx n/a | 5h 55%')) || `file ${JSON.stringify(j)}, line ${c.out}`;
     }],
     ['S27', 'session_id absent: writes nothing, shows this payload\'s numbers', () => {}, (c) => {
       c.render(pay(null, 55, 20));
@@ -1092,11 +1239,11 @@ if (selected('S09')) {
       return (a.five_hour.used_percentage === 55 && b.five_hour.used_percentage === 10 && c.out.includes('5h 55%') && c.out.includes('7d 20%')) ||
         `s1 ${JSON.stringify(a)}, s2 ${JSON.stringify(b)}, line ${c.out}`;
     }],
-    ['S30', 'label present: written to the file, acct segment after ctx', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'jdorje@example.com')), (c) => {
+    ['S30', 'label present: written to the file, account segment after ctx', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'jdorje@example.com')), (c) => {
       c.render(pay('s1', 24, 72));
       const j = readJ(stFile(c.h, 's1'));
       return (j.account && j.account.uuid === 'uuid-a' && j.account.organizationUuid === 'org-1' && j.account.email === 'jdorje@example.com' &&
-        c.out.startsWith('M | ctx n/a | acct jdorje | 5h 24% (hold 50) ->')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+        c.out.startsWith('M | ctx n/a | jdorje | 5h 24% (hold 50) ->')) || `file ${JSON.stringify(j)}, line ${c.out}`;
     }],
     ['S31', 'label from CLAUDE_CONFIG_DIR, not the home directory', (h, cfg) => {
       fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com'));
@@ -1104,7 +1251,7 @@ if (selected('S09')) {
     }, (c) => {
       c.render(pay('s1', 24, 72), { CLAUDE_CONFIG_DIR: c.cfg });
       const j = readJ(stFile(c.h, 's1'));
-      return (j.account.uuid === 'uuid-b' && c.out.includes('| acct b |')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+      return (j.account.uuid === 'uuid-b' && c.out.includes('| b |')) || `file ${JSON.stringify(j)}, line ${c.out}`;
     }],
     ['S32', 'label from the legacy .config.json, which wins over .claude.json', (h) => {
       fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com'));
@@ -1112,30 +1259,67 @@ if (selected('S09')) {
     }, (c) => {
       c.render(pay('s1', 24, 72));
       const j = readJ(stFile(c.h, 's1'));
-      return (j.account.uuid === 'uuid-b' && c.out.includes('| acct b |')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+      return (j.account.uuid === 'uuid-b' && c.out.includes('| b |')) || `file ${JSON.stringify(j)}, line ${c.out}`;
     }],
     ['S33', 'label torn: the cached label is kept, the windows still update', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
       c.render(pay('s1', 24, 72));
       fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-b', 'b@example.com').slice(0, 25));
       c.render(pay('s1', 30, 73));
       const j = readJ(stFile(c.h, 's1'));
-      return (j.account.uuid === 'uuid-a' && j.five_hour.used_percentage === 30 && c.out.includes('| acct a |') && c.out.includes('5h 30%')) ||
+      return (j.account.uuid === 'uuid-a' && j.five_hour.used_percentage === 30 && c.out.includes('| a |') && c.out.includes('5h 30%')) ||
         `file ${JSON.stringify(j)}, line ${c.out}`;
     }],
-    ['S34', 'label change: cached windows absent from the payload are dropped', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
-      c.render(pay('s1', 55, 20));
+    ['S34', 'label change with a newer total_api_duration_ms: accepted, every old window dropped', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
+      c.render(pay('s1', 55, 20, 1000));
+      fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-b', 'b@example.com'));
+      c.render(pay('s1', 30, null, 2500));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account.uuid === 'uuid-b' && j.five_hour.used_percentage === 30 && !('seven_day' in j) && j.apiMs === 2500 &&
+        c.out.includes('| b | 5h 30%') && c.out.includes('7d n/a')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S35', 'label change with the same total_api_duration_ms: refused, nothing written, n/a', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
+      c.render(pay('s1', 55, 20, 1000));
+      const before = fs.readFileSync(stFile(c.h, 's1'), 'utf8');
+      fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-b', 'b@example.com'));
+      c.render(pay('s1', 55, 20, 1000));
+      const after = fs.readFileSync(stFile(c.h, 's1'), 'utf8');
+      return (before === after && JSON.parse(after).apiMs === 1000 && c.out.includes('| b | 5h n/a') && c.out.includes('7d n/a') && !c.out.includes('HOLD')) ||
+        `before ${before}, after ${after}, line ${c.out}`;
+    }],
+    ['S40', 'label change with no cost in the payload: accepted', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
+      c.render(pay('s1', 55, 20, 1000));
       fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-b', 'b@example.com'));
       c.render(pay('s1', 30, null));
       const j = readJ(stFile(c.h, 's1'));
-      return (j.account.uuid === 'uuid-b' && j.five_hour.used_percentage === 30 && !('seven_day' in j) && c.out.includes('| acct b | 5h 30%') &&
-        c.out.includes('7d n/a')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+      return (j.account.uuid === 'uuid-b' && j.five_hour.used_percentage === 30 && !('seven_day' in j) && j.apiMs === 1000) ||
+        `file ${JSON.stringify(j)}, line ${c.out}`;
     }],
-    ['S35', 'label change, another organization: dropped as well', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
-      c.render(pay('s1', 55, 20));
-      fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-a', 'a@example.com', 'org-2'));
-      c.render(pay('s1', 30, null));
+    ['S43', 'label change with a smaller total_api_duration_ms (a resumed process): accepted, every old window dropped', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
+      c.render(pay('s1', 55, 20, 90000));
+      fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-b', 'b@example.com'));
+      c.render(pay('s1', 30, null, 1200));
       const j = readJ(stFile(c.h, 's1'));
-      return (j.account.organizationUuid === 'org-2' && !('seven_day' in j)) || `file ${JSON.stringify(j)}`;
+      return (j.account.uuid === 'uuid-b' && j.five_hour.used_percentage === 30 && !('seven_day' in j) && j.apiMs === 1200 &&
+        c.out.includes('| b | 5h 30%')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S44', 'label change against a file without apiMs (written by the stage 1 script): accepted', (h) => {
+      fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-b', 'b@example.com'));
+      fs.mkdirSync(path.join(h, '.claude', 'usage-state'), { recursive: true });
+      fs.writeFileSync(stFile(h, 's1'), JSON.stringify({ account: { uuid: 'uuid-a', organizationUuid: 'org-1', email: 'a@example.com' },
+        five_hour: { used_percentage: 55 }, seven_day: { used_percentage: 20 }, updatedAt: nowSec }));
+    }, (c) => {
+      c.render(pay('s1', 30, null, 1000));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account.uuid === 'uuid-b' && j.five_hour.used_percentage === 30 && !('seven_day' in j) && j.apiMs === 1000) ||
+        `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S41', 'organization unknown on one side does not differ: a plain merge', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
+      c.render(pay('s1', 55, 20, 1000));
+      fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-a', 'a@example.com', null));
+      c.render(pay('s1', 30, null, 1000));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.five_hour.used_percentage === 30 && j.seven_day.used_percentage === 20 && c.out.includes('5h 30%') && c.out.includes('7d 20%')) ||
+        `file ${JSON.stringify(j)}, line ${c.out}`;
     }],
     ['S36', 'no-window render after a label change: nothing written, meters n/a', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
       c.render(pay('s1', 55, 20));
@@ -1143,13 +1327,13 @@ if (selected('S09')) {
       fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-b', 'b@example.com'));
       c.render(pay('s1', null, null));
       const after = fs.readFileSync(stFile(c.h, 's1'), 'utf8');
-      return (before === after && c.out.includes('| acct b | 5h n/a') && c.out.includes('7d n/a') && !c.out.includes('HOLD')) ||
+      return (before === after && c.out.includes('| b | 5h n/a') && c.out.includes('7d n/a') && !c.out.includes('HOLD')) ||
         `before ${before}, after ${after}, line ${c.out}`;
     }],
-    ['S37', 'label without an email: written, no acct segment', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', null)), (c) => {
+    ['S37', 'label without an email: written, no account segment', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', null)), (c) => {
       c.render(pay('s1', 24, 72));
       const j = readJ(stFile(c.h, 's1'));
-      return (j.account.uuid === 'uuid-a' && j.account.email === null && !c.out.includes('acct')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+      return (j.account.uuid === 'uuid-a' && j.account.email === null && c.out.startsWith('M | ctx n/a | 5h 24%')) || `file ${JSON.stringify(j)}, line ${c.out}`;
     }],
     ['S38', 'prune: a new session\'s file deletes files older than a day, keeps newer ones', (h) => {
       const dir = path.join(h, '.claude', 'usage-state');
@@ -1170,14 +1354,16 @@ if (selected('S09')) {
       const kept = fs.existsSync(path.join(dir, 'later.json'));
       return (after === 'notes.txt,recent.json,s1.json' && kept) || `after ${after}, later kept ${kept}`;
     }],
-    ['S39', 'the old single cache file is deleted when a session file is created', (h) => {
+    ['S39', 'the old single cache file is neither read, written nor deleted', (h) => {
       fs.writeFileSync(path.join(h, '.claude', 'usage-state.json'), JSON.stringify(fresh(95, 95)));
     }, (c) => {
+      const old = path.join(c.h, '.claude', 'usage-state.json');
+      const before = fs.readFileSync(old, 'utf8');
       c.render(pay('s1', null, null));
-      const keptOnNoWrite = fs.existsSync(path.join(c.h, '.claude', 'usage-state.json'));
+      const unread = c.out.includes('5h n/a');
       c.render(pay('s1', 24, 72));
-      const gone = !fs.existsSync(path.join(c.h, '.claude', 'usage-state.json'));
-      return (keptOnNoWrite && gone && c.out.includes('5h 24%')) || `kept before the first write ${keptOnNoWrite}, gone after ${gone}, line ${c.out}`;
+      const after = fs.existsSync(old) ? fs.readFileSync(old, 'utf8') : null;
+      return (unread && after === before && c.out.includes('5h 24%')) || `unread ${unread}, old file after ${after}, line ${c.out}`;
     }],
   ];
   for (const [id, label, setup, check] of SN) {

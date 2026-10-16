@@ -23,6 +23,7 @@ pusher refuses a push above it.
 
    ## Now
    1-3 bullets: what is in flight, which agent had it, exact state (files, failing test, blocker).
+   The account the session ran on (the status line's account segment, the email local part), and the one the gate named, if it did.
 
    ## Next
    Ordered, 3-7 items, each actionable in a single brief. Name the agent when it is obvious.

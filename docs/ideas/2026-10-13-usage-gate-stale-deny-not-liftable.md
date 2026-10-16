@@ -10,7 +10,7 @@ In `.claude/hooks/usage-gate.js` the `whenStale: "deny"` branch runs before the 
 the override variable are read, so a project that denies on stale data has no mid-session lift when
 the status line stops writing: the same shape as the deny-line trap
 (`docs/findings/2026-10-13-usage-gate-deny-line-trap.md`). The reverse case is also unguarded: a
-session with no status line (`claude -p`, a cloud session) never writes `~/.claude/usage-state.json`,
+session with no status line (`claude -p`, a cloud session) never writes `~/.claude/usage-state/<session_id>.json` [no-check: a per-session file],
 so with the base `whenStale: "allow"` its launches are never gated.
 
 ## Open

@@ -15,12 +15,14 @@
 // or denies when the policy sets usage.whenStale to "deny". No session_id, no file for this
 // session, and a file labelled with another account than the one logged in are all missing data:
 // the gate never judges another account's numbers. A malformed policy falls back to the base
-// defaults and says so on stderr.
+// defaults and says so on stderr. With usage.pool set, a HOLD deny (and only that) runs the pool
+// command once and names another account with room, or says there is none (ADR 0011).
 'use strict';
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { load, usageVerdict, readGrants, judgeGrants, holdCovered, readAccount, accountLabel, accountsDiffer } = require('./policy');
+const { spawnSync } = require('child_process');
+const { load, usageVerdict, meterThresholds, readGrants, judgeGrants, holdCovered, readAccount, accountLabel, accountsDiffer } = require('./policy');
 
 const STATE_DIR = path.join(os.homedir(), '.claude', 'usage-state');
 // The status line uses the same rule: a session id becomes a file name, so only plain ids count.
@@ -57,6 +59,78 @@ const scopeText = (s) => (s.kind === 'user' ? 'user' : `${s.kind} ${s.value}`);
 function clause(name, c) {
   if (c.status === 'malformed') return `An override file exists but is malformed (${name}; see ADR 0006, The HOLD override).`;
   return `An override exists for ${c.scope.kind} ${c.scope.value}, not this one.`;
+}
+
+// The pool advice appended to a HOLD deny (ADR 0011, The gate): runs usage.pool.command once,
+// without a shell, stdin closed, killed after timeoutSeconds, and reads its stdout as the
+// `cswap list --json` contract (accounts[]: number, email, organizationUuid, disabled,
+// usageStatus, usage and usageAgeSeconds, lastGoodUsage and lastGoodAgeSeconds; unknown fields
+// ignored). A row's reading is usage when usageStatus is "ok", else lastGoodUsage when
+// lastGoodAgeSeconds is at most an hour, else none; either needs its age. Room: not disabled, a
+// number, an email, a reading, not the session's account, each meter below its own hold; the row
+// with the largest smallest margin wins, the first on a tie. The session's account is every row
+// whose email equals session.email (case-insensitively) and whose organizationUuid equals
+// session.org when both are known; session.email null means unknown, and nothing is excluded.
+// Returns the text to append, starting with a space. Called only on the HOLD deny path.
+const LAST_GOOD_SECONDS = 3600;
+function poolAdvice(u, session) {
+  const { command, timeoutSeconds } = u.pool;
+  const r = spawnSync(command[0], command.slice(1), {
+    input: '', encoding: 'utf8', timeout: Math.round(timeoutSeconds * 1000), windowsHide: true, shell: false,
+    maxBuffer: 4 * 1024 * 1024,
+  });
+  let reason = null;
+  if (r.error && r.error.code === 'ENOENT') reason = `${command[0]} not found`;
+  else if (r.error && r.error.code === 'ETIMEDOUT') reason = `no answer within ${timeoutSeconds} s`;
+  else if (r.error) reason = r.error.message;
+  else if (r.status !== 0) reason = r.status === null ? `${command[0]} killed by ${r.signal}` : `${command[0]} exited ${r.status}`;
+  let accounts = null;
+  if (!reason) {
+    try {
+      const j = JSON.parse(r.stdout);
+      if (j && Array.isArray(j.accounts)) accounts = j.accounts.filter((a) => a && typeof a === 'object');
+    } catch (_) { /* reported below */ }
+    if (!accounts) reason = 'output is not the list --json shape';
+  }
+  if (reason) return ` No pool reading (${reason}).`;
+
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const str = (v) => (typeof v === 'string' && v !== '' ? v : null);
+  const mine = str(session.email) && session.email.toLowerCase();
+  const myOrg = str(session.org);
+  const isMine = (a) => mine !== null && typeof a.email === 'string' && a.email.toLowerCase() === mine &&
+    !(myOrg !== null && str(a.organizationUuid) !== null && a.organizationUuid !== myOrg);
+  // { five, seven, age } or null.
+  const reading = (a) => {
+    let usage = null;
+    let age = null;
+    if (a.usageStatus === 'ok') { usage = a.usage; age = num(a.usageAgeSeconds); }
+    else if (num(a.lastGoodAgeSeconds) !== null && a.lastGoodAgeSeconds <= LAST_GOOD_SECONDS) { usage = a.lastGoodUsage; age = a.lastGoodAgeSeconds; }
+    const pct = (w) => num(usage && typeof usage === 'object' && usage[w] && usage[w].pct);
+    const five = pct('fiveHour');
+    const seven = pct('sevenDay');
+    return age === null || five === null || seven === null ? null : { five, seven, age };
+  };
+  const others = accounts.filter((a) => !isMine(a)).map((a) => ({ a, r: reading(a) }));
+  const holds = Object.fromEntries(meterThresholds(u).map(([l, t]) => [l, t.hold]));
+  const mins = (s) => Math.round(s / 60);
+  const unknown = mine === null ? ' (this session\'s account not excluded)' : '';
+  let best = null;
+  for (const { a, r } of others) {
+    if (!r || a.disabled === true || str(a.email) === null || num(a.number) === null || !(r.five < holds['5h'] && r.seven < holds['7d'])) continue;
+    const margin = Math.min(holds['5h'] - r.five, holds['7d'] - r.seven);
+    if (!best || margin > best.margin) best = { a, r, margin };
+  }
+  if (best) {
+    const n = best.a.number;
+    // The email reaches the deny text only when it looks like one; otherwise the slot alone.
+    const who = /^\S+@\S+$/.test(best.a.email) ? `account ${best.a.email} (slot ${n})` : `slot ${n}`;
+    return ` Report to the owner: ${who} had room ${mins(best.r.age)} min ago: 5h ${Math.round(best.r.five)}%, ` +
+      `7d ${Math.round(best.r.seven)}%${unknown}. The next session is the owner's to start there (cswap switch ${n}, or cswap run ${n}).`;
+  }
+  const ages = others.filter((o) => o.r).map((o) => o.r.age);
+  const readings = ages.length ? `pool readings up to ${mins(Math.max(...ages))} min old` : 'no pool readings';
+  return ` No other account has room (${readings})${unknown}; an override grant is still the lift (ADR 0006).`;
 }
 
 function main(raw) {
@@ -122,7 +196,15 @@ function main(raw) {
       if (g.c.status !== 'expired') return ` ${clause(g.name, g.c)}`;
       return g === expired[0] ? ` Expired override files: ${expired.map((e) => e.name).join(', ')}.` : '';
     }).join('');
-    deny(`${head} ${detail}. ${tripped}: ${u.holdAdvice}${partial}${unused} Lifting this early is the user's decision (${POLICY_DOC}).`);
+    // The pool is asked only here, about to deny at HOLD: an allowed launch spawns nothing. A fault
+    // in it must not turn the deny into a crash, which would fail open.
+    let pool = '';
+    if (u.pool) {
+      // The session's account: the login's label, else the file's (both known means they agree here).
+      const pick = (k) => (current && current[k]) || (fileLabel && fileLabel[k]) || null;
+      try { pool = poolAdvice(u, { email: pick('email'), org: pick('organizationUuid') }); } catch (e) { pool = ` No pool reading (${e.message}).`; }
+    }
+    deny(`${head} ${detail}. ${tripped}: ${u.holdAdvice}${partial}${unused} Lifting this early is the user's decision (${POLICY_DOC}).${pool}`);
   }
 }
 

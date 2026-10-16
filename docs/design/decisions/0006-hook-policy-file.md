@@ -58,6 +58,7 @@ per model seen downstream (task branches, single branch, per-meter thresholds), 
 | `usage.staleSeconds` | seconds | `7200` | Older usage data is stale. |
 | `usage.whenStale` | `"allow"` or `"deny"` | `"allow"` | What the gate does with stale or missing data. |
 | `usage.overrideEnv` | variable name or `null` | `null` | An environment variable that, set to `1` when the session starts, lifts HOLD on both meters for that session (never the deny line): the launch-time form of a session grant (The HOLD override). |
+| `usage.pool` | `null` or `{ "command": argv, "timeoutSeconds": integer 1 to 60 }` | `null` | A command run once, without a shell, only when the gate is about to deny at HOLD; its stdout is read as the `cswap list --json` contract and the deny names another account with room, or says there is none or no reading (ADR 0011). `timeoutSeconds` defaults to `15`. Hatchery's own file sets `["cswap", "list", "--json"]`. |
 | `usage.holdAdvice` / `usage.denyAdvice` | text | the base's wording | The sentence after the threshold in each deny. |
 | `edit.capExempt` | path patterns | `[]` | Docs exempt from the 300-line cap. |
 | `edit.anchorExempt` | path patterns | proposals, decisions, findings | Docs whose backtick-quoted paths are not checked: closed records that name paths as they were. |

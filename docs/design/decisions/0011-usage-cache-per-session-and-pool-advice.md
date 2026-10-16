@@ -4,7 +4,9 @@ Date: 2026-10-16
 Status: accepted
 
 Record: proposal `../proposals/0011-usage-gate-under-account-switching.md` and
-`../proposals/0011-critic-review.md`. Evidence: `docs/findings/2026-10-16-account-switcher-practices.md`;
+`../proposals/0011-critic-review.md`. Amended the same day, before the push, from the stage 1
+review and the stage 2 build: the label-change rule, the old file left in place, last-good pool
+readings, the organization in the pool join. Evidence: `docs/findings/2026-10-16-account-switcher-practices.md`;
 facts: `docs/reference/claude-swap.md`. Amends ADR 0006 (the key table, which is living, and the
 `resets_at` source in Writing a grant) and the cache paragraph of `0002-hook-specs.md` section 3.
 
@@ -38,15 +40,25 @@ the switcher hold the cross-account readings, pin parallel sessions to accounts.
   under the user's `~/.claude` (like the grants directory), never under `CLAUDE_CONFIG_DIR`, so
   the location depends on neither the variable nor the scrub. The directory is created on first
   write; files older than one day are deleted when a session's file is created. The old
-  `~/.claude/usage-state.json` is neither read nor written, and the new status line deletes it
-  once. No `session_id`: the status line writes nothing, the gate takes the stale path.
+  `~/.claude/usage-state.json` is neither read, written nor deleted: sibling projects on the older
+  base still read it (stage 1 review, 2026-10-16; the deletion the first draft had is withdrawn).
+  No `session_id`: the status line writes nothing, the gate takes the stale path.
 - Shape: `{ "account": { "uuid", "organizationUuid", "email" } | null, "five_hour": { "used_percentage",
-  "resets_at" }, "seven_day": {...}, "updatedAt" }`, epoch seconds. Merge per window as before: a
-  window on stdin replaces the cached one, an absent one keeps it. Rule order on a render: no
-  window on stdin, nothing is written, whatever the label did; a window present, then if the
-  cached and current labels are both known and differ in `uuid` or `organizationUuid`, cached
-  windows absent from this payload are dropped, then the merge; the current label is written when
-  known, else the cached one is kept (a torn read is a no-op).
+  "resets_at" }, "seven_day": {...}, "apiMs", "updatedAt" }`, epoch seconds; `apiMs` is the
+  payload's `cost.total_api_duration_ms` at the write. Merge per window as before: a window on
+  stdin replaces the cached one, an absent one keeps it. Rule order on a render: no window on
+  stdin, nothing is written, whatever the label did. A window present and the labels equal, or
+  either unknown: merge, and write the current label when known, else keep the cached one (a torn
+  read is a no-op). A window present and the labels both known and different: the payload repeats
+  the last response's `rate_limits`, which after `cswap switch` are the previous account's until
+  the next response (stage 1 review), so the change is refused while the payload's
+  `cost.total_api_duration_ms` equals the file's `apiMs`: nothing is written, the line shows
+  `n/a`, and the gate sees the mismatch as stale. Any other case accepts: a greater counter (a
+  response has happened since the last write), a smaller one (a resumed process, whose
+  `rate_limits` can only be its own responses'; stage 2 review), no `cost` in the payload, or no
+  `apiMs` in the file. On acceptance every cached window is dropped and the payload's are taken
+  under the new label. Labels differ when `uuid` differs, or `organizationUuid` differs
+  with both known; a field unknown on either side does not differ.
 - The label: `readAccount()` in `policy.js`, the one reader both scripts use: config home is
   `CLAUDE_CONFIG_DIR` when set else the home directory; `.config.json` in the config home, then
   `.claude.json` there, the first that parses with an `oauthAccount`; returns the three fields or
@@ -54,10 +66,10 @@ the switcher hold the cross-account readings, pin parallel sessions to accounts.
 
 ### The status line
 
-The segment `acct <email local part>` before the meters, omitted when the label is unknown:
-`Opus 5.5 | ctx 25% | acct jdorje | 5h 24% (hold 50) ->12:20 | 7d 72% (hold 50) ->Mon 06:00`.
+The segment `<email local part>` before the meters, omitted when the label is unknown:
+`Opus 5.5 | ctx 25% | jdorje | 5h 24% (hold 50) ->12:20 | 7d 72% (hold 50) ->Mon 06:00`.
 When the current label and the file's are both known and differ, the meters read `n/a`, as the
-gate treats them. The form is the owner's to change (proposed, not reviewed by the owner).
+gate treats them. The owner reviewed the form on 2026-10-16 and chose the bare local part.
 
 ### The gate
 
@@ -65,13 +77,22 @@ gate treats them. The form is the owner's to change (proposed, not reviewed by t
   `Usage gate (jdorje@example.com): 5h X%, 7d Y%. ...`. When the file's label and the current
   label are both known and differ, the file is no usage data (the stale path, `whenStale`), with
   the reason on stderr; the gate never judges another account's numbers.
-- `usage.pool`: `null` (base) or `{ "command": [argv], "timeoutSeconds": 15 }`. Run only when the
+- `usage.pool`: `null` (base) or `{ "command": [argv], "timeoutSeconds": 15 }` (an integer from
+  1 to 60, under Claude Code's own hook timeout, so a hung command ends in a deny rather than a
+  timed-out hook; a shell shim such as a `.cmd` is "not found" by a spawn without a shell, so the
+  argv names a real executable). Run only when the
   gate is about to deny at HOLD after the grant check: a spawn without a shell, stdin closed,
-  stdout parsed as the `cswap list --json` contract (`accounts[]`: `number`, `email`, `disabled`,
-  `usageStatus`, `usage.fiveHour.pct`, `usage.sevenDay.pct`, `usageAgeSeconds`; unknown fields
-  ignored). Room: not `disabled`, `usageStatus` `ok`, email not the session's label email (every
-  row with that email excluded; email is the only join), 5h and 7d each below that meter's hold;
-  the row with the largest minimum of hold minus pct is named. Appended to the HOLD deny:
+  stdout parsed as the `cswap list --json` contract (`accounts[]`: `number`, `email`,
+  `organizationUuid`, `disabled`, `usageStatus`, `usage.fiveHour.pct`, `usage.sevenDay.pct`,
+  `usageAgeSeconds`, and for a row whose `usage` is null `lastGoodUsage` with
+  `lastGoodAgeSeconds`; unknown fields ignored). A row's reading is `usage` when `usageStatus` is
+  `ok`, else `lastGoodUsage` when `lastGoodAgeSeconds` is at most 3600 (cswap marks any row not
+  fetched within five minutes `unavailable` and keeps the last reading; the age is in the text, so
+  an hour-old reading is advice the owner can weigh), else none. Room: not `disabled`, a reading,
+  not the session's account (every row whose email equals the label's, case-insensitively, and
+  whose `organizationUuid` equals the label's when both are known, is excluded), 5h and 7d each
+  below that meter's hold; the row with the largest minimum of hold minus pct is named, with its
+  reading's age. Appended to the HOLD deny:
   ` Report to the owner: account <email> (slot <n>) had room <m> min ago: 5h a%, 7d b%. The next
   session is the owner's to start there (cswap switch <n>, or cswap run <n>).`; else ` No other
   account has room (pool readings up to <m> min old); an override grant is still the lift (ADR
@@ -91,8 +112,10 @@ unchanged.
 ### Harness
 
 Group S: `session_id` present and absent; two sessions side by side; label present, absent, from
-the legacy file, torn; label change dropping absent windows; a no-window render after a label
-change writing nothing; the prune; the old file deleted. Group U: a file for another session only;
+the legacy file, torn; a label change with a greater `cost.total_api_duration_ms` accepted and all
+old windows dropped, with the same value refused (nothing written, `n/a`), and with a smaller
+value, no `cost`, or a file without `apiMs` accepted; a no-window render after a label change writing nothing; the prune; a session grant
+not lifting when the payload has no `session_id`. Group U: a file for another session only;
 label mismatch as stale; every existing U, UX, UO case carries a `session_id`. Group UP: `pool`
 null; a scratch policy whose command is `["node", "<stub>", "<fixture>"]` for room, no room,
 disabled and non-ok rows, the session's email excluded, unknown label, a missing program, a stub
@@ -104,11 +127,16 @@ that sleeps past the timeout, non-zero exit, bad JSON. Never a stub on PATH.
   that can name a model window and a reading the status line can show.
 - Judging the pool instead of the account, switching accounts from the hook, a proxy: rejected in
   the proposal (options C, D, E).
-- Check while building: a hook inside a subagent carries the parent's `session_id` (docs:
-  "current session identifier"). If not, a nested launch takes the stale path, fail-open, said on
-  stderr.
-- Residual accepted: a torn identity read on the first render after a switch writes the new
-  windows under the old label; the gate treats that as stale until the next successful render.
+- Unverified: a hook inside a subagent carries the parent's `session_id` (docs: "current session
+  identifier"; inside a subagent `CLAUDE_CODE_SESSION_ID` equals the parent's, observed
+  2026-10-16, but no hook payload was captured). If not, a nested launch takes the stale path,
+  fail-open, said on stderr.
+- Residuals accepted: a torn identity read on the first render after a switch writes the new
+  windows under the old label, treated as stale until the next successful render; a fresh session
+  whose first response launches an agent may run the gate before its status line has written, so
+  the first launch takes the stale path (`whenStale: deny` for a project that would rather wait);
+  the old shared file is left for the owner to delete once every project on the machine runs the
+  new scripts.
 
 ## Consequences
 

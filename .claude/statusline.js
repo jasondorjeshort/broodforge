@@ -6,7 +6,7 @@
 // Thresholds for the HOLD and STOP flags come from .claude/hooks/policy.json (usage block) and are
 // shown per meter, "(hold 50)" or "(hold 50 stop 90)"; STOP shows only on a meter with a deny line,
 // which the base does not set. "HOLD lifted" replaces HOLD when an override lifts it for this session.
-// "acct <local part>" names the logged-in account (policy.readAccount) when it is known.
+// The bare email local part names the logged-in account (policy.readAccount) when it is known.
 // Spec: docs/design/decisions/0002-hook-specs.md section 3; the per-session file: ADR 0011.
 //
 // Fields: https://code.claude.com/docs/en/statusline. rate_limits appears only on claude.ai
@@ -14,17 +14,21 @@
 // seven_day) may be absent on its own, dropped once its resets_at passes. So the cache is merged
 // per window: a window present on stdin replaces the cached one, an absent window keeps the cached
 // one, and nothing is written when neither is present. A cached reading is never replaced by null.
-// The account is a label, never the key: when the cached and current labels are both known and
-// differ, cached windows absent from the payload are dropped before the merge.
+// The account is a label, never the key. When the cached and current labels both are known and
+// differ, the payload may still repeat the previous account's rate_limits (after cswap switch,
+// until the next response), so the change is refused while cost.total_api_duration_ms equals the
+// file's apiMs: nothing is written and the meters read n/a. Any other value (greater: a response
+// since; smaller: a resumed process counting afresh), no cost, or no apiMs accepts it, and every
+// cached window is dropped (ADR 0011, The cache).
 // File: { account: { uuid, organizationUuid, email } | null, five_hour: { used_percentage, resets_at },
-// seven_day: {...}, updatedAt } (epoch seconds). No session_id: nothing is read or written.
+// seven_day: {...}, apiMs, updatedAt } (epoch seconds). No session_id: nothing is read or written.
+// The old single file ~/.claude/usage-state.json is neither read, written nor deleted.
 'use strict';
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
 const STATE_DIR = path.join(os.homedir(), '.claude', 'usage-state');
-const OLD_FILE = path.join(os.homedir(), '.claude', 'usage-state.json');
 const WINDOWS = ['five_hour', 'seven_day'];
 const PRUNE_SECONDS = 86400;
 // A session id becomes a file name, so only plain ids are used; anything else counts as absent.
@@ -37,10 +41,9 @@ function readState(file) {
   } catch (_) { return {}; }
 }
 
-// Files in the directory older than a day, other than this session's, are deleted; so is the old
-// single cache file, which nothing reads any more. Run when a session's file is created.
+// Files in the directory older than a day, other than this session's, are deleted. Run when a
+// session's file is created.
 function prune(keep) {
-  try { fs.rmSync(OLD_FILE, { force: true }); } catch (_) { /* a directory or locked: leave it */ }
   try {
     const cutoff = Date.now() - PRUNE_SECONDS * 1000;
     for (const name of fs.readdirSync(STATE_DIR)) {
@@ -54,25 +57,34 @@ function prune(keep) {
   } catch (_) { /* no directory */ }
 }
 
-// Merges the windows present in rl over the cached state and writes it when one was present.
-// current is the logged-in account's label or null; differ(a, b) is policy.accountsDiffer, or a
-// function returning false when policy.js did not load. Rule order (ADR 0011): no window on stdin,
-// nothing is written; else a label change drops the cached windows absent from this payload, then
-// the merge; the current label is written when known, else the cached one is kept.
+const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+// Merges the windows present in the payload d over the cached state and writes it when one was
+// present. current is the logged-in account's label or null; differ(a, b) is policy.accountsDiffer,
+// or a function returning false when policy.js did not load. Rule order (ADR 0011): no window on
+// stdin, nothing is written; labels equal or either unknown, the merge, the current label written
+// when known, else the cached one kept; labels known and different, nothing is written when the
+// payload's cost.total_api_duration_ms equals the file's apiMs, and otherwise the change is
+// accepted (every cached window dropped, the payload's taken under the new label). apiMs is the
+// payload's number, else the cached one.
 // The write goes to a temporary file and is renamed, so the gate never reads half a file.
-function update(file, rl, current, differ) {
+function update(file, d, current, differ) {
   const state = file ? readState(file) : {};
+  const rl = d.rate_limits;
   const present = WINDOWS.filter((w) => rl && rl[w] && typeof rl[w].used_percentage === 'number');
   if (!present.length) return state;
+  const apiMs = num(d.cost && d.cost.total_api_duration_ms);
+  const changed = differ(state.account, current);
+  if (changed && apiMs !== null && num(state.apiMs) !== null && apiMs === state.apiMs) return state;
   const out = { account: current || (state.account && typeof state.account === 'object' ? state.account : null) };
-  const keep = !differ(state.account, current);
   for (const w of WINDOWS) {
     const v = rl[w];
     if (present.includes(w)) {
       out[w] = { used_percentage: v.used_percentage };
       if (typeof v.resets_at === 'number') out[w].resets_at = v.resets_at;
-    } else if (keep && state[w]) out[w] = state[w];
+    } else if (!changed && state[w]) out[w] = state[w];
   }
+  out.apiMs = apiMs !== null ? apiMs : num(state.apiMs);
   out.updatedAt = Math.floor(Date.now() / 1000);
   if (!file) return out;
   const created = !fs.existsSync(file);
@@ -104,7 +116,7 @@ process.stdin.on('end', () => {
   const current = policy && typeof policy.readAccount === 'function' ? policy.readAccount() : null;
   const differ = (a, b) => { try { return !!policy && policy.accountsDiffer(a, b); } catch (_) { return false; } };
   // Without a session id there is no file: the meters show this payload's windows only.
-  const state = update(file, d.rate_limits, current, differ);
+  const state = update(file, d, current, differ);
   // The file's numbers belong to another account than the one logged in: show n/a, as the gate
   // treats them (stale).
   const otherAccount = differ(state.account, current);
@@ -140,8 +152,8 @@ process.stdin.on('end', () => {
     return ` ->${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][t.getDay()]} ${hm}`;
   };
 
-  // The account segment: the logged-in label's email local part, else the file's; omitted when
-  // neither is known.
+  // The account segment: the email local part on its own, from the logged-in label, else the
+  // file's; omitted when neither is known.
   const label = current || (state.account && typeof state.account === 'object' ? state.account : null);
   const email = label && typeof label.email === 'string' ? label.email : '';
   const local = email.split('@')[0];
@@ -149,7 +161,7 @@ process.stdin.on('end', () => {
   const parts = [
     (d.model && d.model.display_name) || '?',
     `ctx ${pct(d.context_window && d.context_window.used_percentage)}`,
-    ...(local ? [`acct ${local}`] : []),
+    ...(local ? [local] : []),
     `5h ${pct(fiveH && fiveH.used_percentage)}${limits('5h')}${resetAt(fiveH)}`,
     `7d ${pct(sevenD && sevenD.used_percentage)}${limits('7d')}${resetAt(sevenD)}${flag}`,
   ];

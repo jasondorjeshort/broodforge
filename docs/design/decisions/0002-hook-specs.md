@@ -202,36 +202,32 @@ exemptions and formatters from a policy file, a malformed policy, and the task-b
 
 ## 3. `usage-gate.js` (PreToolUse, matcher `Agent|Workflow`, no `onFailure`) and the status line
 
-Cache (ADR 0011): one file per session, `~/.claude/usage-state/<session_id>.json`, always under the
-user's `~/.claude`, never under `CLAUDE_CONFIG_DIR`. Shape: `{ "account": { "uuid",
-"organizationUuid", "email" } | null, "five_hour": { "used_percentage", "resets_at" },
-"seven_day": {...}, "updatedAt" }`, epoch seconds. A `session_id` is used only when it is a plain
-name (letters, digits, `_`, `-`); otherwise, or when there is none, the status line reads and writes
-no file and shows the payload's own windows. `.claude/statusline.js` writes the file: with no window
-on stdin nothing is written, so a refresh without `rate_limits` never replaces numbers with nulls;
-with a window, when the cached and current account labels are both known and differ in `uuid` or
-`organizationUuid`, the cached windows absent from this payload are dropped, then a window present
-on stdin replaces the cached one and an absent window keeps it; the current label is written when
-known, else the cached one is kept. The write creates the directory, goes to a temporary file and is
-renamed; a failed rename removes the temporary file. When the write created the session's file, the
-status line deletes every `*.json` and `*.tmp` in the directory last modified more than a day ago,
-and the old single file `~/.claude/usage-state.json`, which nothing reads.
-The label is `readAccount()` in `policy.js`, the one reader both scripts use: the config home is
-`CLAUDE_CONFIG_DIR` when set, else the home directory; `.config.json` there, then `.claude.json`
-there, the first that parses with an `oauthAccount` whose `accountUuid` is a non-empty string gives
-`{ uuid, organizationUuid, email }` (the last two `null` when absent); otherwise `null`. It never
-throws, and it is a label, never the key.
+Cache: one file per session, `~/.claude/usage-state/<session_id>.json` under the user's `~/.claude`
+(never `CLAUDE_CONFIG_DIR`); its shape and the merge's rule order are ADR 0011's. A `session_id`
+counts only as a plain name (letters, digits, `_`, `-`); without one the status line reads and
+writes no file and shows the payload's windows. No window on stdin writes nothing, so a refresh
+without `rate_limits` never replaces numbers with nulls. The write creates the directory, goes to a
+temporary file and is renamed; a failed rename removes the temporary file. A write that creates the
+session's file deletes every `*.json` and `*.tmp` there modified over a day ago; the old
+`~/.claude/usage-state.json` is left alone. Every write records `apiMs`, the payload's
+`cost.total_api_duration_ms` (else the cached value). A label change with a window is refused while
+that number equals the file's `apiMs` (nothing written, meters `n/a`); any other value, smaller
+included, or either missing accepts it and drops every cached window. Labels differ by `uuid`, or by
+`organizationUuid` when both are known. The label is `readAccount()` in `policy.js`, shared by both scripts:
+`.config.json`, then `.claude.json`, in `CLAUDE_CONFIG_DIR` else the home directory, the first with
+an `oauthAccount` whose `accountUuid` is a non-empty string, as `{ uuid, organizationUuid, email }`
+(the last two may be `null`); else `null`. It never throws and is never the key.
 `settings.json` sets `"refreshInterval": 60`, so the cache stays fresh while the user is idle and
 agents run. Line 1 is the working directory exactly as received
 (`workspace.current_dir`, else the older `cwd`; no shortening); when neither is a non-empty string the
 output is the meters line alone, with no blank first line. The meters line, after line 1's newline
-when there is one, shows model, context, `acct <email local part>` (the current label's, else the
+when there is one, shows model, context, `<email local part>` (the current label's, else the
 file's; omitted when neither carries an email), both windows with their reset times, and ` HOLD` or ` STOP` by the same per-meter judgement as the gate (the
 helper in `policy.js`; ` STOP` only on a meter with a deny line); a cached window past its
 `resets_at` shows `n/a`, and so do both windows when the file's label and the current one are both
 known and differ. Each window carries its thresholds from `meterThresholds`, `(hold 50)` or
 `(hold 50 stop 90)`, also when it reads `n/a`, so a line reads
-`Opus 5.5 | ctx 25% | acct jdorje | 5h 24% (hold 50) ->12:20 | 7d 72% (hold 50) ->Mon 06:00 HOLD`; a missing or malformed `policy.json`
+`Opus 5.5 | ctx 25% | jdorje | 5h 24% (hold 50) ->12:20 | 7d 72% (hold 50) ->Mon 06:00 HOLD`; a missing or malformed `policy.json`
 falls back to the base values, as the gate does (ADR 0006), and only a `policy.js` that cannot be required drops
 the parentheses and the flag. At HOLD the flag reads ` HOLD lifted` when the gate's grant rules would let a launch
 through, judged on the readings the line shows; the status line does not judge staleness, the gate does, so on stale
@@ -271,10 +267,26 @@ There is no HOLD deny when the grants that apply together lift every meter that 
 `usage.overrideEnv` names a variable set to exactly `1` (ADR 0006). A crash exits 1, which does not
 block: the gate fails open.
 
-Every U, UX and UO case runs as one session with its file; UG cases write the file of their payload's
-session. Harness cases U (thresholds and the legacy override file, with and without a deny line; a
-file for another session only; no or an unusable `session_id`; the label matching, differing by
-uuid or organization, unknown on either side, torn, from `CLAUDE_CONFIG_DIR`, from the legacy file), UO (the
+Pool (ADR 0011). With `usage.pool` set, and only on the HOLD deny path (never on an allow, a lift or
+a deny line), the gate runs `command` once without a shell, stdin empty, killed after
+`timeoutSeconds` (an integer from 1 to 60), and appends one of: ` Report to the owner: account <email> (slot <n>) had room <m> min ago: 5h a%, 7d b%[U]. The next session is the owner's to start there (cswap switch <n>, or cswap run <n>).`
+(`slot <n>` alone in place of `account <email> (slot <n>)` when the email does not match `^\S+@\S+$`);
+` No other account has room (pool readings up to <m> min old|no pool readings)[U]; an override grant is still the lift (ADR 0006).`;
+` No pool reading (<reason>).`, reasons such as `<program> not found` (a `.cmd` shim too: no shell), `no answer within <t> s`,
+`<program> exited <code>`, `killed by <signal>`, `output is not the list --json shape`, a spawn error (`spawnSync ... ENOBUFS`).
+`[U]` is ` (this session's account not excluded)`, added when the session's email (login, else file) is
+unknown. A row's reading is `usage` with `usageAgeSeconds` when `usageStatus` is `ok`, else
+`lastGoodUsage` with `lastGoodAgeSeconds` when that is at most 3600, else none. A row has room when
+it is not `disabled`, has a `number`, an email and a reading with both `pct`, is not the session's
+account (email equal case-insensitively, and `organizationUuid` equal when both are known), and
+each `pct` is below that meter's hold; the largest smallest margin wins, the first on a tie. `<m>` is
+the reading's age in whole minutes, rounded; the no-room age is the oldest reading among the others.
+
+Every U, UX and UO case runs as one session with its file; UG cases write their payload session's.
+The ADR 0011 additions to U, S and UP follow its Harness list, plus a `session_id` that is not a
+plain name, a label without an email or organization, and the pool key's validation; the pool
+command is a stub in the scratch dir, never one on PATH. Harness cases U (thresholds and the legacy
+override file, with and without a deny line), UO (the
 override per meter, no deny line on one meter or both, `usage.overrideEnv`), UG (the grant
 directory: a session grant for this session and for another; a project grant with `cwd` at the
 path, under it, and beside it with the path as a prefix, with either separator and, on Windows,
@@ -283,9 +295,6 @@ differing case; a user grant; the legacy file beside a directory grant; both sco
 out-of-scope file; several expired files in one clause; a `reason` that is not a string; stdin
 without `session_id` and unparseable, which take the stale path, and without `cwd`), UX (staleness both
 ways, a reset window, the example policies, per-meter thresholds, a malformed policy including a
-string `deny`, a pre-merge cache file), and S (the status line's merge, the untouched file without
-`rate_limits`, malformed stdin, the directory line from `current_dir`, from `cwd` alone, and absent, policy flags, no STOP without a deny line, the thresholds beside each meter, `HOLD lifted` for a grant for this session and `HOLD` for another session's, a partial lift or STOP, a failed rename;
-and, per ADR 0011, `session_id` present, absent and not a plain name, two sessions side by side, the
-label present, without an email, from `CLAUDE_CONFIG_DIR`, from the legacy file and torn, a label
-change dropping absent windows, a no-window render after a label change writing nothing, the prune,
-and the old file deleted).
+string `deny`, a pre-merge cache file), UP (the pool, with per-meter holds and no spawn on an allow,
+a lift or a deny line), and S (the status line's merge, the untouched file without
+`rate_limits`, malformed stdin, the directory line from `current_dir`, from `cwd` alone, and absent, policy flags, no STOP without a deny line, the thresholds beside each meter, `HOLD lifted` for a grant for this session and `HOLD` for another session's, a partial lift or STOP, a failed rename).

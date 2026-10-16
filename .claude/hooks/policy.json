@@ -6,7 +6,10 @@
     "branchDelete": { "branches": [], "requireMergedPr": false },
     "hooksPath": null
   },
-  "usage": { "hold": 50, "deny": null, "staleSeconds": 7200, "whenStale": "allow" },
+  "usage": {
+    "hold": 50, "deny": null, "staleSeconds": 7200, "whenStale": "allow",
+    "pool": { "command": ["cswap", "list", "--json"], "timeoutSeconds": 15 }
+  },
   "edit": {
     "capExempt": [],
     "anchorExempt": ["docs/design/proposals/*", "docs/design/decisions/*", "docs/findings/*"],

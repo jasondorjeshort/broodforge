@@ -76,8 +76,12 @@ forbid. Nothing in the base requires cswap; what reads it fails open when it is 
   (`usageFetchedAt`, `usageAgeSeconds`, `lastGoodUsage`, `usageError`, `usageRetryAt`),
   `loginExpiresAt`. The README names the scoped entries without their fields (the internal cache
   has `name`, `pct`, `resets_at`); the "ignore unknown fields" promise is written for
-  `auto --json`; `list` exit codes are undocumented beyond non-zero with an error object; no
-  `accountUuid` or `organizationUuid` is in the output, so email is the only join to a session.
+  `auto --json`; `list` exit codes are undocumented beyond non-zero with an error object. The
+  README omits three row fields 0.27.2 emits (`json_output.account_row`): `organizationUuid`,
+  `organizationName`, `isOrganization`; no `accountUuid` is emitted, so email plus organization is
+  the join to a session. A row not fetched within five minutes (`STALE_OK_S`) is reported as
+  `usageStatus` `unavailable` with `usage` null and the last reading under `lastGoodUsage` with
+  `lastGoodAgeSeconds`; `list` does not always refresh such a row on the spot.
 - `list` refreshes entries older than its serve TTL and otherwise re-serves cached readings, with
   backoff after a 429. Readings can be hours old; read `usageAgeSeconds`.
 - Anthropic's usage endpoint has a per-account request budget, observed at roughly thirty requests
