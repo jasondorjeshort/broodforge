@@ -22,9 +22,15 @@ through `GOPROXY` and the checksum database).
 | `zombiezen.com/go/sqlite` | v1.4.2 | ISC | `store` |
 | `golang.org/x/sys` | v0.49.0 | BSD-3-Clause | `spawn`, `control` |
 
-`control` imports `golang.org/x/sys/windows` (Windows build only). Until its owner imports it,
+`control` imports `golang.org/x/sys/windows` (Windows build only); `store` imports
+`zombiezen.com/go/sqlite` and its `sqlitex`, and no other package does. Until its owner imports it,
 each other module is held by a blank import in `internal/deps/deps.go`; x/sys stays pinned there
 through `golang.org/x/sys/cpu` because `x/sys/windows` does not build on Linux.
+
+zombiezen facts (finding `docs/findings/2026-10-16-sqlite-facts-seen-while-building-the-store.md`):
+
+- Run each `PRAGMA` as its own statement; inside `sqlitex.ExecuteScript` (a SAVEPOINT) `synchronous` fails.
+- A read-only open of a WAL store creates `-wal` and `-shm` and leaves them after close; a truncated file opens and fails only at its first statement.
 
 `x/sys/windows` pitfalls in the named-pipe transport (finding
 `docs/findings/2026-10-16-go-named-pipes-on-windows-two-stdlib-pitfalls.md`):

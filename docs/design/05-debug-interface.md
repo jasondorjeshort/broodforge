@@ -27,7 +27,8 @@ live|dry-run connected|disconnected`, `sessions: <open> open, <waiting> waiting-
 <age> ago|none`, `engine: <path> <version>`; `--json` nests the same under those keys.
 `broodforge stop [--timeout 30]` is 03's shutdown, exit 1 after the timeout with the open
 sessions listed. `broodforge reconcile [--report-only]` runs ADR 0021's reconciliation on
-demand; `--report-only` works on the file without the bot.
+demand; `--report-only` works on the file without the bot, writes nothing and prints `<kind>
+<subject>  <session>  <detail>` per finding (`interrupt`, `missing`, `present`, `unrecorded`).
 Observe. `status`; `audit --kind instance-started --limit 1` and the events after it (the report).
 Reproduce. `broodforge scratch run -- broodforge serve --discord dry-run` with a second shell
 running `status --wait 10 --expect config=ok`; a start refusal keeps the scratch root.
@@ -244,27 +245,35 @@ git never opens the session tree (ADR 0022); `worktree check` reads `refs/sessio
 
 Drive. `broodforge usage [--session <id> | --user <id> | --credential <id> | --channel <id> |
 --project <id>] [--since <time>] [--by model|turn]` prints one line per model `<model>  <turns>
-<input>  <output>  <cache read>  <cache write>  <interrupted turns>`; no filter is the instance
-total; `--user` is the requester total, `--credential` the payer total (02). `broodforge audit
+<input>  <output>  <cache read>  <cache write>  <interrupted turns>`, then the same columns as
+`total`, printed even with no usage; no filter is the instance total; `--user` is the requester
+total, `--credential` the payer total (02); `--by turn` prints `<session>  <turn>  <model>
+<input>  <output>  <cache read>  <cache write>  <interrupted>  <time>`. `broodforge audit
 [--since-seq <n>] [--kind <kind>[,<kind>]] [--session <id>] [--limit 20] [--follow]` prints
-`<seq>  <time>  <kind>  <phase or ->  <actor>  <session or ->  <details, first 80 chars>`;
-`--json` prints every column. Kinds are 03's audit event kinds in kebab-case.
-Observe. `usage --by turn --json` carries each turn's raw `modelUsage` and `usage`.
+`<seq>  <time>  <kind>  <phase or ->  <actor>  <session or ->  <details, first 80 chars>` in seq
+order: the newest `--limit` events, or with `--since-seq` the first after it; an empty log
+prints nothing, exit 0; `--json` prints every column. Kinds are 03's audit event kinds in
+kebab-case. `--follow` needs the bot (`not-running` without one).
+Observe. `usage --by turn --json` carries each turn's raw `modelUsage` and `usage` as `raw`.
 Reproduce. A total that disagrees with a fixture: `usage --session s0001 --by turn --json` beside
 `grep '"type":"result"' <fixture dir>/turn-<n>.jsonl`.
 Isolation. Read-only; without the bot both read the store file (a direct reader needs write
-access to `-shm`, ADR 0021; the CLI says `error: store-shm: <path>` when it lacks it).
+access to `-shm`, ADR 0021; the CLI says `error: store-shm: <path>` when it lacks it);
+`no-store` without `data/store.sqlite`, `store-schema` when its migrations are not the binary's.
 
 ## Backup snapshot and restore rehearsal
 
-Drive. `broodforge backup snapshot (file)`, `backup verify [path] (file)`, `backup rehearse
-[path] (file)` are the ADR 0021 companion's steps and exit codes; `verify` prints `migration
-<id>` then `<table>  <rows>` per table; `rehearse` prints the same from the restored copy plus
+Drive. `broodforge backup snapshot (file)`, `backup verify [--path <file>] (file)`, `backup
+rehearse [path] (file)` are the ADR 0021 companion's steps and exit codes. `snapshot` prints `ok
+<snapshot path>  <audit events exported>` (no checkpoint from outside the bot; a second run at
+once is `backup-busy`, the lock `backup/snapshot.lock`); `verify`, of
+`latest` by default, prints `ok`, `migration  <id>`, then `<table>  <rows>` per table; a failed
+check is `error: integrity-check: <result>`; `rehearse` prints the same from the restored copy plus
 `reconcile: <n> missing` and, on failure, the scratch root it kept.
 Observe. `status` line `backup:`; `ls <root>/backup/`; `backup verify --json`.
 Reproduce. `scratch run -- bash tests/repro/backup-cycle.sh` [no-check: no code yet]: a session,
 `backup snapshot`, `backup verify --expect ok`, `backup rehearse --expect ok`; a corruption case
-is `backup verify <path to a truncated copy>`, exit 1.
+is `backup verify --path <truncated copy>`, exit 1.
 Isolation. A rehearsal is itself a scratch root; the nightly job is never started by the bot.
 
 ## The Discord adapter

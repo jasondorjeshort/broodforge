@@ -22,7 +22,7 @@ names; everything else goes through `SessionService`. Host differences live in `
 | `hook` | `broodforge hook pre-tool-use`, run by the engine inside the session; a pure function of stdin and environment (`03-hook-contract.md`) | nothing in the bot process |
 | `policy` | The reach table, the decision function the hook and `session` share, the deny text, the role check (a pure function of supplied roles and a channel's role list), the model display-name map | nothing (pure) |
 | `credentials` | `CredentialStore` over `credentials/store.json`, credential status, harness config directories through `engine-entry`, `credential login`, the DM relay (off by default) (ADR 0022) | `spawn`, `audit` |
-| `store` | The SQLite data layer, migrations, reconciliation, scratch roots (ADR 0021) | `audit` (same transaction) |
+| `store` | The SQLite data layer, migrations, reconciliation, scratch roots (ADR 0021) | `audit` writes in a `store` transaction; the import is `audit` to `store`, one direction |
 | `audit` | The sink interface: the `audit_event` table first, the optional file sink second | `store` |
 | `git` | Canonical checkouts, `refs/sessions/*`, clone and bundle through the spawn backend, the attribution check, push and pull request | `spawn`, `credentials`, `audit` |
 | `spawn` | `SpawnBackend`: `same-account` and `linux-sudo-bwrap`; interrupt; `engine-entry`; preflight | the OS |

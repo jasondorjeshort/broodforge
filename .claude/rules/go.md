@@ -10,8 +10,8 @@ paths:
 - First line of every `.go` file: `// SPDX-License-Identifier: GPL-3.0-or-later`.
 - Format with `gofmt`. Clean under the check line, run from the repository root:
   `go vet ./... && go tool staticcheck ./... && go tool exhaustive ./...`.
-- Build before test: `go build ./...`, the check line, then `go test ./...` (plain on the PC until
-  the mingw operator entry is done; `CGO_ENABLED=1 go test -race ./...` on Linux). Say which ran.
+- Build before test: `go build ./...`, the check line, then `CGO_ENABLED=1 go test -race ./...` on
+  Linux and on the PC (there with `PATH="/c/msys64/ucrt64/bin:$PATH"` for gcc).
 - The binary is `CGO_ENABLED=0 go build -o bin/ ./cmd/broodforge`: the trailing slash makes Go
   add `.exe` on Windows, where `-o bin/broodforge` writes a file PowerShell will not run.
   `CGO_ENABLED` is set on the command line, never in `go.mod`. Nothing goes on `PATH`; never
@@ -31,4 +31,5 @@ paths:
   ADR 0023 names; `docs/reference/go-dependencies.md` changes with `go.mod`.
 - Import exception: `internal/cli` also imports `engine`, `config` and `hook`, for the standalone
   subcommands the plan places there (engine run, record, replay; config check; hook pre-tool-use,
-  try, cases), and nothing else beyond what 03's `cli` row names.
+  try, cases), and `store`, `audit` and `backup`, for the `(file)` commands and the read
+  commands' fallback to the store file; nothing else beyond what 03's `cli` row names.

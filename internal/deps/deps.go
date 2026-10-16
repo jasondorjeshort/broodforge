@@ -8,8 +8,6 @@ package deps
 import (
 	// discord's library (ADR 0023).
 	_ "github.com/disgoorg/disgo"
-	// store's library (ADR 0023).
-	_ "zombiezen.com/go/sqlite"
 	// spawn's and control's module; cpu is held because it builds on every host, whereas
 	// x/sys/windows builds only on Windows. The module, not the package, is what is pinned.
 	_ "golang.org/x/sys/cpu"
