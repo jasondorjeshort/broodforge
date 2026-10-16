@@ -1,12 +1,12 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-16, at commit 163e7f0, by main session
+Updated: 2026-10-16, at commit dcb845f, by main session
 
 ## Now
 
-- `main` is twenty commits ahead of `origin/main` (`762e6c5` is pushed), every one read by an
-  agent that did not write it. Push only on the owner's words. HOLD 60%/75%.
+- `origin/main` is at `3156472` (pushed 2026-10-16). `main` is ahead by one, the mingw close-out
+  `dcb845f`, not yet read by a reviewer. Push only on the owner's words. HOLD 60%/75%.
 - Owner: Jason Dorje Short <jdorje@gmail.com>, repo-local identity; UX is his, technical calls mine.
 - Language settled 2026-10-16: Go, ADR 0023 under the owner's long-term principle (vision). Design
   docs and `08-implementation-plan.md` are in Go form; P0 (module skeleton) is committed.
