@@ -12,7 +12,8 @@ conventions first.
 Every command follows `05-cli-conventions.md`: one binary with `--root` and `--json`, the
 control-socket wire format (one JSON object per line, `cmd` as `<group>.<command>`), the text
 and JSONL output rules, the N-07 exit codes and what `--expect` compares, the scratch root
-(`scratch new|run|delete|prune`, channels `100` and `200`, credential `cred-scratch`), and the
+(`scratch new|run|delete|prune`, channels `100` and `200`, credential `cred-scratch`; a kept
+root is named on stderr as `scratch root kept: <path>`), and the
 shared isolation rules (no command prints a secret; `error: live-instance` for a debug flag
 that widens a live session), the hidden probe `control echo`. Sections below give only what differs.
 
@@ -251,12 +252,15 @@ access to `-shm`, ADR 0021; the CLI says `error: store-shm: <path>` when it lack
 ## Backup snapshot and restore rehearsal
 
 Drive. `broodforge backup snapshot (file)`, `backup verify [--path <file>] (file)`, `backup
-rehearse [path] (file)` are the ADR 0021 companion's steps and exit codes. `snapshot` prints `ok
+rehearse [--path <file>] [--keep] (file)` are the ADR 0021 companion's steps and exit codes. `snapshot` prints `ok
 <snapshot path>  <audit events exported>` (no checkpoint from outside the bot; a second run at
 once is `backup-busy`, the lock `backup/snapshot.lock`); `verify`, of
 `latest` by default, prints `ok`, `migration  <id>`, then `<table>  <rows>` per table; a failed
-check is `error: integrity-check: <result>`; `rehearse` prints the same from the restored copy plus
-`reconcile: <n> missing` and, on failure, the scratch root it kept.
+check is `error: integrity-check: <result>`; `rehearse` restores into a new scratch root (config
+copied with its `instanceName` and `keyFile` made the scratch root's), prints the same from the
+restored copy plus `reconcile  <n> missing` (recorded trees checked at their place under the
+scratch root, so each counts) and `root  <path>` with `--keep`, deletes the root on
+success and, on failure, keeps it and names it on stderr.
 Observe. `status` line `backup:`; `ls <root>/backup/`; `backup verify --json`.
 Reproduce. `scratch run -- bash tests/repro/backup-cycle.sh` [no-check: no code yet]: a session,
 `backup snapshot`, `backup verify --expect ok`, `backup rehearse --expect ok`; a corruption case

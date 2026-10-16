@@ -57,22 +57,30 @@ through `internal/control/controltest` (a server on a temporary root whose
 with the plan's build line once per test package, into a temporary directory, and runs it);
 `go test -v -run TestProof ./internal/cli/` shows each command and its exit code.
 
-Scratch (N-09, ADR 0021). `broodforge scratch new [--keep] [--project <path or url>]` creates a
-root in the OS temp directory, prints its path (`--json`: `{"root":"...","instanceName":
+Scratch (N-09, ADR 0021). `broodforge scratch new [--project <path or url>]` creates a
+root `<temp>/scratch-<12 hex>`, prints its path (`--json`: `{"root":"...","instanceName":
 "scratch-<12 hex>"}`); later commands take `--root <path>`. The generated root holds: config with
 `discord.mode: "dry-run"`, `defaults.harness: "fake"`, `engine.fakeFixtures` naming the
 repository's `fixtures/engine/` [no-check: no code yet], `spawn.backend: "same-account"`,
 `credentials.keyFile` under the root (`BROODFORGE_KEY_FILE` is ignored for a scratch root, so a
-scratch run never touches the owner's key); a throwaway project `scratch` cloned from
-`--project` (default: generated) with a local bare `origin` under the root so `push` works
-offline; channel `100` (reach `code`, prompt mode) and channel `200` (reach `read-only`, policy
+scratch run never touches the owner's key); a throwaway project `scratch` at `projects/scratch`,
+cloned from `--project` (default: generated, one commit on `main`) with a local bare `origin` at
+`remote/scratch.git` so `push` works offline; channel `100` (reach `code`, prompt mode) and channel `200` (reach `read-only`, policy
 mode), both with `start`, `contribute` and `answer` for role `10` (group `trusted`); credential
 `cred-scratch` of kind `api-key` whose value is the fixed string `scratch`, the fake's own; no
-registrations. `broodforge scratch run -- <command...>` creates a root, exports
-`BROODFORGE_ROOT`, runs the command, deletes the root on exit 0, otherwise keeps it and prints
-the path on stderr. `scratch delete <root>` and `scratch prune --older-than <days>` remove roots
-through the worktree-removal interface and refuse (`error: not-scratch`) a root that is not under
-the OS temp directory or whose `instanceName` does not start with `scratch-`. The scratch form of
+registrations.
+`broodforge scratch run [--keep] [--project <path or url>] -- <command...>` creates a root, exports
+`BROODFORGE_ROOT`, runs the command (a first word `broodforge` is the running binary), deletes the
+root on exit 0 unless `--keep`, otherwise keeps it and prints `scratch root kept: <path>` on
+stderr; the exit code is the command's. `scratch delete <path>` (`removed  <root>`) and `scratch
+prune [--older-than <days>] [--all]` (default 1 day, aged by `config/instance.json`'s modification
+time; `removed  <root>` or `refused  <root>  <why>` each, exit 0) remove roots, every
+`sessions/<id>` through the worktree-removal interface first, and refuse (`error: not-scratch`) a
+root that is not directly under the OS temp directory, is a link, is not named `scratch-<12 hex>`
+or whose `instanceName` (read from `config/instance.json` only after the place is checked, with no
+last-good recovery) is not that name; a link under `prune` is `refused  <root>  link`. The final
+removal of the root runs only after every entry under `sessions/` went through the guard (a link
+there, or `sessions/` itself a link, is refused) and the root was verified not to be a link. The scratch form of
 every section is the same commands with `--root <scratch root>`; only a difference is written out.
 
 Isolation, shared. The surface reaches the bot process only: a session on Linux has no `data/`,

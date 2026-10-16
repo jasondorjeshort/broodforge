@@ -104,6 +104,15 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if taken == len(names) {
 			return inv.fail(&usageError{cmd.Name + ": unexpected argument " + strconv.Quote(fs.Arg(0))})
 		}
+		if variadic[cmd] && taken == len(names)-1 {
+			rest, err := json.Marshal(fs.Args())
+			if err != nil {
+				return inv.fail(err)
+			}
+			env.values[names[taken]].s = string(rest)
+			taken++
+			break
+		}
 		env.values[names[taken]].s = fs.Arg(0)
 		taken++
 		args = fs.Args()[1:]
@@ -173,6 +182,20 @@ func (inv *invocation) flagSet(cmd *Command, env *Env) (*flag.FlagSet, error) {
 // kind FlagString, are not accepted as --flags, and are all required. A command file fills it
 // from its own init().
 var positionals = map[*Command][]string{}
+
+// variadic marks the commands whose last positional takes every argument left, after `--` or
+// from the first non-flag on, unparsed (`scratch run -- <command...>`); Env.Strings reads it.
+// A command file fills it from its own init().
+var variadic = map[*Command]bool{}
+
+// Strings is a variadic positional's arguments.
+func (e *Env) Strings(name string) []string {
+	var out []string
+	if v := e.values[name]; v != nil && v.s != "" {
+		_ = json.Unmarshal([]byte(v.s), &out)
+	}
+	return out
+}
 
 func isPositional(cmd *Command, name string) bool {
 	for _, n := range positionals[cmd] {
@@ -331,7 +354,11 @@ func commandUsage(c *Command) string {
 	if c.List {
 		b.WriteString(" [--limit <n>|--all]")
 	}
-	for _, n := range positionals[c] {
+	for i, n := range positionals[c] {
+		if variadic[c] && i == len(positionals[c])-1 {
+			b.WriteString(" -- <" + n + "...>")
+			continue
+		}
 		b.WriteString(" <" + n + ">")
 	}
 	return b.String()

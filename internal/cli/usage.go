@@ -132,7 +132,8 @@ func notRunning(env *Env) error {
 
 // encode is json.Marshal without HTML escaping, so paths and details print as stored.
 func encode[T []store.TurnUsage | store.UsageTotal | []store.Finding | backup.SnapshotResult |
-	backup.VerifyResult | backup.TableRows | auditText | verifyLine](v T) (json.RawMessage, error) {
+	backup.VerifyResult | backup.TableRows | auditText | verifyLine | backup.RehearseResult | store.Scratch |
+	scratchLine](v T) (json.RawMessage, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)

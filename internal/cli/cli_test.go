@@ -159,7 +159,9 @@ func TestCommandTable(t *testing.T) {
 			t.Errorf("%s: class %d needs Local", c.Name, c.Class)
 		}
 		for _, f := range c.Flags {
-			if f.Name == "root" || f.Name == "json" || f.Name == "expect" || f.Name == "limit" || f.Name == "all" {
+			// --limit and --all are shared only on List commands (scratch prune has its own --all).
+			listFlag := c.List && (f.Name == "limit" || f.Name == "all")
+			if f.Name == "root" || f.Name == "json" || f.Name == "expect" || listFlag {
 				t.Errorf("%s: flag --%s is shared, not the command's", c.Name, f.Name)
 			}
 		}
