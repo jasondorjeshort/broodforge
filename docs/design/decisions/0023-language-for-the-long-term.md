@@ -15,8 +15,7 @@ The owner's principle of 2026-10-16 (`../00-vision.md`, Principles) puts scalabi
 maintainability above time to first release, names three growth axes (sessions and users per
 instance, codebase longevity, engines and providers) and says the language is judged on
 mechanical properties. ADR 0020 had picked TypeScript on Node for the opposite weighting. The
-proposal scored seven languages on thirteen criteria; the critic verified the library and
-toolchain claims and measured on the PC.
+proposal scored seven languages on thirteen criteria; the critic verified its library and toolchain claims on the PC.
 
 Verified (sources in the review): Go 1.27.2 is current, the PC has 1.27.0, and a `toolchain` pin
 newer than the install is downloaded through the proxy and checked by the sumdb; `go test -race`
@@ -38,8 +37,8 @@ strength and per-change cost weighted equally, as the principle lists them toget
 four longevity sub-criteria (small dependency tree, stable toolchain, cheap refactors) favour Go,
 type strength favours Rust, and agent-driven development, where every change is written and
 verified in an agent loop, makes minutes-long builds and borrow-checker token cost a recurring
-tax that a lint layer in Go does not carry. The owner was told the switching cost and his
-principle says it does not decide.
+tax that a lint layer in Go does not carry. The owner was told the switching cost; his principle
+says it does not decide.
 
 Switching cost, recorded: `../03-architecture.md` (the process sentence, the `Engine` snippet,
 `paths.node`), `../05-debug-interface.md` and `../05-cli-conventions.md` (command classes, the
@@ -60,11 +59,11 @@ build. Lint tools pinned by `tool` directives in `go.mod`: `honnef.co/go/tools` 
 and `github.com/nishanths/exhaustive` (BSD-2-Clause). Commands, identical on both hosts:
 
 ```
-go build -o bin/broodforge ./cmd/broodforge          # bin/broodforge.exe on Windows
+CGO_ENABLED=0 go build -o bin/ ./cmd/broodforge      # bin/broodforge.exe on Windows
 go vet ./... && go tool staticcheck ./... && go tool exhaustive ./...   # check
 go test ./...                                         # test; fixtures replayed
 CGO_ENABLED=1 go test -race ./...                     # Linux always; PC after the mingw entry
-go run ./cmd/broodforge <args>                        # run from source
+go run ./cmd/broodforge <args>      # from source; same usage output, exit code is the binary's only
 ```
 
 The droplet builds its own binary from the pinned source (network for the toolchain download);
@@ -101,11 +100,12 @@ tagged structs that never refuse an unknown field or kind (03 reads unknown kind
 recorded fixture, so a toolchain change that alters what the parser accepts fails there first.
 
 Facts recorded, not reasons: hook startup 9 ms Go against 48 ms Node on the PC; the Go hook is
-a 4 MB binary with a 9 MB working set. Closed by this ADR: ADR 0020's deferred Agent SDK implementation (the SDK ships for TypeScript
-and Python only; a Node sidecar is a second runtime on both hosts and is rejected) and its
-mid-turn injection trigger "the SDK is built", which becomes "a long-lived engine process per
-session is adopted under mechanism B", a supersession of 0020's process model. A raw-API second
-engine (R-42) is unaffected and plugs into the `Engine` interface as a package.
+a 4 MB binary with a 9 MB working set. Closed by this ADR: ADR 0020's deferred Agent SDK
+implementation (the SDK ships for TypeScript and Python only; a Node sidecar is a second runtime
+on both hosts and is rejected) and its mid-turn injection trigger "the SDK is built", which
+becomes "a long-lived engine process per session is adopted under mechanism B", a supersession of
+0020's process model. A raw-API second engine (R-42) is unaffected and plugs into the `Engine`
+interface as a package.
 
 Out of scope: the engine mechanism, the command line and the hook contract (0020, 03); the debug
 commands (05); the words users see (04). Deferred, with triggers: a second Discord library in the

@@ -8,8 +8,8 @@ commands and wire format `05-debug-interface.md`'s; the hook's environment, path
 
 ## Components and boundaries
 
-One Go binary, one process per instance (ADRs 0020, 0023), one directory per component under `src/`
-[no-check: no code yet] named by the first column. A component talks only to the ones its row
+One Go binary, one process per instance (ADRs 0020, 0023), one package per component under `internal/<component>/`,
+named by the first column. A component talks only to the ones its row
 names; everything else goes through `SessionService`. Host differences live in `spawn`,
 `worktree-remove`, `control` (the socket path) and nowhere else (`06-platforms.md`, Sharing).
 
@@ -26,14 +26,15 @@ names; everything else goes through `SessionService`. Host differences live in `
 | `audit` | The sink interface: the `audit_event` table first, the optional file sink second | `store` |
 | `git` | Canonical checkouts, `refs/sessions/*`, clone and bundle through the spawn backend, the attribution check, push and pull request | `spawn`, `credentials`, `audit` |
 | `spawn` | `SpawnBackend`: `same-account` and `linux-sudo-bwrap`; interrupt; `engine-entry`; preflight | the OS |
-| `backup`, `config` | `backup snapshot`, `verify`, `rehearse` (never scheduled by the bot); loading, validation, last-good, `reload`, `config check` | `store`; `credentials` (id existence) |
+| `backup` | `backup snapshot`, `verify`, `rehearse` (never scheduled by the bot) | `store` |
+| `config` | Loading, validation, last-good, `reload`, `config check` | `credentials` (id existence) |
 | `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control` |
 
 `SessionService` is the boundary N-11 names: `start`, `submit`, `answer`, `setMode`, `interrupt`,
 `end`, `invite`, `status`, `subscribe(sessionId)`. The Discord adapter and the control socket call
 the same methods and read the same `SessionEvent` stream; a behaviour reachable from Discord only is
-a bug. N-26: each session's turn is its own engine process and promise chain, nothing in `session`
-awaits another session, and store writes are short transactions (ADR 0021): a stuck engine delays only its own session, until the idle timeout.
+a bug. N-26: each session's turn is its own engine process and goroutine, nothing in `session`
+awaits another session, and store writes are short transactions (ADR 0021): a stuck engine delays only its own session until the idle timeout.
 
 Registration and participants (R-01 to R-04, R-13, R-25, N-18). `discord` owns the register
 command: one registration per Discord user id; registering again replaces name and email with an
@@ -48,8 +49,7 @@ unregistered writer gets the register flow, an unpermitted one the refused flow 
 Credential status (`usable`, `needs-login`, `removed`) is the store's record and nothing else:
 a subscription credential is created `needs-login`; an auth error in a `result` sets it;
 `credential login <id> --done` on the host, or the relay's success, clears it; an API key is
-never `needs-login` (a rejected key is replaced). The bot never reads a config directory to
-infer it. A session start naming anything but `usable` is refused (R-41).
+never `needs-login` (a rejected key is replaced). The bot never reads a config directory to infer it. A session start naming a credential not `usable` is refused (R-41).
 
 ## Data flow for one turn
 
@@ -109,26 +109,27 @@ type TurnRequest struct {
 	Spawn       SpawnBackend
 }
 type TurnHandle struct { Events <-chan EngineEvent; Interrupt func() error }
-// A sum type is a struct with a Kind enum and one pointer payload per kind (ADR 0023);
-// every switch on Kind is checked by the exhaustive linter.
+// A sum type: a struct with a Kind enum, one pointer payload per kind; `exhaustive` checks each switch (ADR 0023).
 type EngineEvent struct {
 	Kind       EventKind // init | assistant | tool-result | result | exit | unknown
 	Init       *struct{ EngineSessionID, Model string; Tools, Capabilities []string }
-	Assistant  *struct{ MessageID, Model, ParentToolUseID string; Blocks []Block; Usage Usage } // Block: text | tool-use (ID, Name, Input)
+	Assistant  *struct{ MessageID, Model, ParentToolUseID string; Blocks []Block; Usage Usage }
 	ToolResult *struct{ ToolUseID string; IsError bool; Text, DecidedBy string } // tool_result_meta source
 	Result     *struct{ StopReason string; IsError bool; NumTurns int; Deferred *DeferredTool; PermissionDenials []json.RawMessage; ModelUsage map[string]ModelUsage; Usage json.RawMessage }
 	Exit       *struct{ Code *int; Signal string; Interrupted bool }
 	Unknown    string    // raw line; logged at debug level, never fatal
 }
+type Usage struct{ Input, CacheRead, CacheWrite int }
+type DeferredTool struct{ ToolUseID, Name string; Input json.RawMessage }
+type Block struct{ Kind string; Text string; ID, Name string; Input json.RawMessage } // Kind: text | tool-use
 ```
 
 Stream-json subset consumed: `system` subtype `init` (session id, model, tools, `capabilities`);
 `assistant` (`message.id`, `message.model`, `message.usage`, text and `tool_use` content,
 `parent_tool_use_id`; one line per content block, S1); `user` with `tool_result` content and the
 optional `tool_result_meta`; `result` (`stop_reason`, `is_error`, `num_turns`, `deferred_tool_use`,
-`permission_denials`, `modelUsage`, `usage`). Everything else is `unknown`, partial messages are
-not requested, and a `capabilities` set missing a name the adapter relies on is a refusal at
-instance start, exit 1.
+`permission_denials`, `modelUsage`, `usage`). Everything else is `unknown`; partial messages are
+not requested; a `capabilities` set missing a name the adapter needs refuses at start (exit 1).
 
 Usage delta: `modelUsage` is cumulative per engine session over the turns that reached a `result`
 (a killed turn's counts are absent from the next cumulative, S2); the turn's record per model is
@@ -255,8 +256,7 @@ parsed and validated except for credential ids; (3) the key file the config name
 `BROODFORGE_KEY_FILE`, the credential store, then the config's credential ids against it (ADR
 0022); (4) `data/store.sqlite` and migrations; (5) the engine binary and version; (6) `spawn
 preflight`; (7) reconciliation (ADR 0021); (8) the control socket; (9) the Discord gateway;
-(10) the interrupted notice in each interrupted session's venue and the start-up report to the
-notice channel if one is configured.
+(10) the interrupted notice in each interrupted session's venue, the start-up report to the notice channel if set.
 
 Signals and leftovers. The spawn backend starts every engine (the `sudo` child on Linux) detached
 in its own process group, so a terminal's Ctrl-C reaches the bot alone and the bot interrupts each

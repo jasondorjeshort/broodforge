@@ -13,7 +13,7 @@ record of the alternatives and the objections.
 | `0021-critic-review.md` | critic review of 0021 (six serious, nine minor, none blocking); every objection answered in the proposal |
 | `0022-session-isolation-and-credential-storage.md` | promoted to ADR 0022; every objection answered, both blockers resolved by change (settings file re-bound read-only; shared clone and bundle handoff), W0 added and chosen for Windows, WSL2 rejected for the first version |
 | `0022-critic-review.md` | critic review of 0022 (two blocking, eight serious, six minor); its verification table quotes the sources and is authoritative over the proposal body; V6 and P2 refuted as written |
-| `0023-language-for-the-long-term.md` | promoted to ADR 0023 (accepted); reopened the language bundle of ADR 0020 (not the engine mechanism) under the owner's principle of 2026-10-16; seven options scored on thirteen weighted criteria, Go recommended with Rust closest; library claims unverified, awaiting the critic |
+| `0023-language-for-the-long-term.md` | promoted to ADR 0023 (accepted); reopened the language bundle of ADR 0020 (not the engine mechanism) under the owner's principle of 2026-10-16; seven options scored on thirteen weighted criteria, Go recommended with Rust closest; library claims verified by the critic (`0023-critic-review.md`) |
 | `0023-critic-review.md` | critic review of 0023 (none blocking, six serious, nine minor); C44 refuted as bundled (`-race` needs cgo and a C compiler on Windows), C40 measured on the PC (Go 9 ms, Node 48 ms); every other claim held or was narrowed; Go upheld over TypeScript, Go against Rust turns on the owner weighting of type strength against per-change cost |
 
 Template:

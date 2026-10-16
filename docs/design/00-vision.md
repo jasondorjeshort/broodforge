@@ -127,8 +127,8 @@ Each of these is a major choice under the working agreement: a proposal, a criti
 before any code (`CLAUDE.md`, the `proposal` and `adr` skills; ADRs for this project start at
 0020). The owner has familiar tools but asked for the design to be made without preconceptions.
 
-- Language and runtime for the bot and its backend. Answered by ADR 0020; reopened on 2026-10-16
-  under the long-term-design principle above by proposal 0023 `[no-check: being written]`.
+- Language and runtime for the bot and its backend. Answered by ADR 0023 (Go), which reopened
+  ADR 0020's language choice on 2026-10-16 under the long-term-design principle above.
 - Discord library, including how it does streaming edits, buttons and private channels.
 - Harness adapter shape: how Broodforge drives Claude Code (the Agent SDK, the CLI as a
   subprocess, or both behind one interface), and how a second engine would plug in.

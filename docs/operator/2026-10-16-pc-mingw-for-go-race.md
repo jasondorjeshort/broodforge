@@ -27,6 +27,6 @@ gcc --version
 go env CGO_ENABLED
 ```
 
-Expect a `gcc` version line (mingw-w64 runtime 8 or later is what the race detector needs; the current MSYS2 package is well past it) and `0` for the second (the build stays cgo-free; the test command sets `CGO_ENABLED=1` for the `-race` run only). Once `src/` exists, `CGO_ENABLED=1 go test -race ./...` in the repository is the real check. Allow 20 minutes; the MSYS2 download is a few hundred MB.
+Expect a `gcc` version line (mingw-w64 runtime 8 or later is what the race detector needs; the current MSYS2 package is well past it) and `1` for the second (a C compiler is now found, so cgo defaults on; the build line forces `CGO_ENABLED=0` and keeps the binary cgo-free, and the test command sets `CGO_ENABLED=1` for the `-race` run). Once `internal/` exists, `CGO_ENABLED=1 go test -race ./...` in the repository is the real check. Allow 20 minutes; the MSYS2 download is a few hundred MB.
 
 When done: delete this file; the next coder pass report states that `-race` ran on the PC, and the Windows host reference (when it exists) records the install under its Go section.

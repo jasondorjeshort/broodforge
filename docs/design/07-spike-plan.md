@@ -240,7 +240,7 @@ account) change how the owner runs the bot and go to the owner.
 
 ## The code: `spike/`
 
-A throwaway directory at the repository root [no-check: created by the coder], never `src/`:
+A throwaway directory at the repository root [no-check: created by the coder], never under `internal/`:
 TypeScript compiled with `tsc` on Node 24 per ADR 0020 (the PC has 22 today; the finding
 records which ran), no dependency but `typescript` and `@types/node`, SPDX headers as
 everywhere. Files: `run.ts` (spawn with `$FLAGS`, the stdin user line, raw stdout to
@@ -276,7 +276,7 @@ they choose to fund the key halves of C34 and C31, at whatever rate they set.
 The spike is done when both findings carry a row per claim (S1, S2, C25 to C39), each `open`,
 `holds` or `refuted` with the observed output quoted; no stop claim (C27, C30, C31, C35, C38's
 planted files, C39's exit 2) is refuted, or the ADR amendment or proposal answering it is
-recorded before any code lands under `src/`; every recorded fixture replays through the spike's
+recorded before any code lands under `internal/`; every recorded fixture replays through the spike's
 own parser with no `unknown` for the kinds 03 lists; and the engine version run is the pin on
 both hosts. Rows that may stay `open` at exit, each with a Next line in its finding: C38's
 refresh (it cannot be forced), the key halves of C31 and C34 (until the owner funds a key), and

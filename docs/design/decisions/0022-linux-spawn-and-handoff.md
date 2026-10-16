@@ -127,8 +127,8 @@ to stderr, exit 1, nothing spawned. `--check` prints every kept name it sees, on
 exits 0; the bot runs the full spawn with `--check` at instance start (`spawn preflight` runs it
 on demand) and refuses to start if a kept name is absent, printing the sudoers block above.
 
-Maintenance commands run as Node through the same `sudo -n -u broodforge-engine /usr/bin/bwrap`
-route, each in a sandbox with the system, Node and Broodforge binds above, no config directory,
+Maintenance commands run as the Broodforge binary through the same `sudo -n -u broodforge-engine /usr/bin/bwrap`
+route, each in a sandbox with the system and Broodforge binds above, no config directory,
 no `<settings>`, and `HOME` set to `/tmp`:
 
 - `engine-entry harness-create <cfg>` and `harness-remove <cfg>` bind `<root>/harness`

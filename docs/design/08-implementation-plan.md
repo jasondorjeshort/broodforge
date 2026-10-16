@@ -2,7 +2,7 @@
 
 Date: 2026-10-16. Status: plan for the Go bundle of ADR 0023, written after the PC spike closed
 every PC row (ADRs 0020 and 0022, Amendments of 2026-10-16) and `07-spike-plan.md`'s exit criterion
-was met. Each pass is one coder brief (`brief` skill); done is the `debug-interface` skill's
+was met for host-neutral code (the droplet rows are open and P14 is held). Each pass is one coder brief (`brief` skill); done is the `debug-interface` skill's
 checklist, its Proof run on a clean checkout from the doc alone, and the `05-debug-interface.md`
 section it builds matching the code. Every pass reads `CLAUDE.md`, `docs/design/README.md`,
 `03-architecture.md` (Components), `05-cli-conventions.md` and ADR 0023 (Decision), then its
@@ -16,9 +16,11 @@ one package per component of 03's table under `internal/<component>/`, tests bes
 no `_windows.go`) outside `spawn`, the worktree removal it owns and `control`. A real engine turn
 spends the owner's plan and runs only where a pass says "real turn", on his word. `spike/` stays
 until the droplet rows land (P14 deletes it). Every Proof's `broodforge` is `bin/broodforge` (`.exe`
-on Windows) from `go build -o bin/broodforge ./cmd/broodforge` at the repository root, or `go run
-./cmd/broodforge`; nothing goes on `PATH`, `go install` is never used. Build before test, always:
-`go build ./...`, the check line, then `CGO_ENABLED=1 go test -race ./...` on Linux and plain `go
+on Windows) from `CGO_ENABLED=0 go build -o bin/ ./cmd/broodforge` at the repository root (the
+directory form: `-o bin/broodforge` writes no `.exe` on Windows), or `go run ./cmd/broodforge`
+(same usage output; its exit code is not the binary's, so exit codes are proven on the binary);
+nothing goes on `PATH`, `go install` is never used. Build before test, always:
+`CGO_ENABLED=0 go build ./...`, the check line, then `CGO_ENABLED=1 go test -race ./...` on Linux and plain `go
 test ./...` on the PC until `../operator/2026-10-16-pc-mingw-for-go-race.md` is done; every pass
 report states which ran. Command classes are `05-cli-conventions.md`'s (Surface); write commands are
 socket clients that exit `not-running` until P10's `serve`, so before P10 a write command is proven
@@ -27,13 +29,13 @@ through P2's harness.
 ## P0. Toolchain and repository skeleton (small)
 
 Implements: ADR 0023 (Decision); `03-architecture.md` (Components); `.claude/rules/README.md`;
-`../reference/README.md`. Files: `go.mod` (`module broodforge` until the public path is settled; `go
+`../reference/README.md`. Files: `go.mod` (`module github.com/jasondorjeshort/broodforge`; `go
 1.27`; `toolchain go1.27.2`; `tool` directives for `honnef.co/go/tools/cmd/staticcheck` and
 `github.com/nishanths/exhaustive/cmd/exhaustive`; every ADR 0023 dependency required at a pinned
-version, `github.com/disgoorg/disgo`, `zombiezen.com/go/sqlite`, `golang.org/x/sys`, held by blank
+version, `github.com/disgoorg/disgo`, `zombiezen.com/go/sqlite`, `golang.org/x/sys/cpu` (the module has no root package), held by blank
 imports in `internal/deps/deps.go` until the owning package imports each, so no later pass fetches
 anything) and `go.sum`; `cmd/broodforge/main.go` (usage on stderr, exit 2; dispatch to
-`internal/cli`); an empty `doc.go` per component of 03's table under `internal/`;
+`internal/cli`); an empty `doc.go` per component of 03's table under `internal/` (`backup` and `config` are separate packages);
 `.claude/rules/go.md` [no-check: written by this pass] (SPDX first line; `gofmt`; vet, staticcheck
 and exhaustive clean; no `interface{}` or `any` outside `internal/engine`'s raw stream layer; sum
 types as a tagged struct with a `Kind` enum and a pointer payload per kind, never a type switch;
@@ -43,9 +45,9 @@ gorilla/websocket requirement included, version and licence, N-24) and its READM
 `tests/README.md`; `.gitignore` (`bin/`, `fixtures/**/received-*.json`). `CGO_ENABLED=0` is on the
 build line, never in `go.mod`. The coder installs nothing: the PC has Go 1.27.0 and the `toolchain`
 line fetches 1.27.2 on first use (ADR 0023 names the refusal). Proof: `CGO_ENABLED=0 go build -o
-bin/broodforge ./cmd/broodforge`; `go vet ./... && go tool staticcheck ./... && go tool exhaustive
+bin/ ./cmd/broodforge`; `go vet ./... && go tool staticcheck ./... && go tool exhaustive
 ./...`; `go test ./...` (one placeholder test in `internal/cli`); `bin/broodforge` with no arguments
-exits 2 with usage on stderr; `go run ./cmd/broodforge` the same. Depends on: nothing.
+exits 2 with usage on stderr; `go run ./cmd/broodforge` prints the same usage (its exit code is `go run`'s, not the binary's). Depends on: nothing.
 
 ## P1. Fixture import (small; a person reads every file before the commit)
 
@@ -262,7 +264,7 @@ Implements: ADR 0022 (Windows); `03-architecture.md` (Process model, Windows col
 and the nightly backup task); `../operator/2026-10-14-pc-broodforge-account-and-task.md`,
 `../operator/2026-10-14-credential-store-key-per-host.md`; C37 (`07-spike-plan.md`). Files:
 `docs/reference/pc-host-setup.md` [no-check: written in this pass] (the two Task Scheduler actions
-naming `bin\broodforge.exe` in full, the key file path, the engine install for the `broodforge`
+naming `bin\broodforge.exe` in full, built by `CGO_ENABLED=0 go build -o bin/ ./cmd/broodforge`, the key file path, the engine install for the `broodforge`
 account by the native installer, the toolchain-download lift of ADR 0023); `spawn preflight` reports
 the account. Proof, recorded as the C37 finding: C37's three actions from the scheduled task;
 `status` over the named pipe from the owner's account; a bot stopped by the task leaves no engine
@@ -277,7 +279,7 @@ systemd timer; Signals and leftovers). Files: `internal/spawn/linuxsudobwrap.go`
 `engine-entry` subcommand (checks, then `syscall.Exec` into the engine; a Linux-only file), the
 `namei` and sudoers checks in `spawn preflight`, the systemd unit and timer,
 `docs/reference/droplet-host-setup.md` [no-check: written when the droplet operator entries are
-done] (Go and `gcc` for `-race` included). Proof: the droplet builds `bin/broodforge` from the
-pinned source and `CGO_ENABLED=1 go test -race ./...` passes; C30 and C31 by hand from a code
+done] (Go and `gcc` for `-race` included). Proof: the droplet builds `bin/broodforge` with `CGO_ENABLED=0 go
+build -o bin/ ./cmd/broodforge` from the pinned source and `CGO_ENABLED=1 go test -race ./...` passes; C30 and C31 by hand from a code
 session, `reach-report` matching the bind list, the Interrupt steps yielding a `result`. Depends on:
 P7 to P10.
