@@ -157,7 +157,11 @@ alone, F1),
 accepted as a hook name), and with `usage-gate` or `statusline` `--home <dir>` (HOME and
 USERPROFILE set to it, `CLAUDE_CONFIG_DIR` removed) and `--config-dir <dir>` (`CLAUDE_CONFIG_DIR`
 set to it).
-`node .claude/hooks/policy.js [file]` prints the effective policy or the error.
+`node .claude/hooks/policy.js [file]` prints the effective policy or the error;
+`node .claude/hooks/policy.js --cap-check <listfile>` is pusher check 7's per-file cap line (one
+`FAIL <path>: N lines, cap C` per file over its cap, a `FAIL policy:` line for a policy that does
+not load, exit 1 on any `FAIL`). Group CAP runs it on a scratch tree and the pusher's line through
+the guard.
 
 ## 2. `post-edit.js` (PostToolUse, matcher `Write|Edit`, no `onFailure`)
 
@@ -179,8 +183,8 @@ Checks on `docs/**/*.md` (`<path>` from the root with forward slashes; line coun
 
 | Check | Message (one line each, joined with newlines) |
 |---|---|
-| over 300 lines, except under `docs/design/proposals/` and paths matching `edit.capExempt` | `post-edit: <path> is N lines; cap is 300 (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.` |
-| `docs/HANDOFF.md` or `docs/handoff/*.md` over 40 lines | `post-edit: <path> is N lines; cap is 40. Move detail to docs/ideas/ or a finding.` |
+| over 300 lines, except under `docs/design/proposals/`, paths matching `edit.capExempt`, and the two handoff paths of the next row (`docCap` in `policy.js`, shared with pusher check 7) | `post-edit: <path> is N lines; cap is 300 (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.` |
+| `docs/HANDOFF.md` or `docs/handoff/*.md` over 40 lines, `edit.capExempt` notwithstanding | `post-edit: <path> is N lines; cap is 40. Move detail to docs/ideas/ or a finding.` |
 | when the edited file is either, `docs/HANDOFF.md` plus every `docs/handoff/*.md` on disk (`.md` only) over 120 lines in total | `post-edit: the handoff loads N lines in total (docs/HANDOFF.md plus docs/handoff/*.md); cap is 120. Close a stream or trim.` |
 | a `docs/handoff/*.md` with no line `@handoff/<name>` in `docs/HANDOFF.md` (this replaces the README row for that directory, which has no README) | `post-edit: <path> is not imported by docs/HANDOFF.md. Add the line @handoff/<name> or delete the file.` |
 | a line starting `@<target>`, outside fenced blocks, in `CLAUDE.md`, `docs/HANDOFF.md` or `docs/handoff/*.md`, whose target does not exist when resolved from the file's directory | `post-edit: <path> imports @<target>, which resolves to <resolved> and does not exist (an import resolves from the importing file's directory).` |

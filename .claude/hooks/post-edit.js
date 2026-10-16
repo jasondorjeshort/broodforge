@@ -11,7 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 const childProcess = require('child_process');
-const { load, matches } = require('./policy');
+const { load, matches, docCap, lineCount, DOCS_CAP, HANDOFF_CAP } = require('./policy');
 
 // Project choices from .claude/hooks/policy.json (edit block); a malformed policy means the base
 // defaults here, since this hook only advises.
@@ -27,13 +27,11 @@ if (process.env.POST_EDIT_FORMATTERS_JSON) {
   try { Object.assign(FORMATTERS, JSON.parse(process.env.POST_EDIT_FORMATTERS_JSON)); } catch (_) { /* ignore */ }
 }
 
-const DOCS_CAP = 300;
-const HANDOFF_CAP = 40;
+// The per-file caps (DOCS_CAP 300, HANDOFF_CAP 40) and which applies are docCap in policy.js, the
+// one rule this hook and pusher check 7 share.
 const HANDOFF_TOTAL_CAP = 120; // docs/HANDOFF.md plus every docs/handoff/*.md
 const CLAUDE_MD_CAP = 150; // .claude/rules/docs.md; loaded every turn, so the tightest cap
 const INDEX_EXEMPT = new Set(['README.md', 'HANDOFF.md']);
-
-const lineCount = (text) => (text.match(/\n/g) || []).length; // same as wc -l
 
 // True when the file starts with ---, closes with --- within the first 20 lines,
 // and every key appears at line start between the two markers.
@@ -60,14 +58,15 @@ function checkDocs(root, rel, abs) {
   const parts = rel.split('/');
   const base = parts[parts.length - 1];
 
-  if (n > DOCS_CAP && !rel.startsWith('docs/design/proposals/') && !matches(edit.capExempt, rel)) {
-    msgs.push(`post-edit: ${rel} is ${n} lines; cap is ${DOCS_CAP} (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.`);
+  const cap = docCap(edit, rel);
+  if (cap === DOCS_CAP && n > cap) {
+    msgs.push(`post-edit: ${rel} is ${n} lines; cap is ${cap} (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.`);
+  }
+  if (cap === HANDOFF_CAP && n > cap) {
+    msgs.push(`post-edit: ${rel} is ${n} lines; cap is ${cap}. Move detail to docs/ideas/ or a finding.`);
   }
   const isStream = parts.length === 3 && parts[1] === 'handoff';
   const isHandoff = rel === 'docs/HANDOFF.md' || isStream;
-  if (isHandoff && n > HANDOFF_CAP) {
-    msgs.push(`post-edit: ${rel} is ${n} lines; cap is ${HANDOFF_CAP}. Move detail to docs/ideas/ or a finding.`);
-  }
   if (isHandoff) {
     let total = n;
     const others = [];

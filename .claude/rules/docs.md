@@ -13,7 +13,10 @@ These load automatically when a file under `docs/` or `CLAUDE.md` is read or edi
 
 - Any `docs/**/*.md`: at most 300 lines. Split by topic, never by date, and never by "part 2".
   Exempt: `docs/design/proposals/`, because a proposal carries its options, the critic's objections,
-  and the responses in one closed record that nothing loads on demand. Aim under 300 anyway.
+  and the responses in one closed record that nothing loads on demand. A project's legacy docs may
+  be exempted by path in `.claude/hooks/policy.json` `edit.capExempt`, which the post-edit hook and
+  the pusher both read; the patterns' `*` crosses `/`, so name files when a folder's subfolders
+  must stay capped. Aim under 300 anyway.
 - `docs/HANDOFF.md`, and each `docs/handoff/*.md` where that directory exists: at most 40 lines, at most 120 together. Detail
   goes to an idea or a finding; the handoff links.
 - `CLAUDE.md`: at most 150 lines. A new paragraph of facts goes to `docs/reference/` with a pointer.

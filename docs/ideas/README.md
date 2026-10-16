@@ -97,7 +97,6 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-16-patch-update-fails-on-files-the-project-never-took.md` | bug | Patch-mode update: `git apply --3way` applies nothing when the diff touches a file the project never took |
 | `2026-10-16-patch-update-never-moves-the-base-docs.md` | bug | Patch-mode update diffs only `.claude CLAUDE.md LICENSES`; the base docs adopt copied never move |
 | `2026-10-16-update-conflict-rule-wipes-mixed-files.md` | bug | Update steps 5 and 6: mixed files read as base-wins; threshold cells and provenance line not slots; cap trim rule |
-| `2026-10-16-pusher-check-7-ignores-policy-cap-exemptions.md` | bug | Pusher check 7 does not read `edit.capExempt`; two siblings fail or hand-edit the agent file |
 | `2026-10-16-base-only-sentences-survive-decant-and-adopt.md` | chore | Phase section, design-doc names, bare ADR numbers and the Windows reference: what decant and adopt leave wrong |
 | `2026-10-16-anchor-check-rejects-elided-paths.md` | bug | The post-edit path check warns on `.../` elided paths that exist |
 | `2026-10-16-downstream-improvements-to-carry-back.md` | chore | A sibling's pusher check 5a (personal data) and ADR skill Amendments section, to take into the base |

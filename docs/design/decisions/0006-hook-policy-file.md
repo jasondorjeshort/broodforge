@@ -165,8 +165,11 @@ project whose root `package.json` declares `"type": "module"` makes Node load th
 
 - Per-rule advice text for git rules 5 to 17 stays in the script, worded for any project. Revive
   when a project needs different wording, as an `advice` map keyed by rule number.
-- The pusher agent's check 7 keeps its own list of cap exemptions in `.claude/agents/pusher.md`.
-  Revive when the first project exempts a file: the check should read `edit.capExempt`.
+- The pusher agent's check 7 kept its own list of cap exemptions in `.claude/agents/pusher.md`.
+  Revived 2026-10-16, when two projects had exempted files: check 7's first line runs
+  `node .claude/hooks/policy.js --cap-check <listfile>`, which reads `edit.capExempt` through
+  `docCap` in `policy.js`, the rule `post-edit.js` also uses; a policy that does not load is a
+  `FAIL` there, not the defaults.
 - The gate still reads the legacy `~/.claude/usage-gate-override.json`. Drop that read, and its
   harness cases, once every project that copied the gate has taken the 2026-10-15 version.
 

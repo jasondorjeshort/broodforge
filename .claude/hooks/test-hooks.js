@@ -667,6 +667,74 @@ for (const [id, label, filePath, expect, rawOverride, fmt, policy, root] of P) {
   }
 }
 
+// ---------- pusher check 7: policy.js --cap-check (docCap, shared with post-edit) ----------
+// One scratch root (cap/) with a list file per case, run from that root as the pusher runs it from
+// the repository's. A case is [id, label, listed paths, policy file, expected exit, expected stdout
+// (a string, or a function of stdout returning true or a reason)].
+const PUSHER_CAP_LINE = 'l=$(mktemp); git ls-files -- \'docs/*.md\' > "$l"; node .claude/hooks/policy.js --cap-check "$l"; rm -f "$l"';
+{
+  const root = path.join(scratch, 'cap');
+  const files = {
+    'docs/reference/big.md': lines(301),
+    'docs/reference/small.md': lines(300),
+    'docs/design/proposals/0001-long.md': lines(320),
+    'docs/HANDOFF.md': lines(41),
+    'docs/handoff/x.md': lines(41),
+    'docs/handoff/huge.md': lines(301),
+  };
+  for (const [rel, text] of Object.entries(files)) {
+    const f = path.join(root, ...rel.split('/'));
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, text);
+  }
+  const CAP = [
+    ['CAP01', 'exempt doc over 300', ['docs/reference/big.md', 'docs/reference/small.md'],
+      scratchPolicy('cap-exempt', { edit: { capExempt: ['docs/reference/big.md'] } }), 0, ''],
+    ['CAP02', 'the same doc, not exempt', ['docs/reference/big.md', 'docs/reference/small.md'],
+      POLICIES.hatchery, 1, 'FAIL docs/reference/big.md: 301 lines, cap 300\n'],
+    ['CAP03', 'exempt by pattern, handoff files still capped at 40', ['docs/HANDOFF.md', 'docs/handoff/x.md', 'docs/reference/big.md'],
+      scratchPolicy('cap-all', { edit: { capExempt: ['docs/*'] } }), 1,
+      'FAIL docs/HANDOFF.md: 41 lines, cap 40\nFAIL docs/handoff/x.md: 41 lines, cap 40\n'],
+    ['CAP04', 'proposal over 300, absent policy', ['docs/design/proposals/0001-long.md'], POLICIES.none, 0, ''],
+    ['CAP05', 'handoff over 300: one FAIL, the 40', ['docs/handoff/huge.md'], POLICIES.hatchery, 1,
+      'FAIL docs/handoff/huge.md: 301 lines, cap 40\n'],
+    ['CAP06', 'malformed policy fails loudly', ['docs/reference/small.md'], scratchPolicy('cap-bad', '{ nope'), 1,
+      (out) => /^FAIL policy: .+\n$/.test(out) || 'expected one "FAIL policy: ..." line'],
+    ['CAP07', 'unknown policy key fails loudly', ['docs/reference/small.md'],
+      scratchPolicy('cap-key', { edit: { capExemt: ['docs/*'] } }), 1,
+      (out) => /^FAIL policy: .*unknown key edit\.capExemt\n$/.test(out) || 'expected a "FAIL policy: ... unknown key" line'],
+    ['CAP08', 'listed file deleted in the working tree is skipped', ['docs/reference/gone.md', 'docs/reference/big.md'],
+      POLICIES.hatchery, 1, 'FAIL docs/reference/big.md: 301 lines, cap 300\n'],
+    ['CAP12', 'listed path unreadable (a directory)', ['docs/reference'], POLICIES.hatchery, 1,
+      (out) => /^FAIL docs\/reference: cannot read \(E[A-Z]+\)\n$/.test(out) || 'expected one "FAIL docs/reference: cannot read" line'],
+  ];
+  for (const [id, label, listed, policy, code, expect] of CAP) {
+    if (!selected(id)) continue;
+    const list = path.join(root, `list-${id}.txt`);
+    fs.writeFileSync(list, listed.map((p) => `${p}\n`).join(''));
+    const r = spawnSync(NODE, [path.join(HOOKS, 'policy.js'), '--cap-check', list],
+      { cwd: root, encoding: 'utf8', timeout: 30000, env: envWith({ HOOK_POLICY_FILE: policy }) });
+    const out = r.stdout || '';
+    let ok = r.status === code;
+    let detail = `exit ${r.status}, expected ${code}; stderr: ${(r.stderr || '').trim()}`;
+    if (ok) {
+      const v = typeof expect === 'function' ? expect(out) : out === expect || `expected stdout ${JSON.stringify(expect)}`;
+      ok = v === true;
+      if (!ok) detail = v;
+    }
+    report(id, `--cap-check: ${label} -> exit ${code}`, ok, detail, out);
+  }
+  if (selected('CAP09')) {
+    const r = spawnSync(NODE, [path.join(HOOKS, 'policy.js'), '--cap-check'], { encoding: 'utf8', env: envWith({ HOOK_POLICY_FILE: POLICIES.hatchery }) });
+    report('CAP09', '--cap-check without a list file -> exit 2, usage line', r.status === 2 && /^usage: /.test(r.stderr || ''),
+      `exit ${r.status}, stderr ${JSON.stringify(r.stderr)}`, r.stdout);
+  }
+  // The pusher's line as written in .claude/agents/pusher.md check 7 (kept in step by hand: the
+  // harness reads no file of the repository) must pass the guard, for the pusher and the main session.
+  guardCase('CAP10', { command: PUSHER_CAP_LINE, agent: 'pusher' }, 'allow');
+  guardCase('CAP11', { command: PUSHER_CAP_LINE }, 'allow');
+}
+
 // ---------- usage-gate (0002-hook-specs-usage.md, section 3) ----------
 const home = path.join(scratch, 'home');
 fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
