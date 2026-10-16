@@ -103,8 +103,9 @@ Two observations about that account, identifiers compared and not printed: its `
 account, organization and email entries equal those in this PC's `~/.claude.json`, the login the
 coordinator session runs under, so the `usage-state.json` meters above are the spike's account after
 all; and the engine's own stream reports the plan meters of whatever account it runs as, see S1.
-Both fixtures and the finding keep the PC owner's username in paths (`C:\Users\<pc user>\...` in
-`system/init`'s `cwd` and the hook command), no email and no credential: the person who reads the
+The finding writes the PC owner's username as `<pc user>`; the fixtures do not. They carry it in every
+path-bearing field of `turn-*.jsonl` (`file_path`, `cwd`, `command`, `permission_denials`, Bash stdout and
+`tool_result` text) and in every `meta-*.json`, with no email and no credential: the person who reads the
 fixtures before they are committed should look for that.
 
 S1 holds. Session `f0451bd7-4428-40b5-a52e-ad6b604c210a`, model id `claude-haiku-5-5`, the same
@@ -114,7 +115,7 @@ S1 holds. Session `f0451bd7-4428-40b5-a52e-ad6b604c210a`, model id `claude-haiku
   reads: none` on all three turns): `system/init` with `session_id`, `model`, `tools` (a list without
   `AskUserQuestion`) and `capabilities`; `assistant` with `message.id`, `message.model`,
   `message.usage`, a `tool_use` block (`Read`, then `ToolSearch` in turn 3) and text blocks; `user`
-  with `tool_result` (`toolu_01Cnjcxy6neu7wKgyKUezhFS`, `is_error` false, text `1\thello\n2\t`);
+  with `tool_result` (`toolu_01Cnjcxy6neu7wKgyKUezhFS`, `is_error` absent, which the parser treats as false, text `1\thello\n2\t`);
   `result` subtype `success` with `stop_reason` `end_turn`, `num_turns` (2, 1, 2), `permission_denials`
   `[]`, `usage` and `modelUsage` keyed by model id.
 - Kinds outside 03's subset, parsed as `unknown` as 03 says and counted: `system/commands_changed`
@@ -152,7 +153,7 @@ C27 holds. Sessions `93ab3f0d-b9f2-40b7-8921-a95858da0251` (turns 1, 2) and
   `stop_reason` `tool_deferred`, `is_error` false, `num_turns` 1, `permission_denials` `[]`,
   `deferred_tool_use` `{id, name: "Write", input}`. `hi.txt` absent. Turn 3 the same for `bye.txt`.
 - Turn 2, resume with stdin closed: `PreToolUse` fired again with the same `tool_use_id`
-  (`hook.log` `decided` `answer:allow`); the `tool_result` (`is_error` false, `File created
+  (`hook.log` `decided` `answer:allow`); the `tool_result` (`is_error` absent, which the parser treats as false, `File created
   successfully at: ...hi.txt ...`) was the third stdout line, before `system/init`, after a
   `command_lifecycle` and an `attachment` line (both `unknown`); `hi.txt` holds `hi`; the model
   answered in text; `result` `end_turn`, `num_turns` 1; `modelUsage` cumulative with turn 1. A
@@ -231,7 +232,7 @@ C28 holds on the plan's terms (the turn ends, exit 0 in 5.3 s, no hang, no crash
   parallel call does not exist here: there is nothing to quote.
 - Turn 2, the resume with `b.txt` answered `allow`: the hook fired once more for
   `toolu_01FfytaZavRivXiQSPniauVu` only (`decided` `answer:allow`), its `tool_result` `is_error`
-  false, `File created successfully at: ...b.txt ...`; `b.txt` holds `b`. The `a.txt` call never
+  absent (the parser treats a missing value as false), `File created successfully at: ...b.txt ...`; `b.txt` holds `b`. The `a.txt` call never
   fired the hook again and never got a result; the model issued a new `Write` for `a.txt`
   (`toolu_01DSwcaGCZMPUQgCp2cERJcp`), the hook deferred it, and the process ended `tool_deferred`
   naming that new id, `a.txt` still absent. The session transcript under `$CFG/projects` carries a

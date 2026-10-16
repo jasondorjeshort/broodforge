@@ -54,6 +54,7 @@ C36, C34 and C35 on the droplet are separate runs of the same claims and are sti
 C36 holds on the metadata side. The file is 56693 bytes and the listing is 1284 lines. No key
 name contains token, refresh, secret, api, key or credential, and no access or refresh token appears
 by name. The credential lives in the separate `.credentials.json` (524 bytes), which was not opened.
+The 56693-byte file was deleted when the directory was recreated on 2026-10-16: the verdict was taken on the earlier account's file, and the key structure was not re-listed for the project owner's file.
 
 What the key names cover:
 

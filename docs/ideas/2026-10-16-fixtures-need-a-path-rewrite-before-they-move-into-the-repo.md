@@ -6,8 +6,9 @@ related: []
 
 # Fixtures need a path rewrite before they move into the repo
 
-The fixtures recorded in the S1 run carry the PC username in paths: the `init` event's `cwd` and
-the hook command in the recorded settings. No email or credential appears. `docs/design/07-spike-plan.md`
+The fixtures recorded in the S1 run carry the PC username in every path-bearing field of `turn-*.jsonl`
+(`file_path`, `cwd`, `command`, `permission_denials`, Bash stdout and `tool_result` text) and in every
+`meta-*.json`. No email or credential appears. `docs/design/07-spike-plan.md`
 (the fixtures paragraph) says a person reads each fixture before it moves to `fixtures/engine/<name>/`;
 that read is slower than it needs to be, and the public repo would still hold the name, which the
 pusher's personal-data check would then flag.
