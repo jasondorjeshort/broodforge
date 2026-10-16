@@ -46,5 +46,9 @@ Decisions so far:
 - [0010 Update mode when both tests pass](decisions/0010-update-mode-when-both-tests-pass.md): the
   anchored `Hatchery base: <sha>` line means patch mode from that sha whatever `merge-base` says;
   a join merge is a project's recorded departure, not base procedure. Amends 0009 and 0004.
+- [0011 Usage cache per session, pool advice at HOLD](decisions/0011-usage-cache-per-session-and-pool-advice.md):
+  the status line caches the meters per `session_id` with the account as a label, the gate treats a
+  changed login as stale, and at HOLD it reports the pool account with room through `usage.pool`;
+  rotation happens at session boundaries. Amends 0006 and the hook specs, section 3.
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).

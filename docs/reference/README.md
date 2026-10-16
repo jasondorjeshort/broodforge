@@ -10,4 +10,5 @@ already certain. When a fact turns out to be wrong, fix it and bump `verified:`;
 
 | File | Topic | Verified |
 |---|---|---|
-| `claude-code-on-windows.md` | Processes, worktrees, shells, shared state and usage meters for parallel agents on Windows. Kept by decant (ADR 0008). | 2026-10-14 |
+| `claude-code-on-windows.md` | Processes, worktrees, shells, shared state and usage meters for parallel agents on Windows. Kept by decant (ADR 0008). | 2026-10-16 |
+| `claude-swap.md` | The `cswap` account switcher: where its state and Claude Code's config live, `switch`, `run` and `CLAUDE_CONFIG_DIR`, `auto` and its exit codes, the `list --json` contract, the usage endpoint budget. | 2026-10-16 |
