@@ -92,9 +92,9 @@ source: observed (Go toolchain and mingw-w64 observed 2026-10-16; npm behaviour 
   `[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\msys64\ucrt64\bin", "User")`.
   Check in a new shell: `gcc --version`; `go env CGO_ENABLED` prints `1`.
 - `filepath.EvalSymlinks` does not follow directory junctions (Go 1.27) while `os.Readlink` reads both junctions and symlinks; resolve links by hand where a junction matters (`docs/findings/2026-10-16-go-evalsymlinks-does-not-follow-windows-junctions.md`).
-- BullGuard's Sentry quarantines a freshly built unsigned binary and the Git tools its tree runs;
-  until the owner restores entry 681 and adds exclusions, no agent runs the binary, `go test` or a
-  scratch root on this PC (`docs/findings/2026-10-16-bullguard-sentry-quarantined-the-binary-and-its-process-tree.md`,
+- A behavioural scanner on this PC took a fresh unsigned build and the Git tools its process tree
+  ran; BullGuard was removed 2026-10-16. If tools vanish at the instant a run ends, check the
+  scanner's quarantine first (`docs/findings/2026-10-16-bullguard-sentry-quarantined-the-binary-and-its-process-tree.md`,
   `docs/operator/2026-10-16-bullguard-restore-quarantine-681-and-exclude-the-build.md`).
 - The `broodforge` instance account never runs tests and needs none of this.
 
