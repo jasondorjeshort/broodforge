@@ -1,0 +1,30 @@
+---
+paths:
+  - "**/*.go"
+  - "go.mod"
+  - "go.sum"
+---
+
+# Go conventions
+
+- First line of every `.go` file: `// SPDX-License-Identifier: GPL-3.0-or-later`.
+- Format with `gofmt`. Clean under the check line, run from the repository root:
+  `go vet ./... && go tool staticcheck ./... && go tool exhaustive ./...`.
+- Build before test: `go build ./...`, the check line, then `go test ./...` (plain on the PC until
+  the mingw operator entry is done; `CGO_ENABLED=1 go test -race ./...` on Linux). Say which ran.
+- The binary is `CGO_ENABLED=0 go build -o bin/ ./cmd/broodforge`: the trailing slash makes Go
+  add `.exe` on Windows, where `-o bin/broodforge` writes a file PowerShell will not run.
+  `CGO_ENABLED` is set on the command line, never in `go.mod`. Nothing goes on `PATH`; never
+  `go install`.
+- No `interface{}` or `any` outside `internal/engine`'s raw stream layer.
+- Sum types are a struct with a `Kind` enum field and a pointer payload per kind, switched on
+  `Kind` so `exhaustive` checks every switch. Never a type switch for them.
+- Tests use `testing` only, beside the code as `_test.go`; fixtures and scripts live under
+  `tests/` and `fixtures/`.
+- `json.Decoder.DisallowUnknownFields` on configuration files only, never on the engine stream:
+  an unknown field or kind there is read, not refused.
+- No host branching (`runtime.GOOS`, `_windows.go`, `//go:build windows`) outside `spawn`, the
+  worktree removal it owns, and `control`.
+- One package per component of `docs/design/03-architecture.md`'s table, under `internal/`; a
+  package imports only the components its row names. A library is imported only by the component
+  ADR 0023 names; `docs/reference/go-dependencies.md` changes with `go.mod`.

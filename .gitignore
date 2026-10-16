@@ -21,3 +21,7 @@ tmp/
 
 # Claude Code per-machine settings
 .claude/settings.local.json
+
+# Go build output and fixture comparison output
+bin/
+fixtures/**/received-*.json
