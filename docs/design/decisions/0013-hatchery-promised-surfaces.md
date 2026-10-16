@@ -57,23 +57,35 @@ In `.claude/hooks/test-hooks.js`, case group `F`, so the test command runs it an
 fails a push on it. Config `.claude/hooks/fitness.json`, read only through the harness:
 
 ```
-{ "deps": { "budget": 0, "paths": [".claude/hooks/*.js", ".claude/statusline.js"] }, "skip": [] }
+{ "deps": { "budget": 0, "paths": [".claude/hooks/*.js", ".claude/statusline.js"], "vendored": [] },
+  "skip": [] }
 ```
 
 Check `deps`: in every file the `paths` match, each `require('<m>')` literal whose `<m>` does
-not start with `./` or `../`, with a `node:` prefix stripped, must be in
-`require('module').builtinModules`; the number of distinct other modules is at most `budget`.
-Detail on failure: `<file>:<line> requires <m>` per offender. The harness line is the contract's
-line with the case id in front: `PASS F1 deps`, `SKIP F1 deps: <reason> (<idea>)`, or
-`FAIL F1 deps: <detail>; from .claude/hooks/fitness.json deps.budget; lift: skip entry
-(coordinator, one push, named in the commit message) or ADR amendment (architect)`. A `skip`
-entry is `{ "check": "deps", "reason", "date", "idea" }`; a missing field or an idea path that
-does not exist fails the check with `skip entry malformed` as the detail. Cases, each isolated in
+not start with `./` or `../`, with a `node:` prefix stripped, must satisfy `module.isBuiltin`
+(not the `builtinModules` list, which omits prefix-only modules such as `node:test`); the number
+of distinct other modules, plus the vendored files, is at most `budget`. `deps.vendored` is an
+optional list of repository-relative files, ADR 0012's copies under a page: each must exist and
+carry an `SPDX-License-Identifier`, each counts against the budget, each is scanned for its own
+requires, and a duplicate entry is ignored. Detail on failure: `<file>:<line> requires <m>` per
+offender, `<file> is vendored` per copy. The harness line is the contract's line with the case id
+in front: `PASS F1 deps`, `SKIP F1 deps: <reason> (<idea>)`, or `FAIL F1 deps: <detail>; from
+.claude/hooks/fitness.json <key>; lift: skip entry (coordinator, one push, named in the commit
+message) or ADR amendment (architect)`, where `<key>` names the config key at fault
+(`deps.budget`, `deps.paths`, `deps.vendored`, `skip`). A `skip` entry is `{ "check": "deps",
+"reason", "date", "idea" }`: `date` matches `YYYY-MM-DD` and `idea` matches
+`docs/ideas/YYYY-MM-DD-<slug>.md` and names a file that exists; anything else, or a missing
+field, fails the check with `skip entry malformed` as the detail. A config error (unreadable,
+not an object, a key of the wrong type, a path matching no file) fails the check in the same
+line; it never exits 2, so the run goes on and reports the other cases. Cases, each isolated in
 the scratch tree like the post-edit cases: F1 the real config and tree pass; F2 a scratch config
 over a scratch tree whose one file requires `left-pad` fails, and the line carries `lift:`; F3
 the same with a skip entry naming a scratch idea file that exists prints `SKIP` and passes; F4
-the same skip with the idea path absent fails with `skip entry malformed`. `--only F` selects
-them. Built by a `coder` from this section; Node built-ins only, as the check itself requires.
+the same skip with the idea path absent fails with `skip entry malformed`; F5 a vendored file
+with its licence line fails a budget of 0; F6 a vendored file without an `SPDX-License-Identifier`
+fails within budget. `--only F` selects them, `--only deps` runs F1 alone, `--verbose` lists what
+was scanned. Built by a `coder` from this section; Node built-ins only, as the check itself
+requires.
 
 ### Deferred
 

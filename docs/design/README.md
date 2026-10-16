@@ -25,7 +25,8 @@ Decisions so far:
 - [0001 Licensing](decisions/0001-licensing.md): GPL-3.0-or-later by default, LGPL for linkable components.
 - [0002 Repository layout](decisions/0002-repository-layout.md): where knowledge, state, procedures,
   rules, and hooks live; skills, permissions, and continuity by `@docs/HANDOFF.md` import. Companion
-  [hook specifications](decisions/0002-hook-specs.md) for the hooks and the status line.
+  [hook specifications](decisions/0002-hook-specs.md) for the hooks, and
+  [section 3, the usage gate and status line](decisions/0002-hook-specs-usage.md).
 - [0004 Adopting the Hatchery practice](decisions/0004-adopt-hatchery.md): an existing project takes
   the practice as files from `hatchery/main`, records the base commit in its own ADR, and updates by
   three-way patch; merging stays the path for decanted projects. (0003 and 0005 are proposals in
@@ -49,7 +50,8 @@ Decisions so far:
 - [0011 Usage cache per session, pool advice at HOLD](decisions/0011-usage-cache-per-session-and-pool-advice.md):
   the status line caches the meters per `session_id` with the account as a label, the gate treats a
   changed login as stale, and at HOLD it reports the pool account with room through `usage.pool`;
-  rotation happens at session boundaries. Amends 0006 and the hook specs, section 3.
+  rotation happens at session boundaries. Amends 0006 and the hook specs, section 3
+  ([usage companion](decisions/0002-hook-specs-usage.md)).
 - [0012 Decision practices for long-lived software](decisions/0012-decision-practices-for-long-lived-software.md):
   each project names its promised surfaces (additions free, an incompatible change a major
   choice); dependencies by checklist, a copy under a page keeps its licence; fitness checks with a

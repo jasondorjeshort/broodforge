@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Test harness and debug interface for the hooks in this directory.
-// Spec: docs/design/decisions/0002-hook-specs.md. Each case runs a hook as a child
-// process with JSON on stdin, exactly as Claude Code does, and checks exit code and stdout.
+// Spec: docs/design/decisions/0002-hook-specs.md for the hooks; the harness, its seams and the
+// fitness group F: docs/design/decisions/0002-hook-specs-usage.md, with ADR 0013 and ADR 0012's
+// fitness contract. Each case runs a hook as a child process with JSON on stdin, exactly as
+// Claude Code does, and checks exit code and stdout.
 //
 // Usage:
 //   node .claude/hooks/test-hooks.js                  run every case; exit 1 on any failure
@@ -20,14 +22,20 @@
 //       in <dir>/.claude/usage-gate-overrides/, and the account label from <dir>/.claude.json
 //       (or <cdir>/.claude.json) instead of the real ones. Put session_id (and cwd, to test a
 //       grant's scope) in <file>; the gate reads the file the status line wrote for that id.
+//   node .claude/hooks/test-hooks.js --only deps [--verbose]
+//       run only the fitness check deps on this repository (case F1; ADR 0013, and ADR 0012's
+//       fitness contract); --verbose lists every file scanned and how each require was classed.
+//       --only F runs F1 and the cases that test the check on scratch trees. An --only that
+//       selects no case is a usage error (exit 2).
 //
 // Isolation: post-edit cases run against a scratch tree in the OS temp dir (deleted at
 // the end); git-guard cases run in two scratch repositories (one on main, one on task/T1);
 // usage-gate and statusline cases point HOME/USERPROFILE at a scratch dir and remove
 // CLAUDE_CONFIG_DIR unless the case sets it to a scratch dir. Every case names
 // its policy file through HOOK_POLICY_FILE: the Hatchery fixture, an example, none, or a scratch
-// file. No file of the repository is read except to check that policy.json loads, and ~/.claude is never touched. Exit codes: 0 all pass, 1 any
-// failure, 2 usage error.
+// file. No file of the repository is read except to check that policy.json loads and, in F1, the
+// files .claude/hooks/fitness.json names; ~/.claude is never touched. Exit codes: 0 all pass (a
+// SKIP is not a failure), 1 any failure, 2 usage error.
 'use strict';
 const fs = require('fs');
 const os = require('os');
@@ -78,6 +86,7 @@ if (opt.input) {
 // ---------- result bookkeeping ----------
 let pass = 0;
 let fail = 0;
+let skipped = 0;
 function report(id, label, ok, detail, stdout) {
   if (opt.only && !id.startsWith(opt.only)) return;
   if (ok) pass++; else fail++;
@@ -584,7 +593,7 @@ for (const [id, label, filePath, expect, rawOverride, fmt, policy, root] of P) {
   if (ok && !opt.verbose) process.stdout.write(`     exit ${r.code}, stdout: ${r.stdout || '(empty)'}\n`);
 }
 
-// ---------- usage-gate (section 3 text) ----------
+// ---------- usage-gate (0002-hook-specs-usage.md, section 3) ----------
 const home = path.join(scratch, 'home');
 fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
 // One usage file per session (ADR 0011): every U, UX and UO case runs as session SID and writes its
@@ -1388,6 +1397,221 @@ if (selected('S09')) {
   }
 }
 
+// ---------- fitness checks (group F; ADR 0013, ADR 0012's fitness contract) ----------
+// One check, deps: in every file deps.paths matches, and in each file of the optional deps.vendored
+// list, each literal require call naming a module that is not relative (. or .., or starting ./ ../
+// .\ ..\) must name a Node built-in (module.isBuiltin). The distinct other packages (the first path
+// segment, or the first two for @scope/name), plus each vendored file (which must exist and carry an
+// SPDX identifier, ADR 0012), may number at most deps.budget. The scan reads raw text: a require call
+// inside a comment or a string counts too, by design (it errs towards a false block, never a false
+// pass). A literal is a quoted or backtick string without an interpolation, after optional spaces,
+// comments and extra parentheses, with an optional trailing comma. A skip entry for the check needs
+// check, reason (no control characters), date (YYYY-MM-DD) and idea (docs/ideas/YYYY-MM-DD-<slug>.md,
+// existing), else the check fails. Lines follow the contract with the case id after the status:
+// PASS F1 deps, SKIP F1 deps: ..., FAIL F1 deps: ... F1 runs on this repository (selected by
+// --only F1, --only F or --only deps); the other F cases run on scratch trees with the same layout
+// and pass when the check gives the line they expect.
+const FIT_CONFIG = '.claude/hooks/fitness.json';
+const FIT_LIFT = 'lift: skip entry (coordinator, one push, named in the commit message) or ADR amendment (architect)';
+const { isBuiltin: fitIsBuiltin } = require('module');
+// Spaces, block comments and line comments, as the regex source of one item.
+const FIT_GAP = String.raw`(?:\s|/\*[\s\S]*?\*/|//[^\n]*\n)`;
+const FIT_REQUIRE = new RegExp(String.raw`\brequire\s*\((?:${FIT_GAP}|\()*` +
+  String.raw`(?:'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|` + '`' + String.raw`((?:[^` + '`' + String.raw`\\$]|\\.|\$(?!\{))*)` + '`' + ')' +
+  String.raw`${FIT_GAP}*,?${FIT_GAP}*\)`, 'g');
+const fitUnescape = (s) => s.replace(/\\(.)/g, '$1');
+const fitRelative = (m) => m === '.' || m === '..' || /^\.\.?[/\\]/.test(m);
+const fitPackage = (m) => m.split('/').slice(0, m.startsWith('@') ? 2 : 1).join('/');
+const FIT_CONTROL = /[\u0000-\u001f\u007f]/;
+const fitEscape = (s) => s.replace(/[.+^$(){}|[\]\\]/g, '\\$&');
+
+// Expands one pattern relative to root: / separates segments, * and ? match within one segment.
+function fitGlob(root, pattern) {
+  let found = [''];
+  for (const seg of pattern.split('/')) {
+    const next = [];
+    for (const rel of found) {
+      if (!/[*?]/.test(seg)) { next.push(rel ? `${rel}/${seg}` : seg); continue; }
+      const re = new RegExp(`^${fitEscape(seg).replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]')}$`);
+      let names = [];
+      try { names = fs.readdirSync(path.join(root, rel)).sort(); } catch (_) { /* no such dir: no match */ }
+      for (const n of names) if (re.test(n)) next.push(rel ? `${rel}/${n}` : n);
+    }
+    found = next;
+  }
+  return found.filter((rel) => { try { return fs.statSync(path.join(root, rel)).isFile(); } catch (_) { return false; } });
+}
+
+// Runs the deps check on the tree at root. Returns { status, rest, log }: the contract line is
+// `${status} ${rest}`, and log holds the --verbose lines (what was scanned and how it was classed).
+function fitnessDeps(root) {
+  const log = [];
+  const done = (status, rest) => ({ status, rest, log });
+  const failed = (detail, key) => done('FAIL', `deps: ${detail}; from ${FIT_CONFIG}${key ? ` ${key}` : ''}; ${FIT_LIFT}`);
+  let cfg;
+  try {
+    cfg = JSON.parse(fs.readFileSync(path.join(root, ...FIT_CONFIG.split('/')), 'utf8').replace(/^﻿/, ''));
+  } catch (e) { return failed(`config unreadable (${e.code || e.message})`); }
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return failed('config malformed (not an object)');
+
+  // Skip entries first: a malformed one fails the check even when the check would pass.
+  const skip = cfg.skip === undefined ? [] : cfg.skip;
+  if (!Array.isArray(skip)) return failed('skip entry malformed', 'skip');
+  let use = null;
+  for (const e of skip) {
+    const ours = !e || typeof e !== 'object' || typeof e.check !== 'string' || e.check === 'deps';
+    if (!ours) continue;
+    let why = null;
+    if (!['check', 'reason', 'date', 'idea'].every((k) => typeof e[k] === 'string' && e[k].trim() !== '')) why = 'a field is missing or empty';
+    else if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date)) why = 'date is not YYYY-MM-DD';
+    else if (FIT_CONTROL.test(e.reason) || FIT_CONTROL.test(e.idea)) why = 'reason or idea holds a control character';
+    else if (!/^docs\/ideas\/\d{4}-\d{2}-\d{2}-[^/]+\.md$/.test(e.idea)) why = 'idea is not docs/ideas/YYYY-MM-DD-<slug>.md';
+    else {
+      let exists = false;
+      try { exists = fs.statSync(path.join(root, e.idea)).isFile(); } catch (_) { /* absent */ }
+      if (!exists) why = 'idea file does not exist';
+    }
+    log.push(`skip entry ${JSON.stringify(e)}: ${why || 'well formed'}`);
+    if (why) return failed('skip entry malformed', 'skip');
+    if (!use) use = e;
+  }
+  if (use) return done('SKIP', `deps: ${use.reason} (${use.idea})`);
+
+  const d = cfg.deps;
+  const strings = (a) => Array.isArray(a) && a.every((s) => typeof s === 'string' && s !== '');
+  if (!d || typeof d !== 'object') return failed('config malformed (deps missing)', 'deps');
+  if (!Number.isInteger(d.budget) || d.budget < 0) return failed('config malformed (budget is not a whole number)', 'deps.budget');
+  if (!strings(d.paths) || d.paths.length === 0 || d.paths.some((p) => p.includes('**'))) {
+    return failed('config malformed (paths is not a list of patterns without **)', 'deps.paths');
+  }
+  if (d.vendored !== undefined && !strings(d.vendored)) return failed('config malformed (vendored is not a list of paths)', 'deps.vendored');
+  const vendored = [...new Set(d.vendored || [])];
+  log.push(`config ${FIT_CONFIG}: budget ${d.budget}; paths ${d.paths.join(', ')}; vendored ${vendored.length ? vendored.join(', ') : 'none'}`);
+
+  const files = [];
+  for (const p of d.paths) {
+    const matched = fitGlob(root, p);
+    if (matched.length === 0) return failed(`${p} matches no file`, 'deps.paths');
+    for (const f of matched) if (!files.includes(f)) files.push(f);
+  }
+  for (const v of vendored) {
+    let text = null;
+    try { text = fs.readFileSync(path.join(root, v), 'utf8'); } catch (_) { /* reported below */ }
+    if (text === null) return failed(`vendored ${v} does not exist`, 'deps.vendored');
+    if (!/SPDX-License-Identifier:\s*\S/.test(text)) return failed(`vendored ${v} has no SPDX-License-Identifier`, 'deps.vendored');
+    log.push(`${v}: vendored, counted`);
+    if (!files.includes(v)) files.push(v);
+  }
+  const others = new Set();
+  const offenders = [];
+  for (const f of files) {
+    const text = fs.readFileSync(path.join(root, f), 'utf8');
+    let n = 0;
+    for (const m of text.matchAll(FIT_REQUIRE)) {
+      n++;
+      const mod = fitUnescape(m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3]);
+      const line = text.slice(0, m.index).split('\n').length;
+      let why;
+      if (fitRelative(mod)) why = 'relative path, not counted';
+      else if (fitIsBuiltin(mod)) why = 'built-in';
+      else { why = `not built-in, counted as ${fitPackage(mod)}`; others.add(fitPackage(mod)); offenders.push(`${f}:${line} requires ${mod}`); }
+      log.push(`${f}:${line} ${mod}: ${why}`);
+    }
+    if (n === 0) log.push(`${f}: no literal require`);
+  }
+  const count = others.size + vendored.length;
+  log.push(`dependencies ${count} (${[...others, ...vendored].join(', ') || 'none'}), budget ${d.budget}`);
+  if (count > d.budget) return failed([...offenders, ...vendored.map((v) => `${v} is vendored`)].join(', '), 'deps.budget');
+  return done('PASS', 'deps');
+}
+
+{
+  if (selected('F1') || opt.only === 'deps') {
+    const r = fitnessDeps(path.resolve(HOOKS, '..', '..'));
+    process.stdout.write(`${r.status} F1 ${r.rest}\n`);
+    if (opt.verbose) for (const l of r.log) process.stdout.write(`     ${l}\n`);
+    if (r.status === 'FAIL') fail++; else if (r.status === 'SKIP') skipped++; else pass++;
+  }
+
+  // Scratch trees. The call name is split so that this file does not itself require the fixtures.
+  const R = 'req' + 'uire';
+  const req = (m) => `${R}('${m}')`;
+  const IDEA = 'docs/ideas/2026-01-01-left-pad.md';
+  const SKIP_LP = { check: 'deps', reason: 'left-pad until its copy lands', date: '2026-01-01', idea: IDEA };
+  const A_JS = `const fs = ${req('fs')};\nconst p = ${req('node:path')};\nconst b = ${req('./b')};\nconst lp = ${req('left-pad')};\n`;
+  const CLEAN_JS = `const fs = ${req('fs')};\n`;
+  const VENDOR = '// SPDX-License-Identifier: MIT\n// Origin: https://example.invalid/pad.js, 1.0.0, 2026-01-01\n';
+  const failLine = (detail, key) => `FAIL deps: ${detail}; from ${FIT_CONFIG} ${key}; ${FIT_LIFT}`;
+  const SHAPES_JS = [
+    `const a = ${R} ('pkg-a');`,
+    `const b = ${R}(\`pkg-b\`);`,
+    `const c = ${R}('pkg-c',);`,
+    `const d = ${R}(('pkg-d'));`,
+    `const e = ${R}(/* why */ 'pkg-e');`,
+    `const f = ${R}(\`pkg-\${x}\`);`,
+    `const g = ${R}(\n  // reason\n  'pkg-g'\n);`,
+  ].join('\n') + '\n';
+  const IDEA_FILE = { [IDEA]: '---\ndate: 2026-01-01\nkind: chore\n---\n# Left-pad\n' };
+  const HOOKS_ONLY = { budget: 0, paths: ['.claude/hooks/*.js'] };
+  // [id, label, deps block, skip list, files { rel: text }, expected line, { bom, logHas: [...] }]
+  const F = [
+    ['F2', 'a scratch file requires left-pad: fails, with the lift', { budget: 0, paths: ['.claude/hooks/*.js'] }, [],
+      { '.claude/hooks/a.js': A_JS }, failLine('.claude/hooks/a.js:4 requires left-pad', 'deps.budget')],
+    ['F3', 'the same with a skip entry whose idea file exists: skips, passes', { budget: 0, paths: ['.claude/hooks/*.js'] }, [SKIP_LP],
+      { '.claude/hooks/a.js': A_JS, [IDEA]: '---\ndate: 2026-01-01\nkind: chore\n---\n# Left-pad\n' },
+      `SKIP deps: ${SKIP_LP.reason} (${IDEA})`],
+    ['F4', 'the same skip entry with its idea file absent: fails, skip entry malformed', { budget: 0, paths: ['.claude/hooks/*.js'] }, [SKIP_LP],
+      { '.claude/hooks/a.js': A_JS }, failLine('skip entry malformed', 'skip')],
+    ['F5', 'a vendored file with its licence counts against a budget of 0: fails', { budget: 0, paths: ['.claude/hooks/*.js'], vendored: ['vendor/pad.js'] }, [],
+      { '.claude/hooks/a.js': CLEAN_JS, 'vendor/pad.js': VENDOR }, failLine('vendor/pad.js is vendored', 'deps.budget')],
+    ['F6', 'a vendored file without an SPDX identifier fails within budget', { budget: 1, paths: ['.claude/hooks/*.js'], vendored: ['vendor/pad.js'] }, [],
+      { '.claude/hooks/a.js': CLEAN_JS, 'vendor/pad.js': '// no licence line\n' }, failLine('vendored vendor/pad.js has no SPDX-License-Identifier', 'deps.vendored')],
+    ['F7', 'require shapes: space before the paren, backtick, trailing comma, extra parens, comments', HOOKS_ONLY, [],
+      { '.claude/hooks/a.js': SHAPES_JS },
+      failLine(['1 requires pkg-a', '2 requires pkg-b', '3 requires pkg-c', '4 requires pkg-d', '5 requires pkg-e', '7 requires pkg-g']
+        .map((s) => `.claude/hooks/a.js:${s}`).join(', '), 'deps.budget'), { logHas: ['dependencies 6 '] }],
+    ['F8', 'node:test and fs/promises are built-in, node:left-pad is not', HOOKS_ONLY, [],
+      { '.claude/hooks/a.js': [req('node:test'), req('fs/promises'), req('node:left-pad')].join(';\n') + ';\n' },
+      failLine('.claude/hooks/a.js:3 requires node:left-pad', 'deps.budget')],
+    ['F9', 'the relative forms . .. .\\ ..\\ are not counted', HOOKS_ONLY, [],
+      { '.claude/hooks/a.js': [req('.'), req('..'), req('.\\\\b'), req('..\\\\c')].join(';\n') + ';\n' }, 'PASS deps',
+      { logHas: ['a.js:3 .\\b: relative path', 'a.js:4 ..\\c: relative path', 'dependencies 0 '] }],
+    ['F10', 'subpaths count once per package, @scope/name as one', { budget: 2, paths: ['.claude/hooks/*.js'] }, [],
+      { '.claude/hooks/a.js': [req('lodash/fp'), req('lodash/get'), req('@scope/pkg/x'), req('@scope/pkg')].join(';\n') + ';\n' }, 'PASS deps',
+      { logHas: ['dependencies 2 (lodash, @scope/pkg), budget 2'] }],
+    ['F11', 'a vendored path listed twice counts once, and its own requires are scanned', { budget: 1, paths: ['.claude/hooks/*.js'], vendored: ['vendor/pad.js', 'vendor/pad.js'] }, [],
+      { '.claude/hooks/a.js': CLEAN_JS, 'vendor/pad.js': `${VENDOR}${req('fs')};\n` }, 'PASS deps',
+      { logHas: ['vendor/pad.js:3 fs: built-in', 'dependencies 1 (vendor/pad.js), budget 1'] }],
+    ['F12', 'a require in a vendored file counts against the budget', { budget: 1, paths: ['.claude/hooks/*.js'], vendored: ['vendor/pad.js'] }, [],
+      { '.claude/hooks/a.js': CLEAN_JS, 'vendor/pad.js': `${VENDOR}${req('left-pad')};\n` },
+      failLine('vendor/pad.js:3 requires left-pad, vendor/pad.js is vendored', 'deps.budget')],
+    ['F13', 'a skip entry whose date is not YYYY-MM-DD is malformed', HOOKS_ONLY, [Object.assign({}, SKIP_LP, { date: '1 Jan 2026' })],
+      Object.assign({ '.claude/hooks/a.js': A_JS }, IDEA_FILE), failLine('skip entry malformed', 'skip')],
+    ['F14', 'a skip entry whose idea is an existing file outside docs/ideas is malformed', HOOKS_ONLY, [Object.assign({}, SKIP_LP, { idea: '.claude/hooks/a.js' })],
+      { '.claude/hooks/a.js': A_JS }, failLine('skip entry malformed', 'skip')],
+    ['F15', 'a skip entry whose reason holds a newline is malformed', HOOKS_ONLY, [Object.assign({}, SKIP_LP, { reason: 'two\nlines' })],
+      Object.assign({ '.claude/hooks/a.js': A_JS }, IDEA_FILE), failLine('skip entry malformed', 'skip')],
+    ['F16', 'a config with a UTF-8 byte order mark is read', HOOKS_ONLY, [], { '.claude/hooks/a.js': CLEAN_JS }, 'PASS deps', { bom: true }],
+  ];
+  for (const [id, label, deps, skip, files, want, extra] of F) {
+    if (!selected(id)) continue;
+    const x = extra || {};
+    const root = path.join(scratch, `fit-${id}`);
+    const all = Object.assign({ [FIT_CONFIG]: `${x.bom ? '﻿' : ''}${JSON.stringify({ deps, skip })}` }, files);
+    for (const [rel, text] of Object.entries(all)) {
+      const f = path.join(root, ...rel.split('/'));
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, text);
+    }
+    const r = fitnessDeps(root);
+    const got = `${r.status} ${r.rest}`;
+    const missing = (x.logHas || []).filter((s) => !r.log.some((l) => l.includes(s)));
+    report(id, label, got === want && missing.length === 0,
+      got !== want ? `expected ${JSON.stringify(want)}; got ${JSON.stringify(got)}` : `verbose log lacks ${JSON.stringify(missing)}`);
+    if (opt.verbose) for (const l of [`check: ${got}`, ...r.log]) process.stdout.write(`     ${l}\n`);
+  }
+}
+
 // ---------- policy files themselves ----------
 // The repository's own policy.json (whatever the project chose) and the examples must load; the
 // Hatchery fixture must equal the loader's defaults, since an absent file means those.
@@ -1409,8 +1633,20 @@ if (selected('S09')) {
   }
 }
 
+// ---------- the harness's own command line ----------
+if (selected('CLI01')) {
+  const r = spawnSync(NODE, [__filename, '--only', 'nosuch'], { encoding: 'utf8', timeout: 60000 });
+  report('CLI01', '--only that selects no case -> exit 2, usage line', r.status === 2 && r.stderr === 'test-hooks: --only nosuch selects no case\n',
+    `exit ${r.status}, stderr ${JSON.stringify(r.stderr)}`, r.stdout);
+}
+
 if (opt.keep) process.stdout.write(`scratch tree kept at ${scratch}\n`);
 else fs.rmSync(scratch, { recursive: true, force: true });
 
-process.stdout.write(`\n${pass} passed, ${fail} failed, ${pass + fail} total\n`);
+if (opt.only && pass + fail + skipped === 0) {
+  process.stderr.write(`test-hooks: --only ${opt.only} selects no case\n`);
+  process.exit(2);
+}
+
+process.stdout.write(`\n${pass} passed, ${fail} failed, ${skipped ? `${skipped} skipped, ` : ''}${pass + fail + skipped} total\n`);
 process.exit(fail > 0 ? 1 : 0);
