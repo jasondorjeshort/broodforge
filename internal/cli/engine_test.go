@@ -139,7 +139,7 @@ func TestEngineRunExpect(t *testing.T) {
 
 func TestEngineRunErrors(t *testing.T) {
 	r := clitest.Run(t, nil, "engine", "run", "--prompt", "x")
-	want(t, r, 2, "", "error: usage: engine run: --fake <fixture dir> is required\n")
+	want(t, r, 2, "", "error: usage: engine run: --fake <fixture dir> or --real is required\n")
 	r = engineRun(t, "basic", "9")
 	if r.Code != 1 || !strings.HasPrefix(r.Stderr, "error: no-turn: no such turn: ") {
 		t.Errorf("turn 9: exit %d stderr %q", r.Code, r.Stderr)

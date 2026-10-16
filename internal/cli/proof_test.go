@@ -9,12 +9,18 @@ import (
 
 	"github.com/jasondorjeshort/broodforge/internal/cli/clitest"
 	"github.com/jasondorjeshort/broodforge/internal/control/controltest"
+	"github.com/jasondorjeshort/broodforge/internal/spawn/spawntest"
 )
 
 // The P2 Proof (08-implementation-plan.md), on the built binary against the in-process
 // harness. Run with -v to see each command, its exit code and its output.
 
-func TestMain(m *testing.M) { os.Exit(clitest.Main(m)) }
+// TestMain also makes this test binary the stand-in engine when the spawn runs it with
+// spawntest.Env set (engine_real_test.go).
+func TestMain(m *testing.M) {
+	spawntest.Main()
+	os.Exit(clitest.Main(m))
+}
 
 func want(t *testing.T, r clitest.Result, code int, stdout, stderr string) {
 	t.Helper()

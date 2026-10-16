@@ -32,4 +32,5 @@ paths:
 - Import exception: `internal/cli` also imports `engine`, `config` and `hook`, for the standalone
   subcommands the plan places there (engine run, record, replay; config check; hook pre-tool-use,
   try, cases), and `store`, `audit`, `backup` and `credentials`, for the `(file)` commands and the
-  read commands' fallback to the store file; nothing else beyond what 03's `cli` row names.
+  read commands' fallback to the store file, and `spawn`, for `spawn preflight` and the backend
+  the standalone engine commands start; nothing else beyond what 03's `cli` row names.

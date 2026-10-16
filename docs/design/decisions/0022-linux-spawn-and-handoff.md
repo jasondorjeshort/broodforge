@@ -216,3 +216,9 @@ no `safe.directory` for anything engine-owned. On Windows the same five steps ru
   and Broodforge installed" loses Node. `<bf>` holds the binary and `share/`; the droplet builds
   it from the pinned source (ADR 0023). The Windows gap "a crashed bot's leftover engines run on
   until they end" in the 0022 ADR's 03-review amendments is closed by ADR 0023's job object.
+- 2026-10-16, source the P7 review (`../08-implementation-plan.md`, P7): "no `CLAUDE_CONFIG_DIR`"
+  for an API-key session (The engine spawn, `<ecfg>`) is this backend's rule, and "exactly one of
+  `CLAUDE_CONFIG_DIR` and `ANTHROPIC_API_KEY`" is `engine-entry`'s check on Linux. The same-account
+  backend sets both for an API key, `CLAUDE_CONFIG_DIR` naming `<sess>/home/.claude`, because on
+  the same account the engine would otherwise read the owner's `~/.claude`; `<ecfg>` is the same
+  directory either way.

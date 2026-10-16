@@ -83,8 +83,8 @@ command print the path only. An existing key file is `error: key-exists: <path>`
 nothing is written. `credential add --kind api-key --user <user id> --label <text>` reads the
 value from stdin (never an argument) and prints the new id `cred-<base36>`; the user must be
 registered (`unknown-user`). `credential add
---kind subscription --user <user id> --label <text>` runs `engine-entry harness-create` through
-the spawn backend (ADR 0022 companion; until P7 it names `<root>/harness/<id>` and creates nothing), records the credential as `needs-login` and prints the
+--kind subscription --user <user id> --label <text>` runs `harness-create` for `<root>/harness/<id>`
+through the spawn backend (ADR 0022 companion; same-account: a directory operation), records the credential as `needs-login` and prints the
 id; it writes no settings, since the hook's settings file is per session. `credential login
 <id>` prints the exact command the user runs to complete the engine's own login into that
 directory (spike C25's, `CLAUDE_CONFIG_DIR=<dir> <engine.path> auth login`, sh quoting); `credential login <id> --done` records `usable` once the owner
@@ -134,31 +134,31 @@ Isolation. All of it in the scratch root against the fake; the socket under the 
 
 ## A turn against the fake engine
 
-Drive. Through a session: `session send` on a scratch root, where the channel's harness is `fake`
-and `--fixture <dir>` picks the directory (default `fixtures/engine/basic/` [no-check: no code
-yet]). Adapter alone, no store, no session: `broodforge engine run --fake <fixture dir> [--turn
-<n>] [--cwd <dir>] --prompt "<text>"` streams `EngineEvent`s as JSONL to stdout exactly as the
-adapter parsed them and exits 0 when the fixture's `exit` is 0, else 1 with `error: engine-exit`; `engine run --real --credential
-<id> --cwd <dir> --prompt "<text>" [--resume <engine session id>]` does the same through the
-configured spawn backend; it is the production form of the spike's throwaway runner, which comes first (`07-spike-plan.md`). `engine record --credential
-<id> --cwd <dir> --out <fixture dir> --prompt "<text>"` runs the real engine and writes the raw
-lines as `turn-<n>.jsonl` (`n` counting up in an existing directory, `--resume` taken from the
-previous turn's `init`) plus a `fixture.json` without delays. The recorder redacts nothing: a
-transcript carries whatever the agent read, so record with a credential made for recording and
-before committing it, have an agent that did not record it read every file with nested JSON
-decoded, confirm no name, email, hostname or repository content survives (before the read the import
-rewrite, `go run ./internal/tools/importfixture`, P1, generalised when `engine record` lands,
-replaces the recording host's home with `/home/user`, and the read confirms no real host path
-survives), and report in a few lines what is account-level or personal and cannot be classified by
-a script (the owner decides on that report, never by reading the files); the recorder refuses an `--out` inside a session tree.
-Observe. `session tail --json` for the mapped events; the fixture's `received-<n>.json` for the
-exact `TurnRequest` the fake saw (delivery kind, hook variable names, `systemPromptAppend`,
-`answer`); `engine run --fake <dir> --prompt x | grep '"type":"result"'` for the usage input.
-Reproduce. A failing parse is a fixture: copy the offending `turn-<n>.jsonl` into a new directory
-and run `engine run --fake <dir> --prompt x --expect result` (no `fixture.json`: every turn exits
-0); a stream without a `result` exits 1, `error: expect: wanted result, got no-result`.
-Isolation. The fake reads the fixture directory and writes only `received-<n>.json` there
-(`--received-dir <dir>` for a read-only tree); `engine record` needs a real credential, not scratch.
+Drive. Through a session: `session send` on a scratch root, where the channel's harness is `fake` and `--fixture <dir>` picks the
+directory (default `fixtures/engine/basic/` [no-check: no code yet]). Adapter alone, no store, no session: `broodforge engine run
+--fake <fixture dir> [--turn <n>] [--cwd <dir>] --prompt "<text>"` streams `EngineEvent`s as JSONL to stdout exactly as the
+adapter parsed them and exits 0 when the fixture's `exit` is 0, else 1 with `error: engine-exit`. `engine run --real --credential
+<id> --cwd <dir> --prompt "<text>" [--resume <engine session id>] [--model <m>]`, with `--root`, does the same through the configured spawn
+backend: credential and git identity from the store, an API key through the key file; the hook sees session `engine-run`, code
+reach, `defaults.mode`, log `<root>/sessions/engine-run/home/hook.log`; Ctrl-C interrupts the turn; no `--credential` is `error:
+usage`, an unknown one `error: unknown-credential`, nothing spawned. `engine record --credential <id> --cwd <dir> --out <fixture
+dir> --prompt "<text>" [--model <m>]` runs the real engine and writes the raw lines as `turn-<n>.jsonl` (`n` counting up in an existing
+directory, `--resume` the previous turn's, from `fixture.json` or its `init`) plus a `fixture.json` without delays (claim
+`recorded`, `engine.version`); an `--out` under `--root` or `--cwd` is `error: out-in-session`. The recorder redacts
+nothing, so record with a credential made for recording; before a commit the import rewrite (`go run
+./internal/tools/importfixture`, P1, generalised when `engine record` lands) replaces the recording host's home with `/home/user`,
+then an agent that did not record reads every file with nested JSON decoded, confirms no name, email, hostname, real host path or
+repository content survives, and reports in a few lines what is account-level or personal and no script can classify (the owner
+decides on that report, never by reading the files).
+Observe. `session tail --json` for the mapped events; the fixture's `received-<n>.json` for the exact `TurnRequest` the fake saw
+(delivery kind, hook variable names, `systemPromptAppend`, `answer`); `engine run --fake <dir> --prompt x | grep
+'"type":"result"'` for the usage input.
+Reproduce. A failing parse is a fixture: copy the offending `turn-<n>.jsonl` into a new directory and run `engine run --fake <dir>
+--prompt x --expect result` (no `fixture.json`: every turn exits 0); a stream without a `result` exits 1, `error: expect: wanted
+result, got no-result`.
+Isolation. The fake reads the fixture directory and writes only `received-<n>.json` there (`--received-dir <dir>` for a read-only
+tree); `engine record` needs a real credential, not scratch; the tests drive `--real` and `record` against
+`internal/spawn/spawntest`, the test binary standing in for the engine.
 
 ## The PreToolUse hook
 
@@ -208,20 +208,21 @@ Isolation. Against the real engine this is spike C27 (`engine run --real --resum
 
 ## Spawn preflight and reach
 
-Drive. `broodforge spawn preflight (file)` runs the backend's checks without a session: on
-Linux the `namei` walk, the `engine-entry --check` spawn and the sudoers comparison of the ADR
-0022 companion, printing the expected sudoers block on a miss; on Windows the engine path, Git
-Bash path and account; `error: preflight-<check>`, exit 1. `session reach-report <id>` prints
-the contract's table column for the session's reach beside the bind list the spawn would use,
-computed from the same array, then `--json` for both. `session start --reach read-only` on
-channel `200` of a scratch root makes a read-only session against the fake.
-Observe. `reach-report`; on the droplet, C30's commands run by hand from a code session's Bash
-(`ls`, `env`, `cat` of the root, another session and the canonical) and the hook's `deny` lines
-in `session tail` for an `Edit` under read-only reach.
-Reproduce. `hook cases` for the policy half; for the bind half, C30 and C31 of ADR 0022 are the
-test, run once per host setup and recorded as a finding; the fake exercises no bind.
-Isolation. Preflight spawns `engine-entry --check` and nothing else; a scratch root reports the
-same-account backend's empty bind list.
+Drive. `broodforge spawn preflight [--expect ok] (file)` runs the backend's checks without a session: `ok  <check>  <detail>` per
+passing check and `error: preflight-<check>: <detail>` per failing one on stderr, exit 1. Same-account: `backend`; `engine-path`
+(absolute, a file, on Windows the `.exe`); `engine-version` (`--version` against an empty config directory, equal to
+`engine.version`); `git-bash` (Windows; unset, the engine finds it); `share` (`<bf>/share/empty/mcp.json` a map, `CLAUDE.md`
+empty, `dir/` empty, made when missing); `account`. `linux-sudo-bwrap` is `error: preflight-backend: held` until P14, which adds
+the `namei` walk, the `engine-entry --check` spawn and the sudoers comparison of the ADR 0022 companion, printing the expected
+sudoers block on a miss. `session reach-report <id>` prints the contract's table column for the session's reach beside the bind
+list the spawn would use, computed from the same array, then `--json` for both. `session start --reach read-only` on channel `200`
+of a scratch root makes a read-only session against the fake.
+Observe. `reach-report`; on the droplet, C30's commands run by hand from a code session's Bash (`ls`, `env`, `cat` of the root,
+another session and the canonical) and the hook's `deny` lines in `session tail` for an `Edit` under read-only reach.
+Reproduce. `hook cases` for the policy half; for the bind half, C30 and C31 of ADR 0022 are the test, run once per host setup and
+recorded as a finding; the fake exercises no bind. The Windows job: `go test ./internal/spawn -run 'Job|Fallback' -v` closes an
+engine's job (and, with assignment refused, takes the walk and `taskkill /T /F`) and shows its `PING.EXE` grandchild gone.
+Isolation. Preflight runs only the engine's `--version` (Linux: `engine-entry --check`); scratch has an empty bind list.
 
 ## Git handoff
 

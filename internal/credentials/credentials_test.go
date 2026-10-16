@@ -237,6 +237,9 @@ func TestServiceSubscription(t *testing.T) {
 	if r.Status != StatusNeedsLogin || r.StoreRef != filepath.ToSlash(filepath.Join(root, "harness", r.ID)) {
 		t.Errorf("record %+v", r)
 	}
+	if st, err := os.Stat(r.StoreRef); err != nil || !st.IsDir() {
+		t.Errorf("harness-create made no %s: %v", r.StoreRef, err)
+	}
 	cmd, err := svc.LoginCommand(r.ID)
 	if err != nil {
 		t.Fatal(err)

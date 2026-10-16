@@ -117,6 +117,9 @@ func TestProofCredentials(t *testing.T) {
 		t.Fatalf("add subscription: exit %d stdout %q stderr %q", r.Code, r.Stdout, r.Stderr)
 	}
 	dir := filepath.ToSlash(filepath.Join(root, "harness", sub))
+	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+		t.Errorf("harness-create made no %s: %v", dir, err)
+	}
 	want(t, clitest.Run(t, nil, "--root", root, "credential", "login", sub), 0,
 		"CLAUDE_CONFIG_DIR="+dir+" /opt/claude auth login\n", "")
 	want(t, clitest.Run(t, nil, "--root", root, "credential", "login", id), 1, "",

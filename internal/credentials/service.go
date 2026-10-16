@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jasondorjeshort/broodforge/internal/audit"
+	"github.com/jasondorjeshort/broodforge/internal/spawn"
 	"github.com/jasondorjeshort/broodforge/internal/store"
 )
 
@@ -51,18 +52,38 @@ type Record struct {
 }
 
 // Harness creates a subscription credential's config directory: the spawn backend's
-// harness-create (ADR 0022 companion).
+// harness-create (ADR 0022 companion); Remove undoes a Create whose row was never written.
 type Harness interface {
 	Create(id string) (dir string, err error)
+	Remove(dir string) error
 }
 
-// PendingHarness stands in for the spawn backend until P7: it names <root>/harness/<id> and
-// creates nothing; the engine's login creates the directory (spike C25).
-type PendingHarness struct{ Root string }
+// SpawnHarness runs harness-create and harness-remove through a spawn backend on
+// <root>/harness/<id>.
+type SpawnHarness struct {
+	Root    string
+	Backend spawn.Backend
+}
 
-// Create returns the directory P7's harness-create will make.
-func (h PendingHarness) Create(id string) (string, error) {
-	return filepath.ToSlash(filepath.Join(h.Root, "harness", id)), nil
+// Create makes the directory and returns it.
+func (h SpawnHarness) Create(id string) (string, error) {
+	dir := spawn.HarnessDir(h.Root, id)
+	if err := h.Backend.HarnessCreate(dir); err != nil {
+		return "", harnessError(err)
+	}
+	return dir, nil
+}
+
+// Remove deletes the directory.
+func (h SpawnHarness) Remove(dir string) error { return harnessError(h.Backend.HarnessRemove(dir)) }
+
+// harnessError keeps the backend's code (harness, or preflight-backend for the held one).
+func harnessError(err error) error {
+	var se *spawn.Error
+	if errors.As(err, &se) {
+		return &Error{se.Code, se.Message}
+	}
+	return err
 }
 
 // Service is the bot's CredentialStore: the credential rows in the store, the values in the
@@ -82,7 +103,9 @@ type Config struct {
 	Root       string
 	KeyFile    string
 	EnginePath string  // engine.path; "" prints `claude` in the login command
-	Harness    Harness // nil is PendingHarness for Root
+	Harness    Harness // nil is SpawnHarness for Root and Spawn
+	// Spawn is the configured backend; nil is the same-account directory operations.
+	Spawn spawn.Backend
 }
 
 // NewService opens the store file with the key; a missing key refuses (ADR 0022).
@@ -93,7 +116,11 @@ func NewService(st *store.Store, aud *audit.Writer, c Config) (*Service, error) 
 	}
 	h := c.Harness
 	if h == nil {
-		h = PendingHarness{Root: c.Root}
+		b := c.Spawn
+		if b == nil {
+			b = &spawn.SameAccount{}
+		}
+		h = SpawnHarness{Root: c.Root, Backend: b}
 	}
 	return &Service{st: st, aud: aud, vault: v, harness: h, enginePath: c.EnginePath, now: time.Now}, nil
 }
@@ -169,8 +196,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, store.Text(r.ID), store.Text(r.Kind), store.Te
 		return err
 	})
 	if err != nil {
-		if kind == KindAPIKey {
+		switch kind {
+		case KindAPIKey:
 			_ = s.vault.Delete(id)
+		case KindSubscription:
+			_ = s.harness.Remove(r.StoreRef)
 		}
 		return Record{}, err
 	}
