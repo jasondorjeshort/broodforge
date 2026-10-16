@@ -5,7 +5,9 @@ hook from a terminal are `05-debug-interface.md`'s. This is the living spec of w
 receives, how it decides and what it returns. The policy table below is one object in `policy`;
 changing a cell is a design change recorded here, never configuration. A fact marked with a
 claim id was observed on engine 2.1.296 on the PC and is recorded in
-`../findings/2026-10-15-spike-claims-for-adr-0020.md` and `../findings/2026-10-15-spike-claims-for-adr-0022.md`;
+`../findings/2026-10-15-spike-login-claims-for-adr-0020.md`,
+`../findings/2026-10-15-spike-stream-and-process-claims-for-adr-0020.md`,
+`../findings/2026-10-15-spike-hook-flow-claims-for-adr-0020.md` and `../findings/2026-10-15-spike-claims-for-adr-0022.md`;
 the amendments of 2026-10-16 in ADRs 0020 and 0022 are the decisions this text applies.
 
 ## How the engine runs it
