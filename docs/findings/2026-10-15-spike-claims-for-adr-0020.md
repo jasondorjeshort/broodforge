@@ -4,7 +4,7 @@ status: open
 area: spike / engine contract (ADR 0020)
 ---
 
-# C25, S1, C27, C39 and S2 hold on the PC: the piped login, the stream shapes, the defer round trip, the hook exit codes and the tree kill all behave as ADR 0020 assumes
+# C25, S1, C27, C39, S2, C28 and C26 hold on the PC: the piped login, the stream shapes, the defer round trip, the hook exit codes, the tree kill and `--settings` behave as ADR 0020 assumes; a parallel pair in prompt mode is deferred twice, not denied
 
 ## Question
 
@@ -17,9 +17,9 @@ claims are a separate finding.
 | Claim | Host | Verdict | When |
 |---|---|---|---|
 | C25 headless login with `CLAUDE_CONFIG_DIR` | PC | holds, piped form | 2026-10-15, again 2026-10-16 |
-| C26 `--settings` with `--setting-sources user` | PC | open | |
+| C26 `--settings` with `--setting-sources user` | PC | holds; the hook also runs with `--setting-sources ""` | 2026-10-16 |
 | C27 `defer` round trip | PC, then droplet | holds on the PC; the deny reason reaches the model wrapped | 2026-10-16 |
-| C28 parallel calls in prompt mode | PC | open | |
+| C28 parallel calls in prompt mode | PC | holds (no hang, no crash); the engine's deny never fires: both calls deferred, `result` names the last, the first is dropped and re-issued on resume | 2026-10-16 |
 | C29 per-turn overhead | droplet | open | |
 | C39 hook exit codes | PC, exit 2 again on droplet | holds on the PC; exit 2 blocks, wrapped with the hook command; exit 1 and the timeout fall through | 2026-10-16 |
 | S1 stream shape and `modelUsage` delta | PC | holds; AskUserQuestion is absent under `-p` | 2026-10-16 |
@@ -63,6 +63,19 @@ C25, C27 and C39 on the droplet are separate runs of the same claims and are sti
   last --prompt "Continue."`, first attempt, no `CLAUDE_CODE_RESUME_INTERRUPTED_TURN`. Then
   `$RUN --replay` on each of the five directories. Meters: before 5-hour 19%, weekly 5%; after 22%,
   6%, and the last turn's `rate_limit_event` said 0.22 and 0.06.
+- C28 and C26, 2026-10-16, same host, engine and `$FLAGS`, `--model haiku` throughout (Haiku emitted
+  the pair on its first attempt, so the Sonnet attempt was not needed), four engine processes, no
+  `control_request`, `--permission-prompts none` never added. C28 into `$S/fx/parallel`, hook
+  `defer`, `--mode prompt`: turn 1 the plan's prompt; turn 2, outside the plan but inside the budget,
+  `node spike/hook.js mode defer <b.txt id>:allow` then `--resume last` with stdin closed, to see
+  what the other call of the pair gets. C26 into `$S/fx/settings-a` and `settings-b`, hook `allow`:
+  `node spike/setup.js settings --no-hook` (so `$CFG/settings.json` became `{}`), `node
+  spike/setup.js settings --out $S/alt-settings.json` (the template's hook block only), then one
+  Read turn with `--settings $S/alt-settings.json` and `--setting-sources user`, and one more with
+  `--setting-sources ""` (the empty argument is on the recorded command line in `meta-1.json`);
+  `node spike/setup.js settings` restored `$CFG/settings.json` (281 bytes). Meters, shared with the
+  C34 turn in the ADR 0022 finding: before 5-hour 25%, weekly 7%; after 27%, 7%; the last
+  `rate_limit_event` said 0.27 and 0.07.
 
 ## Result
 
@@ -204,18 +217,61 @@ S2 holds, on the retry prompt.
   a kill (clamped `cacheCreationInputTokens` 0 here): that delta should be taken against the last
   `result`'s cumulative, the interrupted row standing as its own record. For the architect.
 
+C28 holds on the plan's terms (the turn ends, exit 0 in 5.3 s, no hang, no crash) but not as ADR
+0020 describes it: nothing falls through to the engine's deny. Session
+`bc31c3ca-5ef2-4dbe-ae49-8387a22c3274`.
+
+- Turn 1: Haiku's first attempt emitted two `Write` `tool_use` blocks in one message,
+  `msg_011Cg5N7YgiSKbzVKCn8DFKz`, arriving as two `assistant` lines with that id and identical
+  `usage`: `toolu_01B5b1rkmDCfPP4aQPdM3VCT` (`a.txt`) and `toolu_01FfytaZavRivXiQSPniauVu`
+  (`b.txt`). `hook.log` shows `PreToolUse` fired for both, 0.6 s apart, each `decided` `defer`.
+  Neither call got a `tool_result` (no `user` line at all); `result` `subtype` `success`,
+  `stop_reason` `tool_deferred`, `num_turns` 1, `permission_denials` `[]`, and `deferred_tool_use`
+  names only the second call (`b.txt`). Neither file was written. The engine's deny text for a
+  parallel call does not exist here: there is nothing to quote.
+- Turn 2, the resume with `b.txt` answered `allow`: the hook fired once more for
+  `toolu_01FfytaZavRivXiQSPniauVu` only (`decided` `answer:allow`), its `tool_result` `is_error`
+  false, `File created successfully at: ...b.txt ...`; `b.txt` holds `b`. The `a.txt` call never
+  fired the hook again and never got a result; the model issued a new `Write` for `a.txt`
+  (`toolu_01DSwcaGCZMPUQgCp2cERJcp`), the hook deferred it, and the process ended `tool_deferred`
+  naming that new id, `a.txt` still absent. The session transcript under `$CFG/projects` carries a
+  `hook_deferred_tool` attachment for both original ids and a `tool_result` for `b.txt` only.
+- So: in prompt mode a parallel pair is deferred call by call, the `result` carries the last
+  deferral, and the first call is dropped, to be re-issued (new id) by the model after the resume.
+  ADR 0020's sentence "parallel tool calls in prompt mode fall through to the engine's deny" and
+  03's one-line notice describe a deny that does not happen; a hook-side rule (deny every call after
+  the first of one message) would need the message id in the hook input, which the spike hook did
+  not log, so whether the input carries it is unobserved. For the architect; the plan's refutation
+  condition (a hang or a crash) was not met, so no fallback is taken here.
+
+C26 holds on both halves. Sessions `11092c22-4838-4626-8bcf-cce61cab09c4` (`--setting-sources
+user`) and `3fa204e6-345a-4185-a522-59ea9219d5b2` (`--setting-sources ""`), one Read each, exit 0
+in 4.9 s and 5.4 s, `stderr-1.txt` empty, the model answered `hello` both times.
+
+- With `$CFG/settings.json` holding `{}`, each run added exactly one `hook.log` line (22 to 23,
+  then 23 to 24): `tool_name` `Read` with the run's `tool_use_id`, `decided` `allow`. The hook could
+  only have come from `--settings $S/alt-settings.json`, so `--settings` is honoured beside
+  `--setting-sources user`, and an empty `--setting-sources` still runs hooks given by `--settings`.
+  Nothing in the Decision changes; the critic's inline alternative (`--settings` with the JSON
+  inline) stays open to the architect as a choice, not a blocker.
+
 ## Next
 
-- The open rows above, in the plan's order: C28, C26 on the PC. C29 and the droplet repeats (C25,
-  C27, C39's exit 2) wait on the droplet operator entries.
+- The PC rows are all closed. The open rows: C29 and the droplet repeats (C25, C27, C39's exit 2)
+  wait on the droplet operator entries.
 - For ADR 0020's amendments: the `[<command>]: ` insert in the exit-2 wrapper (03's strip); the
-  engine's standalone-`sleep` block, which fires before the hook; the delta rule after a killed turn.
+  engine's standalone-`sleep` block, which fires before the hook; the delta rule after a killed turn;
+  the prompt-mode parallel pair (C28): no engine deny, the last deferral in `result`, the first call
+  dropped and re-issued after the resume, so 03's "pending call" is one of two and the notice has
+  nothing to report; whether the hook input carries the message id is the open question there.
 - `$CFG` holds the project owner's login as of 2026-10-16; every PC turn spends his plan, and the
   stream's `rate_limit_event` shows the meters after each turn.
-- Fixtures `basic`, `defer`, `hook-exit2`, `hook-exit1`, `hook-sleep` and `interrupted` are recorded
+- Fixtures `basic`, `defer`, `hook-exit2`, `hook-exit1`, `hook-sleep`, `interrupted`, `parallel`
+  (two turns), `settings-a` and `settings-b` (and `scrub`, the ADR 0022 finding's C34) are recorded
   and replay with no `unknown` for a kind 03 lists (new unknown kinds: `command_lifecycle`,
   `attachment`, `system/permission_denied`, `system/background_tasks_changed`, `system/task_started`,
   `system/task_notification`, `tool_progress`); a person reads every `turn-*.jsonl` (PC username in
   paths) before they move to `fixtures/engine/<name>/`. In `interrupted`, turn 1 is the blocked-sleep
-  case and turns 2 and 3 the kill and the resume. `$S/tree` holds an untracked `hi.txt` from C27.
+  case and turns 2 and 3 the kill and the resume. `$S/tree` holds untracked `hi.txt` (C27) and
+  `b.txt` (C28). `$S/alt-settings.json` is left in place; `$CFG/settings.json` is the template again.
 - `promoted_to` ADR 0020 when the last row closes.
