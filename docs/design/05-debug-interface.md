@@ -137,7 +137,10 @@ configured spawn backend; it is the production form of the spike's throwaway run
 lines as `turn-<n>.jsonl` (`n` counting up in an existing directory, `--resume` taken from the
 previous turn's `init`) plus a `fixture.json` without delays. The recorder redacts nothing: a
 transcript carries whatever the agent read, so record with a credential made for recording and
-read the fixture before committing it; the recorder refuses an `--out` inside a session tree.
+before committing it, have an agent that did not record it read every file with nested JSON
+decoded, confirm no name, email, hostname, path outside the placeholder or repository content
+survives, and report in a few lines what is account-level or personal and cannot be classified by
+a script (the owner decides on that report, never by reading the files); the recorder refuses an `--out` inside a session tree.
 Observe. `session tail --json` for the mapped events; the fixture's `received-<n>.json` for the
 exact `TurnRequest` the fake saw (delivery kind, hook variable names, `systemPromptAppend`,
 `answer`); `engine run --fake <dir> --prompt x | grep '"type":"result"'` for the usage input.
