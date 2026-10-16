@@ -1,38 +1,38 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-15, at commit c36fe4a, by main session (Hatchery coordinator); pausing for usage
+Updated: 2026-10-16, at commit 5e1d10a, by main session (Hatchery coordinator)
 
 ## Now
 
-- origin/main is 99bcab1 (decant upstream fix, base-docs drop on merge, npm reference). Unpushed:
-  6f3ab3e (handoff), c36fe4a (ADR 0010: the anchored `Hatchery base:` line picks patch mode even
-  when merge-base succeeds; update skill step 3 and the README prompt match; reviewed once), and
-  this handoff. Push on the owner's words.
-- `../regenesis1` audited: nothing lost; its next update is patch mode by ADR 0010. Its own handoff
-  still asks for carry-backs that 1c2e559 already made, and its clone has diverged from origin.
-- `../broodforge` (its own session, unpushed): decant re-authored there (fd4bad2), base merged as
-  b4a7b4d, no upstream; its first push is `git push -u origin main`.
-- Session 6c1640c4 holds a grant on both meters until about 22:40 today (ADR 0006); the meters
-  read 5h 50%, 7d 79% (HOLD on both); the weekly one resets Mon 06:00.
+- origin/main was 9d90716. Above it: 437df52 (ADR 0011 record), fe3c759 (ADR 0011 stage 1),
+  5e1d10a (stage 2, reviewed, fixes and the owner's status-line review folded in), and this handoff.
+  The owner asked for the push on 2026-10-16 after a privacy sweep of the four commits (clean;
+  three owner-specific sentences generalised); if `git status -sb` still says ahead, it did not land.
+- This session ran on account jdorje (the status line's account segment); the gate never denied.
+- `../regenesis1` and `../broodforge` run the older base and still read `~/.claude/usage-state.json`,
+  which the new scripts leave in place; their next update brings ADR 0011 (regenesis1 in patch
+  mode by ADR 0010; broodforge's first push is `git push -u origin main`).
 
 ## Next
 
 1. The first decant with the README prompt.
 2. Architect answers the critic reviews of proposals 0003 and 0005 (`docs/design/proposals/README.md`).
-   0005 objection 1a is answered by the reference's removal procedure and the robocopy finding; the
-   rest decides the `wave` skill, the verify-agent `Waits:`, and an ADR 0007 amendment.
 3. Critic review of ADR 0006 as a whole, with the escape-hatch question in `.claude/skills/proposal/brief-critic.md`.
-4. Research `docs/ideas/2026-10-15-review-fixes-amend-or-follow-up.md` (a finding first), and
-   check `docs/ideas/2026-10-15-statusline-command-cwd-relative.md`.
-5. Triage `docs/ideas/` (`triage` skill): the files with no block. Also settle the post-edit
+4. Triage `docs/ideas/` (`triage` skill): the files with no block. Also settle the post-edit
    warning that `docs/design/decisions/README.md` lists no ADRs while `docs.md` says it should.
-6. Sibling work in its own session: the first two-way sync with the build-phase sibling
+5. Research `docs/ideas/2026-10-15-review-fixes-amend-or-follow-up.md` (a finding first; this
+   session amended review fixes three times, twice by autosquash) and check
+   `docs/ideas/2026-10-15-statusline-command-cwd-relative.md`.
+6. Sibling work in its own session: the first two-way sync
    (`docs/ideas/2026-10-13-first-sync-with-the-build-phase-sibling.md`).
 7. The open heredoc finding's Next steps (reproduce on Linux; check the changelog).
 
 ## Waiting on user
 
+- The HOLD deny's pool sentences (ADR 0011, The gate) have not been seen by a human; the status-line
+  segment has (bare email local part, 2026-10-16). Wording is free to change.
+- Deleting `~/.claude/usage-state.json` once every project on this machine runs the new scripts.
 - Deletion of the merged `task/T94` branch on GitHub (the guard denies it here; terminal or UI).
 
 ## Open findings
