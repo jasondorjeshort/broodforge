@@ -20,8 +20,8 @@ on Windows) from `CGO_ENABLED=0 go build -o bin/ ./cmd/broodforge` at the reposi
 directory form: `-o bin/broodforge` writes no `.exe` on Windows), or `go run ./cmd/broodforge`
 (same usage output; its exit code is not the binary's, so exit codes are proven on the binary);
 nothing goes on `PATH`, `go install` is never used. Build before test, always:
-`CGO_ENABLED=0 go build ./...`, the check line, then `CGO_ENABLED=1 go test -race ./...` on Linux and on the PC; every pass
-report states which ran. Command classes are `05-cli-conventions.md`'s (Surface); write commands are
+`CGO_ENABLED=0 go build ./...`, the check line, then `CGO_ENABLED=1 go test -race ./...` on Linux
+and on the PC. Command classes are `05-cli-conventions.md`'s (Surface); write commands are
 socket clients that exit `not-running` until P10's `serve`, so before P10 a write command is proven
 through P2's harness.
 
@@ -218,7 +218,7 @@ resume; `config reload`; `session reach-report`, an empty bind list until P14). 
 `From:` blocks, the system prompt append, the `permission decision` rows with `dropped` and
 `decidedBy` `config` (the `hook bypassed` audit event), the classifier that strips the engine's
 wrapper, usage rows, idle and prompt timeouts with an injectable clock; one goroutine per turn
-reading its engine's events, nothing awaiting another session, `-race` clean on Linux);
+reading its engine's events, nothing awaiting another session, `-race` clean on both hosts);
 `internal/cli/{serve,status,stop,register,session}.go` (`serve` steps 1 to 8, dry-run only; the
 harness of P2 retires into it); `tests/repro/full-session.sh` and `tests/repro/defer-resume.sh`,
 both reading `session tail` and `audit` only. Mid-pass commit after (a) lifecycle, registration, a

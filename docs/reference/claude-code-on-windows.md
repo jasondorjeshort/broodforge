@@ -81,6 +81,17 @@ source: observed (Go toolchain and mingw-w64 observed 2026-10-16; npm behaviour 
   forces `CGO_ENABLED=0 go build ./...` and the test line sets `CGO_ENABLED=1 go test -race ./...`
   (ADR 0023).
 - `CGO_ENABLED=1 go test -race ./...` is the check that the compiler still works.
+- A process started before the `PATH` change does not see gcc: `go env CGO_ENABLED` prints `0` and
+  `go test -race` fails with `cgo: C compiler "gcc" not found`. Restart Claude Code, or put the
+  directory first on `PATH` for the one command. PowerShell:
+  `$env:Path = "C:\msys64\ucrt64\bin;" + $env:Path; $env:CGO_ENABLED = "1"; go test -race ./...`.
+  Git Bash: `PATH="/c/msys64/ucrt64/bin:$PATH" CGO_ENABLED=1 go test -race ./...`.
+- Reinstall: `winget install --id MSYS2.MSYS2 -e` (elevated PowerShell); in the "MSYS2 UCRT64" shell
+  `pacman -S --needed --noconfirm mingw-w64-ucrt-x86_64-gcc`; then, in PowerShell as the owner, the
+  user-scope append (no other entry is touched):
+  `[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\msys64\ucrt64\bin", "User")`.
+  Check in a new shell: `gcc --version`; `go env CGO_ENABLED` prints `1`.
+- The `broodforge` instance account never runs tests and needs none of this.
 
 ## Shared state
 

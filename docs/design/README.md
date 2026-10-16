@@ -77,7 +77,7 @@ Decisions so far:
   CLI, the hook and the tests: a pinned toolchain, disgo behind a narrow `discord` package with
   arikawa as the exit, zombiezen over modernc for SQLite with the audit authorizer, x/sys job
   objects on Windows, the standard library elsewhere, one static binary per host that is also the
-  sandbox entry wrapper; `-race` on Linux always and on the PC after an operator step; the engine
+  sandbox entry wrapper; `-race` on both hosts; the engine
   stream never refuses an unknown field; 0020's Agent SDK route closed. Amends 0020, 0021 and the
   0022 companion.
 
