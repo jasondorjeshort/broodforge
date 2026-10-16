@@ -353,6 +353,11 @@ const GR = [
   ['GR22', '$g="git"; & $g push -f', 'PowerShell', null, 19],
   ['GR23', '$a="push","-f"; git @a', 'PowerShell', null, 19],
   ['GR24', '$h = git rev-parse HEAD', 'PowerShell', null, 'allow'],
+  // A quoted string that only contains "git" does not make an expansion command word a git suspect.
+  ['GR24a', 'g=git; & $g push --force', 'Bash', null, 19],
+  ['GR24b', "$g = 'git'; & $g push --force", 'PowerShell', null, 19],
+  ['GR24c', String.raw`grep -r '\.git' . | $filter`, 'Bash', null, 'allow'],
+  ['GR24e', String.raw`powershell -NoProfile -Command "Get-ChildItem -Path '~' -Recurse -Depth 5 -Filter package.json -ErrorAction SilentlyContinue | Where-Object { \$_.FullName -notmatch '\\(node_modules|AppData|\.git)(\\|$)' } | ForEach-Object { try { \$j = Get-Content -LiteralPath \$_.FullName -Raw | ConvertFrom-Json; [pscustomobject]@{ Path=\$_.FullName; Name=\$j.name; Folder=\$_.Directory.Name; Desc=\$j.description; Bin=(\$j.bin | ConvertTo-Json -Compress); Deps=(\$j.dependencies.PSObject.Properties.Name -join ','); Modified=\$_.LastWriteTime.ToString('yyyy-MM-dd') } } catch { } } | Where-Object { \$_.Name -in @('bot-folder','project') -or \$_.Folder -in @('bot-folder','project') } | Format-List" 2>&1; echo "exit=$?"`, 'Bash', null, 'allow'],
   // PowerShell launchers.
   ['GR25', 'Start-Process git -ArgumentList "push --force"', 'PowerShell', null, 1],
   ['GR26', 'Start-Process git -ArgumentList "push","--force"', 'PowerShell', null, 1],

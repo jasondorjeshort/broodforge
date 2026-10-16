@@ -549,9 +549,17 @@ function opaqueCommand(cmd, mentionsGit) {
   return !(cmd.words[k].match(/[\/\\]/) && last && !/[$\0{}]/.test(last) && !isGit(last));
 }
 
+// True when a word the parser produced names git: an unquoted word with a git token in it (G=git,
+// git, /usr/bin/git), or a quoted word that is git alone ($g = 'git'). A quoted string that merely
+// contains git (a regex, a message, a .git path part) does not count.
+function namesGit(w, quoted) {
+  if (!quoted) return /(^|[^A-Za-z0-9_-])git(\.exe)?([^A-Za-z0-9_-]|$)/i.test(w);
+  return /^(\$?[A-Za-z_:][A-Za-z0-9_:]*=)?([^\s]*[\/\\])?git(\.exe)?$/i.test(w);
+}
+
 function decide(command, dialect, agent, cwd, loaded) {
   const cmds = commandsOf(command, dialect, cwd);
-  const mentionsGit = /(^|[^A-Za-z0-9_-])git(\.exe)?([^A-Za-z0-9_-]|$)/i.test(command);
+  const mentionsGit = cmds.some(({ cmd }) => cmd.words.some((w, k) => namesGit(w, cmd.quoted && cmd.quoted[k])));
   const invs = [];
   for (const { cmd, dir } of cmds) {
     invs.push(...invocations(cmd, dir));

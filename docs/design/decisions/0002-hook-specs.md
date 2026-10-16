@@ -58,7 +58,9 @@ an abbreviated long option of four or more characters becomes every guarded opti
 each subcommand's value-taking options drop their value (`VALUE_OPTS` in the code), so `-m "-n"` and
 `-mnote` are a message, not `-n`, and `-m "add $f"` is not opaque. An invocation is opaque when a
 remaining argument is, when a `-c`/`--config-env` value is, or when `xargs` runs it (xargs appends
-arguments from stdin). A command whose command word is opaque, in a line that names git, is an
+arguments from stdin). A command whose command word is opaque, in a line that names git (a parsed word that
+is or contains a git token and is unquoted, or a quoted word that is git alone, as in `$g = 'git'`; a quoted
+string that merely contains git, such as a regex or a `.git` path part, does not), is an
 invocation with an unknown subcommand, unless it is a PowerShell assignment (`$h = git ...`) or the
 word ends in a literal file name that is not git (`$(dirname "$0")/check.sh`).
 
