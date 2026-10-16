@@ -3,8 +3,7 @@
 Companion to `05-debug-interface.md`, which points here from its Registration and participants,
 Session lifecycle without Discord and Prompt-mode defer and resume sections. The service is
 `03-architecture.md`'s `session` row and Data flow; a trace line's wording is `04-ux.md`'s, the
-owner's; conventions are `05-cli-conventions.md`'s. P10 builds it in two halves: what is marked
-(b) below is the second's.
+owner's; conventions are `05-cli-conventions.md`'s.
 
 ## Registration and participants
 
@@ -37,66 +36,105 @@ Drive. `broodforge session start --channel <id> --as <user id> [--roles <ids>] [
 <n>] [--prompt-timeout-seconds <n>]` prints the session id (`s0001`); `--reach`, `--fixture` and
 the timeouts are dry-run only (`live-instance`). `--credential` defaults to the driver's
 (`no-credential` without one; R-41: `credential-not-usable: <id> is <status>`); `--fixture` is a
-name under `engine.fakeFixtures` or a path, default `basic` (`unknown-fixture`; a broken `fixture.json` is `bad-fixture`). A start refused before its row
-writes `action-refused` and leaves nothing; one that fails later (the clone, the fake, the store) also
-removes the tree and `refs/sessions/<id>` and keeps the row as `ended`, outcome `refused: <code>`, so no
-id is reused; the refusal names the stage and keeps the git or fixture code.
-`session send <id> --as <user id> [--roles <ids>] [--wait] [--tail] "<text>"` (or `-`
-for stdin) calls `SessionService.submit` and prints `turn  <n>  started|queued` (a message during
-a turn waits for the next, one `From: <name> (<role>)` block each, 03); `--wait` returns at the
-turn's end, exit 0, printing `turn-ended  <n>  completed|error|interrupted|deferred` instead
-((b): `waiting-for-answer` and the call); `--tail` streams the turn's events meanwhile and, without
-`--wait`, prints the start line after them. (b): `session mode <id> prompt|policy`, `session
-interrupt <id>`, `session end <id>` (the end-of-session sequence; the closing turn against the
-fake when a fixture named `closing` exists, `--no-closing-turn` skips it) and `session invite <id>
---user <user id>`, with `--as` and `--roles` as above (`mode` and `invite` need the driver,
-`interrupt` and `end` the `answer` list). `session list [--state <state>]` prints `<id>  <state>
-<channel>  <driver>  <mode>  <reach>  <turns>  <started at>`. `session show <id>` prints `session:
-<id>  <state>  <channel>  <project>  <driver>  <mode>  <reach>  <harness>`, `credential: <id>`,
-`engine-session: <id or ->`, `turns: <n>`, the `participants:` lines, `worktree: <path>
-<branch>  <state>` and `pending: -` ((b): `pending: <tool use id>  <tool>  <target>  since <time>
-until <deadline>`). `session tail <id> [--follow] [--since <seq>] [--limit <n>|--all]` prints
-`<seq>  <time>  <type>  <summary>`. Types: `session-started` (04's header line, `Session <id> on
-<project>, branch <branch>, driver <name>.`), `participant-joined`, `message-queued`,
+name under `engine.fakeFixtures` or a path, default `basic` (`unknown-fixture`; a broken
+`fixture.json` is `bad-fixture`). A start refused before its row writes `action-refused` and
+leaves nothing; one that fails later (the clone, the fake, the store) also removes the tree and
+`refs/sessions/<id>` and keeps the row as `ended`, outcome `refused: <code>`, so no id is reused;
+the refusal names the stage and keeps the git or fixture code. `session send <id> --as <user id>
+[--roles <ids>] [--wait] [--tail] "<text>"` (or `-` for stdin) calls `SessionService.submit` and
+prints `turn  <n>  started|queued` (a message during a turn, or while it waits for an answer,
+waits for the next turn, one `From: <name> (<role>)` block each, 03); `--wait` returns at the
+turn's end or its wait for an answer, exit 0, printing `turn-ended  <n>
+completed|error|interrupted|deferred` or `waiting-for-answer  <n>  <tool use id> [<tool>]
+<target>` instead; `--tail` streams the turn's events meanwhile and, without `--wait`, prints the
+start line after them. `session mode <id> prompt|policy` (the driver; from the next turn) prints
+`mode-changed  <next turn>  <mode>`. `session interrupt <id>` (the `answer` list) stops the
+running turn and prints `turn-ended  <n>  interrupted` once it ended; while a call waits for an
+answer it denies the call with the reason `interrupted` and ends the turn without a resume (the
+default until the owner decides); otherwise `no-running-turn`. `session end <id>
+[--no-closing-turn]` (the `answer` list) runs 03's end of session: a running turn interrupted,
+then the handoff, printing its line as `worktree handoff` does; a refused handoff
+(`handoff-refused-*`, its failing commits streamed first) keeps the session open, waiting for
+input (after an idle end the idle timer waits for the next activity: one attempt); anything else
+ends it. Ending (end, idle, `stop`) while a call waits records it `dropped`, decider `instance`,
+with the cause (`the session ended`, `the session ended: no activity`, `the bot stopped`), and
+ends its turn (`turn-ended`, result `interrupted`); each queued message is dropped with a
+`message-dropped` event and an `action-refused` row. The closing turn that
+writes the pull request is not run yet (no `closing` fixture; the fallback title stands), so
+`--no-closing-turn` changes nothing. `session invite <id> --user <user id>` (the driver) prints
+the invited registration and writes `participant-invited`; the invitee becomes a participant on
+their first message (R-13), so no co-author line is owed for an invitation alone. `session list
+[--state <state>]` prints `<id>  <state>  <channel>  <driver>  <mode>  <reach>  <turns>  <started
+at>`. `session show <id>` prints `session: <id>  <state>  <channel>  <project>  <driver>  <mode>
+<reach>  <harness>`, `credential: <id>`, `engine-session: <id or ->`, `turns: <n>`, the
+`participants:` lines, `worktree: <path>  <branch>  <state>` and `pending: -`, or while waiting
+`pending: <tool use id>  <tool>  <target>  since <time>  until <deadline>`. `session tail <id>
+[--follow] [--since <seq>] [--limit <n>|--all]` prints `<seq>  <time>  <type>  <summary>`.
+Types: `session-started` (04's header line, `Session <id> on <project>, branch <branch>, driver
+<name>.`), `participant-joined`, `participant-invited` (`<name> was invited.`), `message-queued`, `message-dropped` (`<cause>: <text>`),
 `turn-started` (the input's first 80 characters), `text` (its first 80), `tool-call` (04's trace
-line, `[<tool>] <target>`), `permission-decision` (`<decision> [<tool>] <target> (<decided by>)`),
-`tool-result` (the trace line, with 04's outcome after ` -> ` when the call was denied, blocked,
-bypassed or failed), `waiting-for-answer` (b), `turn-ended` (the stop reason, or `interrupted`),
-`session-interrupted`. A decision row's decider is `policy` (the hook answered from the table),
-`hook` (it failed: exit 2, `hook:`, audited `action-refused` with actor `hook`), `config` (the
+line, `[<tool>] <target>`), `permission-decision` (`<decision> [<tool>] <target> (<decided
+by>)`), `tool-result` (the trace line, with 04's outcome after ` -> ` when the call was denied,
+blocked, bypassed or failed), `waiting-for-answer` (`<tool use id> [<tool>] <target>`),
+`mode-changed` (04's `From the next turn: asks first.` or `acts freely.`), `turn-ended` (the stop
+reason, or `interrupted`), `handoff-refused`, `session-ended` (`Session <id> ended by <name>.`, or
+04's `Session <id> ended: no activity for <n> minutes.`), `session-interrupted`. A decision row's
+decider is `policy` (the hook answered from the table; also the `deferred` row, and the `dropped`
+row of every other call of that message, C28), `participant` or `prompt-timeout` (an answer),
+`instance` (dropped as its session ended), `hook` (it failed: exit 2, `hook:`, audited `action-refused` with actor `hook`), `config` (the
 engine's default: audited `hook-bypassed`), or `unknown` (no source in the stream); a tool's own
-`<tool_use_error>` gets no row (03-hook-contract.md, What the bot sees). The events are the bot's,
-in memory: without the bot `tail` is `not-running`, and a session an earlier run held is
-`session-closed`. P11 (the renderer, `05-debug-interface-discord.md`): `session outbox <id>
-[--follow]` prints the dry-run renderer's posts: `<seq>  <time>  create|edit|attach  <message id>
-<length>  <first line>`, `--json` with the full body; `session transcript <id> [--out <file>]`
-prints 04's Markdown transcript as the summary would attach it; `broodforge panel post <channel
-id>` posts or refreshes the project channel's panel (04) and records its message id in the
-store, which `panel show <channel id>` prints back; on a dry-run instance it lands in the outbox.
-`session reach-report <id>` is (b), in 05 (Spawn preflight and reach).
+`<tool_use_error>` gets no row (03-hook-contract.md, What the bot sees). Each engine process's
+usage is one record per model, written with the turn row before `turn-ended` (N-21): the result's
+`modelUsage` minus the engine session's last result, or for a process without a result the
+deduplicated assistant counts, no output, flagged interrupted and never a baseline (S2);
+`harness_ref` is `<session id>/<engine session id>/<turn>.<process>/<model>`. The events are the bot's, in
+memory: without the bot `tail` is `not-running`, and a session an earlier run held is
+`session-closed`. `session reach-report <id>` prints one `<tools>  <cell under the tree or
+canonical>  <cell elsewhere>` line per row of the policy table for the session's reach (`*` for
+every other tool), then `binds: -`, the empty bind list until P14; `--json` both; `--expect` the
+reach. P11 (the renderer, `05-debug-interface-discord.md`): `session outbox <id> [--follow]`
+prints the dry-run renderer's posts: `<seq>  <time>  create|edit|attach  <message id>  <length>
+<first line>`, `--json` with the full body; `session transcript <id> [--out <file>]` prints 04's
+Markdown transcript as the summary would attach it; `broodforge panel post <channel id>` posts or
+refreshes the project channel's panel (04) and records its message id in the store, which `panel
+show <channel id>` prints back; on a dry-run instance it lands in the outbox.
 Observe. `session show`, `session tail --json` (every field: tool, target, decision, decided by,
 reason, result), `audit --kind permission-decision --session <id>`, the fake's
-`sessions/<id>/fake/received-<n>.json` (the exact `TurnRequest`), `usage --session <id>` (b).
+`sessions/<id>/fake/received-<n>.json` (the exact `TurnRequest`), `usage --session <id> --by turn
+--json` (its `raw` holds the model's cumulative `modelUsage` and the delta recorded).
 Reproduce. A whole R-51 run in one line: `scratch run -- bash tests/repro/full-session.sh`:
 `serve &`, `status --wait 10 --expect ok`, `register 1001 ...`, the refused start, `session start
 --channel 100 --as 1001 --roles 10 --credential cred-scratch --mode policy --fixture basic`,
 `session send s0001 --as 1001 --wait "..."`, then `session tail` and `audit` checked line by
-line, `worktree handoff s0001 --expect none`, `stop`; (b) and P11 add `session answer`, `session
-outbox` and `session end`.
+line, `session reach-report`, `usage`, `config reload`, `worktree handoff s0001 --expect none`,
+`stop`; P11 adds `session outbox`.
 Isolation. All of it in the scratch root against the fake; the socket under the root.
 
-## Prompt-mode defer and resume (b)
+## Prompt-mode defer and resume
 
-Drive. On a prompt-mode session with the fixture `fixtures/engine/defer/` (turn 1 ends
-`stop_reason: tool_deferred`, turn 2 is the resumed turn): `session send s0001 --as 1001 --wait
-"edit a.ts"` prints `waiting-for-answer toolu_01 Write a.ts`; `session answer s0001 toolu_01
-allow|deny [--as <user id>] [--roles <ids>]` calls `SessionService.answer` and the resumed turn's
-events follow in `session tail`. The idle timeout is driven with `--idle-timeout-seconds 2` at
-start and observed as `session-ended` with reason `idle`; `--prompt-timeout-seconds 2` with no
-answer shows the timeout trace line (`denied: the prompt timed out`) in `session outbox`.
-Observe. `session show` prints `pending: toolu_01 Write a.ts since <time> until <deadline>`;
-`received-2.json` carries `answer` and `engineSessionId`; `session outbox` has the buttons post,
-custom id `bf:s0001:toolu_01:allow`.
-Reproduce. `scratch run -- bash tests/repro/defer-resume.sh` [no-check: P10 half b writes it]; an
-answer refused for roles is `session answer ... --roles 11 --expect refused`.
+Drive. On a prompt-mode session (channel `100` of a scratch root) with the fixture `defer` (turn 1
+ends `stop_reason: tool_deferred`; its resume is the fixture's turn 2): `session send s0001 --as
+1001 --wait "write hi.txt"` prints `waiting-for-answer  1  <tool use id> [Write] <target>`;
+`session answer <id> allow|deny|allow-session [--tool-use-id <id>] [--reason <text>] [--as <user
+id>] [--roles <ids>] [--wait] [--tail]` calls `SessionService.answer` (the channel's `answer`
+list; a driver-only list refuses others with 04's `Only <name> (the driver) can answer this.`;
+`--tool-use-id`, when given, must be the pending call, `not-pending`; nothing pending is
+`no-pending`), prints `turn  <n>  resumed` or with `--wait` the outcome, and the resumed process
+(the answer in `BROODFORGE_ANSWER`, no stdin line, C27) continues the same turn in `session
+tail`. `allow-session` also puts the tool in `BROODFORGE_SESSION_ALLOW` from that resume on (04,
+Owner 6); `--reason` on a deny is `BROODFORGE_ANSWER_REASON` (with an allow it is `bad-args`: the agent sees no reason for an allow); a resume that cannot start ends the turn as an error and the answer is `resume-failed`. The prompt timeout
+(`--prompt-timeout-seconds <n>` at start, else the channel's minutes) denies the pending call with
+the reason `the prompt timed out after <n> minutes|seconds`, decider `prompt-timeout`, and the
+turn finishes: the trace line `[<tool>] <target> -> denied: the prompt timed out after <n>
+minutes.` (04). The idle timeout (`--idle-timeout-seconds <n>`) runs from the last turn's end, or
+the start of a wait, and ends the session (`session-ended`, reason `idle` in `audit`); the two
+timers are independent (R-53). Both run on the service's clock, which the tests replace
+(`session.ManualClock`). With the fixture `parallel`, the message's two Writes leave one
+`deferred` and one `dropped` row.
+Observe. `session show` prints `pending: <tool use id>  Write  <target>  since <time>  until
+<deadline>` while waiting; `received-2.json` carries `answer` and `engineSessionId`; `audit --kind
+permission-decision` the deferred, dropped and answered calls; P11's `session outbox` the buttons
+post, custom id `bf:s0001:<tool use id>:allow`.
+Reproduce. `scratch run -- bash tests/repro/defer-resume.sh`; an answer refused for roles is
+`session answer s0001 allow --as 1001 --roles 11 --expect refused`.
 Isolation. Against the real engine this is spike C27 (`engine run --real --resume`), not scratch.

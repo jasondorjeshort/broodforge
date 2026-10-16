@@ -126,3 +126,12 @@ func (l *eventLog) follow(ctx context.Context, seq int64, fn func(Event) (stop b
 		}
 	}
 }
+
+// Events P10 half (b) adds: prompt mode's answers, the mode switch, an invitation, the end.
+const (
+	EventModeChanged        EventType = "mode-changed"
+	EventParticipantInvited EventType = "participant-invited"
+	EventHandoffRefused     EventType = "handoff-refused"
+	EventSessionEnded       EventType = "session-ended"
+	EventMessageDropped     EventType = "message-dropped"
+)

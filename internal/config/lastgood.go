@@ -65,13 +65,13 @@ func WriteLastGood(root string, c *Config) error {
 	old := ""
 	if _, err := os.Stat(final); err == nil {
 		old = final + ".old-" + filepath.Base(tmp)
-		if err := os.Rename(final, old); err != nil {
+		if err := renameRetry(final, old); err != nil {
 			return err
 		}
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	if err := os.Rename(tmp, final); err != nil {
+	if err := renameRetry(tmp, final); err != nil {
 		if old != "" {
 			_ = os.Rename(old, final)
 		}
@@ -111,4 +111,36 @@ func recoverLastGood(root string) {
 	if len(olds) == 1 {
 		_ = os.Rename(olds[0], final)
 	}
+}
+
+// Rename retries: 5 tries, 50 ms apart.
+const (
+	renameTries = 5
+	renamePause = 50 * time.Millisecond
+)
+
+// renameRetry is os.Rename retried while it fails for permission. Observed once in ten `serve`
+// starts on the PC (2026-10-16, P10): the rename of the freshly written last-good directory
+// failed with `Access is denied`, unreproduced, most likely another process (a scanner or the
+// indexer) holding a file just written in it. On Windows ERROR_ACCESS_DENIED is fs.ErrPermission;
+// a sharing violation has no host-neutral sentinel and is not retried. Any other error, or the
+// fifth failure, is returned as is.
+func renameRetry(from, to string) error {
+	var err error
+	for i := 0; i < renameTries; i++ {
+		if i > 0 {
+			time.Sleep(renamePause)
+		}
+		if err = os.Rename(from, to); err == nil || !errors.Is(err, fs.ErrPermission) {
+			return err
+		}
+	}
+	return err
+}
+
+// LastGoodInstanceName is instanceName of the last-good copy, read alone as InstanceName reads
+// config/'s: a client whose config/ names another instance than the bot runs as (an edit not
+// yet reloaded, or one the bot refused) still finds the bot under the name it started with.
+func LastGoodInstanceName(root string) (string, error) {
+	return readInstanceName(slashJoin(LastGoodDir(root), "instance.json"))
 }

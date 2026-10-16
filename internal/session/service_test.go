@@ -19,19 +19,16 @@ import (
 	"github.com/jasondorjeshort/broodforge/internal/store"
 )
 
-// testClock is the injectable clock: a fixed time each test moves by hand.
-type testClock struct{ t time.Time }
-
-func (c *testClock) now() time.Time { return c.t }
-
 type harness struct {
 	svc   *Service
 	st    *store.Store
 	root  string
-	clock *testClock
+	clock *ManualClock
 
 	mu      sync.Mutex
 	removed []string // the sessions RemoveTree was called for
+	// handoff, when set, is what the end of session gets from the handoff; nil hands nothing off.
+	handoff func(id string) (git.Outcome, error)
 }
 
 func exec(t *testing.T, st *store.Store, stmts ...string) {
@@ -77,10 +74,10 @@ func newHarness(t *testing.T, fixtureDir string, dryRun bool) *harness {
 		"100": {ID: "100", Project: "p", ProjectName: "Project P", Reach: "code", Mode: "policy", Harness: "fake", Roles: roles, Repo: repo},
 		"200": {ID: "200", Project: "p", ProjectName: "Project P", Reach: "read-only", Mode: "policy", Harness: "fake", Roles: roles, Repo: repo},
 	}
-	clock := &testClock{t: time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)}
+	clock := NewManualClock(time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC))
 	h := &harness{st: st, root: root, clock: clock}
 	h.svc = New(Config{
-		Root: root, Instance: "test", DryRun: dryRun, RoleGroups: map[string][]string{"trusted": {"10"}},
+		Root: root, Instance: "test", DryRun: dryRun, Groups: func() map[string][]string { return map[string][]string{"trusted": {"10"}} },
 		Channel:  func(id string) (Channel, bool) { ch, ok := channels[id]; return ch, ok },
 		Fixtures: fx,
 		Engine: func(harness, fixture, received string) (engine.Engine, error) {
@@ -92,13 +89,22 @@ func newHarness(t *testing.T, fixtureDir string, dryRun bool) *harness {
 		CreateTree: func(_ context.Context, s git.Session) (string, error) {
 			return "base", os.MkdirAll(filepath.FromSlash(s.Dir()+"/tree"), 0o750)
 		},
+		Handoff: func(_ context.Context, id string) (git.Outcome, error) {
+			h.mu.Lock()
+			f := h.handoff
+			h.mu.Unlock()
+			if f == nil {
+				return git.Outcome{Outcome: git.OutcomeNone}, nil
+			}
+			return f(id)
+		},
 		RemoveTree: func(_ context.Context, s git.Session) error {
 			h.mu.Lock()
 			h.removed = append(h.removed, s.ID)
 			h.mu.Unlock()
 			return os.RemoveAll(filepath.FromSlash(s.Dir() + "/tree"))
 		},
-		Store: st, Audit: audit.NewWriter(nil), Now: clock.now,
+		Store: st, Audit: audit.NewWriter(nil), Clock: clock,
 	})
 	return h
 }
@@ -289,9 +295,9 @@ func TestQueuedMessageJoinsAsContributor(t *testing.T) {
 	if !strings.Contains(string(b), `"engineSessionId": "f0451bd7-4428-40b5-a52e-ad6b604c210a"`) {
 		t.Errorf("turn 2 is not a resume:\n%s", b)
 	}
-	// The contributor is now a co-author line.
+	// The contributor is now a co-author line, then the model that has usage (03, Attribution).
 	tr, err := os.ReadFile(filepath.FromSlash(git.TrailersPath(h.root + "/sessions/s0001")))
-	if err != nil || string(tr) != "Co-Authored-By: Sam Example <sam@example.com>\n" {
+	if err != nil || string(tr) != "Co-Authored-By: Sam Example <sam@example.com>\nCo-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>\n" {
 		t.Errorf("trailers %q, %v", tr, err)
 	}
 }
@@ -383,7 +389,7 @@ func TestReconcileAtStart(t *testing.T) {
 VALUES ('s0001', '100', 'p', '1001', 'running-turn', 'fake', 'cred-a', 'policy', 'code', '2026-10-16T00:00:00Z')`,
 		`INSERT INTO worktree (path, project_id, session_id, branch, state, created_at)
 VALUES ('`+h.root+`/sessions/s0001/tree', 'p', 's0001', 'b', 'active', '2026-10-16T00:00:00Z')`)
-	findings, err := Reconcile(h.st, audit.NewWriter(nil), h.root, h.clock.t)
+	findings, err := Reconcile(h.st, audit.NewWriter(nil), h.root, h.clock.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

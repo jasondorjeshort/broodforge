@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -68,6 +69,7 @@ const defaultStopTimeout = 30 * time.Second
 // bot is one running instance: what the startup steps opened and the handlers serve.
 type bot struct {
 	root       string
+	mu         sync.Mutex // guards cfg and lastGood, which config reload replaces
 	cfg        *config.Config
 	lastGood   *time.Time // set when the bot runs on data/config-last-good/
 	discord    string
@@ -76,6 +78,7 @@ type bot struct {
 	creds      *credentials.Service
 	backend    spawn.Backend
 	svc        *session.Service
+	wt         *WorktreeService
 	srv        *control.Server
 	addr       string
 	stopReq    chan stopRequest
@@ -247,7 +250,11 @@ func startBot(env *Env) (*bot, error) {
 		return fail(stepCredentials, err)
 	}
 	b.cfg = c
-	if err := b.recordConfig(loadErr); err != nil {
+	var invalid error
+	if b.lastGood != nil {
+		invalid = loadErr
+	}
+	if _, err := b.recordConfig(c, invalid, "last-good"); err != nil {
 		return fail(stepConfig, err)
 	}
 
@@ -294,9 +301,12 @@ func startBot(env *Env) (*bot, error) {
 		return fail(stepReconcile, err)
 	}
 
+	b.wt = &WorktreeService{Root: root, Config: c, Current: b.config, Store: b.st, Audit: b.aud, Backend: b.backend,
+		Secret: b.creds.Secret}
 	b.svc = session.New(session.Config{
 		Root: root, Instance: c.Instance.InstanceName, DryRun: b.discord == config.DiscordDryRun,
-		RoleGroups: c.Instance.RoleGroups, Channel: b.channel, Fixtures: fixturesDir(c),
+		Groups:  func() map[string][]string { return b.config().Instance.RoleGroups },
+		Channel: b.channel, Fixtures: fixturesDir(c), Handoff: b.wt.Handoff,
 		Engine: b.engine, CreateTree: func(ctx context.Context, s git.Session) (string, error) {
 			return git.Create(ctx, b.backend, s)
 		},
@@ -324,11 +334,12 @@ func fixturesDir(c *config.Config) string {
 
 // channel translates one configured channel for the session service, defaults merged in.
 func (b *bot) channel(id string) (session.Channel, bool) {
-	p := b.cfg.ChannelProject(id)
+	c := b.config()
+	p := c.ChannelProject(id)
 	if p == nil {
 		return session.Channel{}, false
 	}
-	e := b.cfg.Effective(p, id)
+	e := c.Effective(p, id)
 	deref := func(s *string) string {
 		if s == nil {
 			return ""
@@ -354,14 +365,30 @@ func (b *bot) engine(harness, fixture, received string) (engine.Engine, error) {
 	return nil, fmt.Errorf("harness %s: want %s or %s", quoteArg(harness), config.HarnessClaudeCode, config.HarnessFake)
 }
 
-// recordConfig is ADR 0021's load record: on a valid config/, the last-good copy rewritten and
-// configuration-changed with the file hash and the changed top-level keys; on the last-good
-// fallback, configuration-invalid with the errors.
-func (b *bot) recordConfig(loadErr error) error {
-	if b.lastGood != nil {
-		return b.st.Write(func(tx *store.Tx) error {
+// config is the configuration as loaded now; lastGoodAt is when the last-good copy it runs on
+// was written, nil when it runs on config/. config reload replaces both.
+func (b *bot) config() *config.Config {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.cfg
+}
+
+func (b *bot) lastGoodAt() *time.Time {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.lastGood
+}
+
+// recordConfig is ADR 0021's load record: for a valid config/ (invalid nil), the last-good
+// copy rewritten and configuration-changed with the file hash and the changed top-level keys,
+// which it returns (keys, when given, are those changed keys: a reload's, against the running
+// configuration); for an invalid one, configuration-invalid with the errors and what the bot
+// runs on instead (the last-good copy at start, the previous configuration at a reload).
+func (b *bot) recordConfig(c *config.Config, invalid error, using string, keys ...string) (string, error) {
+	if invalid != nil {
+		return "", b.st.Write(func(tx *store.Tx) error {
 			_, err := b.aud.Append(tx, audit.Event{Kind: audit.KindConfigurationInvalid, Actor: session.ActorInstance,
-				Details: session.Details("errors", control.OneLine(loadErr.Error()), "using", "last-good")})
+				Details: session.Details("errors", control.OneLine(invalid.Error()), "using", using)})
 			return err
 		})
 	}
@@ -369,16 +396,19 @@ func (b *bot) recordConfig(loadErr error) error {
 	if lg, err := config.LoadLastGood(b.root, config.AnyCredential); err == nil {
 		prev = lg
 	}
-	if err := config.WriteLastGood(b.root, b.cfg); err != nil {
-		return err
+	if err := config.WriteLastGood(b.root, c); err != nil {
+		return "", err
 	}
 	h := sha256.New()
-	for _, f := range b.cfg.Files {
+	for _, f := range c.Files {
 		h.Write([]byte(f.Name + "\n"))
 		h.Write(f.Raw)
 	}
-	changed := strings.Join(changedKeys(prev, b.cfg), ",")
-	return b.st.Write(func(tx *store.Tx) error {
+	if keys == nil {
+		keys = changedKeys(prev, c)
+	}
+	changed := strings.Join(keys, ",")
+	return changed, b.st.Write(func(tx *store.Tx) error {
 		_, err := b.aud.Append(tx, audit.Event{Kind: audit.KindConfigurationChanged, Actor: session.ActorInstance,
 			Details: session.Details("hash", hex.EncodeToString(h.Sum(nil)), "changed", changed)})
 		return err
@@ -449,11 +479,11 @@ func (b *bot) started() error {
 // store file (cli.go, execute).
 func (b *bot) register(reg *control.Registry) {
 	CredentialHandlers(b.creds)(reg)
-	WorktreeHandlers(&WorktreeService{Root: b.root, Config: b.cfg, Store: b.st, Audit: b.aud, Backend: b.backend,
-		Secret: b.creds.Secret})(reg)
+	WorktreeHandlers(b.wt)(reg)
 	SessionHandlers(b.svc)(reg)
 	reg.Handle("status", b.status)
 	reg.Handle("stop", b.stop)
+	reg.Handle("config.reload", b.reload)
 }
 
 // stop is `stop [--timeout 30]`: 03's shutdown, answered after the sessions are interrupted

@@ -120,6 +120,11 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if taken < len(names) {
 		return inv.fail(&usageError{cmd.Name + ": missing <" + names[taken] + ">"})
 	}
+	for _, name := range required[cmd] {
+		if env.values[name].s == "" {
+			return inv.fail(&usageError{cmd.Name + ": --" + name + " is required"})
+		}
+	}
 	if inv.root == "" {
 		inv.root = os.Getenv(RootEnv)
 	}
@@ -346,6 +351,8 @@ func commandUsage(c *Command) string {
 		}
 		if f.Kind == FlagBool {
 			b.WriteString(" [--" + f.Name + "]")
+		} else if isRequired(c, f.Name) {
+			b.WriteString(" --" + f.Name + " " + f.Value)
 		} else {
 			b.WriteString(" [--" + f.Name + " " + f.Value + "]")
 		}
@@ -364,4 +371,18 @@ func commandUsage(c *Command) string {
 		b.WriteString(" <" + n + ">")
 	}
 	return b.String()
+}
+
+// required names, per command, the string flags it cannot run without, shown without brackets
+// in its usage line (`session invite <id> --user <user id>`); a missing one is a usage error.
+// A command file fills it from its own init().
+var required = map[*Command][]string{}
+
+func isRequired(cmd *Command, name string) bool {
+	for _, n := range required[cmd] {
+		if n == name {
+			return true
+		}
+	}
+	return false
 }

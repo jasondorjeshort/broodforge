@@ -4,7 +4,9 @@ package session
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -15,17 +17,21 @@ import (
 	"github.com/jasondorjeshort/broodforge/internal/store"
 )
 
+// A turn is one participant input and everything the agent does until it next waits for input
+// (02-domain.md, Turn). In prompt mode it may take several engine processes: one that ends
+// deferred, then one resumed with the answer (ADR 0020, C27), and so on. Each process is
+// numbered k within its turn; each of its results is one usage record per model.
+
 // SendRequest is `session send` (05-debug-interface-session.md).
 type SendRequest struct {
 	Session, As, Roles, Text string
 }
 
-// Submitted is what submit did with the message: the turn it starts or joins, and whether
-// that turn started now or the message waits for it. Seq is the session's last event before
-// the message, where a follower of this turn starts.
+// Submitted is what submit (or answer) did: the turn it starts, joins or resumes, and how. Seq
+// is the session's last event before it, where a follower of this turn starts.
 type Submitted struct {
 	Turn  int    `json:"turn"`
-	State string `json:"state"` // started or queued
+	State string `json:"state"` // started, queued or resumed
 	Seq   int64  `json:"-"`
 }
 
@@ -33,6 +39,7 @@ type Submitted struct {
 const (
 	SubmitStarted = "started"
 	SubmitQueued  = "queued"
+	SubmitResumed = "resumed"
 )
 
 // closedSession is the refusal for a session the bot no longer holds open.
@@ -53,7 +60,8 @@ func (s *Service) closedSession(id string) error {
 
 // Submit is SessionService.submit (03 Data flow, step 2): the writer is checked, joins as a
 // contributor on their first accepted message (R-13), and the message is one From block. An
-// idle session starts a turn; a busy one queues the message for the next (ADR 0020).
+// idle session starts a turn; a busy one, or one waiting for an answer, queues the message for
+// the next turn (ADR 0020).
 func (s *Service) Submit(ctx context.Context, req SendRequest) (Submitted, error) {
 	actor := actorOf(req.As)
 	if s.closing.Load() {
@@ -77,7 +85,7 @@ func (s *Service) Submit(ctx context.Context, req SendRequest) (Submitted, error
 		return Submitted{}, s.refuse(actor, l.id, "send", "unregistered", &Error{CodeUnregistered, req.As + " is not registered"})
 	}
 	isDriver := req.As == l.driver.User
-	if req.Roles != "" && !isDriver && !policy.Permitted(splitRoles(req.Roles), l.ch.Roles.Contribute, s.cfg.RoleGroups, false) {
+	if req.Roles != "" && !isDriver && !policy.Permitted(splitRoles(req.Roles), l.ch.Roles.Contribute, s.groups(), false) {
 		return Submitted{}, s.refuse(actor, l.id, "send", "roles",
 			&Error{CodeRefused, "contribute needs a role in " + strings.Join(l.ch.Roles.Contribute, ",")})
 	}
@@ -112,13 +120,13 @@ func (s *Service) Submit(ctx context.Context, req SendRequest) (Submitted, error
 	}
 	block := FromBlock(reg.Name, role, req.Text)
 	if l.state == StateWaitingForInput {
-		n, err := s.startTurnLocked(l, []queued{{user: req.As, block: block}})
+		n, err := s.startTurnLocked(l, []queued{{user: req.As, block: block, text: req.Text}})
 		if err != nil {
 			return Submitted{}, err
 		}
 		return Submitted{Turn: n, State: SubmitStarted, Seq: seq}, nil
 	}
-	l.queue = append(l.queue, queued{user: req.As, block: block})
+	l.queue = append(l.queue, queued{user: req.As, block: block, text: req.Text})
 	l.log.add(Event{Time: s.stamp(), Type: EventMessageQueued, Turn: l.turn + 1, User: req.As,
 		Summary: firstRunes(req.Text, summaryRunes)})
 	return Submitted{Turn: l.turn + 1, State: SubmitQueued, Seq: seq}, nil
@@ -147,8 +155,8 @@ GROUP BY model ORDER BY min(recorded_at), model`, []store.Value{store.Text(l.id)
 }
 
 // startTurnLocked starts the next turn from the messages given; l.mu is held. The turn row is
-// written (started) before the engine starts (03 Data flow, step 3); the turn's goroutine
-// owns its events from then on.
+// written (started) before the engine starts (03 Data flow, step 3). The mode is the one at
+// the turn's start: a switch takes effect at the next turn (ADR 0020).
 func (s *Service) startTurnLocked(l *live, msgs []queued) (int, error) {
 	n := l.turn + 1
 	blocks := make([]string, len(msgs))
@@ -156,13 +164,6 @@ func (s *Service) startTurnLocked(l *live, msgs []queued) (int, error) {
 		blocks[i] = m.block
 	}
 	input := JoinBlocks(blocks)
-	lines, err := s.trailers(l)
-	if err != nil {
-		return 0, s.turnNotStarted(l, n, msgs, err)
-	}
-	if err := git.WriteTrailers(l.git.Dir(), lines); err != nil {
-		return 0, s.turnNotStarted(l, n, msgs, err)
-	}
 	now := s.stamp()
 	// The requester is the first block's writer (R-44); every writer is in the input's From lines.
 	if err := s.cfg.Store.Write(func(tx *store.Tx) error {
@@ -173,52 +174,85 @@ func (s *Service) startTurnLocked(l *live, msgs []queued) (int, error) {
 		_, err := tx.Exec("UPDATE session SET state = ? WHERE id = ?", store.Text(StateRunningTurn), store.Text(l.id))
 		return err
 	}); err != nil {
-		return 0, s.turnNotStarted(l, n, msgs, err)
+		return 0, s.turnNotStarted(l, n, msgs[0].user, err)
 	}
-	l.turn, l.state = n, StateRunningTurn
+	l.turn, l.state, l.turnMode, l.requester, l.proc = n, StateRunningTurn, l.mode, msgs[0].user, 0
 	l.log.add(Event{Time: now, Type: EventTurnStarted, Turn: n, User: msgs[0].user, Summary: firstRunes(input, summaryRunes)})
+	_ = s.startProcessLocked(l, input, nil, "") // a failure ends the turn and publishes it
+	return n, nil
+}
+
+// startProcessLocked starts the turn's next engine process: the first with the input, a
+// resume with the answer in the hook environment and no stdin line (C27). l.mu is held. A
+// process that cannot start ends the turn as an error.
+func (s *Service) startProcessLocked(l *live, input string, answer *engine.TurnAnswer, reason string) error {
+	n := l.turn
+	l.proc++
+	s.disarmIdleLocked(l)
+	l.state = StateRunningTurn
+	lines, err := s.trailers(l)
+	if err == nil {
+		err = git.WriteTrailers(l.git.Dir(), lines)
+	}
+	if err != nil {
+		s.failTurnLocked(l, err)
+		return err
+	}
+	env := []engine.HookVar{
+		{Name: envSession, Value: l.id},
+		{Name: envMode, Value: l.turnMode},
+		{Name: envReach, Value: l.reach},
+		{Name: envTree, Value: l.tree},
+		{Name: envCanonical, Value: l.git.Canonical},
+		{Name: envHookLog, Value: l.home + "/hook.log"},
+	}
+	if len(l.sessionAllow) > 0 {
+		env = append(env, engine.HookVar{Name: envSessionAllow, Value: strings.Join(l.sessionAllow, ",")})
+	}
+	if answer != nil && reason != "" {
+		env = append(env, engine.HookVar{Name: envAnswerReason, Value: reason})
+	}
 	req := engine.TurnRequest{
-		SessionID:       l.id,
-		EngineSessionID: l.engineSessionID,
-		Cwd:             l.tree,
-		Delivery:        l.delivery,
-		GitIdentity:     engine.GitIdentity{Name: l.driver.Name, Email: l.driver.Email},
-		HookEnv: []engine.HookVar{
-			{Name: envSession, Value: l.id},
-			{Name: envMode, Value: l.mode},
-			{Name: envReach, Value: l.reach},
-			{Name: envTree, Value: l.tree},
-			{Name: envCanonical, Value: l.git.Canonical},
-			{Name: envHookLog, Value: l.home + "/hook.log"},
-		},
+		SessionID:          l.id,
+		EngineSessionID:    l.engineSessionID,
+		Cwd:                l.tree,
+		Delivery:           l.delivery,
+		GitIdentity:        engine.GitIdentity{Name: l.driver.Name, Email: l.driver.Email},
+		HookEnv:            env,
 		Input:              input,
+		Answer:             answer,
 		Model:              l.ch.Model,
 		Effort:             l.ch.Effort,
 		SystemPromptAppend: SystemPromptAppend(l.id, l.ch.ProjectName, l.reach, l.driver.Name, lines),
 	}
 	h, err := l.eng.StartTurn(req)
 	if err != nil {
-		ended := s.endTurnLocked(l, n, nil, err.Error())
-		s.auditTurnFailure(l, n, msgs, err)
-		l.state = StateWaitingForInput
-		_ = s.setState(l.id, StateWaitingForInput)
-		l.log.add(ended)
-		return n, nil
+		s.failTurnLocked(l, err)
+		return err
 	}
 	l.running = &h
 	done := make(chan struct{})
 	l.turnDone = done
-	go s.runTurn(l, n, h, done)
-	return n, nil
+	go s.runProcess(l, n, l.proc, h, done)
+	return nil
+}
+
+// failTurnLocked ends the running turn as an error when its process could not start: the turn
+// row, an audit event, the state back to waiting, then turn-ended. l.mu is held.
+func (s *Service) failTurnLocked(l *live, err error) {
+	ended := s.endTurnLocked(l, l.turn, nil, engine.TurnUsage{}, "engine: "+err.Error())
+	s.auditTurnFailure(l, l.turn, l.requester, err)
+	s.settleLocked(l, ended)
 }
 
 // turnNotStarted is a turn that failed before its row was written: it publishes turn-ended
 // with the failure, so a `send --wait` on it returns, audits it, and returns err. l.mu is held.
-func (s *Service) turnNotStarted(l *live, n int, msgs []queued, err error) error {
-	s.auditTurnFailure(l, n, msgs, err)
+func (s *Service) turnNotStarted(l *live, n int, user string, err error) error {
+	s.auditTurnFailure(l, n, user, err)
 	if l.state == StateRunningTurn { // the turn before it, when it was queued
 		l.state = StateWaitingForInput
 		_ = s.setState(l.id, StateWaitingForInput)
+		s.armIdleLocked(l)
 	}
 	l.log.add(Event{Time: s.stamp(), Type: EventTurnEnded, Turn: n, Result: ResultError,
 		Summary: "the turn could not start: " + firstRunes(err.Error(), summaryRunes)})
@@ -226,9 +260,9 @@ func (s *Service) turnNotStarted(l *live, n int, msgs []queued, err error) error
 }
 
 // auditTurnFailure writes action-refused for a turn that did not start, actor its requester.
-func (s *Service) auditTurnFailure(l *live, n int, msgs []queued, err error) {
+func (s *Service) auditTurnFailure(l *live, n int, user string, err error) {
 	_ = s.cfg.Store.Write(func(tx *store.Tx) error {
-		_, aerr := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindActionRefused, Actor: actorOf(msgs[0].user), Session: l.id,
+		_, aerr := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindActionRefused, Actor: actorOf(user), Session: l.id,
 			Details: details("action", "turn", "turn", strconv.Itoa(n), "reason", "turn-start", "message", err.Error())})
 		return aerr
 	})
@@ -241,21 +275,26 @@ func (s *Service) setState(id, state string) error {
 	})
 }
 
-// call is a tool call the turn has seen, for its result's trace line and decision row.
+// call is a tool call the session has seen, for its result's trace line, its decision row and
+// the dropped rule (the calls of one message, C28).
 type call struct {
-	tool, target string
+	tool, target, message string
 }
 
-// runTurn reads one turn's engine events to the end (03 Data flow, steps 4 to 7) and then
-// starts the next queued turn, if any. It is the only goroutine reading this handle.
-func (s *Service) runTurn(l *live, n int, h engine.TurnHandle, done chan struct{}) {
+// runProcess reads one engine process's events to the end (03 Data flow, steps 4 to 7) and
+// hands them to processEnded. It is the only goroutine reading this handle.
+func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan struct{}) {
 	defer close(done)
-	var endEv *Event // the turn-ended event, published once the state is settled
+	var evs []engine.EngineEvent
+	results := map[string]bool{}
+	esid := ""
 	for ev := range h.Events {
+		evs = append(evs, ev)
 		switch ev.Kind {
 		case engine.KindInit:
 			if ev.Init != nil && ev.Init.EngineSessionID != "" {
-				s.setEngineSession(l, ev.Init.EngineSessionID)
+				esid = ev.Init.EngineSessionID
+				s.setEngineSession(l, esid)
 			}
 		case engine.KindAssistant:
 			if ev.Assistant == nil {
@@ -268,7 +307,7 @@ func (s *Service) runTurn(l *live, n int, h engine.TurnHandle, done chan struct{
 						l.log.add(Event{Time: s.stamp(), Type: EventText, Turn: n, Summary: firstRunes(b.Text, summaryRunes), Text: b.Text})
 					}
 				case engine.BlockToolUse:
-					c := call{tool: b.Name, target: Target(b.Name, b.Input, l.tree)}
+					c := call{tool: b.Name, target: Target(b.Name, b.Input, l.tree), message: ev.Assistant.MessageID}
 					l.mu.Lock()
 					l.calls[b.ID] = c
 					l.mu.Unlock()
@@ -278,48 +317,149 @@ func (s *Service) runTurn(l *live, n int, h engine.TurnHandle, done chan struct{
 			}
 		case engine.KindToolResult:
 			if ev.ToolResult != nil {
+				results[ev.ToolResult.ToolUseID] = true
 				s.toolResult(l, n, *ev.ToolResult)
 			}
-		case engine.KindResult:
-			if ev.Result != nil && endEv == nil {
-				l.mu.Lock()
-				e := s.endTurnLocked(l, n, ev.Result, "")
-				l.mu.Unlock()
-				endEv = &e
-			}
-		case engine.KindExit:
-			if endEv == nil {
-				l.mu.Lock()
-				e := s.endTurnLocked(l, n, nil, "")
-				l.mu.Unlock()
-				endEv = &e
-			}
-		case engine.KindUnknown:
+		case engine.KindResult, engine.KindExit, engine.KindUnknown:
 		}
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if endEv == nil {
-		e := s.endTurnLocked(l, n, nil, "")
-		endEv = &e
-	}
 	l.running, l.turnDone = nil, nil
-	// turn-ended goes out once the session's state is settled, so whoever acts on it (a
-	// `send --wait` sending again) finds the session waiting, or the queued turn started.
+	if esid == "" {
+		esid = l.engineSessionID
+	}
+	s.processEndedLocked(l, n, k, esid, evs, results)
+}
+
+// lastResult is the process's result line, nil when it ended without one.
+func lastResult(evs []engine.EngineEvent) *engine.ResultEvent {
+	var r *engine.ResultEvent
+	for _, ev := range evs {
+		if ev.Kind == engine.KindResult && ev.Result != nil {
+			r = ev.Result
+		}
+	}
+	return r
+}
+
+// processEndedLocked records a process's end. A result that defers a call keeps the turn
+// open, waiting for an answer; anything else ends the turn. Its usage is measured against the
+// engine session's last result, never an interrupted row (S2). l.mu is held.
+func (s *Service) processEndedLocked(l *live, n, k int, esid string, evs []engine.EngineEvent, results map[string]bool) {
+	u := engine.UsageOf(evs, l.baselines[esid])
+	r := lastResult(evs)
+	if u.Cumulative != nil {
+		l.baselines[esid] = u.Cumulative
+	}
+	if r != nil && r.Deferred != nil && l.state == StateRunningTurn && l.interruptedBy == "" && !s.closing.Load() {
+		s.deferLocked(l, n, k, esid, u, r, results)
+		return
+	}
+	ended := s.endTurnLocked(l, n, r, u, "", usageRef{esid: esid, k: k})
+	s.settleLocked(l, ended)
+}
+
+// settleLocked moves the session on after its turn ended, then publishes turn-ended, so
+// whoever acts on it (a `send --wait` sending again) finds the session waiting for input or
+// the queued turn started. l.mu is held.
+func (s *Service) settleLocked(l *live, ended Event) {
+	if l.interruptedBy != "" {
+		ended.User, l.interruptedBy = l.interruptedBy, ""
+	}
 	switch {
 	case l.state != StateRunningTurn || s.closing.Load():
-		// Interrupted by shutdown meanwhile, or about to be: Shutdown marks it.
-		l.log.add(*endEv)
+		// Ending, or interrupted by shutdown meanwhile, or about to be: end and Shutdown mark it.
+		l.log.add(ended)
 	case len(l.queue) > 0:
 		msgs := l.queue
 		l.queue = nil
-		l.log.add(*endEv)
+		l.log.add(ended)
 		_, _ = s.startTurnLocked(l, msgs) // a failure publishes its own turn-ended (turnNotStarted)
 	default:
 		l.state = StateWaitingForInput
 		_ = s.setState(l.id, StateWaitingForInput)
-		l.log.add(*endEv)
+		s.armIdleLocked(l)
+		l.log.add(ended)
 	}
+}
+
+// deferLocked is a process that ended deferring a call (prompt mode): its usage, the
+// `deferred` row for the call the result names and a `dropped` row for every other call of
+// that message without a result (C28), then waiting-for-answer with the prompt and idle
+// timers running. l.mu is held.
+func (s *Service) deferLocked(l *live, n, k int, esid string, u engine.TurnUsage, r *engine.ResultEvent, results map[string]bool) {
+	d := r.Deferred
+	c, ok := l.calls[d.ToolUseID]
+	if !ok {
+		c = call{tool: d.Name, target: Target(d.Name, d.Input, l.tree)}
+		l.calls[d.ToolUseID] = c
+	}
+	var dropped []string
+	for id, other := range l.calls {
+		if id != d.ToolUseID && other.message != "" && other.message == c.message && !results[id] {
+			dropped = append(dropped, id)
+		}
+	}
+	sortStrings(dropped)
+	now := s.now()
+	stamp := store.FormatTime(now)
+	err := s.cfg.Store.Write(func(tx *store.Tx) error {
+		if err := s.writeUsage(tx, l, n, u, r, usageRef{esid: esid, k: k}); err != nil {
+			return err
+		}
+		if err := s.decisionTx(tx, l, n, d.ToolUseID, c, DecisionDeferred, DecidedByPolicy, ActorPolicy, "", "", ""); err != nil {
+			return err
+		}
+		for _, id := range dropped {
+			reason := "the engine kept only the last call of its message (C28)"
+			if err := s.decisionTx(tx, l, n, id, l.calls[id], DecisionDropped, DecidedByPolicy, ActorPolicy, "", reason, ""); err != nil {
+				return err
+			}
+		}
+		_, err := tx.Exec("UPDATE session SET state = ? WHERE id = ?", store.Text(StateWaitingForAnswer), store.Text(l.id))
+		return err
+	})
+	if err != nil {
+		s.failTurnLocked(l, err)
+		return
+	}
+	for _, id := range append([]string{d.ToolUseID}, dropped...) {
+		dc := l.calls[id]
+		dec := DecisionDropped
+		if id == d.ToolUseID {
+			dec = DecisionDeferred
+		}
+		l.log.add(Event{Time: stamp, Type: EventPermissionDecision, Turn: n, ToolUseID: id, Tool: dc.tool, Target: dc.target,
+			Decision: dec, DecidedBy: DecidedByPolicy, Summary: dec + " " + TraceLine(dc.tool, dc.target) + " (" + DecidedByPolicy + ")"})
+	}
+	until := now.Add(l.promptTimeout)
+	l.pending = &Pending{ToolUseID: d.ToolUseID, Tool: c.tool, Target: c.target, Since: stamp, Until: store.FormatTime(until),
+		Dropped: len(dropped)}
+	l.state = StateWaitingForAnswer
+	s.armPromptLocked(l)
+	s.armIdleLocked(l)
+	l.log.add(Event{Time: stamp, Type: EventWaitingForAnswer, Turn: n, ToolUseID: d.ToolUseID, Tool: c.tool, Target: c.target,
+		Summary: d.ToolUseID + " " + TraceLine(c.tool, c.target)})
+}
+
+func sortStrings(s []string) { sort.Strings(s) }
+
+// decisionTx writes one permission_decision row and its audit event in tx. A call that comes
+// back (a deferred call answered on the resume) replaces its row; the audit log keeps both.
+func (s *Service) decisionTx(tx *store.Tx, l *live, n int, id string, c call, decision, decidedBy, actor, user, reason, source string) error {
+	if _, err := tx.Exec(`INSERT INTO permission_decision (session_id, request_id, turn_seq, tool, summary, decided_by, user_id, decision, reason, decided_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (session_id, request_id) DO UPDATE SET turn_seq = excluded.turn_seq, decided_by = excluded.decided_by,
+    user_id = excluded.user_id, decision = excluded.decision, reason = excluded.reason, decided_at = excluded.decided_at`,
+		store.Text(l.id), store.Text(id), store.Int(int64(n)), store.Text(c.tool), store.Text(TraceLine(c.tool, c.target)),
+		store.Text(decidedBy), store.OptText(user), store.Text(decision), store.OptText(reason), store.Text(s.stamp())); err != nil {
+		return err
+	}
+	_, err := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindPermissionDecision, Actor: actor, Session: l.id, Registration: user,
+		Details: details("turn", strconv.Itoa(n), "toolUseId", id, "tool", c.tool, "target", c.target,
+			"decision", decision, "decidedBy", decidedBy, "source", source, "reason", reason)})
+	return err
 }
 
 func (s *Service) setEngineSession(l *live, id string) {
@@ -337,16 +477,27 @@ func (s *Service) setEngineSession(l *live, id string) {
 
 // toolResult writes the call's permission decision row and audit events in one transaction,
 // then publishes the decision and the result (03 Data flow, step 5). A tool's own error gets no
-// row (03-hook-contract.md).
+// row (03-hook-contract.md). A call a person or the prompt timeout answered has its row and
+// event already (answerLocked): only its result is published, with the answer's outcome.
 func (s *Service) toolResult(l *live, n int, tr engine.ToolResultEvent) {
 	l.mu.Lock()
 	c := l.calls[tr.ToolUseID]
+	ans, answered := l.answers[tr.ToolUseID]
+	delete(l.answers, tr.ToolUseID)
 	l.mu.Unlock()
-	cl := Classify(tr, c.tool)
 	now := s.stamp()
+	if answered {
+		line := TraceLine(c.tool, c.target)
+		if ans.trace != "" {
+			line += " -> " + ans.trace
+		}
+		l.log.add(Event{Time: now, Type: EventToolResult, Turn: n, ToolUseID: tr.ToolUseID, Tool: c.tool, Target: c.target,
+			IsError: tr.IsError, Summary: line})
+		return
+	}
+	cl := Classify(tr, c.tool)
 	line := ResultLine(c.tool, c.target, l.reach, tr.IsError, tr.Text, cl)
 	if cl.Kind != ClassNoDecision {
-		summary := TraceLine(c.tool, c.target)
 		actor := ActorPolicy
 		switch cl.DecidedBy {
 		case DecidedByHook:
@@ -355,18 +506,7 @@ func (s *Service) toolResult(l *live, n int, tr engine.ToolResultEvent) {
 			actor = ActorInstance
 		}
 		err := s.cfg.Store.Write(func(tx *store.Tx) error {
-			// A resumed call's final answer replaces its deferred row (P10 half b); the audit log keeps both.
-			if _, err := tx.Exec(`INSERT INTO permission_decision (session_id, request_id, turn_seq, tool, summary, decided_by, user_id, decision, reason, decided_at)
-VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
-ON CONFLICT (session_id, request_id) DO UPDATE SET turn_seq = excluded.turn_seq, decided_by = excluded.decided_by,
-    decision = excluded.decision, reason = excluded.reason, decided_at = excluded.decided_at`,
-				store.Text(l.id), store.Text(tr.ToolUseID), store.Int(int64(n)), store.Text(c.tool), store.Text(summary),
-				store.Text(cl.DecidedBy), store.Text(cl.Decision), store.OptText(cl.Reason), store.Text(now)); err != nil {
-				return err
-			}
-			if _, err := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindPermissionDecision, Actor: actor, Session: l.id,
-				Details: details("turn", strconv.Itoa(n), "toolUseId", tr.ToolUseID, "tool", c.tool, "target", c.target,
-					"decision", cl.Decision, "decidedBy", cl.DecidedBy, "source", tr.DecidedBy, "reason", cl.Reason)}); err != nil {
+			if err := s.decisionTx(tx, l, n, tr.ToolUseID, c, cl.Decision, cl.DecidedBy, actor, "", cl.Reason, tr.DecidedBy); err != nil {
 				return err
 			}
 			switch cl.Kind {
@@ -397,26 +537,83 @@ ON CONFLICT (session_id, request_id) DO UPDATE SET turn_seq = excluded.turn_seq,
 		} else {
 			l.log.add(Event{Time: now, Type: EventPermissionDecision, Turn: n, ToolUseID: tr.ToolUseID, Tool: c.tool,
 				Target: c.target, Decision: cl.Decision, DecidedBy: cl.DecidedBy, Reason: cl.Reason,
-				Summary: cl.Decision + " " + summary + " (" + cl.DecidedBy + ")"})
+				Summary: cl.Decision + " " + TraceLine(c.tool, c.target) + " (" + cl.DecidedBy + ")"})
 		}
 	}
 	l.log.add(Event{Time: now, Type: EventToolResult, Turn: n, ToolUseID: tr.ToolUseID, Tool: c.tool, Target: c.target,
 		IsError: tr.IsError, Summary: line})
 }
 
-// endTurnLocked records the turn's end (03 Data flow, step 7) and returns its turn-ended
-// event, which the caller publishes once the session's state is settled; l.mu is held. A nil
-// result is an exit without one: the turn was interrupted.
-//
-// TODO(P10 half b): the usage rows (the modelUsage delta against the last result row of the
-// engine session, or the deduplicated assistant counts of an interrupted turn) go into this
-// transaction, before turn-ended is published (N-21); a deferred result moves the session to
-// waiting-for-answer with the deferred and dropped rows instead of back to waiting-for-input.
-func (s *Service) endTurnLocked(l *live, n int, r *engine.ResultEvent, startErr string) Event {
+// usageRef names a process's usage records: harness_ref is `<session id>/<engine session
+// id>/<turn>.<k>/<model>`, unique instance-wide (the column is) even when two sessions replay one
+// fixture, whose engine session ids repeat.
+type usageRef struct {
+	esid string
+	k    int
+}
+
+// usageRaw is a usage record's raw column: what the engine reported for the model, so
+// `usage --by turn --json` can be laid beside the fixture (05, Usage and audit queries).
+type usageRaw struct {
+	ModelUsage  engine.ModelUsage `json:"modelUsage,omitempty"`
+	Usage       json.RawMessage   `json:"usage,omitempty"`
+	Delta       engine.ModelUsage `json:"delta"`
+	Interrupted bool              `json:"interrupted,omitempty"`
+}
+
+// writeUsage writes one usage record per model with a non-zero delta (R-44, N-21), in tx.
+// An interrupted process's record has no output count and is flagged (ADR 0020; S2).
+func (s *Service) writeUsage(tx *store.Tx, l *live, n int, u engine.TurnUsage, r *engine.ResultEvent, ref usageRef) error {
+	models := make([]string, 0, len(u.Delta))
+	for m := range u.Delta {
+		models = append(models, m)
+	}
+	sortStrings(models)
+	esid := ref.esid
+	if esid == "" {
+		esid = "-" // no init seen: the process never started its engine session
+	}
+	for _, model := range models {
+		d := u.Delta[model]
+		in, out := int64(d["inputTokens"]), int64(d["outputTokens"])
+		cr, cw := int64(d["cacheReadInputTokens"]), int64(d["cacheCreationInputTokens"])
+		if in+out+cr+cw == 0 {
+			continue
+		}
+		raw := usageRaw{Delta: d, Interrupted: u.Interrupted}
+		if r != nil {
+			raw.ModelUsage, raw.Usage = r.ModelUsage[model], r.Usage
+		}
+		b, err := json.Marshal(raw)
+		if err != nil {
+			return err
+		}
+		interrupted := int64(0)
+		if u.Interrupted {
+			interrupted = 1
+		}
+		if _, err := tx.Exec(`INSERT INTO usage_record (session_id, turn_seq, harness_ref, requester_id, credential_id, channel_id,
+    project_id, harness, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, interrupted, raw, recorded_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			store.Text(l.id), store.Int(int64(n)), store.Text(l.id+"/"+esid+"/"+strconv.Itoa(n)+"."+strconv.Itoa(ref.k)+"/"+model),
+			store.OptText(l.requester), store.Text(l.credential), store.Text(l.ch.ID), store.Text(l.ch.Project), store.Text(l.ch.Harness),
+			store.Text(model), store.Int(in), store.Int(out), store.Int(cr), store.Int(cw), store.Int(interrupted),
+			store.Text(string(b)), store.Text(s.stamp())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// endTurnLocked records the turn's end (03 Data flow, step 7): the turn row and the last
+// process's usage records in one transaction, committed before turn-ended is published (N-21).
+// It returns the turn-ended event for the caller to publish once the session's state is
+// settled; l.mu is held. A nil result is an exit without one: the turn was interrupted.
+func (s *Service) endTurnLocked(l *live, n int, r *engine.ResultEvent, u engine.TurnUsage, startErr string, refs ...usageRef) Event {
 	res, reason := ResultInterrupted, ResultInterrupted
 	switch {
 	case startErr != "":
-		res, reason = ResultError, "engine: "+startErr
+		res, reason = ResultError, startErr
 	case r == nil:
 	case r.Deferred != nil:
 		res, reason = ResultDeferred, r.StopReason
@@ -427,6 +624,11 @@ func (s *Service) endTurnLocked(l *live, n int, r *engine.ResultEvent, startErr 
 	}
 	now := s.stamp()
 	err := s.cfg.Store.Write(func(tx *store.Tx) error {
+		for _, ref := range refs {
+			if err := s.writeUsage(tx, l, n, u, r, ref); err != nil {
+				return err
+			}
+		}
 		_, err := tx.Exec("UPDATE turn SET ended_at = ?, result = ?, harness_ref = ? WHERE session_id = ? AND seq = ?",
 			store.Text(now), store.Text(res), store.OptText(l.engineSessionID), store.Text(l.id), store.Int(int64(n)))
 		return err
@@ -434,6 +636,8 @@ func (s *Service) endTurnLocked(l *live, n int, r *engine.ResultEvent, startErr 
 	if err != nil {
 		reason = errors.Join(errors.New(reason), err).Error()
 	}
+	l.pending = nil
+	s.disarmPromptLocked(l)
 	return Event{Time: now, Type: EventTurnEnded, Turn: n, Result: res, Summary: reason}
 }
 

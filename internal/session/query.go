@@ -65,6 +65,8 @@ type Pending struct {
 	Target    string `json:"target"`
 	Since     string `json:"since"`
 	Until     string `json:"until"`
+	// Dropped is how many other calls of its message the engine dropped (C28): 04 says so.
+	Dropped int `json:"dropped"`
 }
 
 // Detail is `session show`.
@@ -138,7 +140,14 @@ func (s *Service) Show(id string) (Detail, error) {
 	if err != nil {
 		return d, err
 	}
-	// TODO(P10 half b): Pending from the live session's waiting call and its prompt deadline.
+	if l := s.lookup(id); l != nil {
+		l.mu.Lock()
+		if l.pending != nil {
+			p := *l.pending
+			d.Pending = &p
+		}
+		l.mu.Unlock()
+	}
 	return d, nil
 }
 

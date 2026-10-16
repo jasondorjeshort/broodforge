@@ -32,7 +32,8 @@ commits`, `backup: last good <age> ago|none` (age `45s`, `12m`, `3h`, `2d`), `en
 <version>` (`-` when unset); `--json` nests the same under those keys; the outcome token is the
 config value. `broodforge stop [--timeout 30]` is 03's shutdown: every running turn interrupted,
 every open session marked interrupted, `stopped  <sessions marked>`, then the bot exits 0; past
-the timeout `error: stop-timeout: open sessions: <ids>` and the bot exits 1. `broodforge
+the timeout `error: stop-timeout: open sessions: <ids>` and the bot exits 1. A session waiting for an
+answer is open too, and its prompt and idle timers stop with the bot. `broodforge
 reconcile [--report-only]` runs ADR 0021's reconciliation on demand; `--report-only` works on the
 file without the bot, writes nothing and prints `<kind>  <subject>  <session>  <detail>` per
 finding (`interrupt`, `missing`, `present`, `unrecorded`). A read the bot does not serve itself
@@ -55,8 +56,17 @@ hosts; no `config/instance.json` is `no-config`. `broodforge config show [--effe
 record each, comments removed; `--effective` prints each channel with
 `defaults` merged in as the bot sees it; `--channel` and `--project` narrow either
 (`unknown-channel`, `unknown-project`); `--last-good` reads `data/config-last-good/`.
-`broodforge config reload` asks the running bot; on failure the old config stays and the errors
-are the stderr lines, exit 1.
+`broodforge config reload [--expect reloaded]` asks the running bot to read `config/` again: valid,
+it runs on it from then on (a running session keeps the reach and mode it started with), rewrites
+the last-good copy, writes `configuration-changed` and prints `reloaded  <changed keys>`; nothing
+changed prints `reloaded  -` and writes nothing. Refused, the old configuration stays and
+`configuration-invalid` is written (`"using":"previous"`): invalid files are one `error:
+bad-config: <file>: <what>; ...` line; another `instanceName` is `bad-config` too; a change to a
+key the bot reads only at its start (`schemaVersion`, `credentials`, `discord`, `engine`,
+`spawn`, `paths`, `audit`) is `reload-needs-restart: <keys>`; exit 1. Every socket command dials
+`config/`'s `instanceName` and, with nothing there, the last-good copy's, so a bot is reached
+after an edit of the name; `status` then adds `instance-name: <config's> (bot runs as <its>)`
+after the config line.
 Observe. `status` line one; `audit --kind configuration-changed --limit 1 --json` shows the file
 hash and changed keys; `config show --effective --channel 100 --json` returns the channel object
 of 03 with `defaults` merged in (`{"id":"100","project":"scratch","reach":"code",...}`).
@@ -161,7 +171,7 @@ Isolation. Pure: no socket, no store, no root; `--tree` is any directory; only t
 
 ## Prompt-mode defer and resume
 
-Moved to `05-debug-interface-session.md` (P10 half b builds it): `session answer`, the idle and prompt timeouts, the pending answer in `session show`.
+Moved to `05-debug-interface-session.md`: `session answer`, deferred and dropped calls, the idle and prompt timeouts, the pending answer in `session show`, and `tests/repro/defer-resume.sh`.
 
 ## Spawn preflight and reach
 
@@ -172,7 +182,7 @@ passing check and `error: preflight-<check>: <detail>` per failing one on stderr
 empty, `dir/` empty, made when missing); `account`. `linux-sudo-bwrap` is `error: preflight-backend: held` until P14, which adds
 the `namei` walk, the `engine-entry --check` spawn and the sudoers comparison of the ADR 0022 companion, printing the expected
 sudoers block on a miss. `session reach-report <id>` prints the contract's table column for the session's reach beside the bind
-list the spawn would use, computed from the same array, then `--json` for both. `session start --reach read-only` on channel `200`
+list the spawn would use (`binds: -` until P14), computed from the same array, then `--json` for both (its lines: `05-debug-interface-session.md`). `session start --reach read-only` on channel `200`
 of a scratch root makes a read-only session against the fake.
 Observe. `reach-report`; on the droplet, C30's commands run by hand from a code session's Bash (`ls`, `env`, `cat` of the root,
 another session and the canonical) and the hook's `deny` lines in `session tail` for an `Edit` under read-only reach.

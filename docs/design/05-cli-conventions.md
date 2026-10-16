@@ -12,7 +12,9 @@ precede its arguments. `--root` or `BROODFORGE_ROOT` names the instance root; ne
 Socket: `<root>/data/control.sock` on Linux, `\\.\pipe\broodforge-<instanceName>` on Windows,
 always from `instanceName` (a scratch root's is `scratch-<12 hex>`, generated at `scratch new`,
 so no path is hashed; the client reads only that key of `config/instance.json`, then of
-`data/config-last-good/instance.json` so a bot started on its last-good copy stays reachable,
+`data/config-last-good/instance.json` so a bot started on its last-good copy stays reachable;
+when nothing answers under `config/`'s name, it dials the last-good copy's too, so an edited name is
+still reached (05, Configuration),
 `error: no-config` or `error: bad-config` naming the first file without it). No socket: a
 `(file)` command and every read command open `data/store.sqlite` read-only (ADR 0021); a write
 command exits 1 with `error: not-running: no bot at <socket>`.

@@ -142,3 +142,17 @@ func TestModelDisplayName(t *testing.T) {
 		}
 	}
 }
+
+// TestClassRowsMatchClassOf: the rows reach-report prints name the tools ClassOf classifies.
+func TestClassRowsMatchClassOf(t *testing.T) {
+	for _, row := range ClassRows() {
+		for _, tool := range row.Tools {
+			if got := ClassOf(tool); got != row.Class {
+				t.Errorf("ClassOf(%s) = %d, row %d", tool, got, row.Class)
+			}
+		}
+	}
+	if ClassOf("mcp__x__y") != ClassOther {
+		t.Error("an mcp tool is not ClassOther")
+	}
+}

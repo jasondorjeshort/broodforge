@@ -7,9 +7,9 @@
 #   bin/broodforge scratch run -- bash tests/repro/full-session.sh
 #
 # It drives the bot through the CLI and reads the outcome through `session tail` and `audit`
-# only. Up to P10 half (a): a refused start, one policy-mode turn against fixtures/engine/basic,
-# the handoff and `stop`. The bot's output is kept as serve.log under the root, which scratch
-# run keeps when this exits non-zero.
+# only: a refused start, one policy-mode turn against fixtures/engine/basic, the reach report,
+# its usage, `config reload`, the handoff and `stop`. The bot's output is kept as serve.log
+# under the root, which scratch run keeps when this exits non-zero.
 set -euo pipefail
 
 bf=bin/broodforge
@@ -55,6 +55,14 @@ for want in \
 	'  permission-decision  -  policy  s0001  {"decidedBy":"policy","decision":"allow",'; do
 	grep -q -- "$want" <<<"$audit" || fail "audit has no line matching: $want"
 done
+
+"$bf" session reach-report "$id" --expect code >/dev/null
+[ "$("$bf" usage --session "$id" --by turn | wc -l)" = 1 ] || fail "usage --by turn has not one turn"
+# A reload with nothing changed writes nothing; one of a key the bot applies writes the event.
+[ "$("$bf" config reload)" = "reloaded  -" ] || fail "an unchanged reload did not print reloaded  -"
+sed -i 's/"idleTimeoutMinutes": 60/"idleTimeoutMinutes": 30/' "$root/config/instance.json"
+[ "$("$bf" config reload)" = "reloaded  defaults" ] || fail "config reload did not report defaults"
+[ "$("$bf" audit --kind configuration-changed --all | wc -l)" = 2 ] || fail "config reload wrote no configuration-changed"
 
 "$bf" worktree handoff "$id" --expect none
 "$bf" stop >/dev/null

@@ -132,6 +132,8 @@ type WorktreeService struct {
 	Secret func(id string) ([]byte, error)
 	Forge  git.PullRequester // nil: git.GitHub
 	API    string            // the forge API root; "": git.GitHubAPI
+	// Current, when set, is the configuration as loaded now (`config reload`); else Config.
+	Current func() *config.Config
 }
 
 // actorHostCLI is the audit actor of a handoff run from the debug CLI.
@@ -234,27 +236,44 @@ func (s *WorktreeService) bundle(ctx context.Context, _ *control.Call, id string
 }
 
 func (s *WorktreeService) handoff(ctx context.Context, call *control.Call, id string, dryRun bool) (json.RawMessage, error) {
+	out, err := s.runHandoff(ctx, id, dryRun, actorHostCLI)
+	if err != nil {
+		var ge *git.Error
+		if errors.As(err, &ge) && ge.Code == git.CodeRefusedAttribution {
+			if eerr := emitCommits(call, ge.Commits); eerr != nil {
+				return nil, eerr
+			}
+		}
+		var ce *control.Error
+		if errors.As(err, &ce) {
+			return nil, ce
+		}
+		return nil, gitError(err)
+	}
+	return encodeWorktree(out)
+}
+
+// ActorBot is the audit actor of a handoff the bot runs itself, at the end of a session.
+const ActorBot = "instance"
+
+// runHandoff is the companion's five steps for one session: the tree's state and the
+// session's outcome recorded as `worktree handoff` records them. A git refusal is returned as
+// the *git.Error, its failing commits with it.
+func (s *WorktreeService) runHandoff(ctx context.Context, id string, dryRun bool, actor string) (git.Outcome, error) {
 	sess, err := s.load(id)
 	if err != nil {
-		return nil, err
+		return git.Outcome{}, err
 	}
 	h := &git.Handoff{Backend: s.Backend, Session: sess.git, Mode: sess.project.HandoffOrDefault(),
 		Attribution: sess.attr, CredentialID: sess.project.Repo.GitCredentialID, Secret: s.Secret,
-		Forge: s.Forge, API: s.API, Title: sess.title, Record: s.record, Actor: actorHostCLI}
+		Forge: s.Forge, API: s.API, Title: sess.title, Record: s.record, Actor: actor}
 	out, err := h.Run(ctx, dryRun)
 	if err != nil {
 		var ge *git.Error
-		if errors.As(err, &ge) {
-			if ge.Code == git.CodeRefusedAttribution {
-				if eerr := emitCommits(call, ge.Commits); eerr != nil {
-					return nil, eerr
-				}
-			}
-			if ge.Code == git.CodeFailedPush || ge.Code == git.CodeFailedPullRequest {
-				s.setWorktreeState(id, "kept")
-			}
+		if errors.As(err, &ge) && (ge.Code == git.CodeFailedPush || ge.Code == git.CodeFailedPullRequest) {
+			s.setWorktreeState(id, "kept")
 		}
-		return nil, gitError(err)
+		return out, err
 	}
 	if out.Removed {
 		s.setWorktreeState(id, store.WorktreeRemoved)
@@ -269,7 +288,7 @@ func (s *WorktreeService) handoff(ctx context.Context, call *control.Call, id st
 			return err
 		})
 	}
-	return encodeWorktree(out)
+	return out, nil
 }
 
 // setWorktreeState records the tree's state on its row, when the session has one.
@@ -322,7 +341,7 @@ FROM session s JOIN registration r ON r.user_id = s.driver_id WHERE s.id = ?`, [
 	if !found {
 		return ls, control.NewError(CodeUnknownSession, "no session "+id)
 	}
-	if ls.project = s.Config.Project(projectID); ls.project == nil {
+	if ls.project = s.config().Project(projectID); ls.project == nil {
 		return ls, control.NewError(CodeUnknownProject, id+" names project "+projectID+", which the configuration does not define")
 	}
 	err = s.Store.Query(`SELECT r.git_name, r.git_email, p.joined_at FROM participant p
@@ -357,7 +376,7 @@ GROUP BY u.model ORDER BY 2, 1`, []store.Value{store.Text(id)}, func(r *store.Ro
 		return ls, err
 	}
 	repo := ls.project.Repo
-	ls.git = git.Session{Root: s.Root, ID: id, Instance: s.Config.Instance.InstanceName, Canonical: repo.Canonical,
+	ls.git = git.Session{Root: s.Root, ID: id, Instance: s.config().Instance.InstanceName, Canonical: repo.Canonical,
 		Remote: orDefault(repo.Remote, "origin"), DefaultBranch: orDefault(repo.DefaultBranch, "main")}
 	ls.title = "Session " + id
 	if firstInput != "" {
@@ -388,4 +407,17 @@ func gitError(err error) error {
 		return control.NewError(ge.Code, control.OneLine(ge.Message))
 	}
 	return spawnError(err)
+}
+
+func (s *WorktreeService) config() *config.Config {
+	if s.Current != nil {
+		return s.Current()
+	}
+	return s.Config
+}
+
+// Handoff is the handoff of session id as `worktree handoff` runs it, for the end of session
+// (the session service's Handoff): the outcome, or the git refusal with its failing commits.
+func (s *WorktreeService) Handoff(ctx context.Context, id string) (git.Outcome, error) {
+	return s.runHandoff(ctx, id, false, ActorBot)
 }

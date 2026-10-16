@@ -132,3 +132,105 @@ func TestProofServeSession(t *testing.T) {
 		t.Errorf("second serve exited %d", code)
 	}
 }
+
+// TestProofConfigReload: a valid reload writes configuration-changed; an invalid one keeps the
+// running configuration, writes configuration-invalid and exits 1 with the problem.
+func TestProofConfigReload(t *testing.T) {
+	_, env := scratchEnv(t)
+	root, _ := scratchNew(t, env)
+	run := func(args ...string) clitest.Result {
+		return clitest.Run(t, env, append([]string{"--root", root}, args...)...)
+	}
+	_, exit := startServe(t, env, root)
+	want(t, run("status", "--wait", "10", "--expect", "ok"), 0,
+		"config: ok\ndiscord: dry-run connected\nsessions: 0 open, 0 waiting-for-answer, 0 interrupted\nworktrees: 0 kept with unpushed commits\nbackup: none\nengine: - -\n", "")
+	want(t, run("config", "reload"), 0, "reloaded  -\n", "")
+	project := root + "/config/projects/scratch.json"
+	good, err := os.ReadFile(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(project, []byte(strings.Replace(string(good), `"handoff": "push"`, `"handoff": "push", "bogus": 1`, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if r := run("config", "reload"); r.Code != 1 || !strings.HasPrefix(r.Stderr, "error: bad-config: ") || !strings.Contains(r.Stderr, "bogus") {
+		t.Errorf("an invalid reload: %d %q", r.Code, r.Stderr)
+	}
+	if r := run("audit", "--kind", "configuration-invalid", "--json"); !strings.Contains(r.Stdout, `"using":"previous"`) {
+		t.Errorf("no configuration-invalid event: %q", r.Stdout)
+	}
+	want(t, run("status", "--expect", "ok"), 0,
+		"config: ok\ndiscord: dry-run connected\nsessions: 0 open, 0 waiting-for-answer, 0 interrupted\nworktrees: 0 kept with unpushed commits\nbackup: none\nengine: - -\n", "")
+	if err := os.WriteFile(project, []byte(strings.Replace(string(good), `"reach": "code"`, `"reach": "read-only"`, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if r := run("config", "reload", "--expect", "reloaded"); r.Code != 0 || r.Stdout != "reloaded  projects/scratch.json\n" {
+		t.Errorf("reload: %d %q %q", r.Code, r.Stdout, r.Stderr)
+	}
+	// The first reload above changed nothing: it wrote no event (start, then this reload: 2).
+	if r := run("audit", "--kind", "configuration-changed", "--json"); strings.Count(r.Stdout, "\n") != 2 || !strings.Contains(r.Stdout, `"changed":"projects/scratch.json"`) {
+		t.Errorf("configuration-changed events: %q", r.Stdout)
+	}
+	// The reloaded channel 100 is read-only now: a new session reports it.
+	if r := run("register", "1001", "--name", "Ada", "--email", "ada@example.com"); r.Code != 0 {
+		t.Fatalf("register: %q", r.Stderr)
+	}
+	if r := run("session", "start", "--channel", "100", "--as", "1001", "--credential", "cred-scratch"); r.Stdout != "s0001\n" {
+		t.Fatalf("start: %q %q", r.Stdout, r.Stderr)
+	}
+	want(t, run("session", "reach-report", "s0001"), 0,
+		"Read,Glob,Grep,LS,NotebookRead  allow  deny\nTodoWrite,Task  allow  allow\nWebFetch,WebSearch  web  web\nEdit,MultiEdit,Write,NotebookEdit  deny  deny\nBash  deny  deny\n*  deny  deny\nbinds: -\n", "")
+	want(t, run("stop"), 0, "stopped  1\n", "")
+	if code := <-exit; code != 0 {
+		t.Errorf("serve exited %d", code)
+	}
+}
+
+// TestProofReloadRefusals: config/ naming another instance is refused by the bot, which the
+// client still reaches under its last-good name, and status says so; a key read only at start
+// is refused reload-needs-restart. Both write configuration-invalid and change nothing.
+func TestProofReloadRefusals(t *testing.T) {
+	_, env := scratchEnv(t)
+	root, name := scratchNew(t, env)
+	run := func(args ...string) clitest.Result {
+		return clitest.Run(t, env, append([]string{"--root", root}, args...)...)
+	}
+	_, exit := startServe(t, env, root)
+	if r := run("status", "--wait", "10", "--expect", "ok"); r.Code != 0 {
+		t.Fatalf("status: %q", r.Stderr)
+	}
+	inst := root + "/config/instance.json"
+	good, err := os.ReadFile(inst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edit := func(from, to string) {
+		t.Helper()
+		if err := os.WriteFile(inst, []byte(strings.Replace(string(good), from, to, 1)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	edit(`"instanceName": "`+name+`"`, `"instanceName": "renamed-instance"`)
+	if r := run("config", "reload"); r.Code != 1 || !strings.Contains(r.Stderr, "error: bad-config: ") || !strings.Contains(r.Stderr, "instanceName cannot change") {
+		t.Errorf("reload of a new instanceName: %d %q", r.Code, r.Stderr)
+	}
+	if r := run("status"); r.Code != 0 || !strings.HasPrefix(r.Stdout, "config: ok\ninstance-name: renamed-instance (bot runs as "+name+")\n") {
+		t.Errorf("status through the last-good name: %d %q %q", r.Code, r.Stdout, r.Stderr)
+	}
+	edit(`"fakeFixtures": "`, `"fakeFixtures": "/elsewhere`)
+	if r := run("config", "reload", "--expect", "reload-needs-restart"); r.Code != 0 {
+		t.Errorf("reload of engine.fakeFixtures: %d %q", r.Code, r.Stderr)
+	}
+	if r := run("audit", "--kind", "configuration-invalid", "--json"); strings.Count(r.Stdout, "\n") != 2 ||
+		!strings.Contains(r.Stdout, "instanceName cannot change") || !strings.Contains(r.Stdout, "engine: the bot reads these at its start") {
+		t.Errorf("configuration-invalid events: %q", r.Stdout)
+	}
+	if err := os.WriteFile(inst, good, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	want(t, run("config", "reload"), 0, "reloaded  -\n", "")
+	want(t, run("stop"), 0, "stopped  0\n", "")
+	if code := <-exit; code != 0 {
+		t.Errorf("serve exited %d", code)
+	}
+}

@@ -27,9 +27,18 @@ func socketCall(ctx context.Context, cmd *Command, env *Env) error {
 			return err
 		}
 	}
-	result, err := control.Do(ctx, addr, cmd.wireCmd(), args, func(ev json.RawMessage) error {
-		return env.Out.Event(ev, cmd.EventColumns)
-	})
+	onEvent := func(ev json.RawMessage) error { return env.Out.Event(ev, cmd.EventColumns) }
+	result, err := control.Do(ctx, addr, cmd.wireCmd(), args, onEvent)
+	var ce *control.Error
+	if errors.As(err, &ce) && ce.Code == control.CodeNotRunning {
+		// config/ may name another instance than the bot runs as (an edit not yet reloaded,
+		// or one the bot refused): the bot listens under its last-good copy's name.
+		if alt, ok := lastGoodAddress(env.Root, addr); ok {
+			if r, aerr := control.Do(ctx, alt, cmd.wireCmd(), args, onEvent); !isNotRunning(aerr) {
+				result, err = r, aerr
+			}
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -100,4 +109,23 @@ func instanceName(root string) (string, error) {
 		return "", control.NewError(CodeBadConfig, inv.Error())
 	}
 	return "", err
+}
+
+func isNotRunning(err error) bool {
+	var ce *control.Error
+	return errors.As(err, &ce) && ce.Code == control.CodeNotRunning
+}
+
+// lastGoodAddress is the control address under the last-good copy's instanceName, when it
+// differs from addr.
+func lastGoodAddress(root, addr string) (string, bool) {
+	name, err := config.LastGoodInstanceName(root)
+	if err != nil {
+		return "", false
+	}
+	alt, err := control.Address(root, name)
+	if err != nil || alt == addr {
+		return "", false
+	}
+	return alt, true
 }

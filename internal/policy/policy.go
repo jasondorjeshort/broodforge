@@ -336,3 +336,22 @@ func SplitList(s string) []string {
 	}
 	return out
 }
+
+// ClassRow is one row of the policy table as `session reach-report` prints it: the class and
+// the tool names ClassOf puts in it (none for ClassOther, which is every other name).
+type ClassRow struct {
+	Class Class
+	Tools []string
+}
+
+// ClassRows is the table's rows in its order (03-hook-contract.md, Policy table).
+func ClassRows() []ClassRow {
+	return []ClassRow{
+		{ClassRead, []string{"Read", "Glob", "Grep", "LS", "NotebookRead"}},
+		{ClassAgent, []string{"TodoWrite", "Task"}},
+		{ClassWeb, []string{"WebFetch", "WebSearch"}},
+		{ClassEdit, []string{"Edit", "MultiEdit", "Write", "NotebookEdit"}},
+		{ClassBash, []string{"Bash"}},
+		{ClassOther, nil},
+	}
+}

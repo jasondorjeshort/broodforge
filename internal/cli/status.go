@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jasondorjeshort/broodforge/internal/backup"
+	"github.com/jasondorjeshort/broodforge/internal/config"
 	"github.com/jasondorjeshort/broodforge/internal/control"
 	"github.com/jasondorjeshort/broodforge/internal/session"
 	"github.com/jasondorjeshort/broodforge/internal/store"
@@ -61,9 +62,11 @@ func runStatusWait(ctx context.Context, env *Env) error {
 
 // statusResult is the bot's status.
 type statusResult struct {
-	Config     string  `json:"config"` // ok or last-good
-	ConfigFrom *string `json:"configFrom"`
-	Discord    struct {
+	Config string `json:"config"` // ok or last-good
+	// InstanceName is the name the bot runs as, which status compares with config/'s.
+	InstanceName string  `json:"instanceName"`
+	ConfigFrom   *string `json:"configFrom"`
+	Discord      struct {
 		Mode      string `json:"mode"`
 		Connected bool   `json:"connected"`
 	} `json:"discord"`
@@ -84,9 +87,9 @@ type statusResult struct {
 func (b *bot) status(_ context.Context, _ *control.Call) (json.RawMessage, error) {
 	var r statusResult
 	r.Config = "ok"
-	if b.lastGood != nil {
+	if lg := b.lastGoodAt(); lg != nil {
 		r.Config = "last-good"
-		t := store.FormatTime(*b.lastGood)
+		t := store.FormatTime(*lg)
 		r.ConfigFrom = &t
 	}
 	// Dry-run has no gateway to lose: its sink is attached for the bot's life (P11 renders into it).
@@ -108,7 +111,9 @@ func (b *bot) status(_ context.Context, _ *control.Call) (json.RawMessage, error
 			r.Backup.LastGood, r.Backup.AgeSeconds = &t, &age
 		}
 	}
-	r.Engine.Path, r.Engine.Version = b.cfg.Instance.Engine.Path, b.cfg.Instance.Engine.Version
+	c := b.config()
+	r.Engine.Path, r.Engine.Version = c.Instance.Engine.Path, c.Instance.Engine.Version
+	r.InstanceName = c.Instance.InstanceName
 	return json.Marshal(r)
 }
 
@@ -141,6 +146,11 @@ func renderStatus(env *Env, raw json.RawMessage) error {
 		fmt.Sprintf("worktrees: %d kept with unpushed commits", r.Worktrees.Kept),
 		bk,
 		"engine: " + orDash(r.Engine.Path) + " " + orDash(r.Engine.Version),
+	}
+	// config/ naming another instance than the bot runs as (it answered under its last-good
+	// name, socket.go): said after the config line.
+	if cur, err := config.PlainInstanceName(env.Root); err == nil && r.InstanceName != "" && cur != r.InstanceName {
+		lines = append(lines[:1], append([]string{"instance-name: " + cur + " (bot runs as " + r.InstanceName + ")"}, lines[1:]...)...)
 	}
 	for _, l := range lines {
 		if _, err := fmt.Fprintln(env.Out.w, l); err != nil {

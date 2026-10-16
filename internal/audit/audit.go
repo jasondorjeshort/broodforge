@@ -41,6 +41,8 @@ const (
 	KindHandoffRefused       Kind = "handoff-refused"
 	KindWorktreeForgotten    Kind = "worktree-forgotten"
 	KindWorktreeAdopted      Kind = "worktree-adopted"
+	KindModeChanged          Kind = "mode-changed"
+	KindParticipantInvited   Kind = "participant-invited"
 )
 
 // Phase marks an action outside the store: attempted before, done or failed after (ADR

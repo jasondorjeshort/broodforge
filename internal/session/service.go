@@ -86,12 +86,14 @@ const (
 // Hook variables of 03-hook-contract.md (Environment). The hook package holds the same names;
 // session does not import it (03's session row).
 const (
-	envSession   = "BROODFORGE_SESSION"
-	envMode      = "BROODFORGE_MODE"
-	envReach     = "BROODFORGE_REACH"
-	envTree      = "BROODFORGE_TREE"
-	envCanonical = "BROODFORGE_CANONICAL"
-	envHookLog   = "BROODFORGE_HOOK_LOG"
+	envSession      = "BROODFORGE_SESSION"
+	envMode         = "BROODFORGE_MODE"
+	envReach        = "BROODFORGE_REACH"
+	envTree         = "BROODFORGE_TREE"
+	envCanonical    = "BROODFORGE_CANONICAL"
+	envHookLog      = "BROODFORGE_HOOK_LOG"
+	envSessionAllow = "BROODFORGE_SESSION_ALLOW"
+	envAnswerReason = "BROODFORGE_ANSWER_REASON"
 )
 
 // worktreeActive is a worktree row's state while its session uses it (02-domain.md, Worktree).
@@ -131,8 +133,9 @@ type Config struct {
 	Instance string // instanceName
 	// DryRun is discord.mode dry-run: the debug overrides (--reach, --fixture, timeouts) are
 	// refused live-instance otherwise (05-cli-conventions.md, Isolation).
-	DryRun     bool
-	RoleGroups map[string][]string
+	DryRun bool
+	// Groups is the instance's roleGroups as currently loaded (config reload may change them).
+	Groups func() map[string][]string
 	// Channel looks a configured channel up by id.
 	Channel func(id string) (Channel, bool)
 	// Fixtures is engine.fakeFixtures: a bare --fixture name is a directory under it.
@@ -142,16 +145,19 @@ type Config struct {
 	CreateTree func(ctx context.Context, s git.Session) (base string, err error)
 	// RemoveTree undoes CreateTree for a start that fails after the clone: git.Discard.
 	RemoveTree func(ctx context.Context, s git.Session) error
-	Store      *store.Store
-	Audit      *audit.Writer
-	// Now is the injectable clock; nil is time.Now. Idle and prompt timeouts read it (P10 half b).
-	Now func() time.Time
+	// Handoff is the end of session's bundle, check and push or pull request (03; the bot's
+	// worktree handoff). nil hands nothing off: the outcome is none.
+	Handoff func(ctx context.Context, id string) (git.Outcome, error)
+	Store   *store.Store
+	Audit   *audit.Writer
+	// Clock is the injectable clock the idle and prompt timeouts run on; nil is RealClock.
+	Clock Clock
 }
 
-// Service is SessionService (03-architecture.md, Components; N-11): start, submit, status and
-// subscribe here; answer, setMode, interrupt, end and invite are P10 half (b) and later. Every
-// session's turn runs on its own goroutine reading its own engine's events; nothing here waits
-// on another session, and store writes are short transactions.
+// Service is SessionService (03-architecture.md, Components; N-11): start, submit, answer,
+// setMode, interrupt, end, invite, status and subscribe. Every session's engine process runs on
+// its own goroutine reading its own engine's events; nothing here waits on another session,
+// and store writes are short transactions.
 type Service struct {
 	cfg     Config
 	closing atomic.Bool
@@ -162,15 +168,19 @@ type Service struct {
 
 // New returns the service.
 func New(cfg Config) *Service {
-	if cfg.Now == nil {
-		cfg.Now = time.Now
+	if cfg.Clock == nil {
+		cfg.Clock = RealClock{}
+	}
+	if cfg.Groups == nil {
+		cfg.Groups = func() map[string][]string { return nil }
 	}
 	return &Service{cfg: cfg, live: map[string]*live{}}
 }
 
-func (s *Service) now() time.Time { return s.cfg.Now().UTC() }
-func (s *Service) stamp() string  { return store.FormatTime(s.now()) }
-func badArgs(msg string) *Error   { return &Error{CodeBadArgs, msg} }
+func (s *Service) groups() map[string][]string { return s.cfg.Groups() }
+func (s *Service) now() time.Time              { return s.cfg.Clock.Now().UTC() }
+func (s *Service) stamp() string               { return store.FormatTime(s.now()) }
+func badArgs(msg string) *Error                { return &Error{CodeBadArgs, msg} }
 
 // Details renders an audit event's details from key and value pairs, an empty value left out.
 // Values are strings, so no map holds an `any`; HTML characters are not escaped, so a
@@ -253,8 +263,8 @@ type live struct {
 	eng        engine.Engine
 	git        git.Session
 	tree, home string
-	// idleTimeout and promptTimeout are the session's (channel or debug override); the timers
-	// are P10 half (b).
+	// idleTimeout and promptTimeout are the session's, the channel's or a debug override; the
+	// timers are actions.go's, on the service's clock.
 	idleTimeout, promptTimeout time.Duration
 	log                        *eventLog
 
@@ -266,14 +276,27 @@ type live struct {
 	queue           []queued
 	engineSessionID string
 	participants    map[string]string // user id to role
-	// calls are the tool calls seen, by tool_use_id, for the session: a resumed turn's result
-	// answers a call the turn before made.
+	// calls are the tool calls seen, by tool_use_id, for the session: a resumed process's result
+	// answers a call the process before made.
 	calls map[string]call
+
+	turnMode      string // the mode the running turn started with (a switch waits for the next)
+	requester     string // the running turn's requester (R-44)
+	proc          int    // the running turn's engine process, 1 up
+	pending       *Pending
+	answers       map[string]answerRec // answered calls whose result has not come yet
+	sessionAllow  []string             // tools allowed for the session (allow-session)
+	interruptedBy string               // set by Interrupt until the turn ends
+	// baselines is each engine session's last result's cumulative modelUsage (S2).
+	baselines map[string]map[string]engine.ModelUsage
+
+	idleTimer, promptTimer Timer
+	idleGen, promptGen     int
 }
 
 // queued is a message waiting for the next turn (ADR 0020: queued, not injected).
 type queued struct {
-	user, block string
+	user, block, text string
 }
 
 func (s *Service) lookup(id string) *live {
@@ -340,7 +363,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (Started, error) 
 	if !found {
 		return Started{}, s.refuse(actor, "", "start", "unregistered", &Error{CodeUnregistered, req.As + " is not registered"})
 	}
-	if roles := splitRoles(req.Roles); req.Roles != "" && !policy.Permitted(roles, ch.Roles.Start, s.cfg.RoleGroups, false) {
+	if roles := splitRoles(req.Roles); req.Roles != "" && !policy.Permitted(roles, ch.Roles.Start, s.groups(), false) {
 		return Started{}, s.refuse(actor, "", "start", "roles",
 			&Error{CodeRefused, "start needs a role in " + strings.Join(ch.Roles.Start, ",")})
 	}
@@ -436,6 +459,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, store.Int(n), store.Text(id), store.T
 		_, _ = s.interruptSession(l, "shutdown")
 		return Started{}, &Error{CodeShuttingDown, id + " was interrupted: the bot is stopping"}
 	}
+	l.mu.Lock()
+	s.armIdleLocked(l)
+	l.mu.Unlock()
 	return Started{ID: id}, nil
 }
 
@@ -497,7 +523,8 @@ func (s *Service) open(ctx context.Context, ch Channel, gs git.Session, reg regi
 	}
 	l := &live{id: gs.ID, ch: ch, mode: mode, reach: reach, driver: reg, credential: credID, delivery: delivery,
 		eng: eng, git: gs, tree: tree, home: home, idleTimeout: ch.IdleTimeout, promptTimeout: ch.PromptTimeout,
-		log: newEventLog(), state: StateWaitingForInput, participants: map[string]string{reg.User: RoleDriver}, calls: map[string]call{}}
+		log: newEventLog(), state: StateWaitingForInput, participants: map[string]string{reg.User: RoleDriver}, calls: map[string]call{},
+		answers: map[string]answerRec{}, baselines: map[string]map[string]engine.ModelUsage{}}
 	if req.IdleTimeoutSeconds > 0 {
 		l.idleTimeout = time.Duration(req.IdleTimeoutSeconds) * time.Second
 	}
@@ -591,6 +618,9 @@ func (s *Service) interruptSession(l *live, reason string) (bool, error) {
 	if l.state == StateEnded || l.state == StateInterrupted {
 		return false, nil
 	}
+	s.disarmIdleLocked(l)
+	s.disarmPromptLocked(l)
+	s.discardLocked(l, ActorInstance, endCause(reason))
 	now := s.stamp()
 	err := s.cfg.Store.Write(func(tx *store.Tx) error {
 		if _, err := tx.Exec("UPDATE session SET state = ?, ended_at = ? WHERE id = ?",
@@ -605,6 +635,8 @@ func (s *Service) interruptSession(l *live, reason string) (bool, error) {
 		return false, err
 	}
 	l.state = StateInterrupted
+	s.disarmIdleLocked(l)
+	s.disarmPromptLocked(l)
 	l.log.add(Event{Time: now, Type: EventSessionInterrupted, Summary: reason})
 	l.log.close()
 	return true, nil
