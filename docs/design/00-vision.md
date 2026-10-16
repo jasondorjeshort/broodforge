@@ -149,7 +149,7 @@ before any code (`CLAUDE.md`, the `proposal` and `adr` skills; ADRs for this pro
    and a plan to meter headless use separately has been reported. Options: proceed and accept
    the risk, ask Anthropic first, or ship API keys first and subscriptions once answered. The
    owner decides; the design supports either credential kind. The 2026-10-16 amendment to ADR
-   0020 records the primary-source answer on both the terms and the metering of headless use. Open for the owner: whether the droplet's DM login relay counts as sign-in "through Anthropic's own flow".
+   0020 records the primary-source answer on both the terms and the metering of headless use. Open for the owner: whether the droplet's DM login relay counts as sign-in "through Anthropic's own flow". Decided 2026-10-16: the relay stays off by default and API keys are the droplet fallback for subscriptions; whether the relay counts as sign-in "through Anthropic's own flow" is asked of Anthropic once the droplet has real users, and the relay is not enabled before an answer. The PC path is unaffected.
 2. Pull request or direct push as the default at the end of a session. The owner said either,
    probably configurable; the default for a new project still needs a pick. Answered 2026-10-14
    in `04-ux.md`.
