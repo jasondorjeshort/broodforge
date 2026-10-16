@@ -35,6 +35,11 @@ the brief supplies what only this task knows.
   expected.
 - reviewer: name the claim most worth testing (a destructive step, a safety property); experiments
   in the scratchpad are expected and it may run them unasked, but naming the claim focuses the review.
+  For a boundary that decides on paths or names (a hook, a guard, a sandbox list), list the escape
+  classes to try: short names, link and junction, UNC and device prefixes, streams, drive-relative,
+  `~` and shell-style prefixes, whitespace, case, patterns with metacharacters first, and ask it to
+  check how the other side (the engine, the shell) resolves the same string before it compares.
+  The P6 hook needed three rounds because the first brief named none of these.
 - runner: give exact commands or the commit brief from the `commit` skill; nothing to interpret.
 - pusher: use the one-line brief from the `commit` skill, with the user's request quoted.
 
