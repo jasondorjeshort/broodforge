@@ -1,6 +1,6 @@
 ---
 name: proposal
-description: Run the major-choice loop (proposal, critic, revision) before an ADR. Use when choosing a language, UI toolkit, cross-platform strategy, data storage, network protocol or API surface, build system, or a dependency the whole project will lean on, or when asked to write a proposal.
+description: Run the major-choice loop (proposal, critic, revision) before an ADR. Use when choosing a language, UI toolkit, cross-platform strategy, data storage, network protocol or API surface, build system, a dependency the whole project will lean on, an incompatible change to a promised surface (ADR 0012), or when asked to write a proposal.
 ---
 
 # Proposal
@@ -16,7 +16,9 @@ The architect writes; the coordinator briefs; the critic argues.
 2. Write `docs/design/proposals/NNNN-<short-title>.md` from `template.md` in this directory (use
    the Write tool). Status: `draft`. Every option gets the same depth of treatment; the
    recommendation names what would reverse it. Claims about tools, licenses, platforms, or APIs
-   are listed under "Claims to verify" so the critic can check them.
+   are listed under "Claims to verify" so the critic can check them. Every option states its exit
+   cost and moving parts. A dependency the project will lean on answers `dependency.md` in the
+   proposal.
 3. Add the proposal to `docs/design/proposals/README.md` if that index lists files.
 4. Set Status to `under review`. Brief the `critic` with `brief-critic.md` filled in. The critic
    writes `NNNN-critic-review.md` beside the proposal.

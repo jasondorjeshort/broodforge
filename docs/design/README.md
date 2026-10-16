@@ -9,7 +9,7 @@ Planned documents (added as we go):
 | `00-vision.md` | What the app is, who it is for, what "done" looks like |
 | `01-requirements.md` | Functional and non-functional requirements |
 | `02-domain.md` | Core concepts, vocabulary, data model |
-| `03-architecture.md` | Components, boundaries, tech choices and why |
+| `03-architecture.md` | Components, boundaries, tech choices and why, the promised surfaces with their compatibility promise, and the fitness checks |
 | `04-ux.md` | Flows, screens, interaction model |
 | `05-debug-interface.md` | How agents drive, observe, and reproduce every feature from a terminal |
 | `06-platforms.md` | Target platforms and the language, toolkit, and API chosen for each part, with the sharing strategy between them |

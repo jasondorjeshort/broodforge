@@ -32,7 +32,8 @@ STOP are made by the main session, because the usage gate blocks subagent launch
    line per model. The runner has no Write tool and heredocs break on apostrophes, so a message
    with an apostrophe, a backtick or more than one paragraph goes to a file: the coordinator writes
    it to its scratchpad with the Write tool and the brief says `git commit -F <that path>` instead
-   of `Message:`.
+   of `Message:`. A serious reviewer finding the coordinator accepted without a fix is one body
+   line, `Accepted finding: <one line>`.
 4. Launch the `runner` with that brief. Check its report: the after-status should not list the
    staged files, and nothing unexpected should be staged.
 5. Amend only when necessary (fix a message, fold a forgotten file into the commit it belongs to)

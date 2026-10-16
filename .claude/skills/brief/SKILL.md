@@ -30,7 +30,8 @@ the brief supplies what only this task knows.
   line cap.
 - critic: use `brief-critic.md` from the `proposal` skill.
 - coder: name the design section and the debug-interface section; say "use the Write tool for
-  files with apostrophes".
+  files with apostrophes"; fill Interface and Dependencies; a surface or cross-module interface
+  is the architect's to design, a module-internal one the coder's.
 - tester: name the behaviours to cover and the test command; say whether failing tests are
   expected.
 - reviewer: name the claim most worth testing (a destructive step, a safety property); experiments

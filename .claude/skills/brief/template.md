@@ -8,6 +8,8 @@ Already ruled out: <what was tried and why it failed, with finding paths; or "no
 
 Scope: do <exact deliverable>. Do not touch <paths or areas>. If the design is silent on
 something you need, make the smallest reasonable choice and report it.
+Interface: may add <X>; must not change <Y>; or unconstrained because <reason>.
+Dependencies: none, or each new one with .claude/skills/proposal/dependency.md answered.
 
 Verify by: <exact commands or observable results; paste output in the report>
 

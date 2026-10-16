@@ -24,7 +24,7 @@ Checks:
 7. Doc size caps (ADR 0002, `.claude/rules/docs.md`): every tracked Markdown file under `docs/` is at most 300 lines, and `docs/HANDOFF.md` is at most 40; `docs/design/proposals/` is exempt (closed records). Run:
    `git ls-files -- 'docs/*.md' | while read -r f; do case "$f" in docs/design/proposals/*) continue;; esac; n=$(wc -l < "$f"); cap=300; [ "$f" = docs/HANDOFF.md ] && cap=40; [ "$n" -gt "$cap" ] && echo "FAIL $f: $n lines, cap $cap"; done`
    Any `FAIL` line means stop and report it; the fix is a split or a trim, not a cap change.
-8. If the repo defines a test command (look in `CLAUDE.md`, `README.md`, or the package manifest), run it. It must pass. If there is no test command yet, say so and continue.
+8. If the repo defines a test command (look in `CLAUDE.md`, `README.md`, or the package manifest), run it. It must pass. If there is no test command yet, say so and continue. A `FAIL` line from a fitness check is reported verbatim as design work for the architect; do not retry or edit anything.
 9. If the repo defines a lint command, run it. It must pass.
 
 Then push the current branch only: `git push origin <branch>` (`git push -u origin <branch>` on first push). Never `--force`, never `--force-with-lease`, never push tags unless the brief says so.

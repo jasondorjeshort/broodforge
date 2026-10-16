@@ -29,6 +29,7 @@ would stop non-GPL projects from using them at all, which is not the intent.
 | Path | License | Reason |
 |---|---|---|
 | `/` (everything not listed below) | GPL-3.0-or-later | Default. |
+| vendored copies (none in the base) | the upstream licence, kept | A file copied in under ADR 0012 keeps its own SPDX identifier and origin line; one row per file here. |
 
 ## Consequences
 
