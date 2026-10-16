@@ -50,7 +50,7 @@ are a separate finding.
   `--permission-prompts none` never added. Into `$S/fx/parallel`, hook `defer`, `--mode prompt`:
   turn 1 the plan's prompt; turn 2, outside the plan but inside the budget, `node spike/hook.js
   mode defer <b.txt id>:allow` then `--resume last` with stdin closed, to see what the other call
-  of the pair gets. Meters, shared with the C26 turns here and the C34 turn in the ADR 0022
+  of the pair gets. Meters, shared with the C26 turns in the hook-flow finding and the C34 turn in the ADR 0022
   finding: before 5-hour 25%, weekly 7%; after 27%, 7%; the last `rate_limit_event` said 0.27 and
   0.07.
 

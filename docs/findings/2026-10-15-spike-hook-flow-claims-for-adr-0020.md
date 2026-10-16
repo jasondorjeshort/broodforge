@@ -52,8 +52,8 @@ This finding's rows:
   `$RUN --replay` on each directory. Meters, shared with the S2 turns in the stream and process
   finding (ten engine processes between them): before 5-hour 19%, weekly 5%; after 22%, 6%, and
   the last turn's `rate_limit_event` said 0.22 and 0.06.
-- C26, 2026-10-16, same host, engine and `$FLAGS`, `--model haiku`, two engine processes, no
-  `control_request`. Into `$S/fx/settings-a` and `settings-b`, hook `allow`: `node spike/setup.js
+- C26, 2026-10-16, same host, engine and `$FLAGS`, `--model haiku`, two engine processes (four with C28's), no
+  `control_request`, `--permission-prompts none` never added. Into `$S/fx/settings-a` and `settings-b`, hook `allow`: `node spike/setup.js
   settings --no-hook` (so `$CFG/settings.json` became `{}`), `node spike/setup.js settings --out
   $S/alt-settings.json` (the template's hook block only), then one Read turn with `--settings
   $S/alt-settings.json` and `--setting-sources user`, and one more with `--setting-sources ""` (the
@@ -133,7 +133,7 @@ in 4.9 s and 5.4 s, `stderr-1.txt` empty, the model answered `hello` both times.
   (two turns), `settings-a` and `settings-b` (and `scrub`, the ADR 0022 finding's C34) are recorded
   and replay with no `unknown` for a kind 03 lists (new unknown kinds: `command_lifecycle`,
   `attachment`, `system/permission_denied`, `system/background_tasks_changed`, `system/task_started`,
-  `system/task_notification`, `tool_progress`); a person reads every `turn-*.jsonl` (PC username in
-  paths) before they move to `fixtures/engine/<name>/`. `$S/tree` holds untracked `hi.txt` (C27).
+  `system/task_notification`, `tool_progress`); two independent agents read every `turn-*.jsonl` (PC username in
+  paths) and the fixtures were committed to `fixtures/engine/<name>/` 2026-10-16 (`50e0c40`; rule in `9accf2d`). `$S/tree` holds untracked `hi.txt` (C27).
   `$S/alt-settings.json` is left in place; `$CFG/settings.json` is the template again.
 - `promoted_to` ADR 0020 when the last row closes.

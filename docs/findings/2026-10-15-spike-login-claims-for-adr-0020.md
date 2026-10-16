@@ -31,8 +31,8 @@ C25 on the droplet is a separate run of the same claim and is still open.
 - C25, run by the owner because the code is theirs:
   `CLAUDE_CONFIG_DIR="$TEMP/bf-spike/cfg" node spike/login.js`, stdin, stdout and stderr all piped,
   which is the relay's shape. Run twice: 2026-10-15, and 2026-10-16 after the owner deleted `$S/cfg`.
-  Note the order: the owner ran the login before the fixtures, which is harmless because the `pc`
-  step only ensures `cfg` exists and never rewrites it.
+  Note the order: the owner ran the login before the fixtures, which is harmless because the `pc` step (hook-flow finding, Shared setup)
+  only ensures `cfg` exists and never rewrites it.
 
 ## Result
 
@@ -63,8 +63,9 @@ spike's account after all; and the engine's own stream reports the plan meters o
 it runs as, see S1 in the stream and process finding.
 The finding writes the PC owner's username as `<pc user>`; the fixtures do not. They carry it in every
 path-bearing field of `turn-*.jsonl` (`file_path`, `cwd`, `command`, `permission_denials`, Bash stdout and
-`tool_result` text) and in every `meta-*.json`, with no email and no credential: the person who reads the
-fixtures before they are committed should look for that.
+`tool_result` text) and in every `meta-*.json`, with no email and no credential. Two independent agents
+read the fixtures and they were committed 2026-10-16 (`50e0c40`), the import rewriting the path (rule in
+`9accf2d`).
 
 ## Next
 

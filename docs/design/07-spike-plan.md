@@ -5,7 +5,7 @@ Date: 2026-10-14. Status: plan, written from the claims tables of ADR 0020 and A
 `05-debug-interface.md` and the operator queue. The spike runs before application code: its
 throwaway runner precedes the adapter of 03 and the fake harness of 05, the fixtures it records
 are the fake's first input, and `engine run --real` is the production form of that runner, not
-what the spike runs. Its output is two findings (`finding` skill), one per ADR, each `open` with
+what the spike runs. Its output is the findings (`finding` skill), one per ADR and the ADR 0020 one split by topic into login, stream and process, and hook flow, each `open` with
 a row per claim for as long as any row is open, `promoted_to` its ADR when it resolves, the rows
 copied by the coordinator into the ADR tables; this plan does not change when a claim falls, the
 ADR's own fallback or an amendment does. S1 and S2 are the unnumbered items of ADR 0020's spike
@@ -252,12 +252,14 @@ everywhere. Files: `run.ts` (spawn with `$FLAGS`, the stdin user line, raw stdou
 `hookmode.sh`, `engine-entry` and `strace-cfg.sh` for the droplet; `share/empty/` with `dir/`,
 `CLAUDE.md` and `mcp.json`, as the companion names them. Fixtures recorded: `basic` (S1, two
 turns), `defer` (C27), `interrupted` (S2), `parallel-deny` (C28), `hook-exit2` (C39). Kept
-afterwards: the fixtures, moved to `fixtures/engine/<name>/` [no-check: created with the
-adapter] as 05's fake expects, each read before the commit by an agent that did not record it, with nested JSON
-decoded, to confirm no name, email, hostname, path outside the placeholder or repository content
-survives, and reported to the owner in a few lines on what is account-level or personal and cannot
-be classified by a script; the owner decides on that report, never by reading the files (the
-recorder redacts nothing), and the two findings. The rest of `spike/` is deleted in the commit that lands
+afterwards: the fixtures and the findings (one per ADR, the 0020 one split by topic). The
+fixtures move to `fixtures/engine/<name>/` [no-check: created with the adapter] as 05's fake
+expects, each read before the commit by an agent that did not record it, with nested JSON decoded.
+Before the read the import rewrite (`go run ./internal/tools/importfixture`, P1; generalised when
+`engine record` lands) replaces the recording host's home with `/home/user`, and the read confirms
+no real host path, name, email, hostname or repository content survives. What is account-level or
+personal and cannot be classified by a script is reported to the owner in a few lines; the owner
+decides on that report, never by reading the files (the recorder redacts nothing). The rest of `spike/` is deleted in the commit that lands
 `engine run --real` and `engine record`. The spike stays TypeScript as the record; its parser is ported to Go in the plan's engine pass (ADR 0023).
 
 ## Cost

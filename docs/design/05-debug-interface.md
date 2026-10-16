@@ -138,8 +138,10 @@ lines as `turn-<n>.jsonl` (`n` counting up in an existing directory, `--resume` 
 previous turn's `init`) plus a `fixture.json` without delays. The recorder redacts nothing: a
 transcript carries whatever the agent read, so record with a credential made for recording and
 before committing it, have an agent that did not record it read every file with nested JSON
-decoded, confirm no name, email, hostname, path outside the placeholder or repository content
-survives, and report in a few lines what is account-level or personal and cannot be classified by
+decoded, confirm no name, email, hostname or repository content survives (before the read the import
+rewrite, `go run ./internal/tools/importfixture`, P1, generalised when `engine record` lands,
+replaces the recording host's home with `/home/user`, and the read confirms no real host path
+survives), and report in a few lines what is account-level or personal and cannot be classified by
 a script (the owner decides on that report, never by reading the files); the recorder refuses an `--out` inside a session tree.
 Observe. `session tail --json` for the mapped events; the fixture's `received-<n>.json` for the
 exact `TurnRequest` the fake saw (delivery kind, hook variable names, `systemPromptAppend`,

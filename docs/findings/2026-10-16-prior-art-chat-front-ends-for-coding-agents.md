@@ -93,8 +93,10 @@ and third-party apps with your subscription limits", that the announced change w
 April 2026 cut-off for OpenClaw and "all third-party harnesses" is press and a quoted customer
 email only; no Anthropic page found names it. Broodforge's shape (unmodified binary, one login
 directory per person, no token read) fits the hosting sentence; a raw-API or pasted-token design
-does not. Decided by the owner 2026-10-16 (relay off by default, asked of Anthropic once the droplet has users; see the last ADR 0020 amendment): whether ADR 0020's DM login relay, where the bot passes the sign-in
-link and the pasted code through, is "Anthropic's own flow".
+does not. Not decided, asked of Anthropic once the droplet has users: whether ADR 0020's DM login relay,
+where the bot passes the sign-in link and the pasted code through, is "Anthropic's own flow". Decided
+by the owner 2026-10-16: the relay is off by default and API keys are the droplet fallback (last ADR
+0020 amendment).
 
 ### Answer
 

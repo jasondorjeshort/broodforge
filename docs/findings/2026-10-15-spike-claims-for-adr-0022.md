@@ -31,7 +31,7 @@ C36, C34 and C35 on the droplet are separate runs of the same claims and are sti
 
 ## What was tried
 
-- Host, engine and fixtures as in the ADR 0020 finding of the same date: the PC, Git Bash,
+- Host, engine and fixtures as in the hook-flow finding of the same date (Shared setup): the PC, Git Bash,
   Node v22.23.2, engine `@anthropic-ai/claude-code` 2.1.296, `$S` at `AppData/Local/Temp/bf-spike`.
 - C36, run straight after C25 and spending no engine turn:
   `node spike/keys.js $CFG/.claude.json`, which prints the key path of every entry and masks each
@@ -44,10 +44,10 @@ C36, C34 and C35 on the droplet are separate runs of the same claims and are sti
   `git -C $S/clone bundle create $S/out.bundle base..spike`; `git -C $S/canon bundle verify
   $S/out.bundle && git -C $S/canon fetch $S/out.bundle spike:refs/sessions/spike`; `git -C $S/canon
   log -1 --format='%an %ae %cn %ce' refs/sessions/spike`.
-- C34 PC half, 2026-10-16, engine 2.1.296 as in the ADR 0020 finding, `$FLAGS`, `--model haiku`,
+- C34 PC half, 2026-10-16, engine 2.1.296 as in the hook-flow finding, `$FLAGS`, `--model haiku`,
   hook `allow`, `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` on the engine process as every run sets it, one
   turn into `$S/fx/scrub` with the plan's prompt; then `$RUN --replay $S/fx/scrub`. Meters (shared with
-  the C28 and C26 turns of the ADR 0020 finding): before 5-hour 25%, weekly 7%; after 27%, 7%.
+  the C28 turns of the stream and process finding and the C26 turns of the hook-flow finding): before 5-hour 25%, weekly 7%; after 27%, 7%.
 
 ## Result
 
