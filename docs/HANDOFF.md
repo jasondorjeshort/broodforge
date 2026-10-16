@@ -1,12 +1,12 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-16, at commit dcb845f, by main session
+Updated: 2026-10-16, at commit d3a0b73, by main session
 
 ## Now
 
-- `origin/main` is at `3156472` (pushed 2026-10-16). `main` is ahead by one, the mingw close-out
-  `dcb845f`, not yet read by a reviewer. Push only on the owner's words. HOLD 60%/75%.
+- `origin/main` is at `3156472` (pushed 2026-10-16). Unpushed: the mingw close-out `dcb845f` and
+  the git-guard quoted-git fix `d3a0b73`, under review. Push only on the owner's words. HOLD 60%/75%.
 - Owner: Jason Dorje Short <jdorje@gmail.com>, repo-local identity; UX is his, technical calls mine.
 - Language settled 2026-10-16: Go, ADR 0023 under the owner's long-term principle (vision). Design
   docs and `08-implementation-plan.md` are in Go form; P0 (module skeleton) is committed.
@@ -22,16 +22,16 @@ Updated: 2026-10-16, at commit dcb845f, by main session
    a person reads every fixture before the commit; the idea file is deleted in that commit).
 2. Coder: P2 CLI conventions and control socket, then P3 engine events and the fake engine.
 3. Tester: split the ADR 0020 finding by topic (login; stream and process; hook flow) first.
-4. Owner: the droplet entries (Go, gcc, Node for the spike); the two npm link names; the
-   login-relay answer. The mingw entry closed 2026-10-16; `-race` now runs on the PC too.
+4. Owner: the droplet entries (Go, gcc, Node for the spike); the login-relay answer. The mingw
+   entry closed 2026-10-16; `-race` runs on the PC. The two pruned npm links are dropped: a
+   Haiku search found they were a Discord bot's dev links on this PC, nothing runs them.
 5. Droplet claims (`07-spike-droplet.md`), then P14 (held) and the deletion of `spike/`.
 6. Pusher pushes `main` on the owner's words, at session end (the module path carries his
    GitHub handle, already public in the repository URL).
 
 ## Waiting on user
 
-- The push; the login-relay answer; the mingw entry; droplet entries; npm link targets; a word
-  that this PC's Claude Code session is his account.
+- The push; the login-relay answer; droplet entries; a word that this PC's session is his account.
 
 ## Open findings
 
