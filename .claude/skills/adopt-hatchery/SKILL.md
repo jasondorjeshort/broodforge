@@ -48,7 +48,8 @@ Everything below runs in a private clone of the project, on its default branch, 
 7. Docs skeleton, only where the project lacks the file: `git checkout hatchery/main -- docs/HANDOFF.md
    docs/ideas/README.md docs/operator/README.md docs/findings/README.md docs/reference/README.md docs/design/proposals/README.md
    docs/design/decisions/README.md docs/design/decisions/0001-licensing.md
-   docs/design/decisions/0002-repository-layout.md docs/design/decisions/0002-hook-specs.md`, then
+   docs/design/decisions/0002-repository-layout.md docs/design/decisions/0002-hook-specs.md
+   docs/design/decisions/0002-hook-specs-usage.md`, then
    reset the `ideas/`, `findings/` and `reference/` index tables to their empty row and leave `docs/ideas/` with only its README.
    `docs/design/README.md`: absent, write one that lists the existing design files one line each plus
    "Decisions so far"; present, add the list. `docs/README.md`: add one row per added path to the

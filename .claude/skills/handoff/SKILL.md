@@ -18,7 +18,10 @@ shape: `split.md` beside this file replaces steps 2 and 4 and the first rule bel
    `docs/findings/README.md`, and what this session knows that is not yet in a file.
    `grep -rh "^- Prediction, check by" docs/design/decisions/ | grep -v " Outcome " | grep -oE "[0-9]{4}-[0-9]{2}-[0-9]{2}" | sort | head -1`;
    a date on or before today, or a `FAIL` or `SKIP` fitness line in the last test run, puts
-   "triage (the scan)" in Next.
+   "triage (the scan)" in Next. A claim about the state of another repository or checkout (for
+   example "<sha> in `../<dir>` is held, not pushed") is re-checked against that repository in the
+   same sitting (`git branch -r --contains <sha>` there) before it is written; the Updated line
+   dates the file, not the claims it carries forward.
 2. Rewrite the file with the Write tool, keeping exactly these sections:
 
    ```

@@ -101,3 +101,4 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-16-base-only-sentences-survive-decant-and-adopt.md` | chore | Phase section, design-doc names, bare ADR numbers and the Windows reference: what decant and adopt leave wrong |
 | `2026-10-16-anchor-check-rejects-elided-paths.md` | bug | The post-edit path check warns on `.../` elided paths that exist |
 | `2026-10-16-downstream-improvements-to-carry-back.md` | chore | A sibling's pusher check 5a (personal data) and ADR skill Amendments section, to take into the base |
+| `2026-10-16-adopt-step-7-dangling-pointers.md` | chore | Adopt step 7's checkout list leaves pointers to ADRs 0006 and 0014 and proposals rows dangling |
