@@ -65,6 +65,14 @@ the primary one.
 - Token use is tracked for every session and user from the start; capping is a possibility.
 - Open source under GPL-3.0-or-later (`LICENSE`, ADR 0001). The owner knows an open-source project
   cannot stop others misusing it and accepts that.
+- Long-term design over time to first release (2026-10-16). Architecture choices are made for
+  scalability and maintainability; reaching a first release sooner is secondary. Growth that
+  counts: sessions and users per instance (hundreds of concurrent sessions, the thousand-player
+  tier, on one host); codebase longevity (years of agent-written changes staying readable and
+  safe: type strength, a small dependency tree, a stable toolchain, cheap refactors); and engines
+  and providers (a second and third engine without touching the core). Many instances or servers
+  per deployment is not a growth axis. Agents know every language, so language and library
+  choices are judged on mechanical properties, not on a programmer's familiarity.
 
 ## The first usable version
 
@@ -119,7 +127,8 @@ Each of these is a major choice under the working agreement: a proposal, a criti
 before any code (`CLAUDE.md`, the `proposal` and `adr` skills; ADRs for this project start at
 0020). The owner has familiar tools but asked for the design to be made without preconceptions.
 
-- Language and runtime for the bot and its backend.
+- Language and runtime for the bot and its backend. Answered by ADR 0020; reopened on 2026-10-16
+  under the long-term-design principle above by proposal 0023 `[no-check: being written]`.
 - Discord library, including how it does streaming edits, buttons and private channels.
 - Harness adapter shape: how Broodforge drives Claude Code (the Agent SDK, the CLI as a
   subprocess, or both behind one interface), and how a second engine would plug in.
