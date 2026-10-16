@@ -30,3 +30,18 @@ func (LinuxSudoBwrap) MCPConfig() string { return "" }
 func (LinuxSudoBwrap) Preflight() []Check {
 	return []Check{{Name: "backend", Detail: "held"}}
 }
+
+// WorktreeCreate refuses: held.
+func (LinuxSudoBwrap) WorktreeCreate(Worktree) error { return held() }
+
+// WorktreeBundle refuses: held.
+func (LinuxSudoBwrap) WorktreeBundle(Worktree) (Bundle, error) { return Bundle{}, held() }
+
+// WorktreeRemove refuses: held.
+func (LinuxSudoBwrap) WorktreeRemove(string) error { return held() }
+
+// HooksDir is unknown until the backend is built.
+func (LinuxSudoBwrap) HooksDir() string { return "" }
+
+// Askpass is unknown until the backend is built.
+func (LinuxSudoBwrap) Askpass() string { return "" }

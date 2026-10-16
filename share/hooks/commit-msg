@@ -1,0 +1,6 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# A help, never the enforcement: the commit goes ahead whatever happens here.
+bf="$(dirname "$0")/../../bin/broodforge"
+if [ -x "$bf" ] || [ -x "$bf.exe" ]; then "$bf" git-commit-msg "$1" || true; else echo "commit-msg: no $bf: co-author trailers not appended" >&2; fi
+exit 0

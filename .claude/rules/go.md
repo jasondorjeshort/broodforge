@@ -33,4 +33,6 @@ paths:
   subcommands the plan places there (engine run, record, replay; config check; hook pre-tool-use,
   try, cases), and `store`, `audit`, `backup` and `credentials`, for the `(file)` commands and the
   read commands' fallback to the store file, and `spawn`, for `spawn preflight` and the backend
-  the standalone engine commands start; nothing else beyond what 03's `cli` row names.
+  the standalone engine commands start, and `git` and `policy`, for the worktree handlers (until
+  `session`, P10) and the hidden `git-askpass` and `git-commit-msg`; nothing else beyond what 03's
+  `cli` row names.

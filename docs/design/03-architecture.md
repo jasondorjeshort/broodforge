@@ -28,7 +28,7 @@ names; everything else goes through `SessionService`. Host differences live in `
 | `spawn` | `SpawnBackend`: `same-account` and `linux-sudo-bwrap`; interrupt; `engine-entry`; preflight | the OS |
 | `backup` | `backup snapshot`, `verify`, `rehearse` (never scheduled by the bot) | `store` |
 | `config` | Loading, validation, last-good, `reload`, `config check` | `credentials` (id existence) |
-| `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control`; `credentials` (`credential init`, the reads' store fallback, the bot's handlers) |
+| `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control`; `credentials` (`credential init`, the reads' store fallback, the bot's handlers); `git` and `policy` (the worktree handlers until `session`, P10) |
 
 `SessionService` is the boundary N-11 names: `start`, `submit`, `answer`, `setMode`, `interrupt`,
 `end`, `invite`, `status`, `subscribe(sessionId)`. The Discord adapter and the control socket call
@@ -213,8 +213,8 @@ subagent branches are listed in the end-of-session summary and removed with the 
 Attribution (R-32, R-33). Author and committer of every commit: the driver's registration,
 through the four git identity variables (ADR 0022). Trailers, one `Co-Authored-By: <name>
 <email>` each, in this order: every other participant who wrote a message before the commit's
-committer time, in join order; then every model with a usage row in the session before that
-time, by display name with `noreply@anthropic.com`. Models used by subagents are contributors
+committer time, in join order; then every model with usage in the session whose first turn
+started before that time (the usage row lands at the turn's end), by display name with `noreply@anthropic.com`. Models used by subagents are contributors
 too: `modelUsage` from the engine's result covers them (ADR 0020, Amendments), so every model with non-zero
 usage in the session gets a line (an Opus agent that ran a Haiku subagent yields both). The
 display name comes from the map in `policy` (model id prefix to name); an unmapped id is used

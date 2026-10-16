@@ -226,26 +226,7 @@ Isolation. Preflight runs only the engine's `--version` (Linux: `engine-entry --
 
 ## Git handoff
 
-Drive. `broodforge worktree list [--kept]` prints `<session id>  <path>  active|pushed|kept|
-removed  <unpushed commits>  <missing since or ->`. `worktree check <id>` runs the attribution
-check alone: one line per commit `<hash>  ok|author:<got>|missing:<trailer>`, exit 1 if any
-fails. `worktree bundle <id>` runs the bundle step, prints the bundle path and commit count
-(`none` for no commits). `worktree handoff <id> [--dry-run]` runs the companion's five steps;
-`--dry-run` stops after the check and prints what `push` or `pull-request` would send (remote,
-refspec, request body with the credential id in place of the value). Refusals are stable codes
-on stderr, exit 1: `handoff-refused-bundle-verify`, `handoff-refused-fetch`,
-`handoff-refused-attribution` (failing lines follow), `handoff-failed-push` (git stderr's first
-line as the message), `handoff-failed-pull-request` (the HTTP status). `worktree forget|adopt`
-are ADR 0021's.
-Observe. `worktree list`; `audit --session <id> --kind push,pull-request-opened,handoff-refused`;
-`git -C <root>/projects/scratch for-each-ref refs/sessions/`; `git -C <root>/remote/scratch.git
-branch` for the pushed branch in scratch.
-Reproduce. In a scratch root, commit in the session tree with a wrong author (`git -C
-<root>/sessions/s0001/tree commit --author "X <x@example.com>" -m t` after a change) and run
-`worktree handoff s0001 --expect handoff-refused-attribution`. A pull request cannot complete
-offline: `--dry-run` is the reproduction, the forge call the one step left.
-Isolation. The scratch remote is a local bare repository with `handoff` `push`; the bot's
-git never opens the session tree (ADR 0022); `worktree check` reads `refs/sessions/<id>`.
+Moved to `05-debug-interface-git.md`: `worktree check|bundle|handoff`, the refusal codes, the hidden `git-askpass` and `git-commit-msg`, and the rules the code fixes.
 
 ## Usage and audit queries
 

@@ -55,6 +55,16 @@ type Backend interface {
 	Preflight() []Check
 	// MCPConfig is the empty MCP map every engine process names (ADR 0022 companion).
 	MCPConfig() string
+	// WorktreeCreate clones the canonical into the session's tree on the session branch;
+	// WorktreeBundle writes the session's bundle of its commits since the base; WorktreeRemove
+	// deletes the tree and the bundle (worktree.go; ADR 0022 companion).
+	WorktreeCreate(w Worktree) error
+	WorktreeBundle(w Worktree) (Bundle, error)
+	WorktreeRemove(session string) error
+	// HooksDir is the directory the clone's core.hooksPath names; Askpass the GIT_ASKPASS
+	// helper the bot's push names. Both are under <bf>/share.
+	HooksDir() string
+	Askpass() string
 }
 
 // Config is what a backend needs from the instance config; spawn does not import config.
