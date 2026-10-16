@@ -5,18 +5,18 @@ Updated: 2026-10-16 by main session (Hatchery coordinator)
 
 ## Now
 
-- origin/main is ab42bd2. Unpushed: 3d5361a (proposal, review, ADR 0014, finding) and this commit
-  (ADR 0014 applied: skills, docs rule, post-edit hook with group PH, pusher check 7, ADR lines,
-  indexes). Reviewed once, minors fixed. Account jdorje; the gate never denied. Earliest due
-  prediction 2027-01-16; no fitness FAIL or SKIP in the last run.
-- `../regenesis` (its ADR 0017) spells its map `@docs/handoff/<file>.md`, which resolves from
-  `docs/`, so no stream has loaded there since the split; not edited from here (ADR 0014, migration).
+- origin/main is 30f82ac (ADR 0014 and its application pushed). Unpushed: 20faa33 (pusher check 7
+  rewritten so `git-guard` allows it; reviewed) and this handoff. Account jdorje; the gate never
+  denied. Earliest due prediction 2027-01-16; no fitness FAIL or SKIP in the last run.
+- `../regenesis-regenesis-handoffs` (worktree, branch `regenesis-handoffs`) holds b94eb723: its map
+  respelled `@handoff/<file>.md` so its streams load again, ADR 0017 corrected, `hatchery.md` Next
+  lists its update steps. Reviewed; unpushed; the owner merges it to master.
   `../broodforge` runs the older base and still reads `~/.claude/usage-state.json`.
 
 ## Next
 
-1. The push, on the owner's words (`pusher`); then the owner's answers (Waiting on user).
-2. `../regenesis` in its own session: map lines to `@handoff/<file>.md` now; ADRs 0011 to 0014 at its update.
+1. The push of 20faa33, on the owner's words (`pusher`); then the owner's answers (Waiting on user).
+2. `../regenesis` in its own session, after b94eb723 is on master: `update-from-hatchery` for ADRs 0011 to 0014.
 3. The first decant with the README prompt.
 4. Architect answers the critic reviews of proposals 0003 and 0005 (`docs/design/proposals/README.md`).
 5. Critic review of ADR 0006 as a whole, with the escape-hatch question in `.claude/skills/proposal/brief-critic.md`.
