@@ -19,7 +19,9 @@
 // repo-relative docs paths (relative to the current directory) and prints one
 // "FAIL <path>: <n> lines, cap <cap>" per file over its docCap; exit 1 on any FAIL, a malformed
 // policy or an unreadable file included (a listed file absent from the working tree is skipped),
-// else 0. Pusher check 7 runs it; post-edit.js uses docCap.
+// else 0. The last stdout line is always "cap-check: <N> files, <M> over cap" (N files checked
+// against a cap, M FAIL lines), on every exit: a run without it is a failed run (an older policy.js
+// that does not know the flag, a crash). Pusher check 7 runs it; post-edit.js uses docCap.
 // Test seam: HOOK_POLICY_FILE names another file (test-hooks.js sets it; unset in normal use).
 'use strict';
 const fs = require('fs');
@@ -332,14 +334,16 @@ const lineCount = (text) => (text.match(/\n/g) || []).length; // same as wc -l
 
 // The --cap-check mode: returns { lines, code } so the CLI below only prints. A policy that does not
 // load is a FAIL here, never the defaults: the push must not pass on rules the project did not set.
+// files counts the listed files checked against a cap (exempt and deleted ones are not).
 function capCheck(listFile) {
   const r = load();
-  if (r.error) return { lines: [`FAIL policy: ${r.error}`], code: 1 };
+  if (r.error) return { lines: [`FAIL policy: ${r.error}`], files: 0, code: 1 };
   let list;
   try { list = fs.readFileSync(listFile, 'utf8'); } catch (e) {
-    return { lines: [`FAIL ${listFile}: cannot read the list (${e.message})`], code: 1 };
+    return { lines: [`FAIL ${listFile}: cannot read the list (${e.message})`], files: 0, code: 1 };
   }
   const out = [];
+  let files = 0;
   for (const rel of list.replace(/\r/g, '').split('\n').filter((l) => l !== '')) {
     const cap = docCap(r.policy.edit, rel);
     if (cap === null) continue;
@@ -351,17 +355,19 @@ function capCheck(listFile) {
       out.push(`FAIL ${rel}: cannot read (${e.code || e.message})`);
       continue;
     }
+    files += 1;
     if (n > cap) out.push(`FAIL ${rel}: ${n} lines, cap ${cap}`);
   }
-  return { lines: out, code: out.length ? 1 : 0 };
+  return { lines: out, files, code: out.length ? 1 : 0 };
 }
 
 module.exports = { load, matches, docCap, lineCount, capCheck, DOCS_CAP, HANDOFF_CAP, usageVerdict, meterThresholds, classifyGrant, readGrants, judgeGrants, holdCovered, holdLifted, readAccount, accountLabel, accountsDiffer, DEFAULTS };
 
 if (require.main === module && process.argv[2] === '--cap-check') {
-  if (!process.argv[3]) { process.stderr.write('usage: node .claude/hooks/policy.js --cap-check <listfile>\n'); process.exit(2); }
-  const c = capCheck(process.argv[3]);
-  process.stdout.write(c.lines.map((l) => `${l}\n`).join(''));
+  const c = process.argv[3] ? capCheck(process.argv[3])
+    : { lines: ['FAIL usage: --cap-check needs a list file'], files: 0, code: 2 };
+  if (c.code === 2) process.stderr.write('usage: node .claude/hooks/policy.js --cap-check <listfile>\n');
+  process.stdout.write(`${c.lines.map((l) => `${l}\n`).join('')}cap-check: ${c.files} files, ${c.lines.length} over cap\n`);
   process.exitCode = c.code; // not process.exit: a write to a pipe may still be in flight
 } else if (require.main === module) {
   const r = load(process.argv[2]);

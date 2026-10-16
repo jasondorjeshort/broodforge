@@ -1,6 +1,7 @@
 ---
 date: 2026-10-16
 kind: chore
+related: [2026-10-16-adopt-step-7-dangling-pointers.md]
 ---
 # Base-only sentences in CLAUDE.md and the agents survive decant and adopt
 

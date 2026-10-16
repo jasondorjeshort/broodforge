@@ -670,8 +670,10 @@ for (const [id, label, filePath, expect, rawOverride, fmt, policy, root] of P) {
 // ---------- pusher check 7: policy.js --cap-check (docCap, shared with post-edit) ----------
 // One scratch root (cap/) with a list file per case, run from that root as the pusher runs it from
 // the repository's. A case is [id, label, listed paths, policy file, expected exit, expected stdout
-// (a string, or a function of stdout returning true or a reason)].
-const PUSHER_CAP_LINE = 'l=$(mktemp); git ls-files -- \'docs/*.md\' > "$l"; node .claude/hooks/policy.js --cap-check "$l"; rm -f "$l"';
+// (a string, or a function of stdout returning true or a reason)]. Every run ends its stdout with
+// the sentinel "cap-check: <N> files, <M> over cap" (N files checked against a cap, M FAIL lines);
+// check 7 treats a run without it as a FAIL, which is how an older policy.js or a crash shows.
+const PUSHER_CAP_LINE = 'l=$(mktemp); git -c core.quotePath=false ls-files -- \'docs/*.md\' > "$l"; node .claude/hooks/policy.js --cap-check "$l"; rm -f "$l"';
 {
   const root = path.join(scratch, 'cap');
   const files = {
@@ -687,26 +689,28 @@ const PUSHER_CAP_LINE = 'l=$(mktemp); git ls-files -- \'docs/*.md\' > "$l"; node
     fs.mkdirSync(path.dirname(f), { recursive: true });
     fs.writeFileSync(f, text);
   }
+  const BIG = 'FAIL docs/reference/big.md: 301 lines, cap 300\n';
   const CAP = [
     ['CAP01', 'exempt doc over 300', ['docs/reference/big.md', 'docs/reference/small.md'],
-      scratchPolicy('cap-exempt', { edit: { capExempt: ['docs/reference/big.md'] } }), 0, ''],
+      scratchPolicy('cap-exempt', { edit: { capExempt: ['docs/reference/big.md'] } }), 0, 'cap-check: 1 files, 0 over cap\n'],
     ['CAP02', 'the same doc, not exempt', ['docs/reference/big.md', 'docs/reference/small.md'],
-      POLICIES.hatchery, 1, 'FAIL docs/reference/big.md: 301 lines, cap 300\n'],
+      POLICIES.hatchery, 1, `${BIG}cap-check: 2 files, 1 over cap\n`],
     ['CAP03', 'exempt by pattern, handoff files still capped at 40', ['docs/HANDOFF.md', 'docs/handoff/x.md', 'docs/reference/big.md'],
       scratchPolicy('cap-all', { edit: { capExempt: ['docs/*'] } }), 1,
-      'FAIL docs/HANDOFF.md: 41 lines, cap 40\nFAIL docs/handoff/x.md: 41 lines, cap 40\n'],
-    ['CAP04', 'proposal over 300, absent policy', ['docs/design/proposals/0001-long.md'], POLICIES.none, 0, ''],
+      'FAIL docs/HANDOFF.md: 41 lines, cap 40\nFAIL docs/handoff/x.md: 41 lines, cap 40\ncap-check: 2 files, 2 over cap\n'],
+    ['CAP04', 'proposal over 300, absent policy', ['docs/design/proposals/0001-long.md'], POLICIES.none, 0,
+      'cap-check: 0 files, 0 over cap\n'],
     ['CAP05', 'handoff over 300: one FAIL, the 40', ['docs/handoff/huge.md'], POLICIES.hatchery, 1,
-      'FAIL docs/handoff/huge.md: 301 lines, cap 40\n'],
+      'FAIL docs/handoff/huge.md: 301 lines, cap 40\ncap-check: 1 files, 1 over cap\n'],
     ['CAP06', 'malformed policy fails loudly', ['docs/reference/small.md'], scratchPolicy('cap-bad', '{ nope'), 1,
-      (out) => /^FAIL policy: .+\n$/.test(out) || 'expected one "FAIL policy: ..." line'],
+      (out) => /^FAIL policy: .+\ncap-check: 0 files, 1 over cap\n$/.test(out) || 'expected one "FAIL policy: ..." line and the sentinel'],
     ['CAP07', 'unknown policy key fails loudly', ['docs/reference/small.md'],
       scratchPolicy('cap-key', { edit: { capExemt: ['docs/*'] } }), 1,
-      (out) => /^FAIL policy: .*unknown key edit\.capExemt\n$/.test(out) || 'expected a "FAIL policy: ... unknown key" line'],
+      (out) => /^FAIL policy: .*unknown key edit\.capExemt\ncap-check: 0 files, 1 over cap\n$/.test(out) || 'expected a "FAIL policy: ... unknown key" line and the sentinel'],
     ['CAP08', 'listed file deleted in the working tree is skipped', ['docs/reference/gone.md', 'docs/reference/big.md'],
-      POLICIES.hatchery, 1, 'FAIL docs/reference/big.md: 301 lines, cap 300\n'],
+      POLICIES.hatchery, 1, `${BIG}cap-check: 1 files, 1 over cap\n`],
     ['CAP12', 'listed path unreadable (a directory)', ['docs/reference'], POLICIES.hatchery, 1,
-      (out) => /^FAIL docs\/reference: cannot read \(E[A-Z]+\)\n$/.test(out) || 'expected one "FAIL docs/reference: cannot read" line'],
+      (out) => /^FAIL docs\/reference: cannot read \(E[A-Z]+\)\ncap-check: 0 files, 1 over cap\n$/.test(out) || 'expected one "FAIL docs/reference: cannot read" line and the sentinel'],
   ];
   for (const [id, label, listed, policy, code, expect] of CAP) {
     if (!selected(id)) continue;
@@ -726,11 +730,43 @@ const PUSHER_CAP_LINE = 'l=$(mktemp); git ls-files -- \'docs/*.md\' > "$l"; node
   }
   if (selected('CAP09')) {
     const r = spawnSync(NODE, [path.join(HOOKS, 'policy.js'), '--cap-check'], { encoding: 'utf8', env: envWith({ HOOK_POLICY_FILE: POLICIES.hatchery }) });
-    report('CAP09', '--cap-check without a list file -> exit 2, usage line', r.status === 2 && /^usage: /.test(r.stderr || ''),
+    report('CAP09', '--cap-check without a list file -> exit 2, usage line, a FAIL line and the sentinel',
+      r.status === 2 && /^usage: /.test(r.stderr || '') && r.stdout === 'FAIL usage: --cap-check needs a list file\ncap-check: 0 files, 1 over cap\n',
       `exit ${r.status}, stderr ${JSON.stringify(r.stderr)}`, r.stdout);
   }
-  // The pusher's line as written in .claude/agents/pusher.md check 7 (kept in step by hand: the
-  // harness reads no file of the repository) must pass the guard, for the pusher and the main session.
+  // An older policy.js does not know the flag; an unknown flag stands in for it: it prints the
+  // effective policy, exits 0 and never the sentinel, which check 7 must read as a FAIL.
+  if (selected('CAP13')) {
+    const list = path.join(root, 'list-CAP13.txt');
+    fs.writeFileSync(list, 'docs/reference/big.md\n');
+    const r = spawnSync(NODE, [path.join(HOOKS, 'policy.js'), '--cap-chek', list],
+      { cwd: root, encoding: 'utf8', env: envWith({ HOOK_POLICY_FILE: POLICIES.hatchery }) });
+    report('CAP13', 'an unknown flag (an older policy.js) prints no cap-check line', !/^cap-check: /m.test(r.stdout || ''),
+      'the sentinel appeared', r.stdout);
+  }
+  // A non-ASCII file name over the cap, through the pusher's real line on a scratch git repository:
+  // without core.quotePath=false git lists it quoted, as "docs/caf\303\251-big.md", and the file is skipped.
+  if (selected('CAP14')) {
+    const repo = path.join(scratch, 'capgit');
+    fs.mkdirSync(path.join(repo, 'docs'), { recursive: true });
+    git(repo, 'init', '-q');
+    fs.writeFileSync(path.join(repo, 'docs', 'café-big.md'), lines(301));
+    git(repo, 'add', '--', 'docs/café-big.md');
+    const line = PUSHER_CAP_LINE.replace('.claude/hooks/policy.js', `"${path.join(HOOKS, 'policy.js').replace(/\\/g, '/')}"`);
+    const r = spawnSync('bash', ['-c', line], { cwd: repo, encoding: 'utf8', timeout: 30000, env: envWith({ HOOK_POLICY_FILE: POLICIES.hatchery }) });
+    const want = 'FAIL docs/café-big.md: 301 lines, cap 300\ncap-check: 1 files, 1 over cap\n';
+    report('CAP14', 'a non-ASCII doc over 300 FAILs through the pusher line', r.stdout === want,
+      `expected ${JSON.stringify(want)}; stderr ${(r.stderr || '').trim()}`, r.stdout);
+  }
+  // CAP10 and CAP11 run PUSHER_CAP_LINE; this case keeps it equal to the backticked command of
+  // .claude/agents/pusher.md that holds --cap-check, so the copy above cannot drift.
+  if (selected('CAP15')) {
+    const spans = fs.readFileSync(path.join(__dirname, '..', 'agents', 'pusher.md'), 'utf8').match(/`[^`\n]+`/g) || [];
+    const hits = spans.map((x) => x.slice(1, -1)).filter((x) => x.includes('--cap-check'));
+    report('CAP15', 'pusher.md check 7 holds exactly the line the harness tests', hits.length === 1 && hits[0] === PUSHER_CAP_LINE,
+      `found ${JSON.stringify(hits)}`);
+  }
+  // The pusher's line must pass the guard, for the pusher and the main session.
   guardCase('CAP10', { command: PUSHER_CAP_LINE, agent: 'pusher' }, 'allow');
   guardCase('CAP11', { command: PUSHER_CAP_LINE }, 'allow');
 }

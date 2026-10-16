@@ -5,11 +5,11 @@ Updated: 2026-10-16 by main session (Hatchery coordinator)
 
 ## Now
 
-- origin/main is f6e0424 (ADR 0014, its application, the check 7 fix and seven ideas all pushed);
-  this handoff follows. Account jdorje; the gate denied at HOLD (5h 52%), no pool account with
-  room. Earliest prediction 2027-01-16; fitness clean.
-- `../regenesis-regenesis-handoffs`: branch `regenesis-handoffs` is pushed at 1c41aca4 (rebased on
-  master, reviewed, suite green): its map respelled `@handoff/<file>.md`. The owner merges it.
+- origin/main is 35af6d3; this push adds 98e4ac3 (adopt step 7 checks out the usage specs; the handoff
+  skill re-checks a claim about another repo), 63a6751 (pusher check 7 reads `edit.capExempt` through
+  `policy.js --cap-check`; ADR 0006's deferred item closed) and its reviewed follow-ups with this handoff.
+- `../regenesis`: the map respelling is on its master and its branch is gone; its policy names its
+  legacy docs one by one (the matcher's `*` crosses `/`); its map plus streams total 132 lines.
 - Scans of 2026-10-16 filed seven ideas. `../broodforge` (decanted, live session) and
   `../droplet-management` (adopted at 9d90716, never updated) still read `~/.claude/usage-state.json`;
   `../dystopo` (adopted, patch mode) updates cleanly only after the patch-update ideas are fixed.
@@ -17,7 +17,7 @@ Updated: 2026-10-16 by main session (Hatchery coordinator)
 ## Next
 
 1. The owner's answers (Waiting on user); the siblings' own fixes from the scans, each in its own session.
-2. `../regenesis`, after `regenesis-handoffs` is merged: `update-from-hatchery` for ADRs 0011 to 0014.
+2. `../regenesis`: `update-from-hatchery` for ADRs 0011 to 0014; first, architect: ADR 0014's 120-line total vs its 132 lines.
 3. The first decant with the README prompt.
 4. Architect answers the critic reviews of proposals 0003 and 0005 (`docs/design/proposals/README.md`).
 5. Critic review of ADR 0006 as a whole, with the escape-hatch question in `.claude/skills/proposal/brief-critic.md`.

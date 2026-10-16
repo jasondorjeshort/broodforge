@@ -1,6 +1,7 @@
 ---
 date: 2026-10-16
 kind: bug
+related: [2026-10-16-adopt-step-7-dangling-pointers.md]
 ---
 # Patch-mode update never moves the base-owned docs that adopt copied
 

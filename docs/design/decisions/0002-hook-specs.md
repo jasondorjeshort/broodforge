@@ -160,7 +160,7 @@ set to it).
 `node .claude/hooks/policy.js [file]` prints the effective policy or the error;
 `node .claude/hooks/policy.js --cap-check <listfile>` is pusher check 7's per-file cap line (one
 `FAIL <path>: N lines, cap C` per file over its cap, a `FAIL policy:` line for a policy that does
-not load, exit 1 on any `FAIL`). Group CAP runs it on a scratch tree and the pusher's line through
+not load, exit 1 on any `FAIL`; stdout always ends with `cap-check: <N> files, <M> over cap`, and a run without that line is a FAIL). Group CAP runs it on a scratch tree and the pusher's line through
 the guard.
 
 ## 2. `post-edit.js` (PostToolUse, matcher `Write|Edit`, no `onFailure`)

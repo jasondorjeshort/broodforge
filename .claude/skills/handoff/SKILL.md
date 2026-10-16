@@ -20,8 +20,10 @@ shape: `split.md` beside this file replaces steps 2 and 4 and the first rule bel
    a date on or before today, or a `FAIL` or `SKIP` fitness line in the last test run, puts
    "triage (the scan)" in Next. A claim about the state of another repository or checkout (for
    example "<sha> in `../<dir>` is held, not pushed") is re-checked against that repository in the
-   same sitting (`git branch -r --contains <sha>` there) before it is written; the Updated line
-   dates the file, not the claims it carries forward.
+   same sitting before it is written: `git ls-remote --heads origin` there, compared with
+   `git merge-base --is-ancestor <sha> <remote-sha>`, or `git branch -r --contains <sha>` after noting
+   when it last fetched (it answers as of that fetch; do not fetch, ADR 0002 reserves it for the
+   pusher). The Updated line dates the file, not the claims it carries forward.
 2. Rewrite the file with the Write tool, keeping exactly these sections:
 
    ```
