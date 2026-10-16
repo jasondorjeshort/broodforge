@@ -36,7 +36,7 @@ How to read this doc:
 |---|---|---|
 | R-06 | A project exists only because the owner configured it on the host, naming its git repository; there is no command in Discord that imports a repository. | v1 |
 | R-07 | A project has one or more Discord channels, and a channel belongs to exactly one project (choice). | v1 |
-| R-08 | Each channel has its own configuration: its reach, the roles allowed to start sessions, to contribute to them and to answer permission prompts, its default permission mode, and its default backend. | v1 |
+| R-08 | Each channel has its own configuration: its reach, the roles allowed to start sessions, to contribute to them and to answer permission prompts, its default permission mode, its prompt timeout, and its default backend. | v1 |
 | R-09 | Project and channel configuration can be read and changed on the host without Discord and without a web site, by a file or a command (choice). | v1 |
 | R-10 | A web site shows and edits project and channel configuration. | later |
 | R-11 | One Broodforge instance serves one Discord server; serving several servers from one instance is not required (choice). | v1 |
@@ -71,6 +71,7 @@ How to read this doc:
 | R-25 | Whether contributors may also answer permission prompts is set per channel; the default is driver only (choice). | v1 |
 | R-26 | A session can run in policy mode, where Broodforge answers permission prompts itself, and the channel sets whether sessions start in policy mode or prompt mode. | v1 |
 | R-27 | A policy-mode answer never allows more than the channel's reach allows; a request outside the reach is denied, not escalated to a person (choice). | v1 |
+| R-53 | A permission prompt nobody answers within the channel's prompt timeout (default 5 minutes) is denied, the turn finishes with its output kept, and the session stays open; the idle timeout of R-15 is separate. | v1 |
 | R-28 | The driver can switch a running session between policy mode and prompt mode from Discord. | v1 (Q 5) |
 | R-29 | A person can change the model or effort of a session from Discord. | later (Q 5) |
 

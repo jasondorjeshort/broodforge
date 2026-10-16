@@ -144,6 +144,10 @@ stream's shapes change between releases, so both hosts pin the engine and the ad
 tokens unknown; prompt mode serialises parallel tool calls; a human wait leaves a transcript on
 disk until the engine's retention sweep.
 
+`-p` disables AskUserQuestion and plan approval, reported for channels in non-interactive mode (the
+`/channels` page, in the 2026-10-16 prior-art finding; S1 checks plain `-p`), so an agent that needs a structured answer asks in prose and ends the turn; the spike
+records what the stream carries when the tool is called (S1, `../07-spike-plan.md`).
+
 Must be maintained: the engine pin per host and the capability checks; the transcript fixtures
 when the pin moves; the conditions table; the deny text wherever 04 rewords what users see.
 
@@ -164,3 +168,7 @@ long-lived session; a second harness makes the per-turn model the wrong default.
 2026-10-14 (review of 043382f): `--bare` skips the hooks in settings files on engine 2.1.296, observed by the reviewer in help text, so the deferral of `--bare` for API-key turns is withdrawn and C26 no longer gates it; `--bare` is never used, as Settings sources already says.
 
 2026-10-14 (07-spike-plan): the spike's throwaway runner precedes the adapter interface and the fake harness named in the spike paragraph above, not the other way round; its recorded fixtures are the fake's first input, and `engine run --real` is the runner's production form (`../07-spike-plan.md`).
+
+2026-10-16 (prior-art finding, `../../findings/2026-10-16-prior-art-chat-front-ends-for-coding-agents.md`, "Terms, re-checked at the source"): the terms were re-read at the primary pages. The Claude Code legal page says a platform may host the unmodified binary when "each end user must authenticate with their own ... Claude subscription plan credentials", and that developers "may not collect, store, or intermediate Claude.ai credentials or session tokens". It also says, verbatim: "Anthropic does not permit third-party developers to offer Claude.ai login into their own applications, or to route requests through Free, Pro, or Max plan credentials on behalf of their users" and "sign-in to a Claude account must complete through Anthropic's own flow", and limits that with "Nor does it prevent an end user from signing in to the unmodified Claude Code binary ... where a platform hosts Claude Code". This design (unmodified binary, one login directory per person, no token read) fits the hosting sentence; a pasted-token or raw-API design does not. Open question for the owner, decided nowhere here: whether the droplet's DM login relay (Decision, credentials), where the bot runs the engine's login command and passes the sign-in link and the pasted code, counts as completing sign-in "through Anthropic's own flow"; the relay is off by default. The support article "Use the Claude Agent SDK with your Claude plan", updated 2026-10-07, says `claude -p`, the Agent SDK and third-party apps remain on subscription limits, that the announced change was paused on 2026-06-15, and that Max and Team plans carry monthly API credits covering `claude -p`. This answers the concern in the Context that headless use might be metered separately; it is a statement as of its date and the supersede triggers above still apply.
+
+2026-10-16 (R-53, Owner 16 in `../04-ux.md`): the sentence "Nobody answering is the channel's idle timeout (R-15)" in Decision is replaced. An unanswered permission prompt is denied after the channel's prompt timeout (default 5 minutes), the turn finishes with its output kept, and the session stays open; the idle timeout of R-15 is a separate timer that still ends the session.

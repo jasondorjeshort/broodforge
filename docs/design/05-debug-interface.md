@@ -97,8 +97,8 @@ string and refuses any other value with exit 1.
 
 Drive. `broodforge session start --channel <id> --as <user id> [--roles <ids>] [--credential
 <id>] [--mode prompt|policy] [--reach read-only|code] [--fixture <dir>] [--idle-timeout-seconds
-<n>]` prints the session id (`s0001`); `--reach`, `--fixture` and `--idle-timeout-seconds` are
-scratch and dry-run only. `session send <id> --as <user id> [--roles <ids>] [--wait] [--tail]
+<n>] [--prompt-timeout-seconds <n>]` prints the session id (`s0001`); `--reach`, `--fixture`,
+`--idle-timeout-seconds` and `--prompt-timeout-seconds` are scratch and dry-run only. `session send <id> --as <user id> [--roles <ids>] [--wait] [--tail]
 "<text>"` (or `-` for stdin) calls `SessionService.submit` and prints `turn <n> queued|started`;
 `--wait` returns at `turn-ended` or `waiting-for-answer`, exit 0 either way, printing which;
 `--tail` streams the events meanwhile. `session mode <id> prompt|policy`, `session interrupt
@@ -176,8 +176,9 @@ yet] (turn 1 ends `stop_reason: tool_deferred`, turn 2 is the resumed turn): `se
 --as 1001 --wait "edit a.ts"` prints `waiting-for-answer toolu_01 Write a.ts`; `session answer
 s0001 toolu_01 allow|deny [--as <user id>] [--roles <ids>]` calls `SessionService.answer` and the
 resumed turn's events follow in `session tail`. The idle timeout is driven with
-`--idle-timeout-seconds 2` at start and observed as `session-ended` with reason `idle`.
-Observe. `session show` prints `pending: toolu_01 Write a.ts since <time>`; `received-2.json`
+`--idle-timeout-seconds 2` at start and observed as `session-ended` with reason `idle`; `--prompt-timeout-seconds 2` with no answer
+shows the timeout trace line (`denied: the prompt timed out`) in `session outbox`.
+Observe. `session show` prints `pending: toolu_01 Write a.ts since <time> until <deadline>`; `received-2.json`
 carries `answer` and `engineSessionId`; `session outbox` has the buttons post, custom id
 `bf:s0001:toolu_01:allow`.
 Reproduce. `scratch run -- bash tests/repro/defer-resume.sh` [no-check: no code yet]; an answer

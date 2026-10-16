@@ -18,7 +18,7 @@ names; everything else goes through `SessionService`. Host differences live in `
 |---|---|---|
 | `discord` | Gateway, command parsing, role lookup at the moment of an action (N-18), the key-paste scan, rendering of session events into posts and edits written to an outbox sink (the dry-run renderer's output, read over control as `session outbox`), the per-session coalescer (R-21) with an injectable clock, buttons; `discord inject message\|click` feeds its handlers without a gateway, dry-run only | `SessionService`, `config`, `policy` |
 | `control` | The local socket the CLI connects to; exposes `SessionService` and the read commands of ADRs 0021 and 0022 as request and response lines; 05 fixes the commands; calls `policy`'s role check as `discord` does | `SessionService`, `store`, `backup`, `policy` |
-| `session` | `SessionService`: state machine, participants, turn queue, mode switches, idle timeouts, the end-of-session sequence; emits `SessionEvent`s | `engine`, `git`, `policy`, `credentials`, `store`, `audit` |
+| `session` | `SessionService`: state machine, participants, turn queue, mode switches, idle and prompt timeouts, the end-of-session sequence; emits `SessionEvent`s | `engine`, `git`, `policy`, `credentials`, `store`, `audit` |
 | `engine` | The `Engine` interface, the `claude-code` implementation (one process per turn through `spawn`), the `fake`, the stream parser, usage deltas | `spawn`, `credentials` (secret handed to the spawn only) |
 | `hook` | `broodforge hook pre-tool-use`, run by the engine inside the session; a pure function of stdin and environment (`03-hook-contract.md`) | nothing in the bot process |
 | `policy` | The reach table, the decision function the hook and `session` share, the deny text, the role check (a pure function of supplied roles and a channel's role list), the model display-name map | nothing (pure) |
@@ -43,10 +43,9 @@ audit event (R-02). `session` owns participants: the driver is the starter, fixe
 a writer becomes a contributor on their first accepted message (R-13). Interrupt and end are
 permitted to the channel's `answer` list (owner decision 8 in 04); `setMode` is the driver's.
 `discord` looks up the roles held at that moment on every message and click (R-25, N-18), never
-writes one (R-04); the role check is
-`policy`'s pure function of the roles supplied and the channel's `start`, `contribute` or
-`answer` list, called by `discord` and `control` alike. An unregistered writer gets the register
-flow, an unpermitted one the refused flow (R-03). Inviting is 04's.
+writes one (R-04); the role check is `policy`'s pure function of the roles supplied and the
+channel's `start`, `contribute` or `answer` list, used by `discord` and `control` alike. An
+unregistered writer gets the register flow, an unpermitted one the refused flow (R-03). Inviting: 04.
 
 Credential status (`usable`, `needs-login`, `removed`) is the store's record and nothing else:
 a subscription credential is created `needs-login`; an auth error in a `result` sets it;
@@ -58,25 +57,26 @@ infer it. A session start naming anything but `usable` is refused (R-41).
 
 1. A message arrives in a configured venue. `discord` first scans it for an Anthropic key shape
    (the `sk-ant-` prefix): a hit is deleted where the bot may, answered with 04's refusal, never
-   submitted, and audited `action refused` with reason `key-pasted` and no key text. Then the
-   writer is checked as above and refused with an `action refused` audit event.
+   submitted, audited `action refused` (reason `key-pasted`, no key text). Then the writer is
+   checked as above; a refusal is audited the same way.
 2. `SessionService.submit(sessionId, participant, text)`. Idle session: a turn starts. Turn
    running: the message is queued for the next turn (ADR 0020). Each message is one block
-   prefixed with a `From:` line carrying the writer's git name and session role (R-14). The
-   turn's requester (R-44) is the writer of its first block; the turn row keeps every writer.
-3. `session` builds a `TurnRequest`, writes the turn row (`started`), and calls
-   `Engine.startTurn`.
-4. `engine` asks `spawn` for the process with the credential delivery, git identity and hook
-   variables of ADR 0022, writes the stream-json user message to stdin, closes stdin, and parses
-   stdout line by line into `EngineEvent`s.
+   prefixed with a `From:` line of the writer's git name and session role (R-14). The turn's
+   requester (R-44) is its first block's writer; the turn row keeps every writer.
+3. `session` writes the turn row (`started`) and calls `Engine.startTurn` with a `TurnRequest`.
+4. `engine` has `spawn` start the process with ADR 0022's credential delivery, git identity and
+   hook variables, writes the stream-json user message, closes stdin, parses stdout into `EngineEvent`s.
 5. `session` maps them to `SessionEvent`s (`text`, `tool-call`, `tool-result`,
    `waiting-for-answer`, `turn-ended`) and writes a `permission decision` row per tool call seen:
    allowed by policy, denied by the hook (the deny text's prefix identifies it), failed in the
-   hook (the `hook:` prefix) or deferred. The hook writes nothing (ADR 0020); the stream is the
-   record.
-6. `discord` renders: one working message per turn edited in place through the coalescer (at
-   most one create or edit per second per session, nothing dropped, overflow split or attached,
-   R-20 to R-22); a new message for a turn end, a wait or an error (R-23).
+   hook (the `hook:` prefix) or deferred. The hook writes nothing (ADR 0020); the stream is the record.
+6. `discord` renders: one working message per turn edited through the coalescer (at most one
+   create or edit per second per session, nothing dropped, overflow split or attached, R-20 to
+   R-22); a new message for a turn end, a wait or an error (R-23). The outbound mask: all posted
+   text (trace lines, prompts, results, transcript) first has credential-shaped tokens replaced by
+   `[masked]`: `sk-` prefixed keys, bearer and OAuth tokens, strings over 40 characters that are
+   not pure hex (so 40- and 64-character SHAs pass); source:
+   `docs/findings/2026-10-16-prior-art-chat-front-ends-for-coding-agents.md`, L1.
 7. On `result` the usage delta is committed with the turn row (`ended`) before `turn-ended` is
    published (N-21). Exit without `result`: `interrupted`, with the per-message counts seen.
 
@@ -84,9 +84,9 @@ Prompt mode: the hook returns `defer` for a call a person must answer; the proce
 `stop_reason: tool_deferred` and the pending call. `session` records `waiting for answer`, keeps
 `engineSessionId`, publishes `waiting-for-answer`; `discord` posts buttons. A click by a
 participant the channel lets answer (R-25) calls `SessionService.answer`; `session` starts a new
-process with `--resume` and the answer in the hook environment; the same `tool_use_id` fires the
-hook again and gets it. Any other click is refused in the reply. Nobody clicking is the idle
-timeout (R-15). Button custom ids, parsed by one function in `discord`:
+process with `--resume` and the answer in the hook environment, and the same `tool_use_id` fires
+the hook again and gets it. Other clicks are refused; no click in the prompt timeout denies it (R-53).
+Button custom ids, parsed by one function in `discord`:
 `bf:<session id>:<tool_use_id>:<allow|deny|allow-session>` for a permission answer,
 `bf:<session id>:stop`, `bf:<session id>:end`, and `bf:<channel id>:start` on the panel.
 
@@ -168,7 +168,7 @@ is a new file plus `worktree forget` for the old rows.
   "paths": { "node": "…", "install": "…" }, "audit": { "fileSink": null },
   "relay": { "loginByDirectMessage": false },
   "roleGroups": { "trusted": ["role id"], "members": ["role id"] },
-  "defaults": { "idleTimeoutMinutes": 60, "mode": "prompt", "harness": "claude-code" } }
+  "defaults": { "idleTimeoutMinutes": 60, "promptTimeoutMinutes": 5, "mode": "prompt", "harness": "claude-code" } }
 ```
 
 ```json
@@ -179,7 +179,7 @@ is a new file plus `worktree forget` for the old rows.
   "venue": { "category": "<category id>", "summaryChannel": null },
   "channels": { "<discord channel id>": {
       "reach": "code", "roles": { "start": ["trusted"], "contribute": ["members"], "answer": ["driver"] },
-      "mode": "prompt", "harness": "claude-code", "idleTimeoutMinutes": 60, "model": null, "effort": null } } }
+      "mode": "prompt", "harness": "claude-code", "idleTimeoutMinutes": 60, "promptTimeoutMinutes": 5, "model": null, "effort": null } } }
 ```
 
 Rules: a role list holds group names from `roleGroups` or raw role ids; `"driver"` under `answer`
@@ -274,9 +274,9 @@ interrupted notice where the gateway allows, close the store, exit 0. After thir
 Every CLI command but `serve` is a control-socket client; with no socket, read commands open the
 store file read-only (ADR 0021) and write commands exit 1 saying the bot is not running. Linux: a
 unix socket sessions cannot reach (`data/` is unbound and `0700`). Windows: a named pipe a
-same-account session can reach, the gap ADR 0022 states. No TCP listener. A scratch root puts the socket under its root; the pipe
-name comes from `instanceName` in every case. 05 specifies the line shapes (`cmd` is
-`<group>.<command>`) and the error codes.
+same-account session can reach, the gap ADR 0022 states. No TCP listener. A scratch root puts the
+socket under its root; the pipe name comes from `instanceName`. 05 specifies the line shapes (`cmd`
+is `<group>.<command>`) and the error codes.
 
 ## Failure modes and what the user sees
 

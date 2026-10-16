@@ -53,7 +53,7 @@ whether a project may span several repositories (not required; the vision speaks
 A Discord text channel bound to one project (R-07); the unit of configuration (R-08). Identity:
 the Discord channel id. Holds: its project; its reach (read-only, code; later host, R-49); the
 role ids allowed to start a session, to contribute, and to answer permission prompts (R-25);
-the default permission mode (R-26); the default harness; the idle timeout (R-15); later a token
+the default permission mode (R-26); the default harness; the idle timeout (R-15); the prompt timeout (R-53); later a token
 limit (R-46). A "questions" channel is a channel whose reach is read-only and whose harness is a
 small model (R-19); it is not a different kind of thing. Relations: one project; many sessions.
 Open: the venue a session gets when it starts in the channel (vision Q 3, UX doc); whether a
@@ -146,7 +146,7 @@ usage; the harness-adapter proposal confirms for each harness).
 
 One answer to one permission request the harness raised during a turn (R-24). Identity: session
 id plus the harness's request id. Holds: the turn; what was asked (the tool or action and a
-summary of its input); who decided (a participant, or the policy mode, R-26); the decision
+summary of its input); who decided (a participant, the policy mode, R-26, or the prompt timeout, R-53); the decision
 (allow or deny; an "allow for the rest of this session" form is open); the reason when the policy
 decided; the time. A policy-mode decision never allows more than the channel's reach (R-27). Every
 permission decision is also an audit event. Relations: one turn; optionally one participant.
@@ -219,7 +219,7 @@ and comes later; this table is what any storage must hold.
 |---|---|---|---|
 | Instance | host plus config dir | Discord server id, directories, policy | projects |
 | Project | name | repo path, remote, default branch, end action, git credential, worktree root | channels, worktrees |
-| Channel | Discord channel id | reach, allowed role ids per permission, default mode, default harness, idle timeout | project |
+| Channel | Discord channel id | reach, allowed role ids per permission, default mode, default harness, idle timeout, prompt timeout | project |
 | Registration | Discord user id | git name, git email, display name, registered at, default credential | credentials |
 | Credential | credential id | kind, provider, label, status, added at, last used, store reference | registration |
 | Harness | name | accepted credential kinds, capabilities | none (configured, not stored) |

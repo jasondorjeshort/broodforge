@@ -46,7 +46,8 @@ Set by `spawn` on the engine process and inherited by the hook; the kept list in
 | `BROODFORGE_REACH` | `read-only` or `code` |
 | `BROODFORGE_TREE` | absolute path of `sessions/<id>/tree`; tool-input paths are resolved against it |
 | `BROODFORGE_CANONICAL` | absolute path of the project's canonical checkout, read-only inside the session |
-| `BROODFORGE_ANSWER` | `<tool_use_id>:allow` or `<tool_use_id>:deny` on a resume after a click; else absent |
+| `BROODFORGE_ANSWER` | `<tool_use_id>:allow` or `<tool_use_id>:deny` on a resume after a click or a prompt timeout; else absent |
+| `BROODFORGE_ANSWER_REASON` | after a prompt timeout only: the deny reason text, written by `session` (04's `the prompt timed out after 5 minutes`) and returned by the hook verbatim; else absent |
 | `BROODFORGE_SESSION_ALLOW` | comma-separated tool names a person allowed for the session; absent unless 04 adopts that button |
 | `BROODFORGE_HOOK_LOG` | `sessions/<id>/home/hook.log`, one line per decision, for debugging only, never audit |
 

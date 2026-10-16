@@ -122,7 +122,10 @@ Evidence: `system/init` carries `session_id`, `model`, `tools`, `capabilities`; 
 line carries `message.id`, `message.model`, `message.usage` and a `tool_use` block; a `user`
 line carries `tool_result`; `result` carries `stop_reason`, `num_turns`, `permission_denials`,
 `usage` and `modelUsage` keyed by model id, and turn 2's `modelUsage` totals exceed turn 1's;
-the parser prints `unknown` for none of the kinds 03 lists. Refuted: 03's `EngineEvent` type
+the parser prints `unknown` for none of the kinds 03 lists. Also observe, in a third turn, a
+prompt that tells the agent to call AskUserQuestion: what the stream carries under `-p` (an
+error `tool_result`, a `permission_denials` entry, or no call at all), recorded in the ADR 0020
+finding's S1 row; a usable call withdraws that ADR consequence. Refuted: 03's `EngineEvent` type
 and usage-delta paragraph change to what was seen; not cumulative means the delta is the value
 itself (ADR 0020, Usage and attribution).
 

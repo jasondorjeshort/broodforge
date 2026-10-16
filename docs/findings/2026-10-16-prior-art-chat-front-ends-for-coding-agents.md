@@ -36,21 +36,21 @@ Primary pages fetched: `code.claude.com/docs/en/channels`, `.../channels-referen
 `support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan`;
 `github.com/anthropics/claude-plugins-official/tree/main/external_plugins/discord` (`README.md`,
 `ACCESS.md`, `server.ts`); `github.com/anthropics/claude-code/issues/40266` and `/39782` (43625
-from a mirror); `docs.openhands.dev/enterprise/integrations/slack`; `docs.devin.ai/integrations/slack`;
+read from a secondary copy, not fetched); `docs.openhands.dev/enterprise/integrations/slack`; `docs.devin.ai/integrations/slack`;
 `docs.github.com/en/copilot/concepts/agents/coding-agent/about-coding-agent`; `jules.google/docs`;
 `learn.chatgpt.com/docs/third-party/slack`; `docs.openclaw.ai/channels/discord`. Each open-source
 row is `github.com/<owner>/<repo>` as named, plus `api.github.com/repos/<owner>/<repo>`.
 
 ## Result
 
-### Anthropic's own routes (all verified)
+### Anthropic's own routes (verified unless marked)
 
 | Route | What it is | Covers | Does not cover |
 |---|---|---|---|
 | Claude Code channels, Discord plugin (research preview; plugin repo Apache-2.0, pushed 2026-10-16) | An MCP server pushes chat into one already-running interactive `claude`; sender allowlist by user id, guild channels opt-in per channel, permission relay as Allow/Deny buttons sent by DM to every allowed user; `-p` disables AskUserQuestion and plan approval; custom channels need `--dangerously-load-development-channels`, which `-p` and the SDK ignore | Discord, the owner's subscription, buttons | One login for everyone, one session per process, no roles, no worktree per session, no attribution, no usage per user, no debug surface |
 | `claude remote-control` server mode (Pro/Max; API keys refused) | One process serves up to 32 sessions, `--spawn worktree` gives each its own git worktree; clients are claude.ai or the mobile app on the same account; "grants no one else access"; crashed sessions resume on the next message; forwarded non-permission dialogs expire after 5 min | Worktree per session, many sessions, one subscription, local host | Discord, other people, roles, attribution, debug surface |
 | Claude Code in Slack (legacy; retired 2026-10-05 in Claude Tag workspaces) and Claude Tag (Team/Enterprise, public beta) | `@Claude` starts a cloud session; GitHub only; legacy bills the mentioning user's Pro/Max plan, Claude Tag bills the organisation under a per-channel spend limit and runs as a shared identity with no user account attached | Chat-started coding, PRs | Discord, self-hosting (self-hosted environments: Team/Enterprise runners, Anthropic control plane, GitHub only), per-user payment, attribution to the person |
-| Agent SDK demos | A React chat UI and others, "local development only" | Nothing of ours | No chat-platform example exists |
+| Agent SDK demos (not fetched; snippet only) | A React chat UI and others, "local development only" | Nothing of ours | No chat-platform example exists |
 
 ### Open-source chat front ends for coding agents
 
@@ -79,16 +79,22 @@ beyond OpenAB.
 
 ### Terms, re-checked at the source
 
-The Claude Code legal page (fetched today) still says a platform may host the unmodified binary
-when "each end user must authenticate with their own ... Claude subscription plan credentials",
-and that developers "may not collect, store, or intermediate Claude.ai credentials or session
-tokens". The support article "Use the Claude Agent SDK with your Claude plan" says (update of
-2026-10-07) "You can still use the Claude Agent SDK, `claude -p`, and third-party apps with your
-subscription limits", that the announced change was paused on 2026-06-15, and that Max and Team
-plans now carry monthly API credits covering `claude -p`. The April 2026 cut-off for OpenClaw and
-"all third-party harnesses" is press and a quoted customer email only; no Anthropic page found
-names it. Broodforge's shape (unmodified binary, one login directory per person, no token read) is
-on the permitted side of every sentence found; a raw-API or pasted-token design is not.
+The Claude Code legal page (fetched today) says a platform may host the unmodified binary when
+"each end user must authenticate with their own ... Claude subscription plan credentials", and
+that developers "may not collect, store, or intermediate Claude.ai credentials or session
+tokens". It also says "Anthropic does not permit third-party developers to offer Claude.ai login
+into their own applications, or to route requests through Free, Pro, or Max plan credentials on
+behalf of their users" and "sign-in to a Claude account must complete through Anthropic's own
+flow", limited by "Nor does it prevent an end user from signing in to the unmodified Claude Code
+binary ... where a platform hosts Claude Code". The support article "Use the Claude Agent SDK with
+your Claude plan" says (update of 2026-10-07) "You can still use the Claude Agent SDK, `claude -p`,
+and third-party apps with your subscription limits", that the announced change was paused on
+2026-06-15, and that Max and Team plans now carry monthly API credits covering `claude -p`. The
+April 2026 cut-off for OpenClaw and "all third-party harnesses" is press and a quoted customer
+email only; no Anthropic page found names it. Broodforge's shape (unmodified binary, one login
+directory per person, no token read) fits the hosting sentence; a raw-API or pasted-token design
+does not. Open for the owner: whether ADR 0020's DM login relay, where the bot passes the sign-in
+link and the pasted code through, is "Anthropic's own flow".
 
 ### Answer
 
@@ -109,7 +115,7 @@ on the permitted side of every sentence found; a raw-API or pasted-token design 
      and plan approval, so an agent that wants a structured answer must ask in prose and end the
      turn; state it, and have the spike show what the stream carries when the tool is called.
    - L4 (change, owner's call, `04-ux.md` "nobody answering" and R-15): every neighbour times a
-     pending prompt out shorter than the session (ccdb denies after 2 min; Remote Control expires
+     pending prompt out shorter than the session (ebi-agent-chat-relay denies after 2 min; Remote Control expires
      other dialogs after 5 min). A deny lets the turn finish and keeps its output; our 60-minute
      idle timeout ends the session instead. Consider a per-channel prompt timeout that denies.
    - L5 (confirmation, `04-ux.md` permission prompt): the prompt shows the command or path.
