@@ -5,10 +5,9 @@ Updated: 2026-10-16, at commit f8eff6e, by main session
 
 ## Now
 
-- RUNS PAUSED on this PC: BullGuard Sentry quarantined `bin/broodforge.exe` and Git's `sh`/`sed`/
-  `head`/`find`/`cp`/`seq` on 2026-10-16 19:28; the owner then uninstalled BullGuard, so Git for
-  Windows must be reinstalled (operator entry of 2026-10-16). No binary, `go test` or scratch run
-  until the owner says runs are clear.
+- Runs resumed 2026-10-16 19:55: BullGuard Sentry had quarantined `bin/broodforge.exe` and six Git
+  tools; the owner uninstalled BullGuard and reinstalled Git for Windows 2.56.0.2 (finding of
+  2026-10-16). The operator entry stays until his reboot; Defender is the only scanner now.
 - `origin/main` is at `c28155a` (pushed 2026-10-16). Everything from `36d023a` to HEAD is
   unpushed and reviewed. Push on the owner's words. HOLD 60%/75%. `-race` needs the ucrt64 PATH.
 - Owner: Jason Dorje Short <jdorje@gmail.com>, repo-local identity; UX is his, technical calls mine.
