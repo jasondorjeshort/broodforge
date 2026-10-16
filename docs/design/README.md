@@ -13,6 +13,7 @@ Planned documents (added as we go):
 | `03-hook-contract.md` | Companion to 03: how the engine runs the PreToolUse hook and reads its exit codes, the hook environment, path checks, the policy table per reach and mode, the decision order |
 | `04-ux.md` | The Discord flows, venues, buttons and message wording, Ticket Tool as the reference; a proposal with every owner decision marked and collected at the end |
 | `05-debug-interface.md` | How agents drive, observe, and reproduce every feature from a terminal |
+| `05-debug-interface-discord.md` | Companion to 05: the Discord adapter's drive, observe, reproduce and isolation, including the `discord` commands |
 | `05-cli-conventions.md` | Companion to 05: the one binary and its flags, the control-socket wire format, output and exit-code rules, `--expect`, the scratch root, the shared isolation rules |
 | `06-platforms.md` | Target hosts, what each asks of every part, the sharing strategy between hosts, and the major choices bundled into proposal loops |
 | `07-spike-plan.md` | The spike that tests claims C25 to C39 of ADRs 0020 and 0022 before application code: per claim the host, the owner step first, the commands, the evidence, the fallback; the throwaway `spike/` code and the fixtures kept; cost; exit criterion |

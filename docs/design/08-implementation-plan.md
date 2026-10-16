@@ -232,7 +232,7 @@ deltas. Depends on: P2 to P9.
 ## P11. Discord dry-run: renderer, coalescer, outbox, transcript, panel (medium; owner sees)
 
 Implements: `04-ux.md` (every screen and text); `03-architecture.md` (`discord` row; Data flow steps
-1 and 6); ADR 0023 (Libraries: Discord); `05-debug-interface.md` (The Discord adapter; `session
+1 and 6); ADR 0023 (Libraries: Discord); `05-debug-interface-discord.md` (The Discord adapter; `session
 outbox`, `transcript`, `panel`). Files: `internal/discord/` (03's `discord` row without the gateway:
 renderer, coalescer with the injectable clock and a global budget of 50 requests per second per bot
 beneath the per-session one, mask, custom ids, command parsing, `inject`; disgo's types appear here
@@ -246,7 +246,7 @@ buttons post and summary in `session outbox`, which the owner reads. Depends on:
 ## P12. Discord live: gateway, commands, buttons, venues, the relay (medium; owner sees; needs his guild)
 
 Implements: `04-ux.md` (Registration through Starting; Credentials); `03-architecture.md` (Startup 9
-and 10; Failure modes, `discord` row); `05-debug-interface.md` (The Discord adapter: `check`, `serve
+and 10; Failure modes, `discord` row); `05-debug-interface-discord.md` (The Discord adapter: `check`, `serve
 --discord live`; `credential login --relay`, off by default). Files: `internal/discord/gateway.go`
 (the disgo client pinned in `go.mod`, slash commands, interactions, the private-channel venue, the
 notice channel, the DM relay; resume and the rate limiter are disgo's; the REST calls used are
