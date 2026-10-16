@@ -15,7 +15,11 @@ for the architect to settle.
 - The hook treats any run of three or more backticks as a fence token, so a four-backtick block
   holding an inner three-backtick line closes early. Pusher line 3 skips no fences at all. Hook and
   pusher disagree on fenced `@` lines.
-- Pusher lines 2 and 3 split filenames on spaces. Stream names are slugs, so this is residual.
+- ADR 0014 item 6's verbatim line 2 (the 120 total) is denied by `git-guard`: an unexpanded
+  argument in a line that runs git. `.claude/agents/pusher.md` now carries lines 2 and 3 in a
+  rewritten form (the `git ls-files` output written to a `mktemp` file, then looped), which the
+  guard allows and which also handles a filename with a space; the ADR's own lines 2 and 3 split
+  on spaces. The amendment should take the pusher's text.
 
 ## Open
 
