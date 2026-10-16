@@ -63,7 +63,7 @@ CGO_ENABLED=0 go build -o bin/ ./cmd/broodforge      # bin/broodforge.exe on Win
 go vet ./... && go tool staticcheck ./... && go tool exhaustive ./...   # check
 go test ./...                                         # test; fixtures replayed
 CGO_ENABLED=1 go test -race ./...                     # Linux always; PC after the mingw entry
-go run ./cmd/broodforge <args>      # from source; same usage output, exit code is the binary's only
+go run ./cmd/broodforge <args>      # from source: same usage, but go run itself exits 1; prove exit codes on bin/
 ```
 
 The droplet builds its own binary from the pinned source (network for the toolchain download);

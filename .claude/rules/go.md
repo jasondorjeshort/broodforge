@@ -15,7 +15,8 @@ paths:
 - The binary is `CGO_ENABLED=0 go build -o bin/ ./cmd/broodforge`: the trailing slash makes Go
   add `.exe` on Windows, where `-o bin/broodforge` writes a file PowerShell will not run.
   `CGO_ENABLED` is set on the command line, never in `go.mod`. Nothing goes on `PATH`; never
-  `go install`.
+  `go install`. Exit codes are proven against `bin/`, never `go run`, which always exits 1 on a
+  non-zero child.
 - No `interface{}` or `any` outside `internal/engine`'s raw stream layer.
 - Sum types are a struct with a `Kind` enum field and a pointer payload per kind, switched on
   `Kind` so `exhaustive` checks every switch. Never a type switch for them.
@@ -28,3 +29,6 @@ paths:
 - One package per component of `docs/design/03-architecture.md`'s table, under `internal/`; a
   package imports only the components its row names. A library is imported only by the component
   ADR 0023 names; `docs/reference/go-dependencies.md` changes with `go.mod`.
+- Import exception: `internal/cli` also imports `engine`, `config` and `hook`, for the standalone
+  subcommands the plan places there (engine run, record, replay; config check; hook pre-tool-use,
+  try, cases), and nothing else beyond what 03's `cli` row names.

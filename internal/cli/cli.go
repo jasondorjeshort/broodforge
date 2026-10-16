@@ -21,7 +21,7 @@ const usage = `usage: broodforge [--root <path>] [--json] <group> <command> [arg
 // name. No command exists yet, so every invocation is a usage error.
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) > 0 {
-		fmt.Fprintf(stderr, "error: usage: unknown command %q\n", args[0])
+		fmt.Fprintln(stderr, "error: usage: no commands exist yet")
 	}
 	fmt.Fprint(stderr, usage)
 	return ExitUsage
