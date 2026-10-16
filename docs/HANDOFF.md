@@ -5,11 +5,11 @@ Updated: 2026-10-16 by main session (Hatchery coordinator)
 
 ## Now
 
-- origin/main is 35af6d3; this push adds 98e4ac3 (adopt step 7 checks out the usage specs; the handoff
-  skill re-checks a claim about another repo), 63a6751 (pusher check 7 reads `edit.capExempt` through
-  `policy.js --cap-check`; ADR 0006's deferred item closed) and its reviewed follow-ups with this handoff.
-- `../regenesis`: the map respelling is on its master and its branch is gone; its policy names its
-  legacy docs one by one (the matcher's `*` crosses `/`); its map plus streams total 132 lines.
+- Everything is pushed: origin/main matches HEAD (pusher check 7 reads `edit.capExempt`; ADR 0006's
+  deferred item closed; adopt step 7 checks out the usage specs). The blocker that stopped pushes in
+  `../regenesis` (its legacy docs past the cap) is gone; its hatchery stream's item 1 is done.
+- `../regenesis`: master is at its origin and the finished handoffs worktree is removed; its policy
+  names its legacy docs one by one (the matcher's `*` crosses `/`); its map plus streams total 132 lines.
 - Scans of 2026-10-16 filed seven ideas. `../broodforge` (decanted, live session) and
   `../droplet-management` (adopted at 9d90716, never updated) still read `~/.claude/usage-state.json`;
   `../dystopo` (adopted, patch mode) updates cleanly only after the patch-update ideas are fixed.
