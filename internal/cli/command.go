@@ -143,12 +143,10 @@ func camel(name string) string {
 	return strings.Join(parts, "")
 }
 
-// commands is the command tree; a pass adds its commands here.
-var commands = []*Command{
-	&controlEcho,
-	&configCheck,
-	&configShow,
-}
+// commands is the command tree. A command file registers its commands from its own init(),
+// as engine.go does; the table is not edited by a pass, so passes running in parallel never
+// collide here.
+var commands []*Command
 
 // lookup finds the command named by the first one or two words of args and returns it with
 // the number of words it took.

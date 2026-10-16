@@ -22,3 +22,5 @@ var controlEcho = Command{
 	Columns:      []string{"text"},
 	EventColumns: []string{"text", "seq"},
 }
+
+func init() { commands = append(commands, &controlEcho) }

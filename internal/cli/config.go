@@ -48,6 +48,8 @@ var configShow = Command{
 	Local: runConfigShow,
 }
 
+func init() { commands = append(commands, &configCheck, &configShow) }
+
 var (
 	checkColumns       = []string{"result", "projects", "channels"}
 	showFileColumns    = []string{"file", "content"}
