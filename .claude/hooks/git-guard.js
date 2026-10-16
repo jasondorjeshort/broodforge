@@ -550,16 +550,22 @@ function opaqueCommand(cmd, mentionsGit) {
 }
 
 // True when a word the parser produced names git: an unquoted word with a git token in it (G=git,
-// git, /usr/bin/git), or a quoted word that is git alone ($g = 'git'). A quoted string that merely
-// contains git (a regex, a message, a .git path part) does not count.
-function namesGit(w, quoted) {
-  if (!quoted) return /(^|[^A-Za-z0-9_-])git(\.exe)?([^A-Za-z0-9_-]|$)/i.test(w);
-  return /^(\$?[A-Za-z_:][A-Za-z0-9_:]*=)?([^\s]*[\/\\])?git(\.exe)?$/i.test(w);
+// git, /usr/bin/git), the unquoted part of a partly quoted word (g=git" push -f"), or a quoted word
+// that is git or a path ending in git ($g = 'git'), or an assignment whose value starts with
+// one ($g='C:\Program Files\Git\cmd\git.exe', $c='git push -f'). A quoted string that merely
+// contains git or starts with it as an argument (a regex, "git push" for grep, a .git path part)
+// does not count.
+const LOOSE_GIT = /(^|[^A-Za-z0-9_-])git(\.exe)?([^A-Za-z0-9_-]|$)/i;
+const QUOTED_GIT = /^(.*[\/\\])?git(\.exe)?$/is;
+const ASSIGNED_GIT = /^\$?[A-Za-z_:][A-Za-z0-9_:]*=(.*[\/\\])?git(\.exe)?([\s,].*)?$/is;
+function namesGit(w, quoted, bare) {
+  if (!quoted) return LOOSE_GIT.test(w);
+  return LOOSE_GIT.test(bare || '') || QUOTED_GIT.test(w) || ASSIGNED_GIT.test(w);
 }
 
 function decide(command, dialect, agent, cwd, loaded) {
   const cmds = commandsOf(command, dialect, cwd);
-  const mentionsGit = cmds.some(({ cmd }) => cmd.words.some((w, k) => namesGit(w, cmd.quoted && cmd.quoted[k])));
+  const mentionsGit = cmds.some(({ cmd }) => cmd.words.some((w, k) => namesGit(w, cmd.quoted && cmd.quoted[k], cmd.bare && cmd.bare[k])));
   const invs = [];
   for (const { cmd, dir } of cmds) {
     invs.push(...invocations(cmd, dir));
