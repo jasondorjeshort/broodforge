@@ -56,7 +56,7 @@ the user. Launch a fresh `pusher` for every push; never resume an earlier one to
 pusher stops on behind or diverged (check 3), the committing agent under the policy (the `runner`
 in the base) runs `git pull --rebase origin <branch>`; a conflict on the handoff is resolved by
 rewriting the file with the `handoff` skill, any other goes back to whoever wrote the hunk; then
-a fresh pusher. Note the stop in the handoff's Now: it is the evidence for ADR 0014's trigger.
+a fresh pusher. Note the stop in the handoff's Now: it may mean a parallel session; the switch is ADR 0015's, on the day one opens.
 The brief:
 
 ```

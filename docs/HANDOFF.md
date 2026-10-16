@@ -6,10 +6,9 @@ Updated: 2026-10-16 by main session (Hatchery coordinator)
 ## Now
 
 - Everything is pushed: origin/main matches HEAD (pusher check 7 reads `edit.capExempt`; ADR 0006's
-  deferred item closed; adopt step 7 checks out the usage specs). The blocker that stopped pushes in
-  `../regenesis` (its legacy docs past the cap) is gone; its hatchery stream's item 1 is done.
-- `../regenesis`: master is at its origin and the finished handoffs worktree is removed; its policy
-  names its legacy docs one by one (the matcher's `*` crosses `/`); its map plus streams total 132 lines.
+  deferred item closed). This session: ADR 0015, the handoff shape chosen at decant, reviewed, committing.
+- `../regenesis`: the check 7 blocker is gone, master is at its origin, the finished handoffs worktree is
+  removed; its policy names its legacy docs one by one; its map plus streams total 146 lines.
 - Scans of 2026-10-16 filed seven ideas. `../broodforge` (decanted, live session) and
   `../droplet-management` (adopted at 9d90716, never updated) still read `~/.claude/usage-state.json`;
   `../dystopo` (adopted, patch mode) updates cleanly only after the patch-update ideas are fixed.
@@ -17,7 +16,8 @@ Updated: 2026-10-16 by main session (Hatchery coordinator)
 ## Next
 
 1. The owner's answers (Waiting on user); the siblings' own fixes from the scans, each in its own session.
-2. `../regenesis`: `update-from-hatchery` for ADRs 0011 to 0014; first, architect: ADR 0014's 120-line total vs its 132 lines.
+2. `../regenesis`: at its next `update-from-hatchery`, take ADR 0015 with 0011 to 0014, drop
+   `../regenesis/docs/handoff/README.md`, and close streams until map plus streams are at most 120 (146 now).
 3. The first decant with the README prompt.
 4. Architect answers the critic reviews of proposals 0003 and 0005 (`docs/design/proposals/README.md`).
 5. Critic review of ADR 0006 as a whole, with the escape-hatch question in `.claude/skills/proposal/brief-critic.md`.

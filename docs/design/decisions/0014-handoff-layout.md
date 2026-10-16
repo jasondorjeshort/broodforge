@@ -1,7 +1,11 @@
 # 0014. Handoff layout: one file by default, a per-stream split the base accepts
 
 Date: 2026-10-16
-Status: accepted
+Status: accepted, superseded in part by 0015
+
+Superseded in part by 0015 (`0015-handoff-shape-at-decant.md`): the Deferred switch trigger (two
+stops or two conflicts) is replaced by the writer count asked at decant and the day a second
+parallel session opens. Everything else stands.
 
 Record: proposal `../proposals/0014-handoff-layout.md` and `../proposals/0014-critic-review.md`.
 Evidence: `docs/findings/2026-10-16-handoff-layout-practices.md`. Supersedes in part ADR 0002,
@@ -149,6 +153,8 @@ Deferred, each with its trigger (the `triage` scan reads these):
 - Hatchery switches to the split shape when the pusher has stopped on behind or diverged twice in
   a working week, or a merge or rebase has conflicted on `docs/HANDOFF.md` twice (noted in the
   handoff's Now; `git log --merges -- docs/HANDOFF.md`). A decanted project has the same trigger.
+  Replaced 2026-10-16 by ADR 0015: the shape is chosen at decant by writer count, and a single-file
+  project switches the day a second parallel session opens.
 - A parallel-session procedure for the base (who rebases, whose handoff wins, how two coordinators
   divide streams): the first time item 8's one line does not resolve a stop on diverged.
 - A `triage` line listing a stream whose file is older than the working week: the first stale
@@ -195,4 +201,4 @@ Predictions (the trigger scan reads these; an outcome is recorded on the line):
   2026-10-17, those touching nothing else are wrap-ups (subject starting `Handoff:` or `WIP:`)
   and fewer than half; the baseline was 10 of 24.
 - Prediction, check by 2027-04-16: Hatchery has not switched shapes, and every decanted project
-  that did has a project ADR citing the trigger evidence.
+  that did has a project ADR citing the trigger evidence. Outcome 2026-10-16: moot in part, ADR 0015; a shape chosen at decant needs no project ADR, the clause holds for projects that switch.

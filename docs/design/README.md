@@ -67,6 +67,11 @@ Decisions so far:
   (`@handoff/<file>.md` lines, 40 each, 120 together, no README, no fixed files) the tooling
   accepts and a project switches to at a stated trigger; every `@` line resolved by the hook
   and the pusher. Skill text in [the sibling](decisions/0014-handoff-skill.md). Supersedes in
-  part 0002; adds a row to 0013.
+  part 0002; adds a row to 0013. Superseded in part by 0015 (switch trigger).
+- [0015 Handoff shape at decant](decisions/0015-handoff-shape-at-decant.md): the shape is chosen
+  by writer count, one question to the owner at decant or adoption (yes: the map plus one stream
+  from the first commit; no: the single file); a single-file project switches the day a second
+  parallel session opens, not at a conflict count; the map stays the index and the stream
+  directory has no README; Hatchery stays single-file; the caps do not move. Supersedes in part 0014.
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).

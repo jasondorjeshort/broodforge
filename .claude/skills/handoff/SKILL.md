@@ -35,7 +35,7 @@ shape: `split.md` beside this file replaces steps 2 and 4 and the first rule bel
    ## Now
    1-3 bullets: what is in flight, which agent had it, exact state (files, failing test, blocker).
    The account the session ran on (the status line's account segment, the email local part), and the one the gate named, if it did.
-   A pusher stop on behind or diverged, or a conflict on this file, as one bullet (ADR 0014, Deferred).
+   A pusher stop on behind or diverged, or a conflict on this file, as one bullet: it is how a session learns a parallel session exists (ADR 0015).
 
    ## Next
    Ordered, 3-7 items, each actionable in a single brief. Name the agent when it is obvious.

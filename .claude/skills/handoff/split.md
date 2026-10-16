@@ -1,7 +1,8 @@
 # Handoff, split shape
 
-For a project whose coordinators run parallel sessions on one branch and have crossed the trigger
-in ADR 0014 (Deferred), recorded in a project ADR of one page that cites the evidence. Nothing
+For a project whose coordinators run parallel sessions on one branch: chosen at decant or adoption
+by the owner's answer to the writer-count question (ADR 0015), or taken up the day a second
+parallel session opens on the branch, recorded then in a project ADR of one page. Nothing
 under `.claude/` and nothing in the policy file changes: the base accepts both shapes. Claude Code
 only: a reader that does not inline `@` imports sees a map of inert lines. Whether nested imports
 re-expand after `/compact` is unverified; a session that has compacted re-reads the map.

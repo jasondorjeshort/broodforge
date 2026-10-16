@@ -53,8 +53,11 @@ Everything below runs in a private clone of the project, on its default branch, 
    reset the `ideas/`, `findings/` and `reference/` index tables to their empty row and leave `docs/ideas/` with only its README.
    `docs/design/README.md`: absent, write one that lists the existing design files one line each plus
    "Decisions so far"; present, add the list. `docs/README.md`: add one row per added path to the
-   project's own map; move nothing. `docs/HANDOFF.md`: `handoff` skill; Now is "adopting Hatchery",
-   Next links the project's current work wherever it already lives.
+   project's own map; move nothing. The handoff: ask the owner, in these words, "Will more than one
+   session work this branch at the same time?" (ADR 0015). Yes: the split shape as the `decant`
+   skill's handoff step writes it, the stream named for the project's current work.
+   No: `docs/HANDOFF.md` with the `handoff` skill. Either way Now is "adopting Hatchery" and Next links the project's current
+   work wherever it already lives.
 8. License. No `LICENSE`: ask the user (GPL-3.0-or-later as Hatchery, or none). Yes: `git checkout
    hatchery/main -- LICENSE LICENSES`, keep 0001, SPDX headers on new files, retrofit as an ideas
    file. No: copy nothing, `## Licensing` is one line stating the terms, the ADR of step 10
@@ -67,7 +70,10 @@ Everything below runs in a private clone of the project, on its default branch, 
     this skill (NNNN: `adr` skill numbering). The line `Hatchery base: <BASE>` is required and living.
     Add it to "Decisions so far".
 11. Verify: `git status --short` lists only the paths above; `grep -rn "^<<<<<<<\|^>>>>>>>" .` empty;
-    `wc -l CLAUDE.md docs/HANDOFF.md` at most 150 and 40; `node .claude/hooks/usage-gate.js < /dev/null`
+    `wc -l CLAUDE.md` at most 150; stage the handoff first, since the commit step takes it anyway (`git add docs/HANDOFF.md` and,
+    where it exists, `git add docs/handoff/`), so an untracked stream file is checked too; then the
+    three command lines of pusher check 7 (`.claude/agents/pusher.md`)
+    print no `FAIL` (both handoff shapes); `node .claude/hooks/usage-gate.js < /dev/null`
     exits 0; `node -e "JSON.parse(require('fs').readFileSync('.claude/settings.json','utf8'))"`.
 12. Commit from the main session (the runner and git-guard are not loaded until restart): stage the
     paths explicitly, subject `Adopt the Hatchery practice at <short BASE>`, body listing copied,
@@ -78,7 +84,7 @@ Everything below runs in a private clone of the project, on its default branch, 
 ## Report
 
 Preconditions checked; `BASE`; files copied, merged (how), added; each contradiction and the user's
-decision; the license decision; files over the cap and their fate; the ADR number; what to do after
+decision; the license decision; files over the cap and their fate; the handoff answer and the shape it gave; the ADR number; what to do after
 restart. Hand-merge steps a model cannot decide alone go to the user with both versions quoted.
 
 ## Rules
