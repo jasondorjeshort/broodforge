@@ -5,6 +5,8 @@ Recorded Claude Code stream-json turns, replayed by the fake engine. Each direct
 `engineVersion`, `recorded`, and `turns: [{n, exit, engineSessionId}]`). The spike recorded them
 on the PC with engine 2.1.296; the import rewrote the PC home to `/home/user`, the spike root to
 `/home/user/bf-spike`, and the engine's project slug to match, and changed nothing else.
+`events-<n>.jsonl` is the parser's golden for `turn-<n>.jsonl`, one `EngineEvent` per line;
+`go test ./internal/engine/` compares them field by field, `-run TestGolden -update` rewrites them.
 
 Import one spike fixture (refuses a non-empty destination unless `--force`):
 

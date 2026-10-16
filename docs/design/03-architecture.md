@@ -95,13 +95,13 @@ Button custom ids, parsed by one function in `discord`:
 ## The engine adapter
 
 ```go
-type Engine interface { Name() string; StartTurn(req TurnRequest) TurnHandle } // "claude-code" | "fake"
+type Engine interface { Name() string; StartTurn(req TurnRequest) (TurnHandle, error) } // "claude-code" | "fake"
 type TurnRequest struct {
 	SessionID, EngineSessionID string // --resume when EngineSessionID is set
 	Cwd         string              // sessions/<id>/tree
 	Delivery    Delivery            // Kind "config-dir" (Path) | "api-key" (CredentialID)
 	GitIdentity struct{ Name, Email string } // the driver's, all four variables
-	HookEnv     HookEnv             // the BROODFORGE_* names of the hook contract
+	HookEnv     []HookVar           // {Name, Value}: the BROODFORGE_* names of the hook contract
 	Input       string              // the From-prefixed blocks
 	Answer      *struct{ ToolUseID, Decision string } // Decision "allow" | "deny"
 	Model, Effort string            // per process (ADR 0020)

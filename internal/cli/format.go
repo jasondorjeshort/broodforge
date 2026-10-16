@@ -38,6 +38,10 @@ func NewPrinter(w io.Writer, jsonMode bool, limit int) *Printer {
 // Token is the outcome token: the first column of the first line printed, or "" if none was.
 func (p *Printer) Token() string { return p.token }
 
+// SetToken makes s the outcome token whatever was printed, for a command whose first line is
+// not its outcome (engine run streams events and its outcome is whether a result came).
+func (p *Printer) SetToken(s string) { p.token, p.tokenSet = s, true }
+
 // Event prints one streamed event as a record.
 func (p *Printer) Event(raw json.RawMessage, cols []string) error { return p.Record(raw, cols) }
 
