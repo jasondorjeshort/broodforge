@@ -26,7 +26,7 @@ The architect writes; the coordinator briefs; the critic argues.
    state the resolution (accepted, accepted with change, rejected because). Correct factual errors
    in the body in place. Do not delete rejected options; they are the record.
 6. If any serious or blocking objection remains unresolved, stop and put both positions to the user
-   in `docs/HANDOFF.md` under Waiting on user. Otherwise set Status to `promoted to ADR NNNN` and
+   under the handoff's Waiting on user (`handoff` skill). Otherwise set Status to `promoted to ADR NNNN` and
    run the `adr` skill.
 
 ## Rules

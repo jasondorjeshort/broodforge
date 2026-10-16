@@ -6,14 +6,17 @@ description: Produce the brief that gets work committed by the runner, or pushed
 # Commit
 
 Normal work is committed by the `runner` from a brief the coordinator writes; the coordinator does
-not stage or commit itself below 50% usage. Wrap-up commits (`docs/HANDOFF.md`, WIP) at HOLD or
-STOP are made by the main session, because the usage gate blocks subagent launches but not Bash.
+not stage or commit itself below 50% usage. Wrap-up commits (the handoff, WIP)
+at HOLD or STOP are made by the main session, because the usage gate blocks subagent launches
+but not Bash.
 
 ## Commit via the runner
 
 1. `git status --short`. Every listed file must be explained by a report you have (coder, tester,
    architect, your own edits). A file nobody described is a stop: find out what it is first.
 2. Group into commits by purpose; small and often. One commit per logical change, not per agent.
+   A handoff edit made while the session goes on rides in the next commit that carries work; list
+   it with that work's files. Only a wrap-up handoff, with nothing to ride with, is its own commit.
 3. For each commit write the brief:
 
    ```
@@ -49,7 +52,12 @@ work is unfinished. No heredocs for the message (apostrophes break them here).
 ## Pushing
 
 The `pusher` pushes, or the main session when the user asked for the push in so many words, or
-the user. Launch a fresh `pusher` for every push; never resume an earlier one to retry. The brief:
+the user. Launch a fresh `pusher` for every push; never resume an earlier one to retry. When the
+pusher stops on behind or diverged (check 3), the committing agent under the policy (the `runner`
+in the base) runs `git pull --rebase origin <branch>`; a conflict on the handoff is resolved by
+rewriting the file with the `handoff` skill, any other goes back to whoever wrote the hunk; then
+a fresh pusher. Note the stop in the handoff's Now: it is the evidence for ADR 0014's trigger.
+The brief:
 
 ```
 Push `main`. The user asked: "<the user's words, quoted>".

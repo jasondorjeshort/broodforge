@@ -24,9 +24,9 @@ Decisions so far:
 
 - [0001 Licensing](decisions/0001-licensing.md): GPL-3.0-or-later by default, LGPL for linkable components.
 - [0002 Repository layout](decisions/0002-repository-layout.md): where knowledge, state, procedures,
-  rules, and hooks live; skills, permissions, and continuity by `@docs/HANDOFF.md` import. Companion
-  [hook specifications](decisions/0002-hook-specs.md) for the hooks, and
-  [section 3, the usage gate and status line](decisions/0002-hook-specs-usage.md).
+  rules, and hooks live; skills, permissions, and continuity by `@docs/HANDOFF.md` import, superseded
+  in part by 0014 (handoff). Companion [hook specifications](decisions/0002-hook-specs.md) for the
+  hooks, and [section 3, the usage gate and status line](decisions/0002-hook-specs-usage.md).
 - [0004 Adopting the Hatchery practice](decisions/0004-adopt-hatchery.md): an existing project takes
   the practice as files from `hatchery/main`, records the base commit in its own ADR, and updates by
   three-way patch; merging stays the path for decanted projects. (0003 and 0005 are proposals in
@@ -62,5 +62,11 @@ Decisions so far:
   file, grant files, the idea grammar, the base line, the usage cache and the hook seams, with
   what is not promised; the reference fitness check (hooks require only Node built-ins) in the
   harness, group `F`. Proposed until the owner confirms the list.
+- [0014 Handoff layout](decisions/0014-handoff-layout.md): one
+  `docs/HANDOFF.md` by default, no hash, the edit rides in the work commit; a per-stream split
+  (`@handoff/<file>.md` lines, 40 each, 120 together, no README, no fixed files) the tooling
+  accepts and a project switches to at a stated trigger; every `@` line resolved by the hook
+  and the pusher. Skill text in [the sibling](decisions/0014-handoff-skill.md). Supersedes in
+  part 0002; adds a row to 0013.
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).

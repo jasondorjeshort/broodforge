@@ -44,6 +44,7 @@ older base loads under a newer one with the same meaning.
 | The base line | `^Hatchery base: [0-9a-f]{7,40}` in a project's `docs/design/decisions/` | `update-from-hatchery`, the `adr` skill | ADRs 0004, 0009, 0010 |
 | The usage cache: directory, file name, shape, the prune bound (never a file under a day old), the old `usage-state.json` left alone | `~/.claude/usage-state/<session_id>.json` | `statusline.js`, `usage-gate.js`, of every base version on the machine | ADR 0011, hook specs section 3 |
 | The hook seams: `HOOK_POLICY_FILE`; `test-hooks.js --input <file> <hook>` with `--home` and `--config-dir`; the exit codes and fail modes | `.claude/hooks/*.js`, `test-hooks.js` | a project reproducing a hook bug; the harness | ADR 0006 Test seams and Fail modes |
+| The handoff paths: `@docs/HANDOFF.md` in `CLAUDE.md`; `docs/HANDOFF.md` and `docs/handoff/*.md` capped at 40 each and 120 together; the map's `@handoff/<file>.md` lines as the directory's index | `CLAUDE.md`, `post-edit.js`, `pusher.md` | every project in either shape | ADR 0014 |
 
 Not promised: the status line's text; the wording of any deny; harness case ids and labels;
 skill, agent and rule prose; `policy.examples/`; the `cswap list --json` shape (consumed, not

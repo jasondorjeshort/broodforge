@@ -21,9 +21,11 @@ Checks:
    - an added file named `.env`, or ending in `.pem` or `.key`
    - an assignment of a literal to a variable named like `password`, `secret`, or `token`
 6. No single added file larger than 5 MB. Check new files from `git diff --name-only --diff-filter=A @{u}..HEAD` with `wc -c`.
-7. Doc size caps (ADR 0002, `.claude/rules/docs.md`): every tracked Markdown file under `docs/` is at most 300 lines, and `docs/HANDOFF.md` is at most 40; `docs/design/proposals/` is exempt (closed records). Run:
-   `git ls-files -- 'docs/*.md' | while read -r f; do case "$f" in docs/design/proposals/*) continue;; esac; n=$(wc -l < "$f"); cap=300; [ "$f" = docs/HANDOFF.md ] && cap=40; [ "$n" -gt "$cap" ] && echo "FAIL $f: $n lines, cap $cap"; done`
-   Any `FAIL` line means stop and report it; the fix is a split or a trim, not a cap change.
+7. Doc size caps and the handoff chain (ADR 0002, ADR 0014, `.claude/rules/docs.md`): every tracked Markdown file under `docs/` is at most 300 lines; `docs/HANDOFF.md` and each `docs/handoff/*.md` at most 40 and 120 together; every `@` line in `CLAUDE.md`, `docs/HANDOFF.md` and `docs/handoff/*.md` resolves from its file's directory; `docs/design/proposals/` is exempt from the 300 (closed records). Run:
+   `git ls-files -- 'docs/*.md' | while read -r f; do case "$f" in docs/design/proposals/*) continue;; esac; n=$(wc -l < "$f"); cap=300; case "$f" in docs/HANDOFF.md|docs/handoff/*.md) cap=40;; esac; [ "$n" -gt "$cap" ] && echo "FAIL $f: $n lines, cap $cap"; done`
+   `t=$(git ls-files -- docs/HANDOFF.md 'docs/handoff/*.md' | xargs cat | wc -l); [ "$t" -gt 120 ] && echo "FAIL handoff total: $t lines, cap 120"`
+   `for f in CLAUDE.md docs/HANDOFF.md $(git ls-files -- 'docs/handoff/*.md'); do d=$(dirname "$f"); grep -oE '^@[^[:space:]]+' "$f" | cut -c2- | while read -r p; do [ -e "$d/$p" ] || echo "FAIL $f: @$p resolves to $d/$p, which does not exist"; done; done`
+   Any `FAIL` line means stop and report it; the fix is a trim, a closed stream or a corrected line, not a cap change.
 8. If the repo defines a test command (look in `CLAUDE.md`, `README.md`, or the package manifest), run it. It must pass. If there is no test command yet, say so and continue. A `FAIL` line from a fitness check is reported verbatim as design work for the architect; do not retry or edit anything.
 9. If the repo defines a lint command, run it. It must pass.
 

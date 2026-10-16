@@ -1,7 +1,9 @@
 # 0002. Repository layout for agent-driven projects
 
 Date: 2026-10-11
-Status: accepted
+Status: accepted, superseded in part by 0014
+
+Superseded in part by 0014 (`0014-handoff-layout.md`): Session continuity's Updated line and handoff commit; the 40-line cap now also covers `docs/handoff/*.md`, 120 in total. Everything else stands.
 
 Record: proposal `../proposals/0002-repository-layout.md` (with the critic's objections answered),
 review `../proposals/0002-critic-review.md`. These proposals are in Hatchery's tree; a decanted

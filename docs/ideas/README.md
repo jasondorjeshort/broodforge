@@ -92,4 +92,5 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-15-review-fixes-amend-or-follow-up.md` | question | Review fixes before a push: amend, fixup and autosquash, or a follow-up commit |
 | `2026-10-15-statusline-command-cwd-relative.md` | bug | Status line command is cwd-relative, unlike the hooks; plain or `:-.` project-dir form |
 | `2026-10-16-deps-check-reach.md` | chore | What the dependency check does not reach: path globs, dynamic loading, unknown keys, direct-dependency licences |
+| `2026-10-16-handoff-import-check-residue.md` | chore | ADR 0014 import check: `~`/absolute targets, fence rules differ between hook and pusher, space-split names |
 | `2026-10-16-scheduled-architect-design-pass.md` | question | A scheduled Fable design pass beside the trigger scan; recommendation no; the owner's call |

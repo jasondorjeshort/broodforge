@@ -173,16 +173,20 @@ base defaults here, since the hook only advises.
 
 `CLAUDE.md` at the root over 150 lines: `post-edit: CLAUDE.md is N lines; cap is 150
 (.claude/rules/docs.md). Move facts to docs/reference/ and path-scoped rules to .claude/rules/.`
+An `@` line of the root `CLAUDE.md` whose target is absent: the import message below.
 
 Checks on `docs/**/*.md` (`<path>` from the root with forward slashes; line count as `wc -l`):
 
 | Check | Message (one line each, joined with newlines) |
 |---|---|
 | over 300 lines, except under `docs/design/proposals/` and paths matching `edit.capExempt` | `post-edit: <path> is N lines; cap is 300 (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.` |
-| `docs/HANDOFF.md` over 40 lines | `post-edit: docs/HANDOFF.md is N lines; cap is 40. Move detail to docs/ideas/ or a finding.` |
+| `docs/HANDOFF.md` or `docs/handoff/*.md` over 40 lines | `post-edit: <path> is N lines; cap is 40. Move detail to docs/ideas/ or a finding.` |
+| when the edited file is either, `docs/HANDOFF.md` plus every `docs/handoff/*.md` on disk (`.md` only) over 120 lines in total | `post-edit: the handoff loads N lines in total (docs/HANDOFF.md plus docs/handoff/*.md); cap is 120. Close a stream or trim.` |
+| a `docs/handoff/*.md` with no line `@handoff/<name>` in `docs/HANDOFF.md` (this replaces the README row for that directory, which has no README) | `post-edit: <path> is not imported by docs/HANDOFF.md. Add the line @handoff/<name> or delete the file.` |
+| a line starting `@<target>`, outside fenced blocks, in `CLAUDE.md`, `docs/HANDOFF.md` or `docs/handoff/*.md`, whose target does not exist when resolved from the file's directory | `post-edit: <path> imports @<target>, which resolves to <resolved> and does not exist (an import resolves from the importing file's directory).` |
 | `docs/findings/*.md` (not README) missing frontmatter `date:`, `status:` or `area:` | `post-edit: <path> lacks finding frontmatter (date, status, area). See the finding skill.` |
 | `docs/reference/*.md` (not README) missing `verified:` | `post-edit: <path> lacks verified: frontmatter. See .claude/rules/docs.md.` |
-| a file at least one directory below `docs/`, basename not `README.md` or `HANDOFF.md`, named in no `README.md` from its own folder up to `docs/<top>/README.md` | `post-edit: <path> is not listed in <folder>/README.md. Add one line.` |
+| a file at least one directory below `docs/` (not `docs/handoff/*.md`, see the import row above), basename not `README.md` or `HANDOFF.md`, named in no `README.md` from its own folder up to `docs/<top>/README.md` | `post-edit: <path> is not listed in <folder>/README.md. Add one line.` |
 | a backtick-quoted token holding `/` whose first segment is a top-level directory of the root (not `.git`), that does not exist | `post-edit: <path> names paths that do not exist: <list>. Fix them, or mark the paragraph [no-check: <reason>] (.claude/rules/docs.md).` |
 
 Path anchors skip files matching `edit.anchorExempt` (by default the closed records under
@@ -206,7 +210,9 @@ Output with at least one message, exit 0:
 `{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"<messages>"}}`; none:
 exit 0, no stdout. Harness cases P01 to P04 and PX01 to PX14 cover the checks above, the
 formatter and the `CLAUDE.md` cap; PA the path anchors, closed records and list-item scope; PC cap
-exemptions and formatters from a policy file, a malformed policy, and the task-branches example.
+exemptions and formatters from a policy file, a malformed policy, and the task-branches example;
+PH the handoff paths (ADR 0014): the stream and total caps, the map import, and the `@` line
+resolution, each case in its own scratch root (`ph-<id>`) so P02 keeps its tree.
 
 ## 3. `usage-gate.js` and the status line
 

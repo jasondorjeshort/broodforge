@@ -49,7 +49,7 @@ the brief supplies what only this task knows.
   (a proposal, an ADR, answers to the critic, a design doc, a plan). Fable costs two and a half
   times Opus and five times Sonnet, and a settled edit does not need it.
 - Under 40 lines. If the brief needs more, the task is too big; split it.
-- Do not paste `docs/HANDOFF.md` or design docs into the brief; they are imported or indexed.
+- Do not paste the handoff or design docs into the brief; they are imported or indexed.
 - Say which model attribution the commit will carry if the agent's output will be committed by
   someone else.
 - Paths in a brief use forward slashes (`C:/Users/...`) even on Windows: the Bash tool is Git Bash

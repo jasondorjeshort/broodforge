@@ -593,6 +593,80 @@ for (const [id, label, filePath, expect, rawOverride, fmt, policy, root] of P) {
   if (ok && !opt.verbose) process.stdout.write(`     exit ${r.code}, stdout: ${r.stdout || '(empty)'}\n`);
 }
 
+// ---------- post-edit: the handoff paths (ADR 0014) ----------
+// Each case builds its own scratch root (ph-<id>) so the P cases above keep their tree. A case is
+// [id, label, files { relative path: contents }, edited file, expected messages (joined with \n) or null].
+// Messages are checked as a whole, so a stray extra warning fails the case.
+{
+  const mapOf = (...imports) => `# Handoff\n\nCoordinator state.\n${imports.join('\n')}\n`;
+  const PH = [
+    ['PH01', '41-line docs/handoff stream warns with its path and 40',
+      { 'docs/HANDOFF.md': mapOf('@handoff/x.md'), 'docs/handoff/x.md': lines(41) }, 'docs/handoff/x.md',
+      'post-edit: docs/handoff/x.md is 41 lines; cap is 40. Move detail to docs/ideas/ or a finding.'],
+    ['PH02', '40-line stream is silent',
+      { 'docs/HANDOFF.md': mapOf('@handoff/x.md'), 'docs/handoff/x.md': lines(40) }, 'docs/handoff/x.md', null],
+    ['PH03', 'map plus streams totalling 121 warns the total and 120',
+      { 'docs/HANDOFF.md': mapOf('@handoff/a.md', '@handoff/b.md', '@handoff/c.md') + lines(34, 'm'), 'docs/handoff/a.md': lines(40), 'docs/handoff/b.md': lines(40), 'docs/handoff/c.md': lines(1) },
+      'docs/HANDOFF.md',
+      'post-edit: the handoff loads 121 lines in total (docs/HANDOFF.md plus docs/handoff/*.md); cap is 120. Close a stream or trim.'],
+    ['PH04', 'map plus streams totalling 120 is silent',
+      { 'docs/HANDOFF.md': mapOf('@handoff/a.md', '@handoff/b.md') + lines(35, 'm'), 'docs/handoff/a.md': lines(40), 'docs/handoff/b.md': lines(40) },
+      'docs/HANDOFF.md', null],
+    ['PH05', 'editing a stream also checks the total',
+      { 'docs/HANDOFF.md': mapOf('@handoff/a.md', '@handoff/b.md', '@handoff/c.md') + lines(34, 'm'), 'docs/handoff/a.md': lines(40), 'docs/handoff/b.md': lines(40), 'docs/handoff/c.md': lines(1) },
+      'docs/handoff/a.md',
+      'post-edit: the handoff loads 121 lines in total (docs/HANDOFF.md plus docs/handoff/*.md); cap is 120. Close a stream or trim.'],
+    ['PH06', 'a stream the map does not import warns',
+      { 'docs/HANDOFF.md': mapOf('@handoff/y.md'), 'docs/handoff/x.md': lines(3), 'docs/handoff/y.md': lines(3) }, 'docs/handoff/x.md',
+      'post-edit: docs/handoff/x.md is not imported by docs/HANDOFF.md. Add the line @handoff/x.md or delete the file.'],
+    ['PH07', 'a stream the map imports is silent, with no README in the directory',
+      { 'docs/HANDOFF.md': mapOf('@handoff/x.md'), 'docs/handoff/x.md': lines(3) }, 'docs/handoff/x.md', null],
+    ['PH08', 'a map line @docs/handoff/x.md warns with the doubled path',
+      { 'docs/HANDOFF.md': mapOf('@docs/handoff/x.md'), 'docs/handoff/x.md': lines(3) }, 'docs/HANDOFF.md',
+      'post-edit: docs/HANDOFF.md imports @docs/handoff/x.md, which resolves to docs/docs/handoff/x.md and does not exist (an import resolves from the importing file\'s directory).'],
+    ['PH09', 'a map line @handoff/x.md is silent',
+      { 'docs/HANDOFF.md': mapOf('@handoff/x.md'), 'docs/handoff/x.md': lines(3) }, 'docs/HANDOFF.md', null],
+    ['PH10', 'root CLAUDE.md importing an existing @docs/HANDOFF.md is silent',
+      { 'CLAUDE.md': '# C\n\n@docs/HANDOFF.md\n', 'docs/HANDOFF.md': mapOf() }, 'CLAUDE.md', null],
+    ['PH11', 'root CLAUDE.md importing an absent @docs/GONE.md warns',
+      { 'CLAUDE.md': '# C\n\n@docs/GONE.md\n' }, 'CLAUDE.md',
+      'post-edit: CLAUDE.md imports @docs/GONE.md, which resolves to docs/GONE.md and does not exist (an import resolves from the importing file\'s directory).'],
+    ['PH12', 'an @ line inside a fenced block warns nothing',
+      { 'docs/HANDOFF.md': '# Handoff\n\n```\n@docs/GONE.md\n```\n' }, 'docs/HANDOFF.md', null],
+    ['PH13', 'an @ inside a code span warns nothing',
+      { 'docs/HANDOFF.md': '# Handoff\n\nWrite `@docs/GONE.md` as @handoff/x.md in the map.\n' }, 'docs/HANDOFF.md', null],
+    ['PH14', 'a stream line @../x.md resolves from the stream directory',
+      { 'docs/HANDOFF.md': mapOf('@handoff/x.md'), 'docs/handoff/x.md': '# X\n@../HANDOFF.md\n' }, 'docs/handoff/x.md', null],
+    ['PH15', 'a map holding only @handoff/x.md.old does not list x.md',
+      { 'docs/HANDOFF.md': mapOf('@handoff/x.md.old'), 'docs/handoff/x.md': lines(3), 'docs/handoff/x.md.old': lines(3) }, 'docs/handoff/x.md',
+      'post-edit: docs/handoff/x.md is not imported by docs/HANDOFF.md. Add the line @handoff/x.md or delete the file.'],
+    ['PH16', 'a map line @handoff/x.md inside a fence does not list x.md',
+      { 'docs/HANDOFF.md': '# Handoff\n\n```\n@handoff/x.md\n```\n', 'docs/handoff/x.md': lines(3) }, 'docs/handoff/x.md',
+      'post-edit: docs/handoff/x.md is not imported by docs/HANDOFF.md. Add the line @handoff/x.md or delete the file.'],
+  ];
+  for (const [id, label, files, edited, expect] of PH) {
+    if (!selected(id)) continue;
+    const root = path.join(scratch, `ph-${id}`);
+    for (const [rel, text] of Object.entries(files)) {
+      const f = path.join(root, ...rel.split('/'));
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, text);
+    }
+    const stdin = JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'Write', cwd: root, tool_input: { file_path: path.join(root, ...edited.split('/')) } });
+    const r = run('post-edit', stdin, envWith({ HOOK_POLICY_FILE: POLICIES.hatchery }));
+    let ok = false;
+    let detail = '';
+    if (r.code !== 0) detail = `exit ${r.code}, expected 0; stderr: ${r.stderr.trim()}`;
+    else if (expect === null) { ok = r.stdout === ''; detail = 'expected no stdout'; }
+    else {
+      const d = parseDecision(r.stdout);
+      ok = !!d && d.event === 'PostToolUse' && d.context === expect;
+      detail = `expected additionalContext ${JSON.stringify(expect)}`;
+    }
+    report(id, `${label} -> ${expect === null ? 'no output' : 'message'}`, ok, detail, r.stdout);
+  }
+}
+
 // ---------- usage-gate (0002-hook-specs-usage.md, section 3) ----------
 const home = path.join(scratch, 'home');
 fs.mkdirSync(path.join(home, '.claude'), { recursive: true });

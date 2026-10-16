@@ -52,7 +52,7 @@ project's own `NNNN-adopt-hatchery.md` records the base commit).
      must then print the policy, not an error.
    - Project wins: `README.md`; the title and project-specific sections of `CLAUDE.md`
      (phase, platforms, routing, branch name, `## Project rules`, anything the project
-     added); `docs/HANDOFF.md`; the files under `docs/ideas/` and `docs/operator/` (their `README.md`s are the base's, since the block grammar must stay identical across projects, ADR 0007); everything under `docs/design/`, `docs/findings/`,
+     added); `docs/HANDOFF.md` and `docs/handoff/`; the files under `docs/ideas/` and `docs/operator/` (their `README.md`s are the base's, since the block grammar must stay identical across projects, ADR 0007); everything under `docs/design/`, `docs/findings/`,
      `docs/reference/`. Exception, merge mode (ADR 0008): ADRs `0001` to `0019` under
      `docs/design/decisions/` are Hatchery's records and the base wins there, except the project's
      own lines, which are merged by hand as a mixed file: a `Status: superseded by NNNN` line and
@@ -74,7 +74,8 @@ project's own `NNNN-adopt-hatchery.md` records the base commit).
    via the runner (`commit` skill), subject `Update from Hatchery <old short sha>..<new short sha>`.
 6. Post-merge checks, each must pass or be reported as a failure:
    - `node --version`; `node .claude/hooks/usage-gate.js < /dev/null` exits 0.
-   - `wc -l CLAUDE.md docs/HANDOFF.md`: at most 150 and 40.
+   - `wc -l CLAUDE.md` at most 150; the three command lines of pusher check 7
+     (`.claude/agents/pusher.md`) print no `FAIL`.
    - Every `.claude/skills/*/SKILL.md` and `.claude/agents/*.md` starts with frontmatter.
    - `.claude/settings.json` parses, and (adopted projects) still contains every project hook entry
      the adoption ADR lists.

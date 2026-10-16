@@ -17,8 +17,8 @@ even if the answer is "unresolved, here is what was ruled out".
 2. Sections: Question (what was being asked), What was tried (commands, versions, environment),
    Result (what is known now, with evidence), Next (what would resolve it; omit when resolved).
 3. Add a line to `docs/findings/README.md` with status and a one-line summary.
-4. If status is open and the coordinator should act, add the path under Open findings in
-   `docs/HANDOFF.md`.
+4. If status is open and the coordinator should act, add the path under the handoff's Open
+   findings (where that lives per shape: `handoff` skill).
 
 ## Resolve
 
@@ -26,7 +26,7 @@ even if the answer is "unresolved, here is what was ruled out".
 2. Promote the durable part: a fact about a tool or environment goes to `docs/reference/<topic>.md`
    (create or extend; set `verified:` to today); a decision goes through the `adr` skill. Set
    `promoted_to: <path>` in the finding. The finding keeps the evidence; the reference keeps the fact.
-3. Update the index line and remove the entry from `HANDOFF.md`.
+3. Update the index line and remove the entry from the handoff.
 
 ## Supersede
 
