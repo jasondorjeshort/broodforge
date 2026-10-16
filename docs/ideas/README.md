@@ -74,5 +74,6 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-14-ux-choices-that-could-become-options.md` | feature | Venue, footer, trace, allow-session button, mode names, model switch, dot aliases as user or channel options |
 | `2026-10-15-carry-back-pusher-check-5a-and-adr-0009-row.md` | chore | Hatchery takes the pusher's personal-data check 5a and the missing ADR 0009 index row; base work |
 | `2026-10-16-acp-as-the-second-harness-boundary.md` | feature | ACP (OpenAB, `claude-agent-acp`) as a candidate boundary for the R-42 and R-43 second harness; the first-version `Engine` stays bespoke |
+| `2026-10-16-git-guard-false-positives-beside-variable-expansions.md` | bug | Lines with a bare `git` or `.git/` word beside a `$B` expansion are refused though nothing runs git; expansion-adjacent words should read as data; scratch-repository commits push reviewers to os/exec |
 | `2026-10-16-instance-credentials-have-no-add-path.md` | feature | `credential add` requires a user, so the bot token and git identity credentials (null `user_id`) cannot be added; needed by P8 and P12 |
 | `2026-10-16-rate-limit-events-carry-plan-usage-per-credential.md` | feature | The stream's `rate_limit_event` carries five-hour and seven-day utilization per credential; a source for R-44, R-45, R-46 and the usage-gate hook |
