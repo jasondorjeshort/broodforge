@@ -22,8 +22,22 @@ through `GOPROXY` and the checksum database).
 | `zombiezen.com/go/sqlite` | v1.4.2 | ISC | `store` |
 | `golang.org/x/sys` | v0.49.0 | BSD-3-Clause | `spawn`, `control` |
 
-Until the owner imports it, each is held by a blank import in `internal/deps/deps.go`; x/sys is
-held through `golang.org/x/sys/cpu` because `x/sys/windows` does not build on Linux.
+`control` imports `golang.org/x/sys/windows` (Windows build only). Until its owner imports it,
+each other module is held by a blank import in `internal/deps/deps.go`; x/sys stays pinned there
+through `golang.org/x/sys/cpu` because `x/sys/windows` does not build on Linux.
+
+`x/sys/windows` pitfalls in the named-pipe transport (finding
+`docs/findings/2026-10-16-go-named-pipes-on-windows-two-stdlib-pitfalls.md`):
+
+- Do not wrap a pipe handle with `os.NewFile` when a reader and a writer run together: `-race`
+  reports a data race on the shared offset in the standard library's poll.FD. Use overlapped I/O
+  directly.
+- Keep every `windows.Overlapped` and its I/O buffer on the heap until the operation completes:
+  a goroutine stack moves, and the kernel completes into the old copy (`ERROR_IO_INCOMPLETE`).
+- Pass `WaitForMultipleObjects` a handle array held on the heap (a struct field, as
+  `pipe_windows.go` line 56 does), never a slice literal: the literal stays on the stack, and
+  x/sys v0.49.0 calls another Go function between taking its address and the syscall, so a stack
+  move hands the kernel freed memory (`ERROR_INVALID_HANDLE`; `TestStressUnderGC` catches it).
 
 ## Tools (`go tool <name>`)
 

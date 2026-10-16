@@ -7,26 +7,34 @@ is `03-hook-contract.md` and the spawn is the ADR 0022 companion; this file is t
 Surface. One binary, `broodforge`, the same entry point as the bot (ADR 0020); every command but
 `serve`, `hook`, `engine-entry` and the ones marked `(file)` is a client of the control socket
 (03, Debug surface attachment). Invocation: `broodforge [--root <path>] [--json] <group>
-<command> [args]`. `--root` or `BROODFORGE_ROOT` names the instance root; neither set, exit 2.
+<command> [flags] [args]`; `--root` and `--json` may also stand among the command's flags, which
+precede its arguments. `--root` or `BROODFORGE_ROOT` names the instance root; neither set, exit 2.
 Socket: `<root>/data/control.sock` on Linux, `\\.\pipe\broodforge-<instanceName>` on Windows,
 always from `instanceName` (a scratch root's is `scratch-<12 hex>`, generated at `scratch new`,
-so no path is hashed). No socket: a `(file)` command and every read command open
-`data/store.sqlite` read-only (ADR 0021); a write command exits 1 with `error: not-running: no
-bot at <socket>`.
+so no path is hashed; until `config` exists the client reads only that key of
+`config/instance.json`, `error: no-config` or `error: bad-config` without it). No socket: a
+`(file)` command and every read command open `data/store.sqlite` read-only (ADR 0021); a write
+command exits 1 with `error: not-running: no bot at <socket>`.
 
 Wire format, both directions one JSON object per line, UTF-8, newline-terminated. Request:
 `{"id":<n>,"cmd":"<group>.<command>","args":{...}}`. Final response: `{"id":<n>,"ok":true,
 "result":<value>}` or `{"id":<n>,"ok":false,"error":{"code":"<kebab-case>","message":"<one
 line>"}}`. A streaming command (`tail`, `audit --follow`, `send --tail`) sends any number of
 `{"id":<n>,"event":{...}}` lines before its final response. `cmd` is the CLI name with the group
-as prefix; `args` are the flags, dashes removed, camel-cased. The socket authenticates nothing
-(ADR 0022 states the Windows gap); 05 adds no TCP and no HTTP.
+as prefix; `args` are the flags, dashes removed, camel-cased, every declared flag sent with its
+value or default. A connection may carry several ids at once; its end cancels its calls. The
+server's own codes: `bad-request` (with id 0 when the line is not JSON), `unknown-command`,
+`internal`; the client's: `not-running` (nothing listens), `connect-failed` (something does but
+the connection is refused: access denied, every pipe instance busy for 2 s), `connection-lost`.
+The socket authenticates nothing (ADR 0022 states the Windows gap); 05 adds no TCP and no HTTP.
 
 Output. Text mode is one record per line, fixed column order, columns separated by two spaces,
 no header; `--json` prints one object for a single result and one object per line (JSONL) for a
 list. Short by default (N-10): lists stop at 20 rows unless `--limit <n>` or `--all`; detail is
-behind `--verbose` or a `show` command. Times are UTC ISO 8601. Every error is one stderr line,
-`error: <code>: <message>`; with `--json` the wire error object on stderr instead. A code is one
+behind `--verbose` or a `show` command. Times are UTC ISO 8601. A text column is a string
+unquoted with `\`, newline, CR and tab escaped, `""` for an empty one, `-` for null or absent,
+compact JSON otherwise; events print as records before the result. Every error is one stderr
+line, `error: <code>: <message>`; with `--json` the wire error object on stderr instead. A code is one
 kebab-case token, a subcode joined by a hyphen (`handoff-refused-attribution`), never a colon.
 
 Exit codes (N-07): `0` done; `1` the command ran and the answer is a refusal or failure, reason
@@ -34,7 +42,19 @@ on stderr; `2` usage: unknown command or flag, missing root, malformed stdin. `-
 where offered, compares `<value>` with the command's outcome token: on success the first column
 of its first output line (`status`: the `config:` value; `hook try`: the decision), on a refusal
 the error code. A match exits 0 even when the outcome is a refusal; a mismatch exits 1 with
-`error: expect: wanted <value>, got <actual>`.
+`error: expect: wanted <value>, got <actual>`. With `--expect` that line replaces the refusal's
+own, and a matched refusal prints none. A usage error is `error: usage: <message>`, never
+compared with `--expect`.
+
+Probe and harness. Every server answers the hidden `broodforge control echo [--text <s>]
+[--events <n>] [--fail <code>] [--expect <value>]`: `<n>` events `{"seq":i,"text":<s>}` (text
+`<s>  <i>`), then the result `{"text":<s>}` (`<s>` defaults to `ok`), or after the events the
+refusal `error: <code>: echo was asked to fail`; `<n>` above 1000 or a `<code>` that is not
+kebab-case is `error: bad-args`. Until `serve` exists, tests drive the binary
+through `internal/control/controltest` (a server on a temporary root whose
+`config/instance.json` names `test-<12 hex>`) and `internal/cli/clitest` (builds the binary
+with the plan's build line once per test package, into a temporary directory, and runs it);
+`go test -v -run TestProof ./internal/cli/` shows each command and its exit code.
 
 Scratch (N-09, ADR 0021). `broodforge scratch new [--keep] [--project <path or url>]` creates a
 root in the OS temp directory, prints its path (`--json`: `{"root":"...","instanceName":

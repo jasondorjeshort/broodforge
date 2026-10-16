@@ -14,7 +14,7 @@ control-socket wire format (one JSON object per line, `cmd` as `<group>.<command
 and JSONL output rules, the N-07 exit codes and what `--expect` compares, the scratch root
 (`scratch new|run|delete|prune`, channels `100` and `200`, credential `cred-scratch`), and the
 shared isolation rules (no command prints a secret; `error: live-instance` for a debug flag
-that would widen a live session). A section below writes out only what differs.
+that widens a live session), the hidden probe `control echo`. Sections below give only what differs.
 
 ## Bot lifecycle
 

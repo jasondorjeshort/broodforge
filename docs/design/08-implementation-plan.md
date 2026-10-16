@@ -76,7 +76,7 @@ classes); `internal/control/` (unix socket; named pipe through `x/sys/windows` o
 package named in the dependency record; the wire format, streaming, the `cmd` registry, a server
 serving whatever services are registered); `internal/control/controltest/` (that server on a temp
 socket with the services built so far); `internal/cli/clitest/` (builds the binary once per test
-package into `t.TempDir()` and runs it); a hidden `control echo`. Proof: a test that starts the
+package into a temporary directory its `Main` removes, and runs it); a hidden `control echo`. Proof: a test that starts the
 harness and runs `broodforge --root <tmp> control echo --expect ok`, with `--json`, and a streaming
 command; no root exits 2; `--expect nope` exits 1 with `error: expect: wanted nope, got ok`; no
 server, `error: not-running: no bot at <socket>`. Depends on: P0.
