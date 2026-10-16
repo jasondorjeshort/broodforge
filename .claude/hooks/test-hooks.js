@@ -9,18 +9,22 @@
 //   node .claude/hooks/test-hooks.js --only G0        run cases whose id starts with G0
 //   node .claude/hooks/test-hooks.js --verbose        also print each hook's raw stdout
 //   node .claude/hooks/test-hooks.js --keep           keep the scratch docs tree (path printed)
-//   node .claude/hooks/test-hooks.js --input <file> <git-guard|post-edit|usage-gate>
-//       run one hook on the raw contents of <file> and print exit code, stdout, stderr.
-//       Use this to reproduce a bug: write the hook input JSON to a file with the Write
-//       tool (a command line containing e.g. a force push would itself trip git-guard).
-//   ... --input <file> usage-gate --home <dir>
-//       the same, with HOME and USERPROFILE set to <dir> for the hook, so it reads
-//       <dir>/.claude/usage-state.json and the grants in <dir>/.claude/usage-gate-overrides/
-//       instead of the real ~/.claude. Put session_id and cwd in <file> to test a grant's scope.
+//   node .claude/hooks/test-hooks.js --input <file> <git-guard|post-edit|usage-gate|statusline>
+//       run one hook (or the status line, ../statusline.js) on the raw contents of <file> and
+//       print exit code, stdout, stderr. Use this to reproduce a bug: write the hook input JSON
+//       to a file with the Write tool (a command line containing e.g. a force push would itself
+//       trip git-guard).
+//   ... --input <file> <usage-gate|statusline> --home <dir> [--config-dir <cdir>]
+//       the same, with HOME and USERPROFILE set to <dir> and CLAUDE_CONFIG_DIR removed (or set
+//       to <cdir>), so the script uses <dir>/.claude/usage-state/<session_id>.json, the grants
+//       in <dir>/.claude/usage-gate-overrides/, and the account label from <dir>/.claude.json
+//       (or <cdir>/.claude.json) instead of the real ones. Put session_id (and cwd, to test a
+//       grant's scope) in <file>; the gate reads the file the status line wrote for that id.
 //
 // Isolation: post-edit cases run against a scratch tree in the OS temp dir (deleted at
 // the end); git-guard cases run in two scratch repositories (one on main, one on task/T1);
-// usage-gate and statusline cases point HOME/USERPROFILE at a scratch dir. Every case names
+// usage-gate and statusline cases point HOME/USERPROFILE at a scratch dir and remove
+// CLAUDE_CONFIG_DIR unless the case sets it to a scratch dir. Every case names
 // its policy file through HOOK_POLICY_FILE: the Hatchery fixture, an example, none, or a scratch
 // file. No file of the repository is read except to check that policy.json loads, and ~/.claude is never touched. Exit codes: 0 all pass, 1 any
 // failure, 2 usage error.
@@ -35,7 +39,7 @@ const NODE = process.execPath;
 
 // ---------- CLI ----------
 const argv = process.argv.slice(2);
-const opt = { only: null, verbose: false, keep: false, input: null, hook: null, home: null };
+const opt = { only: null, verbose: false, keep: false, input: null, hook: null, home: null, configDir: null };
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--verbose') opt.verbose = true;
@@ -43,22 +47,29 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--only' && argv[i + 1]) opt.only = argv[++i];
   else if (a === '--input' && argv[i + 1] && argv[i + 2]) { opt.input = argv[++i]; opt.hook = argv[++i]; }
   else if (a === '--home' && argv[i + 1]) opt.home = path.resolve(argv[++i]);
+  else if (a === '--config-dir' && argv[i + 1]) opt.configDir = path.resolve(argv[++i]);
   else { process.stderr.write(`test-hooks: unknown or incomplete argument: ${a}\n`); process.exit(2); }
 }
 
 function run(hook, stdin, env) {
-  const r = spawnSync(NODE, [path.join(HOOKS, `${hook}.js`)], {
+  const script = hook === 'statusline' ? path.join(HOOKS, '..', 'statusline.js') : path.join(HOOKS, `${hook}.js`);
+  const r = spawnSync(NODE, [script], {
     input: stdin, encoding: 'utf8', timeout: 30000, env: env || process.env,
   });
   return { code: r.status, stdout: r.stdout || '', stderr: r.stderr || '', error: r.error };
 }
 
 if (opt.input) {
-  if (!['git-guard', 'post-edit', 'usage-gate'].includes(opt.hook)) {
+  if (!['git-guard', 'post-edit', 'usage-gate', 'statusline'].includes(opt.hook)) {
     process.stderr.write(`test-hooks: unknown hook ${opt.hook}\n`);
     process.exit(2);
   }
-  const env = opt.home ? Object.assign({}, process.env, { HOME: opt.home, USERPROFILE: opt.home }) : process.env;
+  let env = process.env;
+  if (opt.home || opt.configDir) {
+    env = Object.assign({}, process.env);
+    if (opt.home) Object.assign(env, { HOME: opt.home, USERPROFILE: opt.home });
+    if (opt.configDir) env.CLAUDE_CONFIG_DIR = opt.configDir; else delete env.CLAUDE_CONFIG_DIR;
+  }
   const r = run(opt.hook, fs.readFileSync(opt.input, 'utf8'), env);
   process.stdout.write(`exit ${r.code}\nstdout: ${r.stdout}\nstderr: ${r.stderr}\n`);
   process.exit(0);
@@ -576,6 +587,17 @@ for (const [id, label, filePath, expect, rawOverride, fmt, policy, root] of P) {
 // ---------- usage-gate (section 3 text) ----------
 const home = path.join(scratch, 'home');
 fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+// One usage file per session (ADR 0011): every U, UX and UO case runs as session SID and writes its
+// state to that session's file; UG cases write it for the session_id in their payload.
+const SID = 'sess-gate';
+const stateDir = path.join(home, '.claude', 'usage-state');
+fs.mkdirSync(stateDir, { recursive: true });
+const stateFileFor = (sid) => path.join(stateDir, `${sid}.json`);
+const stateFile = stateFileFor(SID);
+const gateInput = (extra) => JSON.stringify(Object.assign({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {}, session_id: SID }, extra));
+// The scratch HOME, and no CLAUDE_CONFIG_DIR from the session running the suite, so the account
+// label is read from the scratch home (none there unless a case writes one).
+const gateEnv = (extra) => envWith(Object.assign({ HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: undefined }, extra));
 const HOLD_MSG = 'Usage gate: 5h 55%, 7d 10%. 5h at or above 50%: Do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report. Lifting this early is the user\'s decision (docs/design/decisions/0006-hook-policy-file.md).';
 const STOP_MSG = 'Usage gate: 5h 85%, 7d 10%. 5h at or above 80%: Stop all work, run the handoff skill, commit WIP from the main session, end the turn.';
 const HOLD_85 = HOLD_MSG.replace('5h 55%', '5h 85%');
@@ -604,7 +626,7 @@ const U = [
 ];
 for (const [id, pct, expect, override, policy] of U) {
   if (!selected(id)) continue;
-  fs.writeFileSync(path.join(home, '.claude', 'usage-state.json'), JSON.stringify({
+  fs.writeFileSync(stateFile, JSON.stringify({
     updatedAt: Math.floor(Date.now() / 1000),
     five_hour: { used_percentage: pct },
     seven_day: { used_percentage: 10 },
@@ -612,8 +634,8 @@ for (const [id, pct, expect, override, policy] of U) {
   const ovPath = path.join(home, '.claude', 'usage-gate-override.json');
   if (override === undefined) fs.rmSync(ovPath, { force: true });
   else fs.writeFileSync(ovPath, typeof override === 'string' ? override : JSON.stringify(override));
-  const env = envWith({ HOME: home, USERPROFILE: home, HOOK_POLICY_FILE: policy || POLICIES.hatchery });
-  const r = run('usage-gate', JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {} }), env);
+  const env = gateEnv({ HOOK_POLICY_FILE: policy || POLICIES.hatchery });
+  const r = run('usage-gate', gateInput(), env);
   let ok;
   let detail;
   if (expect === null) { ok = r.code === 0 && r.stdout === ''; detail = 'expected allow (exit 0, no stdout)'; }
@@ -628,7 +650,6 @@ for (const [id, pct, expect, override, policy] of U) {
 
 // Staleness, reset windows and the example policies. state null means no file.
 // [id, label, state, policy file, expected deny-reason prefix or null for allow, stderr must include]
-const stateFile = path.join(home, '.claude', 'usage-state.json');
 const fresh = (five, seven, extra) => Object.assign({ updatedAt: nowSec, five_hour: { used_percentage: five }, seven_day: { used_percentage: seven } }, extra);
 const staleDeny = scratchPolicy('stale-deny', { usage: { whenStale: 'deny' } });
 const UX = [
@@ -659,8 +680,7 @@ fs.rmSync(path.join(home, '.claude', 'usage-gate-override.json'), { force: true 
 for (const [id, label, state, policy, expect, stderrHas] of UX) {
   if (!selected(id)) continue;
   if (state === null) fs.rmSync(stateFile, { force: true }); else fs.writeFileSync(stateFile, JSON.stringify(state));
-  const r = run('usage-gate', JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {} }),
-    envWith({ HOME: home, USERPROFILE: home, HOOK_POLICY_FILE: policy }));
+  const r = run('usage-gate', gateInput(), gateEnv({ HOOK_POLICY_FILE: policy }));
   let ok;
   let detail;
   if (expect === null) { ok = r.code === 0 && r.stdout === ''; detail = 'expected allow (exit 0, no stdout)'; }
@@ -713,8 +733,7 @@ for (const [id, label, state, override, policy, extraEnv, expect, stderrHas] of 
   if (!selected(id)) continue;
   fs.writeFileSync(stateFile, JSON.stringify(state));
   if (override === undefined) fs.rmSync(ovFile, { force: true }); else fs.writeFileSync(ovFile, JSON.stringify(override));
-  const r = run('usage-gate', JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {} }),
-    envWith(Object.assign({ HOME: home, USERPROFILE: home, HOOK_POLICY_FILE: policy }, extraEnv)));
+  const r = run('usage-gate', gateInput(), gateEnv(Object.assign({ HOOK_POLICY_FILE: policy }, extraEnv)));
   let ok;
   let detail;
   if (expect === null) { ok = r.code === 0 && r.stdout === ''; detail = 'expected allow (exit 0, no stdout)'; }
@@ -727,6 +746,77 @@ for (const [id, label, state, override, policy, extraEnv, expect, stderrHas] of 
   report(id, `${label} -> ${expect === null ? 'allow' : 'deny'}`, ok, detail, r.stdout);
 }
 fs.rmSync(ovFile, { force: true });
+
+// The per-session file and the account label (ADR 0011). A file for another session, no usable
+// session_id, and a file labelled with another account than the one logged in are no usage data
+// (the stale path); a matching or unknown label is judged, and the deny names the file's email.
+// [id, label, state for this session or null, files { relative path under the scratch HOME (CFG/
+// for the scratch CLAUDE_CONFIG_DIR): contents }, input overrides, policy or undefined for the
+// Hatchery fixture, expected deny-reason prefix or null for allow, stderr must include, use CFG]
+{
+  const cfgDir = path.join(scratch, 'gate-config');
+  const label = (a) => ({ uuid: a.uuid, organizationUuid: a.org, email: a.email });
+  const login = (a) => JSON.stringify({ oauthAccount: { accountUuid: a.uuid, organizationUuid: a.org, emailAddress: a.email }, numStartups: 3 });
+  const A = { uuid: 'uuid-a', org: 'org-1', email: 'a@example.com' };
+  const B = { uuid: 'uuid-b', org: 'org-1', email: 'b@example.com' };
+  const A2 = { uuid: 'uuid-a', org: 'org-2', email: 'a@example.com' };
+  const withAcct = (a, five) => Object.assign(fresh(five, 10), { account: label(a) });
+  const HOLD_A = HOLD_MSG.replace('Usage gate:', 'Usage gate (a@example.com):');
+  const OTHER = 'no usage data for this account (this session\'s file is for a@example.com, logged in as b@example.com)';
+  const UA = [
+    ['U11', 'a file for another session only: no usage data', null, {}, {}, undefined, null,
+      'no usage data (the status line has not written any for this session); allowing', 'other'],
+    ['U12', 'a file for another session only, whenStale deny', null, {}, {}, staleDeny,
+      'Usage gate: no usage data (the status line has not written any for this session), and the policy denies', undefined, 'other'],
+    ['U13', 'no session_id in the input: no usage data', fresh(95, 10), {}, { session_id: undefined }, undefined, null,
+      'no usage data (no usable session_id in the hook input)'],
+    ['U14', 'a session_id that is not a plain name: no usage data', fresh(95, 10), {}, { session_id: `../${SID}` }, undefined, null,
+      'no usable session_id'],
+    ['U15', 'label matches the login: judged, the deny names the email', withAcct(A, 55), { '.claude.json': login(A) }, {}, undefined, HOLD_A],
+    ['U16', 'label differs from the login: stale, allow, the reason on stderr', withAcct(A, 95), { '.claude.json': login(B) }, {}, undefined, null,
+      `${OTHER}; allowing`],
+    ['U17', 'label differs, whenStale deny: denied as no data', withAcct(A, 10), { '.claude.json': login(B) }, {}, staleDeny,
+      `Usage gate: ${OTHER}, and the policy denies delegation without fresh data.`],
+    ['U18', 'same account uuid, another organization: stale', withAcct(A, 95), { '.claude.json': login(A2) }, {}, undefined, null,
+      'no usage data for this account'],
+    ['U19', 'login unknown (no config file): the file is judged', withAcct(A, 55), {}, {}, undefined, HOLD_A],
+    ['U20', 'file label unknown, login known: judged, no email', fresh(55, 10), { '.claude.json': login(B) }, {}, undefined, HOLD_MSG],
+    ['U21', 'torn .claude.json: login unknown, the file is judged', withAcct(A, 55), { '.claude.json': login(B).slice(0, 30) }, {}, undefined, HOLD_A],
+    ['U22', 'CLAUDE_CONFIG_DIR wins over the home directory for the label', withAcct(A, 95),
+      { '.claude.json': login(A), 'CFG/.claude.json': login(B) }, {}, undefined, null, `${OTHER}; allowing`, undefined, true],
+    ['U23', 'legacy .config.json in the config home wins over .claude.json', withAcct(A, 95),
+      { '.claude.json': login(A), '.config.json': login(B) }, {}, undefined, null, `${OTHER}; allowing`],
+    ['U24', 'a .config.json without oauthAccount falls through to .claude.json', withAcct(A, 55),
+      { '.claude.json': login(A), '.config.json': '{"numStartups":1}' }, {}, undefined, HOLD_A],
+  ];
+  for (const [id, lbl, state, files, input, policy, expect, stderrHas, otherSession, useCfg] of UA) {
+    if (!selected(id)) continue;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.rmSync(cfgDir, { recursive: true, force: true });
+    fs.mkdirSync(cfgDir, { recursive: true });
+    for (const f of ['.claude.json', '.config.json']) fs.rmSync(path.join(home, f), { force: true });
+    if (state) fs.writeFileSync(stateFile, JSON.stringify(state));
+    if (otherSession) fs.writeFileSync(stateFileFor(otherSession), JSON.stringify(fresh(95, 10)));
+    for (const [rel, contents] of Object.entries(files)) {
+      fs.writeFileSync(rel.startsWith('CFG/') ? path.join(cfgDir, rel.slice(4)) : path.join(home, rel), contents);
+    }
+    const r = run('usage-gate', gateInput(input),
+      gateEnv({ HOOK_POLICY_FILE: policy || POLICIES.hatchery, CLAUDE_CONFIG_DIR: useCfg ? cfgDir : undefined }));
+    let ok;
+    let detail;
+    if (expect === null) { ok = r.code === 0 && r.stdout === ''; detail = 'expected allow (exit 0, no stdout)'; }
+    else {
+      const d = parseDecision(r.stdout);
+      ok = r.code === 0 && !!d && d.decision === 'deny' && d.reason.startsWith(expect);
+      detail = `expected a reason starting ${JSON.stringify(expect)}`;
+    }
+    if (ok && stderrHas && !r.stderr.includes(stderrHas)) { ok = false; detail = `stderr lacks ${JSON.stringify(stderrHas)}: ${r.stderr}`; }
+    report(id, `${lbl} -> ${expect === null ? 'allow' : 'deny'}`, ok, detail, r.stdout);
+  }
+  for (const f of ['.claude.json', '.config.json']) fs.rmSync(path.join(home, f), { force: true });
+  fs.rmSync(cfgDir, { recursive: true, force: true });
+}
 
 // The grant directory (ADR 0006, The HOLD override): scope by session, project or user, matched
 // against session_id and cwd on stdin. All under the scratch HOME; ~/.claude is never read.
@@ -756,15 +846,15 @@ const UG = [
     { session_id: 'xyz', cwd: PROJ }, withClauses(HOLD_MSG, C.session('abc'))],
   ['UG03', 'project grant, cwd at the path', fresh(55, 10), { 'project-proj.json': g({ project: PROJ }) }, undefined, at, null, `(project ${PROJ})`],
   ['UG04', 'project grant, cwd under the path', fresh(55, 10), { 'project-proj.json': g({ project: PROJ }) }, undefined,
-    { cwd: path.join(PROJ, 'sub', 'deeper') }, null],
+    { session_id: 'pq', cwd: path.join(PROJ, 'sub', 'deeper') }, null],
   ['UG05', 'project grant, cwd beside it with the path as a prefix', fresh(55, 10), { 'project-proj.json': g({ project: PROJ }) }, undefined,
-    { cwd: `${PROJ}-other` }, withClauses(HOLD_MSG, C.project(PROJ))],
+    { session_id: 'pq', cwd: `${PROJ}-other` }, withClauses(HOLD_MSG, C.project(PROJ))],
   ['UG06', 'project written with / and a trailing /, cwd with \\', fresh(55, 10), { 'p.json': g({ project: `${fwd(PROJ)}/` }) }, undefined,
-    { cwd: `${back(PROJ)}\\sub` }, null],
+    { session_id: 'pq', cwd: `${back(PROJ)}\\sub` }, null],
   ['UG07', 'project written with \\, cwd with /', fresh(55, 10), { 'p.json': g({ project: back(PROJ) }) }, undefined,
-    { cwd: `${fwd(PROJ)}/sub` }, null],
+    { session_id: 'pq', cwd: `${fwd(PROJ)}/sub` }, null],
   ['UG08', `project in another case: ${isWin ? 'applies on Windows' : 'out of scope off Windows'}`, fresh(55, 10),
-    { 'p.json': g({ project: PROJ }) }, undefined, { cwd: PROJ.toUpperCase() }, isWin ? null : withClauses(HOLD_MSG, C.project(PROJ))],
+    { 'p.json': g({ project: PROJ }) }, undefined, { session_id: 'pq', cwd: PROJ.toUpperCase() }, isWin ? null : withClauses(HOLD_MSG, C.project(PROJ))],
   ['UG09', 'user grant applies with any session and cwd', fresh(55, 10), { 'user.json': g() }, undefined,
     { session_id: 'xyz', cwd: path.join(scratch, 'elsewhere') }, null, 'by override user.json (user)'],
   ['UG10', 'legacy file beside a directory grant: the legacy user grant lifts', fresh(55, 10), { 'session-other.json': g({ session: 'other' }) }, g(),
@@ -773,7 +863,7 @@ const UG = [
     { 'zz-session.json': g({ session: 'other' }) }, g({ until: nowSec - 1 }), at, withClauses(HOLD_MSG, C.session('other'), C.expired(LEGACY))],
   ['UG12', 'both scope keys: malformed', fresh(55, 10), { 'both.json': g({ session: 'abc', project: PROJ }) }, undefined, at,
     withClauses(HOLD_MSG, C.malformed('both.json'))],
-  ['UG13', 'a relative project: malformed', fresh(55, 10), { 'rel.json': g({ project: 'rel/proj' }) }, undefined, { cwd: path.join(PROJ, 'rel', 'proj') },
+  ['UG13', 'a relative project: malformed', fresh(55, 10), { 'rel.json': g({ project: 'rel/proj' }) }, undefined, { session_id: 'pq', cwd: path.join(PROJ, 'rel', 'proj') },
     withClauses(HOLD_MSG, C.malformed('rel.json'))],
   ['UG14', 'an empty session and a numeric project: malformed', fresh(55, 10), { 'a.json': g({ session: '' }), 'b.json': g({ project: 5 }) }, undefined, at,
     withClauses(HOLD_MSG, C.malformed('a.json'), C.malformed('b.json'))],
@@ -789,13 +879,16 @@ const UG = [
   ['UG18', 'each file classified once: malformed before expired, expired before out of scope', fresh(55, 10),
     { 'a.json': g({ until: nowSec - 1, session: 'abc', project: PROJ }), 'b.json': g({ until: nowSec - 1, session: 'other' }) }, undefined, at,
     withClauses(HOLD_MSG, C.malformed('a.json'), C.expired('b.json'))],
-  ['UG19', 'stdin without session_id: no session grant applies', fresh(55, 10), { 'session-abc.json': g({ session: 'abc' }) }, undefined,
-    { cwd: PROJ }, withClauses(HOLD_MSG, C.session('abc'))],
+  // Without a session_id there is no usage file to judge (ADR 0011): the stale path, before any grant.
+  ['UG19', 'stdin without session_id: no usage data, the stale path', fresh(55, 10), { 'session-abc.json': g({ session: 'abc' }) }, undefined,
+    { cwd: PROJ }, null, 'no usage data (no usable session_id in the hook input); allowing'],
   ['UG20', 'stdin without cwd: no project grant applies', fresh(55, 10), { 'project-proj.json': g({ project: PROJ }) }, undefined,
     { session_id: 'abc' }, withClauses(HOLD_MSG, C.project(PROJ))],
-  ['UG21', 'unparseable stdin: a session grant does not apply', fresh(55, 10), { 'session-abc.json': g({ session: 'abc' }) }, undefined,
-    'not json', withClauses(HOLD_MSG, C.session('abc'))],
-  ['UG22', 'unparseable stdin: a user grant still applies', fresh(55, 10), { 'user.json': g() }, undefined, 'not json', null, '(user)'],
+  ['UG21', 'unparseable stdin: no usage data, the stale path', fresh(55, 10), { 'session-abc.json': g({ session: 'abc' }) }, undefined,
+    'not json', null, 'no usage data (no usable session_id in the hook input); allowing'],
+  ['UG22', 'unparseable stdin under whenStale deny: denied, no grant consulted', fresh(55, 10), { 'user.json': g() }, undefined, 'not json',
+    'Usage gate: no usage data (no usable session_id in the hook input), and the policy denies delegation without fresh data. Check usage with /usage in an interactive session; the status line refreshes the data while a session is open.',
+    undefined, staleDeny],
   ['UG23', 'other names and subdirectories in the directory are ignored', fresh(55, 10), { 'notes.txt': 'not json', 'nested.json': DIR }, undefined, at,
     HOLD_MSG],
   ['UG24', 'a session grant does not lift the deny line', fresh(85, 10), { 'session-abc.json': g({ session: 'abc' }) }, undefined, at, STOP_MSG,
@@ -808,7 +901,10 @@ const UG = [
 ];
 for (const [id, label, state, files, legacy, payload, expect, stderrHas, policy] of UG) {
   if (!selected(id)) continue;
-  fs.writeFileSync(stateFile, JSON.stringify(state));
+  // The state goes to the file of the payload's session; a payload without one has no file.
+  fs.rmSync(stateDir, { recursive: true, force: true });
+  fs.mkdirSync(stateDir, { recursive: true });
+  if (typeof payload === 'object' && payload.session_id) fs.writeFileSync(stateFileFor(payload.session_id), JSON.stringify(state));
   fs.rmSync(grantDir, { recursive: true, force: true });
   fs.mkdirSync(grantDir, { recursive: true });
   for (const [name, contents] of Object.entries(files)) {
@@ -820,7 +916,7 @@ for (const [id, label, state, files, legacy, payload, expect, stderrHas, policy]
   if (legacy === undefined) fs.rmSync(ovFile, { force: true }); else fs.writeFileSync(ovFile, JSON.stringify(legacy));
   const stdin = typeof payload === 'string' ? payload
     : JSON.stringify(Object.assign({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {} }, payload));
-  const r = run('usage-gate', stdin, envWith({ HOME: home, USERPROFILE: home, HOOK_POLICY_FILE: policy || POLICIES.hatchery }));
+  const r = run('usage-gate', stdin, gateEnv({ HOOK_POLICY_FILE: policy || POLICIES.hatchery }));
   let ok;
   let detail;
   if (expect === null) { ok = r.code === 0 && r.stdout === ''; detail = 'expected allow (exit 0, no stdout)'; }
@@ -842,16 +938,20 @@ fs.rmSync(ovFile, { force: true });
 // numbers to a refresh that carries no rate_limits.
 const slHome = path.join(scratch, 'sl-home');
 fs.mkdirSync(path.join(slHome, '.claude'), { recursive: true });
-const slFile = path.join(slHome, '.claude', 'usage-state.json');
+// One file per session (ADR 0011): the S cases run as session SL_SID unless they say otherwise.
+const SL_SID = 'sess-sl';
+const slDir = path.join(slHome, '.claude', 'usage-state');
+const slFile = path.join(slDir, `${SL_SID}.json`);
 const readSl = () => { try { return fs.readFileSync(slFile, 'utf8'); } catch (_) { return null; } };
 function statusline(stdin, policy, extraEnv) {
   const r = spawnSync(NODE, [path.join(HOOKS, '..', 'statusline.js')], {
     input: stdin, encoding: 'utf8', timeout: 30000,
-    env: envWith(Object.assign({ HOME: slHome, USERPROFILE: slHome, HOOK_POLICY_FILE: policy || POLICIES.hatchery }, extraEnv)),
+    env: envWith(Object.assign({ HOME: slHome, USERPROFILE: slHome, CLAUDE_CONFIG_DIR: undefined, HOOK_POLICY_FILE: policy || POLICIES.hatchery }, extraEnv)),
   });
   return { code: r.status, stdout: r.stdout || '' };
 }
-const rl = (five, seven) => JSON.stringify({ model: { display_name: 'M' }, rate_limits: Object.assign({},
+const bare = (extra) => JSON.stringify(Object.assign({ model: { display_name: 'M' }, session_id: SL_SID }, extra));
+const rl = (five, seven) => JSON.stringify({ model: { display_name: 'M' }, session_id: SL_SID, rate_limits: Object.assign({},
   five === null ? {} : { five_hour: { used_percentage: five, resets_at: nowSec + 3600 } },
   seven === null ? {} : { seven_day: { used_percentage: seven, resets_at: nowSec + 86400 * 3 } }) });
 // [id, label, stdin, policy, check(result, fileBefore, fileAfter) -> true or a failure detail]
@@ -861,7 +961,7 @@ const S = [
     return (j.five_hour.used_percentage === 55 && j.five_hour.resets_at === nowSec + 3600 && j.seven_day.used_percentage === 20 &&
       typeof j.updatedAt === 'number' && r.stdout.includes('5h 55%') && r.stdout.endsWith(' HOLD')) || `file ${a}, line ${r.stdout}`;
   }],
-  ['S02', 'no rate_limits: file untouched, cached numbers shown', JSON.stringify({ model: { display_name: 'M' } }), null,
+  ['S02', 'no rate_limits: file untouched, cached numbers shown', bare(), null,
     (r, b, a) => (b === a && r.stdout.includes('5h 55%') && r.stdout.includes('7d 20%')) || `before ${b}, after ${a}, line ${r.stdout}`],
   ['S03', 'one window: the other is kept', rl(null, 30), null, (r, b, a) => {
     const j = JSON.parse(a);
@@ -937,19 +1037,169 @@ for (const [id, label, stdin, policy, check] of S) {
 }
 // A cached window past its reset reads as n/a rather than its old number.
 if (selected('S08')) {
+  fs.mkdirSync(slDir, { recursive: true });
   fs.writeFileSync(slFile, JSON.stringify({ updatedAt: nowSec, five_hour: { used_percentage: 90, resets_at: nowSec - 1 }, seven_day: { used_percentage: 5 } }));
-  const r = statusline(JSON.stringify({ model: { display_name: 'M' } }));
+  const r = statusline(bare());
   report('S08', 'cached window past its reset shows n/a', r.stdout.includes('5h n/a') && !r.stdout.includes('STOP'), r.stdout, r.stdout);
 }
 // A rename that fails (the cache path is a directory here) leaves no temporary file behind.
 if (selected('S09')) {
   fs.rmSync(slFile, { force: true });
-  fs.mkdirSync(slFile);
+  fs.mkdirSync(slFile, { recursive: true });
   const r = statusline(rl(40, 10));
   const left = fs.readdirSync(path.dirname(slFile)).filter((f) => f.endsWith('.tmp'));
   report('S09', 'failed rename: no .tmp left, line still prints', r.code === 0 && left.length === 0 && r.stdout.includes('5h 40%'),
     `exit ${r.code}, leftovers ${left.join(', ')}`, r.stdout);
   fs.rmSync(slFile, { recursive: true, force: true });
+}
+// The per-session file and the account label (ADR 0011). Each case gets its own empty scratch home
+// (and config dir): setup(h, cfg) writes what it needs, the renders run in order through
+// render(stdin, env), and check(ctx) returns true or a failure detail.
+{
+  const login = (uuid, email, org) => JSON.stringify({ oauthAccount: Object.assign({ accountUuid: uuid, organizationUuid: org || 'org-1' },
+    email === null ? {} : { emailAddress: email }) });
+  const stFile = (h, sid) => path.join(h, '.claude', 'usage-state', `${sid}.json`);
+  const readJ = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { return null; } };
+  const pay = (sid, five, seven) => JSON.stringify(Object.assign({ model: { display_name: 'M' } }, sid ? { session_id: sid } : {},
+    five === null && seven === null ? {} : { rate_limits: Object.assign({},
+      five === null ? {} : { five_hour: { used_percentage: five, resets_at: nowSec + 3600 } },
+      seven === null ? {} : { seven_day: { used_percentage: seven, resets_at: nowSec + 86400 * 3 } }) }));
+  const ago = (f, days) => { const t = nowSec - days * 86400; fs.utimesSync(f, t, t); };
+  const SN = [
+    ['S26', 'session_id present: writes usage-state/<id>.json, no label, no acct segment', () => {}, (c) => {
+      c.render(pay('s1', 55, 20));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j && j.account === null && j.five_hour.used_percentage === 55 && j.seven_day.used_percentage === 20 && typeof j.updatedAt === 'number' &&
+        !c.out.includes('acct') && c.out.includes('5h 55%')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S27', 'session_id absent: writes nothing, shows this payload\'s numbers', () => {}, (c) => {
+      c.render(pay(null, 55, 20));
+      const dir = path.join(c.h, '.claude', 'usage-state');
+      const files = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
+      return (files.length === 0 && c.out.includes('5h 55%') && c.out.endsWith(' HOLD')) || `files ${files}, line ${c.out}`;
+    }],
+    ['S28', 'a session_id that is not a plain name: writes nothing', () => {}, (c) => {
+      c.render(pay('../escape', 55, 20));
+      const leaked = [path.join(c.h, '.claude', 'escape.json'), path.join(c.h, '.claude', 'usage-state')].filter((f) => fs.existsSync(f));
+      return leaked.length === 0 || `written: ${leaked.join(', ')}`;
+    }],
+    ['S29', 'two sessions side by side keep their own numbers', () => {}, (c) => {
+      c.render(pay('s1', 55, 20));
+      c.render(pay('s2', 10, 5));
+      c.render(pay('s1', null, null));
+      const a = readJ(stFile(c.h, 's1'));
+      const b = readJ(stFile(c.h, 's2'));
+      return (a.five_hour.used_percentage === 55 && b.five_hour.used_percentage === 10 && c.out.includes('5h 55%') && c.out.includes('7d 20%')) ||
+        `s1 ${JSON.stringify(a)}, s2 ${JSON.stringify(b)}, line ${c.out}`;
+    }],
+    ['S30', 'label present: written to the file, acct segment after ctx', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'jdorje@example.com')), (c) => {
+      c.render(pay('s1', 24, 72));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account && j.account.uuid === 'uuid-a' && j.account.organizationUuid === 'org-1' && j.account.email === 'jdorje@example.com' &&
+        c.out.startsWith('M | ctx n/a | acct jdorje | 5h 24% (hold 50) ->')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S31', 'label from CLAUDE_CONFIG_DIR, not the home directory', (h, cfg) => {
+      fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com'));
+      fs.writeFileSync(path.join(cfg, '.claude.json'), login('uuid-b', 'b@example.com'));
+    }, (c) => {
+      c.render(pay('s1', 24, 72), { CLAUDE_CONFIG_DIR: c.cfg });
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account.uuid === 'uuid-b' && c.out.includes('| acct b |')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S32', 'label from the legacy .config.json, which wins over .claude.json', (h) => {
+      fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com'));
+      fs.writeFileSync(path.join(h, '.config.json'), login('uuid-b', 'b@example.com'));
+    }, (c) => {
+      c.render(pay('s1', 24, 72));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account.uuid === 'uuid-b' && c.out.includes('| acct b |')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S33', 'label torn: the cached label is kept, the windows still update', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
+      c.render(pay('s1', 24, 72));
+      fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-b', 'b@example.com').slice(0, 25));
+      c.render(pay('s1', 30, 73));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account.uuid === 'uuid-a' && j.five_hour.used_percentage === 30 && c.out.includes('| acct a |') && c.out.includes('5h 30%')) ||
+        `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S34', 'label change: cached windows absent from the payload are dropped', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
+      c.render(pay('s1', 55, 20));
+      fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-b', 'b@example.com'));
+      c.render(pay('s1', 30, null));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account.uuid === 'uuid-b' && j.five_hour.used_percentage === 30 && !('seven_day' in j) && c.out.includes('| acct b | 5h 30%') &&
+        c.out.includes('7d n/a')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S35', 'label change, another organization: dropped as well', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
+      c.render(pay('s1', 55, 20));
+      fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-a', 'a@example.com', 'org-2'));
+      c.render(pay('s1', 30, null));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account.organizationUuid === 'org-2' && !('seven_day' in j)) || `file ${JSON.stringify(j)}`;
+    }],
+    ['S36', 'no-window render after a label change: nothing written, meters n/a', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
+      c.render(pay('s1', 55, 20));
+      const before = fs.readFileSync(stFile(c.h, 's1'), 'utf8');
+      fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-b', 'b@example.com'));
+      c.render(pay('s1', null, null));
+      const after = fs.readFileSync(stFile(c.h, 's1'), 'utf8');
+      return (before === after && c.out.includes('| acct b | 5h n/a') && c.out.includes('7d n/a') && !c.out.includes('HOLD')) ||
+        `before ${before}, after ${after}, line ${c.out}`;
+    }],
+    ['S37', 'label without an email: written, no acct segment', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', null)), (c) => {
+      c.render(pay('s1', 24, 72));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account.uuid === 'uuid-a' && j.account.email === null && !c.out.includes('acct')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S38', 'prune: a new session\'s file deletes files older than a day, keeps newer ones', (h) => {
+      const dir = path.join(h, '.claude', 'usage-state');
+      fs.mkdirSync(dir, { recursive: true });
+      for (const n of ['old.json', 'old.json.123.tmp', 'recent.json', 'notes.txt']) fs.writeFileSync(path.join(dir, n), '{}');
+      ago(path.join(dir, 'old.json'), 2);
+      ago(path.join(dir, 'old.json.123.tmp'), 2);
+      ago(path.join(dir, 'notes.txt'), 2);
+      ago(path.join(dir, 'recent.json'), 0.5);
+    }, (c) => {
+      c.render(pay('s1', 24, 72));
+      const dir = path.join(c.h, '.claude', 'usage-state');
+      const after = fs.readdirSync(dir).sort().join(',');
+      // A later file older than a day survives a render of an existing session: prune runs on creation only.
+      fs.writeFileSync(path.join(dir, 'later.json'), '{}');
+      ago(path.join(dir, 'later.json'), 2);
+      c.render(pay('s1', 25, 72));
+      const kept = fs.existsSync(path.join(dir, 'later.json'));
+      return (after === 'notes.txt,recent.json,s1.json' && kept) || `after ${after}, later kept ${kept}`;
+    }],
+    ['S39', 'the old single cache file is deleted when a session file is created', (h) => {
+      fs.writeFileSync(path.join(h, '.claude', 'usage-state.json'), JSON.stringify(fresh(95, 95)));
+    }, (c) => {
+      c.render(pay('s1', null, null));
+      const keptOnNoWrite = fs.existsSync(path.join(c.h, '.claude', 'usage-state.json'));
+      c.render(pay('s1', 24, 72));
+      const gone = !fs.existsSync(path.join(c.h, '.claude', 'usage-state.json'));
+      return (keptOnNoWrite && gone && c.out.includes('5h 24%')) || `kept before the first write ${keptOnNoWrite}, gone after ${gone}, line ${c.out}`;
+    }],
+  ];
+  for (const [id, label, setup, check] of SN) {
+    if (!selected(id)) continue;
+    const h = path.join(scratch, `sl-${id}`);
+    const cfg = path.join(scratch, `sl-${id}-config`);
+    fs.mkdirSync(path.join(h, '.claude'), { recursive: true });
+    fs.mkdirSync(cfg, { recursive: true });
+    setup(h, cfg);
+    const c = { h, cfg, out: '' };
+    c.render = (stdin, extraEnv) => {
+      const r = spawnSync(NODE, [path.join(HOOKS, '..', 'statusline.js')], {
+        input: stdin, encoding: 'utf8', timeout: 30000,
+        env: envWith(Object.assign({ HOME: h, USERPROFILE: h, CLAUDE_CONFIG_DIR: undefined, HOOK_POLICY_FILE: POLICIES.hatchery }, extraEnv)),
+      });
+      c.out = r.status === 0 ? r.stdout || '' : `exit ${r.status}: ${r.stderr}`;
+      return c.out;
+    };
+    let res;
+    try { res = check(c); } catch (e) { res = `${e.message}; line ${c.out}`; }
+    report(id, label, res === true, res, c.out);
+  }
 }
 
 // ---------- policy files themselves ----------

@@ -5,20 +5,26 @@
 // windows) is at or above usage.hold in .claude/hooks/policy.json, unless an override grant that
 // applies to this call lifts it, and at or above usage.deny, where a deny line is set, without
 // exception (null, the base, means none: HOLD is then the only line). Other tools are never gated.
-// Usage comes from ~/.claude/usage-state.json, which .claude/statusline.js writes.
-// Spec: docs/design/decisions/0002-hook-specs.md section 3; policy: ADR 0006.
+// Usage comes from this session's file, ~/.claude/usage-state/<session_id>.json, which
+// .claude/statusline.js writes; session_id is the one in the PreToolUse payload.
+// Spec: docs/design/decisions/0002-hook-specs.md section 3; policy: ADR 0006; the per-session
+// file and the account label: ADR 0011.
 //
 // Fails open: a crash (exit 1, no onFailure in settings.json) lets the launch through, because a
 // broken gate must not stop all delegation. Stale or missing data allows with a note on stderr,
-// or denies when the policy sets usage.whenStale to "deny". A malformed policy falls back to the
-// base defaults and says so on stderr.
+// or denies when the policy sets usage.whenStale to "deny". No session_id, no file for this
+// session, and a file labelled with another account than the one logged in are all missing data:
+// the gate never judges another account's numbers. A malformed policy falls back to the base
+// defaults and says so on stderr.
 'use strict';
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { load, usageVerdict, readGrants, judgeGrants, holdCovered } = require('./policy');
+const { load, usageVerdict, readGrants, judgeGrants, holdCovered, readAccount, accountLabel, accountsDiffer } = require('./policy');
 
-const STATE_FILE = path.join(os.homedir(), '.claude', 'usage-state.json');
+const STATE_DIR = path.join(os.homedir(), '.claude', 'usage-state');
+// The status line uses the same rule: a session id becomes a file name, so only plain ids count.
+const SESSION_ID = /^[A-Za-z0-9_-]+$/;
 // Override grants (read and judged in policy.js, shared with the status line) lift HOLD, never the
 // deny line, until "until" on their meters, for one session, one project or the user. Format and
 // matching: ADR 0006, The HOLD override.
@@ -58,11 +64,22 @@ function main(raw) {
   if (loaded.error) note(`${loaded.error}; using the base defaults.`);
   const u = loaded.policy.usage;
   const now = Math.floor(Date.now() / 1000);
+  const ctx = readPayload(raw);
 
-  const state = readJson(STATE_FILE);
+  const sid = ctx.sessionId && SESSION_ID.test(ctx.sessionId) ? ctx.sessionId : null;
+  let state = sid ? readJson(path.join(STATE_DIR, `${sid}.json`)) : null;
+  if (!state || typeof state !== 'object' || Array.isArray(state)) state = null;
+  const fileLabel = state ? accountLabel(state.account) : null;
+  const current = readAccount();
   const age = state && typeof state.updatedAt === 'number' ? now - state.updatedAt : null;
-  if (age === null || age > u.staleSeconds) {
-    const what = age === null ? 'no usage data (the status line has not written any)' : `usage data is ${Math.round(age / 60)} min old`;
+  const otherAccount = accountsDiffer(fileLabel, current);
+  if (otherAccount || age === null || age > u.staleSeconds) {
+    const who = (l) => l.email || l.uuid;
+    let what;
+    if (!sid) what = 'no usage data (no usable session_id in the hook input)';
+    else if (otherAccount) what = `no usage data for this account (this session's file is for ${who(fileLabel)}, logged in as ${who(current)})`;
+    else if (age === null) what = 'no usage data (the status line has not written any for this session)';
+    else what = `usage data is ${Math.round(age / 60)} min old`;
     if (u.whenStale === 'deny') {
       deny(`Usage gate: ${what}, and the policy denies delegation without fresh data. Check usage with /usage in an interactive session; the status line refreshes the data while a session is open.`);
     }
@@ -77,18 +94,19 @@ function main(raw) {
   const sevenD = pct(state.seven_day);
   const fmt = (v) => (v === null ? 'n/a' : `${Math.round(v)}%`);
   const detail = `5h ${fmt(fiveH)}, 7d ${fmt(sevenD)}`;
+  // The deny names the account the numbers belong to when the file carries its email.
+  const head = fileLabel && fileLabel.email ? `Usage gate (${fileLabel.email}):` : 'Usage gate:';
   // Each meter is judged by its own thresholds (usage.fiveHour / usage.sevenDay, else the shared
   // hold/deny) and the worse verdict wins; the reason names the meter that tripped.
   const v = usageVerdict(u, { '5h': fiveH, '7d': sevenD });
   const tripped = v.hits.map((h) => `${h.label} at or above ${h.threshold}%`).join(', ');
 
-  if (v.level === 2) deny(`Usage gate: ${detail}. ${tripped}: ${u.denyAdvice}`);
+  if (v.level === 2) deny(`${head} ${detail}. ${tripped}: ${u.denyAdvice}`);
   if (v.level === 1) {
     if (u.overrideEnv && process.env[u.overrideEnv] === '1') {
       note(`HOLD (${detail}) lifted for this session by ${u.overrideEnv}=1.`);
       return;
     }
-    const ctx = readPayload(raw);
     const { grants, applying, lifted } = judgeGrants(readGrants(), now, ctx);
     const labels = v.hits.map((h) => h.label);
     if (holdCovered(lifted, v)) {
@@ -104,7 +122,7 @@ function main(raw) {
       if (g.c.status !== 'expired') return ` ${clause(g.name, g.c)}`;
       return g === expired[0] ? ` Expired override files: ${expired.map((e) => e.name).join(', ')}.` : '';
     }).join('');
-    deny(`Usage gate: ${detail}. ${tripped}: ${u.holdAdvice}${partial}${unused} Lifting this early is the user's decision (${POLICY_DOC}).`);
+    deny(`${head} ${detail}. ${tripped}: ${u.holdAdvice}${partial}${unused} Lifting this early is the user's decision (${POLICY_DOC}).`);
   }
 }
 

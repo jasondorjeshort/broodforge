@@ -145,7 +145,10 @@ So a project that copies `.claude/hooks/` and sets its own policy runs it unchan
 
 Debug interface: `node .claude/hooks/test-hooks.js` runs every case for all hooks, PASS/FAIL per
 case plus a summary; exit 1 on any failure, 2 on a usage error. Flags: `--only <id-prefix>`,
-`--verbose`, `--keep`, `--input <file> <hook>` (reproduce one input from a file).
+`--verbose`, `--keep`, `--input <file> <hook>` (reproduce one input from a file; `statusline` is
+accepted as a hook name), and with `usage-gate` or `statusline` `--home <dir>` (HOME and
+USERPROFILE set to it, `CLAUDE_CONFIG_DIR` removed) and `--config-dir <dir>` (`CLAUDE_CONFIG_DIR`
+set to it).
 `node .claude/hooks/policy.js [file]` prints the effective policy or the error.
 
 ## 2. `post-edit.js` (PostToolUse, matcher `Write|Edit`, no `onFailure`)
@@ -199,20 +202,36 @@ exemptions and formatters from a policy file, a malformed policy, and the task-b
 
 ## 3. `usage-gate.js` (PreToolUse, matcher `Agent|Workflow`, no `onFailure`) and the status line
 
-Cache: `~/.claude/usage-state.json`, `{ "five_hour": { "used_percentage", "resets_at" },
-"seven_day": {...}, "updatedAt" }`, epoch seconds. `.claude/statusline.js` writes it: a window
-present on stdin replaces the cached one, an absent window keeps it, and when neither is present
-nothing is written, so a refresh without `rate_limits` never replaces numbers with nulls. The write
-goes to a temporary file and is renamed; a failed rename removes the temporary file.
+Cache (ADR 0011): one file per session, `~/.claude/usage-state/<session_id>.json`, always under the
+user's `~/.claude`, never under `CLAUDE_CONFIG_DIR`. Shape: `{ "account": { "uuid",
+"organizationUuid", "email" } | null, "five_hour": { "used_percentage", "resets_at" },
+"seven_day": {...}, "updatedAt" }`, epoch seconds. A `session_id` is used only when it is a plain
+name (letters, digits, `_`, `-`); otherwise, or when there is none, the status line reads and writes
+no file and shows the payload's own windows. `.claude/statusline.js` writes the file: with no window
+on stdin nothing is written, so a refresh without `rate_limits` never replaces numbers with nulls;
+with a window, when the cached and current account labels are both known and differ in `uuid` or
+`organizationUuid`, the cached windows absent from this payload are dropped, then a window present
+on stdin replaces the cached one and an absent window keeps it; the current label is written when
+known, else the cached one is kept. The write creates the directory, goes to a temporary file and is
+renamed; a failed rename removes the temporary file. When the write created the session's file, the
+status line deletes every `*.json` and `*.tmp` in the directory last modified more than a day ago,
+and the old single file `~/.claude/usage-state.json`, which nothing reads.
+The label is `readAccount()` in `policy.js`, the one reader both scripts use: the config home is
+`CLAUDE_CONFIG_DIR` when set, else the home directory; `.config.json` there, then `.claude.json`
+there, the first that parses with an `oauthAccount` whose `accountUuid` is a non-empty string gives
+`{ uuid, organizationUuid, email }` (the last two `null` when absent); otherwise `null`. It never
+throws, and it is a label, never the key.
 `settings.json` sets `"refreshInterval": 60`, so the cache stays fresh while the user is idle and
 agents run. Line 1 is the working directory exactly as received
 (`workspace.current_dir`, else the older `cwd`; no shortening); when neither is a non-empty string the
 output is the meters line alone, with no blank first line. The meters line, after line 1's newline
-when there is one, shows model, context, both windows with their reset times, and ` HOLD` or ` STOP` by the same per-meter judgement as the gate (the
+when there is one, shows model, context, `acct <email local part>` (the current label's, else the
+file's; omitted when neither carries an email), both windows with their reset times, and ` HOLD` or ` STOP` by the same per-meter judgement as the gate (the
 helper in `policy.js`; ` STOP` only on a meter with a deny line); a cached window past its
-`resets_at` shows `n/a`. Each window carries its thresholds from `meterThresholds`, `(hold 50)` or
+`resets_at` shows `n/a`, and so do both windows when the file's label and the current one are both
+known and differ. Each window carries its thresholds from `meterThresholds`, `(hold 50)` or
 `(hold 50 stop 90)`, also when it reads `n/a`, so a line reads
-`Opus 5.5 | ctx n/a | 5h 24% (hold 50) ->12:20 | 7d 72% (hold 50) ->Mon 06:00 HOLD`; a missing or malformed `policy.json`
+`Opus 5.5 | ctx 25% | acct jdorje | 5h 24% (hold 50) ->12:20 | 7d 72% (hold 50) ->Mon 06:00 HOLD`; a missing or malformed `policy.json`
 falls back to the base values, as the gate does (ADR 0006), and only a `policy.js` that cannot be required drops
 the parentheses and the flag. At HOLD the flag reads ` HOLD lifted` when the gate's grant rules would let a launch
 through, judged on the readings the line shows; the status line does not judge staleness, the gate does, so on stale
@@ -222,12 +241,17 @@ shared with the gate); a partial lift stays ` HOLD`, ` STOP` is never lifted, an
 grants means not lifted.
 
 Gate. Each window is judged against its own thresholds (`usage.fiveHour`, `usage.sevenDay`, else the shared `usage.hold` and `usage.deny`) and the worse verdict wins; a window past its `resets_at` has reset and does not
-count. No file, no `updatedAt`, or data older than `usage.staleSeconds` is stale: with `whenStale`
-`allow` the gate allows with a note on stderr; with `deny` it denies with `Usage gate: <what>, and
+count. The gate reads the file of the `session_id` in the PreToolUse payload. No usable `session_id`,
+no file for this session, no `updatedAt`, a file whose label and the current `readAccount()` label are
+both known and differ (the gate never judges another account's numbers), or data older than
+`usage.staleSeconds` is stale: with `whenStale`
+`allow` the gate allows with a note on stderr naming which (for an account mismatch, both emails);
+with `deny` it denies with `Usage gate: <what>, and
 the policy denies delegation without fresh data. Check usage with /usage in an interactive session;
 the status line refreshes the data while a session is open.` The hook never runs `claude -p`.
 
-At or above a deny line, where one is set: `Usage gate: 5h X%, 7d Y%. <meter> at or above <deny>%: <denyAdvice>`.
+The deny texts below begin `Usage gate (<email>):` instead of `Usage gate:` when the session's file
+carries an email. At or above a deny line, where one is set: `Usage gate: 5h X%, 7d Y%. <meter> at or above <deny>%: <denyAdvice>`.
 `usage.deny` `null`, the base, sets none, so a meter at 100% is a HOLD like any other. At or above
 `usage.hold`: `Usage gate: 5h X%, 7d Y%. <meter> at or above <hold>%: <holdAdvice>[ The override in force
 lifts only <meters>.][ An override exists for session <id>, not this one.| An override exists for
@@ -247,14 +271,21 @@ There is no HOLD deny when the grants that apply together lift every meter that 
 `usage.overrideEnv` names a variable set to exactly `1` (ADR 0006). A crash exits 1, which does not
 block: the gate fails open.
 
-Harness cases U (thresholds and the legacy override file, with and without a deny line), UO (the
+Every U, UX and UO case runs as one session with its file; UG cases write the file of their payload's
+session. Harness cases U (thresholds and the legacy override file, with and without a deny line; a
+file for another session only; no or an unusable `session_id`; the label matching, differing by
+uuid or organization, unknown on either side, torn, from `CLAUDE_CONFIG_DIR`, from the legacy file), UO (the
 override per meter, no deny line on one meter or both, `usage.overrideEnv`), UG (the grant
 directory: a session grant for this session and for another; a project grant with `cwd` at the
 path, under it, and beside it with the path as a prefix, with either separator and, on Windows,
 differing case; a user grant; the legacy file beside a directory grant; both scope keys; a relative
 `project`; two files lifting one meter each; the clause order across a malformed, an expired and an
 out-of-scope file; several expired files in one clause; a `reason` that is not a string; stdin
-without `session_id`, without `cwd`, and unparseable), UX (staleness both
+without `session_id` and unparseable, which take the stale path, and without `cwd`), UX (staleness both
 ways, a reset window, the example policies, per-meter thresholds, a malformed policy including a
 string `deny`, a pre-merge cache file), and S (the status line's merge, the untouched file without
-`rate_limits`, malformed stdin, the directory line from `current_dir`, from `cwd` alone, and absent, policy flags, no STOP without a deny line, the thresholds beside each meter, `HOLD lifted` for a grant for this session and `HOLD` for another session's, a partial lift or STOP, a failed rename).
+`rate_limits`, malformed stdin, the directory line from `current_dir`, from `cwd` alone, and absent, policy flags, no STOP without a deny line, the thresholds beside each meter, `HOLD lifted` for a grant for this session and `HOLD` for another session's, a partial lift or STOP, a failed rename;
+and, per ADR 0011, `session_id` present, absent and not a plain name, two sessions side by side, the
+label present, without an email, from `CLAUDE_CONFIG_DIR`, from the legacy file and torn, a label
+change dropping absent windows, a no-window render after a label change writing nothing, the prune,
+and the old file deleted).

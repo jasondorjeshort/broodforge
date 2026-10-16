@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Loads .claude/hooks/policy.json, the one file that holds a project's choices for the hooks
 // (who commits and pushes, which branches may be deleted, usage thresholds, docs cap exemptions,
-// formatters). The scripts hold mechanism only, so update-from-hatchery can patch them without
+// formatters), and the helpers the usage gate and the status line share (thresholds, grants, the
+// account label). The scripts hold mechanism only, so update-from-hatchery can patch them without
 // touching a project's policy. Schema and fail modes: docs/design/decisions/0006-hook-policy-file.md.
 //
 // load() returns { policy, error, source }:
@@ -250,12 +251,47 @@ function holdLifted(usage, verdict, ctx, now, env) {
   return holdCovered(judgeGrants(readGrants(), now, ctx).lifted, verdict);
 }
 
+// The logged-in account, as a label for the per-session usage cache (ADR 0011): display and
+// consistency only, never a key. The config home is CLAUDE_CONFIG_DIR when set, else the home
+// directory; .config.json there (legacy), then .claude.json there, the first that parses with an
+// oauthAccount carrying a non-empty accountUuid. Returns { uuid, organizationUuid, email } (the
+// last two a non-empty string or null), or null. Never throws: a torn or absent file is null.
+function readAccount() {
+  try {
+    const dir = typeof process.env.CLAUDE_CONFIG_DIR === 'string' && process.env.CLAUDE_CONFIG_DIR !== ''
+      ? process.env.CLAUDE_CONFIG_DIR : os.homedir();
+    for (const name of ['.config.json', '.claude.json']) {
+      let j = null;
+      try {
+        const text = fs.readFileSync(path.join(dir, name), 'utf8');
+        j = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+      } catch (_) { continue; }
+      const o = j && typeof j === 'object' && j.oauthAccount && typeof j.oauthAccount === 'object' ? j.oauthAccount : null;
+      const a = o ? accountLabel({ uuid: o.accountUuid, organizationUuid: o.organizationUuid, email: o.emailAddress }) : null;
+      if (a) return a;
+    }
+  } catch (_) { /* never throw */ }
+  return null;
+}
+// A label as stored in a usage file, normalised: an object with a non-empty string uuid, else null.
+function accountLabel(a) {
+  if (!a || typeof a !== 'object' || typeof a.uuid !== 'string' || a.uuid === '') return null;
+  const str = (v) => (typeof v === 'string' && v !== '' ? v : null);
+  return { uuid: a.uuid, organizationUuid: str(a.organizationUuid), email: str(a.email) };
+}
+// True when both labels are known and name different accounts (uuid or organizationUuid differ).
+function accountsDiffer(a, b) {
+  const x = accountLabel(a);
+  const y = accountLabel(b);
+  return !!x && !!y && (x.uuid !== y.uuid || x.organizationUuid !== y.organizationUuid);
+}
+
 // True when name matches one of the patterns; "*" matches any run of characters, "/" included.
 function matches(patterns, name) {
   return patterns.some((p) => new RegExp(`^${p.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`).test(name));
 }
 
-module.exports = { load, matches, usageVerdict, meterThresholds, classifyGrant, readGrants, judgeGrants, holdCovered, holdLifted, DEFAULTS };
+module.exports = { load, matches, usageVerdict, meterThresholds, classifyGrant, readGrants, judgeGrants, holdCovered, holdLifted, readAccount, accountLabel, accountsDiffer, DEFAULTS };
 
 if (require.main === module) {
   const r = load(process.argv[2]);

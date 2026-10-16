@@ -137,8 +137,8 @@ a grant first deletes every expired grant file in the directory, so leftover fil
 in each deny; the gate never deletes, the coordinator does at write time. The session id
 is `CLAUDE_CODE_SESSION_ID` in the Bash tool's environment, the same id the hook receives as
 `session_id`. `until` is the time the owner gives, else about twelve hours ahead for a session
-grant, and for a project or user grant the weekly meter's `seven_day.resets_at` in
-`~/.claude/usage-state.json`, else twelve hours. `reason` names who asked and the scope they gave.
+grant, and for a project or user grant the weekly meter's `seven_day.resets_at` in this session's
+usage file, `~/.claude/usage-state/<session_id>.json` (ADR 0011), else twelve hours. `reason` names who asked and the scope they gave.
 `usage.overrideEnv` is the launch-time form of a session grant: set in a policy file, and its
 variable set when the session starts, only on the owner's instruction, it lifts HOLD on both meters
 for that session and nothing else.
