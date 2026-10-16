@@ -5,9 +5,10 @@ Updated: 2026-10-16, at commit f8eff6e, by main session
 
 ## Now
 
-- RUNS PAUSED on this PC: BullGuard Sentry quarantined `bin/broodforge.exe`, Git's `sh`/`sed`/
-  `head`/`find`/`cp`/`seq` and a run's outputs on 2026-10-16 19:28 (quarantine 681). No binary,
-  `go test` or scratch run until the owner restores and excludes (operator entry of 2026-10-16).
+- RUNS PAUSED on this PC: BullGuard Sentry quarantined `bin/broodforge.exe` and Git's `sh`/`sed`/
+  `head`/`find`/`cp`/`seq` on 2026-10-16 19:28; the owner then uninstalled BullGuard, so Git for
+  Windows must be reinstalled (operator entry of 2026-10-16). No binary, `go test` or scratch run
+  until the owner says runs are clear.
 - `origin/main` is at `c28155a` (pushed 2026-10-16). Everything from `36d023a` to HEAD is
   unpushed and reviewed. Push on the owner's words. HOLD 60%/75%. `-race` needs the ucrt64 PATH.
 - Owner: Jason Dorje Short <jdorje@gmail.com>, repo-local identity; UX is his, technical calls mine.
@@ -21,8 +22,7 @@ Updated: 2026-10-16, at commit f8eff6e, by main session
 
 ## Next
 
-1. P11 in flight: review, fold fixes, commit; the owner reads the outbox text and the string
-   list (hook no-answer phrase, interrupt-while-pending, "acts freely") and his word applies.
+1. P11 reviewed, fix round pending (needs runs), then commit; the owner's word on the strings.
 2. Owner: droplet entries, the PC account entry; then droplet claims, P14 (held), `spike/` deleted.
 4. Pusher pushes `main` on the owner's words, at session end; the whole stack is review-clean.
 
