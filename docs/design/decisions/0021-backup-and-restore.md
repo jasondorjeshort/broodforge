@@ -65,8 +65,8 @@ along but are never what a restore opens first.
 Outside the set, by design: the credential-store key and anything else 0022 keeps off the host;
 the runtime, Broodforge itself and the harness; the service definition; `settings/`, which the bot
 regenerates before every engine process; the files 0022 lists as excluded: `.credentials.json` and
-`.claude.json` in every harness directory and every session home, by name, pending spike C36 of
-`0022-session-isolation-and-credential-storage.md`. The owner's own `~/.claude` on the PC is
+`.claude.json` in every harness directory and every session home, by name (spike C36 kept it:
+`0022-session-isolation-and-credential-storage.md`, Amendments from the spike). The owner's own `~/.claude` on the PC is
 never in the set.
 
 ## Restore from an empty host

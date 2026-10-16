@@ -151,19 +151,22 @@ Isolation. The fake reads the fixture directory and writes only `received-<n>.js
 Drive. Standalone, exactly as the engine runs it: the engine's JSON on stdin and every
 `BROODFORGE_*` variable of the contract (`03-hook-contract.md`) in the environment:
 `printf '{"tool_name":"Write","tool_input":{"file_path":"/tmp/x/a.ts","content":""},
-"tool_use_id":"toolu_01","cwd":"/tmp/x"}' | BROODFORGE_SESSION=s0001 BROODFORGE_MODE=prompt
+"tool_use_id":"toolu_01","cwd":"/tmp/x","transcript_path":"/tmp/cfg/projects/x/s.jsonl"}' |
+BROODFORGE_SESSION=s0001 BROODFORGE_MODE=prompt
 BROODFORGE_REACH=code BROODFORGE_TREE=/tmp/x BROODFORGE_CANONICAL=/tmp/c
 BROODFORGE_HOOK_LOG=/dev/null broodforge hook pre-tool-use` prints `{"hookSpecificOutput":
 {"hookEventName":"PreToolUse","permissionDecision":"defer","permissionDecisionReason":
 "<reason>"}}`, exit 0. Any error, a missing variable or malformed stdin included, is exit 2
 with `hook: <what>` on stderr, the one exit the engine reads as a block. The same code path
 with flags: `broodforge hook try --tool <name> --input '<json>' --mode prompt|policy --reach
-read-only|code --tree <path> --canonical <path> [--answer <tool_use_id>:allow|deny]
-[--session-allow <names>] [--expect allow|deny|defer]` prints `<decision>  <reason>`.
+read-only|code --tree <path> --canonical <path> --transcript-path <path> [--answer
+<tool_use_id>:allow|deny] [--session-allow <names>] [--expect allow|deny|defer]` prints
+`<decision>  <reason>`; `--transcript-path` is what the hook derives the config directory from
+(`03-hook-contract.md`, Paths), so a case can read inside it.
 Observe. The decision line; `BROODFORGE_HOOK_LOG` (`sessions/<id>/home/hook.log`), one line per
 decision; in a session, `audit --kind permission-decision --session <id>`.
 Reproduce. One `hook try` line with `--expect`, or a case file: `broodforge hook cases <file>`
-runs a JSONL of `{"tool","input","mode","reach","tree","canonical","answer","expect"}` objects,
+runs a JSONL of `{"tool","input","mode","reach","tree","canonical","transcript","answer","expect"}` objects,
 prints one `ok|FAIL` line each, exit 1 on any FAIL; the shipped set `tests/hook/cases.jsonl`
 [no-check: no code yet] covers every cell of the contract's table in both modes, a symlink out
 of the tree, and a read of `.credentials.json` and of the config directory.

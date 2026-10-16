@@ -146,8 +146,10 @@ usage; the harness-adapter proposal confirms for each harness).
 
 One answer to one permission request the harness raised during a turn (R-24). Identity: session
 id plus the harness's request id. Holds: the turn; what was asked (the tool or action and a
-summary of its input); who decided (a participant, the policy mode, R-26, or the prompt timeout, R-53); the decision
-(allow or deny; an "allow for the rest of this session" form is open); the reason when the policy
+summary of its input); who decided (a participant, the policy mode, R-26, the prompt timeout, R-53,
+or the engine's own default when the hook was bypassed, `03-hook-contract.md`); the decision
+(allow or deny; deferred while a person is asked; dropped, for a parallel call the engine did not
+carry to the prompt; an "allow for the rest of this session" form is open); the reason when the policy
 decided; the time. A policy-mode decision never allows more than the channel's reach (R-27). Every
 permission decision is also an audit event. Relations: one turn; optionally one participant.
 Open: which contributors may answer (R-25, per channel); whether "always allow" exists and how

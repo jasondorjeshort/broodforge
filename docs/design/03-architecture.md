@@ -2,10 +2,9 @@
 
 Date: 2026-10-14. Status: first draft, written from `01-requirements.md`, `02-domain.md`,
 `06-platforms.md` and ADRs 0020, 0021 (with `decisions/0021-backup-and-restore.md`) and 0022
-(with `decisions/0022-linux-spawn-and-handoff.md`). It settles what those ADRs handed to it and
-cites them for the rest; where it disagrees with an ADR, the ADR wins. What humans see is
-`04-ux.md`'s; the debug commands and wire format are `05-debug-interface.md`'s; the hook's
-environment, path checks and policy table are `03-hook-contract.md`'s.
+(with `decisions/0022-linux-spawn-and-handoff.md`); it settles what they handed to it, cites them
+for the rest, and where it disagrees the ADR wins. What humans see is `04-ux.md`'s; the debug
+commands and wire format `05-debug-interface.md`'s; the hook's environment, path checks and policy table `03-hook-contract.md`'s.
 
 ## Components and boundaries
 
@@ -31,11 +30,10 @@ names; everything else goes through `SessionService`. Host differences live in `
 | `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control` |
 
 `SessionService` is the boundary N-11 names: `start`, `submit`, `answer`, `setMode`, `interrupt`,
-`end`, `invite`, `status`, `subscribe(sessionId)`. The Discord adapter and the control socket
-call the same methods and read the same `SessionEvent` stream; a behaviour reachable from Discord
-only is a bug. N-26: each session's turn is its own engine process and its own promise chain;
-nothing in `session` awaits another session, and store writes are short transactions (ADR 0021),
-so a stuck engine delays its own session until the idle timeout and nothing else.
+`end`, `invite`, `status`, `subscribe(sessionId)`. The Discord adapter and the control socket call
+the same methods and read the same `SessionEvent` stream; a behaviour reachable from Discord only is
+a bug. N-26: each session's turn is its own engine process and promise chain, nothing in `session`
+awaits another session, and store writes are short transactions (ADR 0021): a stuck engine delays only its own session, until the idle timeout.
 
 Registration and participants (R-01 to R-04, R-13, R-25, N-18). `discord` owns the register
 command: one registration per Discord user id; registering again replaces name and email with an
@@ -68,8 +66,9 @@ infer it. A session start naming anything but `usable` is refused (R-41).
    hook variables, writes the stream-json user message, closes stdin, parses stdout into `EngineEvent`s.
 5. `session` maps them to `SessionEvent`s (`text`, `tool-call`, `tool-result`,
    `waiting-for-answer`, `turn-ended`) and writes a `permission decision` row per tool call seen:
-   allowed by policy, denied by the hook (the deny text's prefix identifies it), failed in the
-   hook (the `hook:` prefix) or deferred. The hook writes nothing (ADR 0020); the stream is the record.
+   allowed by policy, denied by the hook (the deny text's prefix), failed in the hook (the `hook:`
+   prefix), deferred, dropped (a parallel call, below), or decided by the engine alone (`decidedBy`
+   `config`: the hook was bypassed, `03-hook-contract.md`). The hook writes nothing; the stream is the record.
 6. `discord` renders: one working message per turn edited through the coalescer (at most one
    create or edit per second per session, nothing dropped, overflow split or attached, R-20 to
    R-22); a new message for a turn end, a wait or an error (R-23). The outbound mask: all posted
@@ -86,6 +85,9 @@ Prompt mode: the hook returns `defer` for a call a person must answer; the proce
 participant the channel lets answer (R-25) calls `SessionService.answer`; `session` starts a new
 process with `--resume` and the answer in the hook environment, and the same `tool_use_id` fires
 the hook again and gets it. Other clicks are refused; no click in the prompt timeout denies it (R-53).
+Parallel calls (ADR 0020, C28, observed for a deferred pair): the engine defers each, ends the turn
+naming only the last, and drops the rest; the model re-issues them after the resume, one prompt and
+one process each. The `tool-use` ids of that message with no result and not in `deferred` get rows `dropped`; 04 says so.
 Button custom ids, parsed by one function in `discord`:
 `bf:<session id>:<tool_use_id>:<allow|deny|allow-session>` for a permission answer,
 `bf:<session id>:stop`, `bf:<session id>:end`, and `bf:<channel id>:start` on the panel.
@@ -112,7 +114,7 @@ type EngineEvent =
   | { type: 'assistant'; messageId: string; model: string; parentToolUseId?: string;
       blocks: ({ kind: 'text'; text: string } | { kind: 'tool-use'; id: string; name: string; input: unknown })[];
       usage: { input: number; cacheRead: number; cacheWrite: number } }
-  | { type: 'tool-result'; toolUseId: string; isError: boolean; text: string }
+  | { type: 'tool-result'; toolUseId: string; isError: boolean; text: string; decidedBy?: string } // tool_result_meta source
   | { type: 'result'; stopReason: string; isError: boolean; numTurns: number;
       deferred?: { toolUseId: string; name: string; input: unknown };
       permissionDenials: unknown[]; modelUsage: Record<string, ModelUsage>; usage: unknown }
@@ -122,25 +124,27 @@ type EngineEvent =
 
 Stream-json subset consumed: `system` subtype `init` (session id, model, tools, `capabilities`);
 `assistant` (`message.id`, `message.model`, `message.usage`, text and `tool_use` content,
-`parent_tool_use_id`); `user` with `tool_result` content; `result` (`stop_reason`, `is_error`,
-`num_turns`, `deferred_tool_use`, `permission_denials`, `modelUsage`, `usage`). Everything else
-is `unknown`. Partial messages are not requested. A `capabilities` set missing a name the
-adapter relies on is a refusal at instance start, exit 1.
+`parent_tool_use_id`; one line per content block, S1); `user` with `tool_result` content and the
+optional `tool_result_meta`; `result` (`stop_reason`, `is_error`, `num_turns`, `deferred_tool_use`,
+`permission_denials`, `modelUsage`, `usage`). Everything else is `unknown`, partial messages are
+not requested, and a `capabilities` set missing a name the adapter relies on is a refusal at
+instance start, exit 1.
 
-Usage delta: `modelUsage` is cumulative per engine session; the turn's record per model is the
-cumulative value minus the sum of the usage rows already written for that `engineSessionId`,
-clamped at zero, with `usage` stored beside it. A turn with no `result` gets the `assistant`
-counts deduplicated by `messageId`, output unknown, flagged interrupted (ADR 0020). Models that
-worked are the keys of `modelUsage`, or the distinct `model` values seen when interrupted.
+Usage delta: `modelUsage` is cumulative per engine session over the turns that reached a `result`
+(a killed turn's counts are absent from the next cumulative, S2); the turn's record per model is
+the cumulative value minus the last `result` row's cumulative for that `engineSessionId` (never a
+sum of rows, never an interrupted row), clamped at zero, with `usage` stored beside it. A turn
+with no `result` gets the `assistant` counts deduplicated by `messageId`, output unknown, flagged
+interrupted (ADR 0020), its own record outside the baseline. Models that worked are the keys of
+`modelUsage`, or the distinct `model` values seen when interrupted.
 
 The command line is ADR 0020's; the stdin message is one stream-json `user` line with one text
-block; the system prompt append is per process; `--mcp-config` names
-`<bf>/share/empty/mcp.json`, an empty map shipped with Broodforge and reached through the
-existing `<bf>` bind (ADR 0022 companion). The `fake` replays a fixture directory:
-`turn-<n>.jsonl` files of verbatim stream-json lines, an optional per-line delay in
-`fixture.json`, each `TurnRequest` received written as `received-<n>.json` for assertions;
-`interrupt()` ends the current file early with `exit` carrying `interrupted: true`. A recorded
-real-engine transcript is a fixture as captured (ADR 0020's spike).
+block; the system prompt append is per process; `--mcp-config` names `<bf>/share/empty/mcp.json`,
+an empty map shipped with Broodforge and reached through the existing `<bf>` bind (ADR 0022
+companion). The `fake` replays a fixture directory: `turn-<n>.jsonl` files of verbatim stream-json
+lines, an optional per-line delay in `fixture.json`, each `TurnRequest` received written as
+`received-<n>.json` for assertions; `interrupt()` ends the current file early with `exit` carrying
+`interrupted: true`. A recorded real-engine transcript is a fixture as captured (ADR 0020's spike).
 
 ## The PreToolUse hook
 
@@ -226,15 +230,14 @@ can ask the agent to amend and `end` again. The bot never rewrites history (ADR 
 
 End of session: interrupt a running turn; when `handoff` is `pull-request` and the credential is
 usable, run one closing engine turn with a fixed prompt that returns the pull request title and
-body (skipped on `push` projects, on an auth error, or when the credential is marked
-needs-login; the fallback title is `Session <id>: <first message, truncated>`, the summary the
-body); then bundle, verify, fetch, check, and hand off per the project's `handoff` (default
-`pull-request`): `push` pushes `refs/sessions/<id>` to `refs/heads/<session branch>` on the
-remote; `pull-request` pushes the same and opens the request through the forge's HTTP API with
-the project's git credential in that one call (`forge: "github"` only in the first version;
-title and body are a 04 flow). No commits: the
-tree is removed and the session says so. The tree is removed only after `done` on the push or the
-request (R-35); a refused or failed handoff keeps it and `status` lists it with its unpushed count.
+body (skipped on `push` projects, on an auth error, or when the credential is marked needs-login;
+the fallback title is `Session <id>: <first message, truncated>`, the summary the body); then
+bundle, verify, fetch, check, and hand off per the project's `handoff` (default `pull-request`):
+`push` pushes `refs/sessions/<id>` to `refs/heads/<session branch>` on the remote; `pull-request`
+pushes the same and opens the request through the forge's HTTP API with the project's git
+credential in that one call (`forge: "github"` only in the first version; title and body are a 04
+flow). No commits: the tree is removed and the session says so. The tree is removed only after
+`done` on the push or the request (R-35); a refused or failed handoff keeps it and `status` lists it with its unpushed count.
 
 ## Process model per host
 
@@ -256,18 +259,16 @@ preflight`; (7) reconciliation (ADR 0021); (8) the control socket; (9) the Disco
 notice channel if one is configured.
 
 Signals and leftovers. The spawn backend starts every engine (the `sudo` child on Linux) detached
-in its own process group, so a terminal's Ctrl-C reaches the bot alone and the bot interrupts
-each turn through the backend; `KillMode=mixed` makes `systemctl stop` do the same (SIGTERM to
-the bot only, SIGKILL to the rest of the cgroup after `TimeoutStopSec`). After a bot crash,
-systemd kills the leftover engines with the unit; on Windows they run on until they end (a Task
-Scheduler stop ends the tree), a gap until a job object exists. The next start records those
-turns interrupted either way.
+in its own process group, so a terminal's Ctrl-C reaches the bot alone and the bot interrupts each
+turn through the backend; `KillMode=mixed` makes `systemctl stop` do the same (SIGTERM to the bot
+only, SIGKILL to the rest of the cgroup after `TimeoutStopSec`). After a bot crash, systemd kills
+the leftover engines with the unit; on Windows they run on until they end (a Task Scheduler stop
+ends the tree), a gap until a job object exists. The next start records those turns interrupted either way.
 
-Shutdown (`SIGTERM`, Ctrl-C, or `stop` over the control socket): stop accepting messages and
-clicks, interrupt every running turn through the spawn backend, mark every open session
-interrupted (R-17; R-18 is later; `end` still runs the handoff, no new turns), post the
-interrupted notice where the gateway allows, close the store, exit 0. After thirty seconds, exit
-1, listing open sessions on stderr; reconciliation covers them at the next start.
+Shutdown (`SIGTERM`, Ctrl-C, or `stop` over the control socket): stop accepting messages and clicks,
+interrupt every running turn through the spawn backend, mark every open session interrupted (R-17;
+R-18 is later; `end` still runs the handoff, no new turns), post the interrupted notice where the
+gateway allows, close the store, exit 0. After thirty seconds: exit 1, open sessions listed on stderr, reconciliation covers them at the next start.
 
 ## Debug surface attachment
 
@@ -275,8 +276,7 @@ Every CLI command but `serve` is a control-socket client; with no socket, read c
 store file read-only (ADR 0021) and write commands exit 1 saying the bot is not running. Linux: a
 unix socket sessions cannot reach (`data/` is unbound and `0700`). Windows: a named pipe a
 same-account session can reach, the gap ADR 0022 states. No TCP listener. A scratch root puts the
-socket under its root; the pipe name comes from `instanceName`. 05 specifies the line shapes (`cmd`
-is `<group>.<command>`) and the error codes.
+socket under its root; the pipe name comes from `instanceName`. 05 specifies the line shapes (`cmd` is `<group>.<command>`) and the error codes.
 
 ## Failure modes and what the user sees
 
@@ -289,7 +289,7 @@ The last column names a 04 flow, not its wording.
 | `engine` | Exit without `result` | turn interrupted, partial usage recorded, exit code kept | turn-failed |
 | `engine` | `result` with `is_error` | turn ended as error; an auth error also ends the session through the normal ending sequence (summary, bundle handoff), discarding no work, and sets the credential `needs-login` (an API key keeps its status) | credential-needs-login |
 | `hook` | Internal error, exit 2 | the engine blocks that call with the hook's stderr as the result, the turn continues, audit `action refused` from the `hook:` prefix | tool-denied notice |
-| `hook` | Timeout | non-blocking: the engine's own default decides (C39 says what); no mark in the stream, `hook.log` shows the gap | none |
+| `hook` | Timeout | non-blocking: the engine's default decides (C39: Read allowed, Write denied, a safe-listed Bash run); the result's `decidedBy` is `config`, audit `hook bypassed` | hook-bypassed |
 | `spawn` | Preflight fails; interrupt timeout | refusal at start naming the sudoers block; tree killed and turn interrupted (ADR 0022) | operator; turn-interrupted |
 | `credentials`, `git` | Key file missing or store unreadable; id removed or `needs-login`; clone fails | start refused; session start refused naming the credential or the clone error, no tree recorded | session-refused |
 | `git` | Bundle, fetch or attribution check fails | handoff refused, tree kept, session stays open, commits listed | handoff-refused |
