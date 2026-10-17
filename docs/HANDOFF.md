@@ -5,21 +5,23 @@ Updated: 2026-10-17 by main session (Hatchery coordinator)
 
 ## Now
 
-- Proposal 0016 (`docs/design/proposals/0016-base-owned-and-project-owned-files.md`) is `under review`,
-  revised after the critic. Recommendation E: one patch-only update over a base-owned allowlist for
-  every project; the agreement as per-section base-owned files imported by a short project
-  `CLAUDE.md`; the base keeps its policy file. Evidence: the finding of 2026-10-17.
-- Pushed through 48a43e4; the finding (5b17d07) and proposal 0016 (b58a582, 7692c28) are not.
+- ADR 0016 (`docs/design/decisions/0016-base-owned-and-project-owned-files.md`, accepted, 35a2a53):
+  base-owned files versus project-owned, one patch-only update, the agreement imported per section.
+  Under independent review by the `reviewer`; nothing built yet. The owner has not yet seen the
+  `docs/hatchery/` subtree move; it is the migration's last step (`0016-migration.md`). [no-check: the subtree does not exist yet]
+- Proposal 0017 (`docs/design/proposals/0017-queue-directories-list-on-demand.md`) is `under review`
+  with the critic: queue READMEs drop their per-file index; a listing script reads frontmatter.
+- Pushed through 48a43e4; everything from 5b17d07 on is not.
 
 ## Next
 
-1. The owner's three answers on 0016 (Waiting on user). Then a short critic pass on recommendation E
-   (the critic saw A), the compaction check the revision asks for, and the `adr` skill for ADR 0016
-   (amends ADRs 0004, 0006, 0008, 0009, 0013; absorbs `docs/ideas/2026-10-16-update-conflict-rule-wipes-mixed-files.md`).
-2. Implementation briefs from ADR 0016: the ownership map and its helper, the update and decant and
-   adopt skills, check 7, the agreement split; then each sibling's migration in its own session.
-3. Architect answers the critic reviews of proposals 0003 and 0005 (`docs/design/proposals/README.md`).
-4. Critic review of ADR 0006 as a whole (escape-hatch question: `.claude/skills/proposal/brief-critic.md`).
+1. Fix what the ADR 0016 review finds (architect for design, tester for wording), then build from
+   `0016-migration.md` section 1: `ownership.json`, `ownership.js`, `imports.js`, the policy and
+   post-edit changes (coder); the skill rewrites and the agreement files (tester); the subtree last.
+2. Architect answers the 0017 critic; `adr` skill for ADR 0017; then its hook, script and skill edits.
+   Absorb `docs/ideas/2026-10-16-update-conflict-rule-wipes-mixed-files.md` when 0016 lands.
+3. Each sibling's migration in its own session (`0016-migration.md`, per-sibling table).
+4. Architect answers the critic reviews of proposals 0003 and 0005; critic review of ADR 0006 as a whole (`docs/design/proposals/README.md`).
 5. Triage `docs/ideas/` (`triage` skill, ADR 0012 scan first); research `2026-10-15-review-fixes-amend-or-follow-up.md`.
 6. Sibling two-way sync in its own session (`docs/ideas/2026-10-13-first-sync-with-the-build-phase-sibling.md`).
 
