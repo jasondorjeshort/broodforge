@@ -14,5 +14,8 @@
     "capExempt": [],
     "anchorExempt": ["docs/design/proposals/*", "docs/design/decisions/*", "docs/findings/*"],
     "formatters": {}
+  },
+  "privacy": {
+    "identities": [{ "name": "Jason Dorje Short", "email": "jdorje@gmail.com" }]
   }
 }

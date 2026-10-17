@@ -11,7 +11,7 @@ Updated: 2026-10-17 by main session (Hatchery coordinator)
 - ADR 0017 (queue directories list on demand; `queue-list.js`; a marker line switches the hook) is
   accepted, built and reviewed. ADR 0018 (personal data never leaves the machine: the privacy scan per commit in the guard, the
   pusher and a pre-push hook; identity from the policy) is accepted and built; its code and text are
-  under one review. Every push from this clone is refused until `privacy.identities` names the owner.
+  reviewed and fixed; the owner's identity is listed, so pushes are allowed again.
 
 ## Next
 
@@ -27,8 +27,7 @@ Updated: 2026-10-17 by main session (Hatchery coordinator)
 
 - The two operator entries of 2026-10-17: the rewrite of the 28 root commits carrying a third-party
   git identity (starts here, reaches both siblings) and the public repository going private first.
-- Which identity goes in `privacy.identities` (real address, or the GitHub noreply one; both during
-  a transition): until it is set, the pusher and the guard refuse every push here.
+- Whether to switch commits to the GitHub noreply address (ADR 0018 recommends it; the real one is listed now).
 - The subtree move of Hatchery's records (ADR 0016 item 5, migration 3.4): yes, or the architect
   writes the alternative. Nothing else in 0016 depends on it.
 - A push: everything after 48a43e4 is unpushed; the pusher goes with the request quoted.
