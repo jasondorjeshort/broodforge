@@ -19,6 +19,7 @@ record of the alternatives and the objections.
 | `0012-critic-review.md` | Companion to 0012: the critic's review (two blocking, seven serious, six minor), all answered in the proposal's last section; every objection accepted, two with a change. |
 | `0014-handoff-layout.md` | Promoted to ADR 0014 (`../decisions/0014-handoff-layout.md`); revised in place after the critic review: the import spelling `@handoff/<file>.md`, four hops, a resolving chain check in the hook and the pusher, a 120-line total, the switch trigger in the pusher's terms as a Deferred item, no README and no fixed files under `docs/handoff/`, the split procedure in one skill file. |
 | `0014-critic-review.md` | Companion to 0014: the critic review (one blocking, four serious, five minor; claim 2 fails by experiment, the downstream map loads nothing), all answered in the proposal's last section; every objection accepted, five with a change. |
+| `0016-base-owned-and-project-owned-files.md` | Under review: an ownership map (base-owned, project-owned, mixed indexes) so an update touches nothing the project wrote; recommends A: the base ships no `policy.json` (its pool command moves to a user-scope file), the rule sections move to a base-owned `.claude/agreement.md` imported by a short project-owned `CLAUDE.md`, merge mode restores project-owned paths mechanically, patch mode excludes the policy file. Awaits the critic. |
 
 Template:
 
