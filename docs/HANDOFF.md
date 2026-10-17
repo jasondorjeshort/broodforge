@@ -1,13 +1,13 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-17, after the rule-20 commit, by main session
+Updated: 2026-10-17, at commit 5742573, by main session
 
 ## Now
 
 - Privacy check promoted: git-guard rule 20 scans every commit a push sends, from every caller
-  (Opus; three review passes, 613 hook cases). Committed with `CLAUDE.md`, the commit skill, the
-  finding, the operator entry and this file; one commit ahead of `origin`, push not yet requested.
+  (Opus; three review passes, 613 hook cases). Pushed at `5742573` on the owner's words, with
+  `CLAUDE.md`, the commit skill, the finding and the operator entry; rule 20 allowed its own push.
 - Public history carries the PC user name in five commits and the machine's git identity on the 28
   Hatchery root commits (finding below); both repos are private; the owner rewrites after this lands.
 - P7's owner turns are done (`d00bb95`): credential `cred-p5o7jb1n3` on `~/bf-owner`, fixtures
@@ -26,7 +26,7 @@ Updated: 2026-10-17, after the rule-20 commit, by main session
 
 ## Waiting on user
 
-- The push of the rule-20 commit, in so many words.
+- The rewrite: when, and the two backups first (operator entry).
 - Wording: the hook no-answer phrase (one for both, recommended); first vs full names in Discord;
   "acts freely" short or long.
 
