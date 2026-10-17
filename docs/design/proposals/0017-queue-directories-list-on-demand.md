@@ -68,7 +68,7 @@ recounted by the critic): 40 commits to the findings README, 37 row-only; 20 to 
 17 row-only. The only merges that touched either are its two base updates (e4d61c7e created both
 tables from the base's rows; 8745c5d1 created the ideas and operator READMEs); its 45 work merges
 never conflicted on them (the finding's replay), because its sessions have run one at a time on
-these files. Two later commits (af2b8d27, the handoff split, and 62f15f9c, the update to 6866d8a)
+these files. Two later commits (af2b8d27, the handoff split, and 62f15f9c, the update to d343b69)
 each drop a stale ideas index row naming a file the repository did not have: the hook checks
 file-to-row, never row-to-file, so a row outlives its file unnoticed. One finding there
 (`2026-10-13-suite-duration.md`) says `status: resolved (ADR 0011, 2026-10-14)` while its row says
@@ -339,7 +339,7 @@ Predictions (the trigger scan reads these):
 - The regenesis counts above (recounted by the critic: hold); the stale-row bodies are af2b8d27 and
   62f15f9c; the status values in use (Hatchery 3 open, 10 resolved, 1 superseded; regenesis 18, 8
   plus one free-text, 1; broodforge 5, 5; dystopo 1, 17; droplet-management 3 open) all read by
-  first word; dystopo's 19 ideas carry `kind:` and the two extra keys (read 2026-10-17 at f7ef712).
+  first word; dystopo's 19 ideas carry `kind:` and the two extra keys (read 2026-10-17 at c781ab5).
 - The finding's experiment rows 1 and 4 (append against append and delete against append conflict
   by default) and its section 5 replay numbers.
 - Node starts in about the time `grep` takes here (0.065 s against 0.034 s); Git's `grep.exe` is on

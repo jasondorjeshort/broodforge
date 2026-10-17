@@ -24,7 +24,7 @@ Experiments ran in `scratchpad/critic17/` (session scratchpad); sibling reposito
 | Each named skill line reads or writes a queue row | Mostly holds | `finding` 19, 29, 34; `triage` 22 to 23 (derives from files, reads no row) and 49; `decant` 54, 78 to 80, 85; `adopt-hatchery` 49, 53; `handoff` 17 to 18; `split.md` 15; `update-from-hatchery` 55, 65. `proposal` 22 is already conditional ("if that index lists files") and needs no edit. The `adr` skill does not edit the proposals row: step 6 sets the proposal `Status:` line only, so nothing but hand edits keeps the proposals rows current today. |
 | ADR text A amends; "no other ADR names the rows" | Fails | Missed: `0002-hook-specs.md` line 193 (the index-check row of the post-edit spec) and ADR 0006's living key table (lines 68 to 70, where every `edit.*` key is documented). ADR 0002's lines are 52, 92, 140 in the working tree (0016's amendment added three). ADR 0008 is `superseded by 0016`, so amending it is moot. |
 | Regenesis counts: findings README 40 commits, 37 row-only; ideas 20, 17 | Holds | Recounted: every `+`/`-` line of each commit's diff to the file, rows being lines starting `|`. |
-| The two stale-row commits are 8745c5d1 and the 6866d8a update | Half fails | The bodies are in af2b8d27 ("Handoff: one file per workstream", not an update) and 62f15f9c (the 6866d8a update). 8745c5d1 created the READMEs and says nothing of a stale row. |
+| The two stale-row commits are 8745c5d1 and the d343b69 update | Half fails | The bodies are in af2b8d27 ("Handoff: one file per workstream", not an update) and 62f15f9c (the d343b69 update). 8745c5d1 created the READMEs and says nothing of a stale row. |
 | `2026-10-13-suite-duration.md` file `resolved (ADR 0011, 2026-10-14)`, row `open` | Holds | Both read at regenesis HEAD d02f09bc. |
 | Status values in use; first-word reading handles them | Fails for one sibling | Findings: Hatchery 3 open, 10 resolved, 1 superseded; regenesis 18, 8 plus the free-text one, 1; broodforge 5, 5; dystopo 1, 17; droplet-management 3 open. All read cleanly by first word. Proposals: every `Status:` line in four repositories reads as `draft`, `under`, `promoted` or no line, except dystopo's `0027-critic-review.md` and `0028-critic-review.md`, whose line is `Status: review of an accepted ADR ...`: first word `review`, so `?` and exit 1 on every call there. Ideas: dystopo's 19 ideas carry their own grammar (`status: new | planned | done | dropped`, `pipeline:`), no block, so all 19 print `untriaged`, done ones included. Hatchery's reading gives 24 untriaged, matching the finding. |
 | Merge-mode base row deletion meets the sibling's rows once, "delete-against-modify" | Holds as a conflict, wrong name | `git merge-file` of base-with-rows, project-with-own-rows, base-with-command-line: one content conflict over the table. It is a content conflict, not a delete/modify one. |
@@ -74,8 +74,8 @@ Experiments ran in `scratchpad/critic17/` (session scratchpad); sibling reposito
 3. Serious. "Every status already lives in the item ... The row is always a second copy" is false
    in the direction that matters, and A removes the only edit-time check while adding none.
    Proposals 0003 and 0005 say `Status: draft`; both were critic-reviewed on 2026-10-13
-   (80d84a6) and the proposal skill has said "Set Status to `under review`" before the critic since
-   b1d4c79 (2026-10-11). Their README rows ("Critic reviewed; awaits the architect's answers") are
+   (1eced83) and the proposal skill has said "Set Status to `under review`" before the critic since
+   f1e0f3b (2026-10-11). Their README rows ("Critic reviewed; awaits the architect's answers") are
    right and the items are wrong; `docs/HANDOFF.md` Next item 4 points at the README for exactly
    this state. Under A the listing reports both as `draft`, in parseable form, and agents will
    trust one command more than they ever trusted a table. Second: the unlisted-file warning is

@@ -70,7 +70,7 @@ second pass).
   89. Each has added its own files under `.claude/` (`rules/go.md`, `rules/kotlin.md`, a `wave`
   skill). `../regenesis` has edited 13 base-owned files against its recorded base, `../dystopo` 11,
   some ahead of the base (the split handoff before ADR 0014); `../broodforge` differs from its
-  merge-base (48a43e4) in seven base-owned files under `.claude/` (`pusher.md`, `git-guard.js`,
+  merge-base (2f98979) in seven base-owned files under `.claude/` (`pusher.md`, `git-guard.js`,
   `shell-parse.js`, `test-hooks.js`, `rules/README.md`, the `adr` and `brief` skills) and four
   under `docs/` (`decisions/README.md` +21, `claude-code-on-windows.md` +28, `0002-hook-specs.md`
   +6, `docs/design/README.md` +46; critic objection 16). ADR numbers: Hatchery has used 0001,

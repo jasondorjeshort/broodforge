@@ -9,7 +9,7 @@ related: [2026-10-16-adopt-step-7-dangling-pointers.md]
 `adopt-hatchery` step 7 copies base-owned docs into the project: ADRs 0001 and 0002, the hook
 specs, the design, proposals and ideas READMEs (the ideas README is the base's by ADR 0007). Those
 files never move forward under a patch update. Observed 2026-10-16 in an adopted project at base
-9d90716: after a simulated update its new `usage-gate.js` and `statusline.js` headers name
+d64ead2: after a simulated update its new `usage-gate.js` and `statusline.js` headers name
 `0002-hook-specs-usage.md`, which the project lacks, while its copy of `0002-hook-specs.md` still
 describes the old cache.
 

@@ -12,7 +12,7 @@ it"); `.claude/skills/commit/SKILL.md` step 5; `.claude/hooks/git-guard.js`, reb
 The owner asked on 2026-10-15 whether minor review fixes made before a push should be amended into
 the commit or committed as a follow-up, and what best practice is, and wants it researched. The
 rule today amends. That is easy when the reviewed commit is HEAD. It is not when a commit sits on top.
-On 2026-10-15 the carry-back 1c2e559 went to review with the status line commit landing above it,
+On 2026-10-15 the carry-back af601b5 went to review with the status line commit landing above it,
 so a fix there would need `git commit --fixup` and a non-interactive `git rebase --autosquash`
 (non-interactive only from Git 2.44), or a follow-up commit. No change to the rule until the
 research is in.

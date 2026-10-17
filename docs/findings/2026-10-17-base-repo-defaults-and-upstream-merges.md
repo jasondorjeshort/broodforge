@@ -11,7 +11,7 @@ promoted_to: docs/design/decisions/0016-base-owned-and-project-owned-files.md
 
 Every update from Hatchery conflicts on `.claude/hooks/policy.json` and usually on `CLAUDE.md` (the
 owner). Both mix base-owned and project-owned content: the base changed them in 5 and 17 commits
-(`git log --oneline -- <path> | wc -l` at 48a43e4); a sibling changed its policy file in 3 (the
+(`git log --oneline -- <path> | wc -l` at 2f98979); a sibling changed its policy file in 3 (the
 brief; not checked). How do base and template repositories ship defaults that live in git, and how
 do downstreams that merge an upstream continuously keep it sustainable? The owner: "these configs
 should be in a default/ directory or something". Evidence only, no design. "States" is the source,
@@ -75,7 +75,7 @@ without `HOOK_POLICY_FILE` at a missing file differ only in `usage.pool`.
   attribute, conflict, exit 1; `merge=ours` with no driver configured, the same conflict, silently;
   with `merge.ours.driver true`, "Applied patch ... cleanly", project kept; project file unedited, the
   base line lands; `merge=union`, both lines, exit 0 (Inference: broken JSON on a changed key);
-  `--exclude=policy.json`, skipped. Observed: `git diff --stat b9e6b28 HEAD -- .claude CLAUDE.md
+  `--exclude=policy.json`, skipped. Observed: `git diff --stat d8735dd HEAD -- .claude CLAUDE.md
   ':(exclude).claude/hooks/policy.json'` lists 38 files, 39 without. Not tested: `git merge`; which
   `.gitattributes` governs the merge that first brings it in.
 - git-apply docs: `--exclude`/`--include`, first match wins; `--3way` needs the blobs locally.

@@ -366,7 +366,7 @@ const GQ = [
   ['GQ30', 'ls -la "$R/.claude/hooks/git" "$X"', 'Bash', 'coder', 'allow'],
   ['GQ31', 'sudo /usr/bin/git push -f', 'Bash', null, 1],
   ['GQ32', "& 'C:\\Program Files\\Git\\cmd\\git.exe' reset --hard", 'PowerShell', null, 5],
-  // ...and is git wherever it stands when a subcommand follows (review of 6100ecd).
+  // ...and is git wherever it stands when a subcommand follows (review of 5f82800).
   ['GQ33', 'timeout 10 /usr/bin/git push --force origin main', 'Bash', null, 1],
   ['GQ34', 'nice -n 5 /usr/bin/git push -f', 'Bash', null, 1],
   ['GQ35', 'sudo -u root /usr/bin/git reset --hard', 'Bash', null, 5],
@@ -749,7 +749,7 @@ for (const [n, command, agent, cwd, want] of GP) {
     pv('PV33a', PUSH, pvRepo('escape-import', [line('a.js', 'const t = "Write\\n@x.md\\n";')]), 'allow');
     pv('PV33b', PUSH, pvRepo('escape-addr', [line('a.js', `const t = "to:\\n${OTHER}";`)]), 20, { extra: says(`(email: ${OTHER})`) });
 
-    // PV34: more places a path starts (review of 6100ecd): after a backslash, a comma or a >, and the WSL share.
+    // PV34: more places a path starts (review of 5f82800): after a backslash, a comma or a >, and the WSL share.
     pv('PV34a', PUSH, pvRepo('slug-backslash', [line('a.txt', `~\\.claude\\projects\\C--${U}-${SEG}-x`)]), 20, { extra: says('a.txt:1 (home: ') });
     pv('PV34b', PUSH, pvRepo('wsl', [line('a.txt', `open \\\\wsl$\\Ubuntu\\home\\${SEG}\\x`)]), 20, { extra: says('a.txt:1 (home: ') });
     pv('PV34c', PUSH, pvRepo('comma', [line('a.txt', `a,/home/${SEG}/x`)]), 20, { extra: says('a.txt:1 (home: ') });

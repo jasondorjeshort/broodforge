@@ -19,7 +19,7 @@ workaround moved the wall rather than removing it. Why, and how was the trap bui
   cannot gain a variable, so the session had to be restarted.
 - Base: `~/.claude/usage-gate-override.json`. Lifts HOLD only; the base denied at 80 on a weekly
   meter at 96, so the file did nothing.
-- Setting `deny` to 100 (downstream T94, base commit 02823a7). The loader caps thresholds at 100 and
+- Setting `deny` to 100 (downstream T94, base commit d2f415c). The loader caps thresholds at 100 and
   a meter saturates at 100, so this trips exactly when overage starts, with no lift.
 
 ## Result
@@ -28,7 +28,7 @@ Four causes, in order:
 
 1. ADR 0006 made `deny` "a ceiling no override lifts" as a technical decision. Whether overage is
    acceptable is a question about the owner's money, not a technical one, and it was never asked.
-   `CLAUDE.md` now says decisions about what the owner pays need the user (commit 59fd8ce).
+   `CLAUDE.md` now says decisions about what the owner pays need the user (commit 5632bef).
 2. The escape hatch was scoped to HOLD by design, so it could not reach the line that bit.
 3. "100 means off" was false: the validator caps at 100 and readings saturate there. `deny` now
    accepts `null`, the base default, meaning no deny line (ADR 0006, living key table).

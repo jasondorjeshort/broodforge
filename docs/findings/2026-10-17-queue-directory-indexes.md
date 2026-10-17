@@ -21,7 +21,7 @@ without one? Evidence, no design. Extends `2026-10-16-handoff-layout-practices.m
 2026-10-17: WebSearch, WebFetch; `curl` and `gh api` of the sources named; GitLab REST API. git
 2.56.0.windows.2 in `scratchpad/idx/`: `git apply --3way` onto a file staged with `git add`, no
 commit (`git-guard` denies this agent `commit`). Sibling merges replayed with `git merge-tree
---write-tree` in `git clone --bare --shared` copies (today's merge-ort). Hatchery at 0339741.
+--write-tree` in `git clone --bare --shared` copies (today's merge-ort). Hatchery at e428036.
 
 ### 1. Changelog fragment tools: per item, the list, any index
 

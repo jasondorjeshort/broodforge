@@ -35,7 +35,7 @@ xdiff three-way merge that `ort` uses. Guard verdicts came from feeding tool-cal
 | 10 | `merge=ours` under `git merge` | Not verified: the guard denies this agent `merge`. Relevant only to B. |
 | 11 | A pool command that cannot run gives "no reading", not a crash | Confirmed by reading: `usage-gate.js` lines 95 and 205 wrap the pool call and append " No pool reading (...)". |
 | 12 | Siblings: base lines, line counts, merge driver unset | Base lines, the missing line in `../broodforge`, and the unset driver: confirmed. **Counts misordered** in Constraints: `../broodforge` is 138 and `../regenesis` is 150 (`wc -l`). |
-| 13 | 5 and 17 base commits | Confirmed at 48a43e4. |
+| 13 | 5 and 17 base commits | Confirmed at 2f98979. |
 
 ## Objections
 
@@ -266,7 +266,7 @@ git apply --3way` on a freshly built fixture, with `FROM` set to `git merge-base
 
 | # | Claim or question | Result |
 |---|---|---|
-| C1 | First update with shared history: `merge-base` is the right `FROM` | Yes in the fixture. In `../broodforge` (read only) the merge-base is 48a43e4, its fetched `hatchery/main`, so its first patch starts exactly where its last merge ended. |
+| C1 | First update with shared history: `merge-base` is the right `FROM` | Yes in the fixture. In `../broodforge` (read only) the merge-base is 2f98979, its fetched `hatchery/main`, so its first patch starts exactly where its last merge ended. |
 | C2 | Project file already matches the base change | Clean, exit 0, the file is unchanged (case a). |
 | C3 | Project diverged on the same line / another line | Same line: `UU`, exit 1, markers (b). Another line: merged, both edits kept (c). |
 | C4 | Base adds a file the project also added | Identical content: clean (g). Different content: `AA`, exit 1 (h). |
@@ -320,7 +320,7 @@ git apply --3way` on a freshly built fixture, with `FROM` set to `git merge-base
     range for Hatchery, named now, with the collisions listed.
 
 16. **Serious. `decisions/README.md` and the Windows reference are mixed in practice, not
-    base-owned.** `git diff 48a43e4 HEAD` in `../broodforge` (read only) shows `decisions/README.md`
+    base-owned.** `git diff 2f98979 HEAD` in `../broodforge` (read only) shows `decisions/README.md`
     grown by 21 lines: an index table of Hatchery's ADRs and its own 0020 to 0023. It also shows
     `claude-code-on-windows.md` +28 lines, `0002-hook-specs.md` 6 lines and `docs/design/README.md`
     46 lines. `.claude/rules/docs.md` requires every `docs/` README to list every file, so a decanted
@@ -428,7 +428,7 @@ git apply --3way` on a freshly built fixture, with `FROM` set to `git merge-base
     index` on a deletion means already done, not an exclude.
 
 27. **Minor. The outside-the-set report is mostly noise, and F7's reach is undefined.** Since ADR
-    0008 (f51a561), 60 paths outside `.claude/` and `LICENSE` changed in Hatchery: 17 ideas, 16
+    0008 (fa49e20), 60 paths outside `.claude/` and `LICENSE` changed in Hatchery: 17 ideas, 16
     decisions, 10 proposals, 9 findings and more. A path that is genuinely meant for projects
     drowns in that list. F7 classifies a new path only if `projectOwned` names Hatchery's state
     directories one by one; a `docs/**` entry makes it pass for any docs path. Where F7 runs is not

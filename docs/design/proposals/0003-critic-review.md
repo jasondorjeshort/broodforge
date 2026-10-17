@@ -3,9 +3,9 @@
 Date: 2026-10-13
 Reviewer: critic (Opus 5.5)
 Evidence: the downstream build-phase project the proposal draws on (Dystopo), read at its commit
-`9d278c0`: its `CLAUDE.md`, `docs/TASKS.md`, the dated log in `docs/PLANNING.md`, its `wave`
+`d6e3b86`: its `CLAUDE.md`, `docs/TASKS.md`, the dated log in `docs/PLANNING.md`, its `wave`
 skill, ADRs 0020, 0021, 0026, 0027 and 0028, its findings, `gh pr list` on its repository. Base
-state read at `24f66e0` (ADRs 0006 and 0007 are newer than the proposal).
+state read at `f747c1f` (ADRs 0006 and 0007 are newer than the proposal).
 
 ## Part 1. Claim verification
 

@@ -16,10 +16,10 @@ a fix on top made the range look clean, and nothing read what each commit carrie
 same shape: check 5 reads `git diff @{u}..HEAD` for secrets only, check 4 a subject and a trailer,
 rules 1 to 19 the command line and never what a push sends; the brief and docs rules say nothing
 about user names, emails or people in committed text; the finding skill invites pasted output; the
-reviewer has no privacy item. Hatchery's own public history carries a third party's name and email
-as author and committer on its first 28 commits (the machine's global git identity, which no step
-set or checked), two first names in one finding, and a `Claude-Session:` trailer with a session
-link in 25 messages, which no check matched.
+reviewer has no privacy item. Hatchery's own public history carries the owner's second account
+(as the owner later confirmed), name and email, as author and committer on its first 28 commits
+(the machine's global git identity, which no step set or checked), two first names in one finding,
+and a `Claude-Session:` trailer with a session link in 25 messages, which no check matched.
 
 The downstream fixes (a per-commit pusher check, a guard rule on every push) are sound in shape and
 carry two defects a straight copy would bring: both exempt the repository's `git config user.email`,

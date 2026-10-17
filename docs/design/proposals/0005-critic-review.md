@@ -2,10 +2,10 @@
 
 Date: 2026-10-13
 Reviewer: critic (Opus 5.5)
-Evidence: the base at `24f66e0` (`git-guard.js`, `policy.json`, `policy.examples/`,
+Evidence: the base at `f747c1f` (`git-guard.js`, `policy.json`, `policy.examples/`,
 `.claude/settings.json`, `.claude/rules/docs.md`, `.claude/agents/reviewer.md`,
 `docs/reference/claude-code-on-windows.md`, ADRs 0006 and 0007); the downstream build-phase
-project's findings, ADR 0021 and its log (Dystopo, at `9d278c0`).
+project's findings, ADR 0021 and its log (Dystopo, at `d6e3b86`).
 
 ## Part 1. Claim verification, and what the base already does
 

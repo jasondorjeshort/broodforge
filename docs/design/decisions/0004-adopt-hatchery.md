@@ -35,8 +35,8 @@ Three ways to bring the practice into such a project were considered:
    applying the patch between that commit and the new `hatchery/main` three-way onto the project's
    tree. Chosen.
 
-Verified 2026-10-12 in a scratch worktree of this repository at commit `5a10ed8` with a locally
-edited `CLAUDE.md` (new title, added `## Project rules` section), staged: `git diff 5a10ed8 main --
+Verified 2026-10-12 in a scratch worktree of this repository at commit `16304e3` with a locally
+edited `CLAUDE.md` (new title, added `## Project rules` section), staged: `git diff 16304e3 main --
 .claude CLAUDE.md | git apply --3way` applied 29 files, left `CLAUDE.md` with the project's edits and
 Hatchery's changes, and `git diff main -- .claude` was empty. With an edit on a line Hatchery also
 changed, `git apply` reported "with conflicts", `git diff --name-only --diff-filter=U` listed the
