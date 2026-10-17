@@ -14,7 +14,8 @@ Read the index of a directory before its files. Nothing here is loaded automatic
 
 Where does a new piece of text go? Ask in this order:
 
-1. A rule Claude must obey every turn: `CLAUDE.md`. Only when touching certain paths:
+1. A rule Claude must obey every turn: an agreement file in `.claude/agreement/` that `CLAUDE.md`
+   imports (a project's own: `## Project rules` in `CLAUDE.md`). Only when touching certain paths:
    `.claude/rules/<name>.md` with `paths:` frontmatter.
 2. A procedure (steps to do X): a skill under `.claude/skills/`. Never `docs/`, never `CLAUDE.md`.
 3. A decision about what we build or why: `design/`; an ADR if the choice is non-obvious (`adr` skill).

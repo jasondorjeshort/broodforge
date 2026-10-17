@@ -110,9 +110,10 @@ and findings. Everything below runs in the new project's clone.
 7. `docs/ideas/` and `docs/operator/`: delete every file except `README.md`; reset each index
    table to its empty row (`docs/operator/` is normally already at rest).
 8. `docs/findings/`: delete every file except `README.md`; reset its index table to its empty row.
-   Hatchery's findings are about Hatchery. `docs/reference/`: keep `README.md` and
-   `claude-code-on-windows.md` with its README row (it describes the tool and the machine, not
-   Hatchery); delete every other reference file and its row.
+   Hatchery's findings are about Hatchery. `docs/reference/`: keep `README.md`,
+   `agreement-loading.md` (a hook cites it) and `claude-code-on-windows.md`, each with its README
+   row (they describe the tool and the machine, not Hatchery); delete every other reference file
+   and its row.
 9. `docs/design/`: keep `README.md`, every file under `decisions/`, and the `proposals/` README;
    delete every proposal and reset the proposals index table to its header. The "Decisions so
    far" list stays as it is: the project's own decisions are added below it from 0020 up. Then

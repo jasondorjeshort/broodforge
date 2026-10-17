@@ -20,19 +20,21 @@ Run every printed command in the Bash tool, never PowerShell: its pipe re-encode
    - `git status --porcelain` is empty (commit first; `git apply --3way` refuses a dirty base file).
    - The relation to Hatchery: a base line,
      `FROM=$(grep -rhE "^Hatchery base: [0-9a-f]{7,40}" docs/design/decisions/ | head -1 | cut -d' ' -f3)`,
-     else a merge-base with `hatchery/main` (a project decanted before ADR 0016, once), else stop
-     and name the README prompt "Adopt the Hatchery practice". The line wins over a merge-base.
+     else (tested in step 2, after the fetch) a merge-base with `hatchery/main` (a project decanted
+     before ADR 0016, once), else stop and name the README prompt "Adopt the Hatchery practice".
+     The line wins over a merge-base.
    - `node --version` works.
 2. `git remote add hatchery https://github.com/jasondorjeshort/hatchery.git` if missing; `git fetch
-   hatchery`; `S=$(git rev-parse hatchery/main)`. From here name the sha literally in every
+   hatchery`; `S=$(git rev-parse hatchery/main)`. Without a base line, `FROM=$(git merge-base HEAD
+   $S)`; if that prints nothing, stop as step 1 says. From here name the sha literally in every
    command: `git show <sha>:<path>`, never the branch name before the colon, which MSYS rewrites in
    Git Bash. Read `git show <sha>:.claude/skills/update-from-hatchery/SKILL.md` and follow that
    copy if it differs. The incoming list is `git log --oneline <FROM>..<sha>`; it goes in the
    commit body. On a tree without `.claude/hooks/ownership.js`, write it to the scratchpad with
    `git show <sha>:.claude/hooks/ownership.js > <scratch>/ownership.js`; "the helper" is then
    `node <scratch>/ownership.js` from the project root until the apply brings the file.
-3. `the helper --command --ref <sha>` (add `--exclude <pattern>` for a path the project removed
-   and has not yet put in `update.exclude`). Run the one line it prints. Outcomes:
+3. `the helper --command --ref <sha>` (add `--exclude '<pattern>'` for a path the project removed
+   and has not yet put in `update.exclude`; single-quote a pattern that contains `*`). Run the one line it prints. Outcomes:
    - Nothing on stdout, `ownership: nothing to apply` on stderr: no path in the set changed. Go to
      step 6, or stop if the base line already is `<sha>`.
    - Exit 0, changed paths in `git status --porcelain`: applied clean. Step 6.
@@ -53,7 +55,8 @@ Run every printed command in the Bash tool, never PowerShell: its pipe re-encode
    - `AA` (a base addition colliding with a project file): report it; the project renames its
      file or takes the base's with `git checkout <sha> -- <path>`.
    A checkout clears the unmerged entry; no `git add` after it. Then
-   `grep -rn "^<<<<<<<" .claude docs/hatchery LICENSE LICENSES` must be empty.
+   `git grep -n "^<<<<<<<" -- .claude docs/hatchery LICENSE LICENSES` must be empty (it names tracked
+   paths only, so an absent `docs/hatchery` is no error).
 5. Whole failure: `the helper --per-path --ref <sha> [--exclude ...]`, run each printed line. A
    line that fails is reported with its entry and a disposition (a rename under its new path):
    - `D`, `does not exist in index`: already done, nothing to do.
@@ -74,18 +77,20 @@ Run every printed command in the Bash tool, never PowerShell: its pipe re-encode
 7. First update under this procedure (the tree ran an older skill), in this order: the apply
    (steps 3 to 5) brings `policy.js`, `ownership.js`, `imports.js` and `.claude/agreement/`;
    `node .claude/hooks/policy.js` must print the policy (else fix it with the Edit tool before
-   anything); then in the same commit the migration edits in `docs/design/decisions/0016-migration.md`
-   section 4 (`CLAUDE.md` to the project shape, the provenance ADR with its departure table);
-   `update.exclude` only now, never earlier; the `Hatchery base: <sha>` line in the provenance ADR
-   only when every failed path has a disposition (excluded, taken, already done, kept: row);
-   otherwise a path would drop out of every later diff unseen. Later updates skip the migration.
-8. Checks, each must pass or be reported verbatim: `node --version`;
+   anything); then in the same commit the migration edits in
+   `git show $S:docs/design/decisions/0016-migration.md` section 4 (`CLAUDE.md` to the project
+   shape, the provenance ADR with its departure table); `update.exclude` only now, never earlier.
+   Later updates skip this step.
+8. Every update: set the `Hatchery base:` line in the provenance ADR to `<sha>`, only when every
+   failed path has a disposition (excluded, taken, already done, kept: row); otherwise a path
+   would drop out of every later diff unseen. On a first update the ADR is step 7's.
+9. Checks, each must pass or be reported verbatim: `node --version`;
    `node .claude/hooks/usage-gate.js < /dev/null` exits 0; the lines of pusher check 7 print no
    `FAIL`: `--cap-check` over the docs, the handoff total, and
    `node .claude/hooks/policy.js --claude-check`; every `.claude/skills/*/SKILL.md` and
    `.claude/agents/*.md` starts with frontmatter; `.claude/settings.json` parses and keeps the
    project's hook entries; the project's test and lint commands, if it defines them.
-9. Commit from the agent policy allows (the `runner` below HOLD, the main session at any level),
+10. Commit from the agent policy allows (the `runner` below HOLD, the main session at any level),
    subject `Update from Hatchery <FROM7>..<sha7>`, body the incoming list. Do not push; pushing
    goes through the `commit` skill's Pushing section.
 

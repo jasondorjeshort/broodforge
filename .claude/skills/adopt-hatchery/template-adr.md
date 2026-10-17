@@ -14,7 +14,7 @@ and why the practice was adopted rather than the project decanted anew. A decant
 ## Decision
 
 - Base-owned files taken from the base: the set in `.claude/hooks/ownership.json`
-  (`node .claude/hooks/ownership.js --check`); the policy file and `settings.local.json` stay the project's.
+  (`node .claude/hooks/ownership.js --check` lists tracked paths the map leaves unclassified); the policy file and `settings.local.json` stay the project's.
 - Merged: `.claude/settings.json` (project hook entries kept: <list, with the purpose of each>),
   `.gitignore`. `CLAUDE.md` written from the template (title, provenance line, `@docs/HANDOFF.md`,
   `## Phase`, `Branch:`, ten agreement imports, `## Project rules`); project rules moved to
@@ -35,7 +35,6 @@ row goes. Carry-back is an idea file, the Hatchery commit that took the change, 
 
 | Path | Reason | Carry-back |
 |---|---|---|
-| | | |
 
 ## Consequences
 

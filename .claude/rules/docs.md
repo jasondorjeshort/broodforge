@@ -8,7 +8,8 @@ paths:
 
 # Conventions for docs/
 
-These load automatically when a file under `docs/` or `CLAUDE.md` is read or edited. The map of what goes where is
+These load automatically when a file matching one of the `paths:` above (`docs/**`, `CLAUDE.md`,
+`.claude/agreement/**`, `.claude/project/**`) is read or edited. The map of what goes where is
 `docs/README.md`; the reasoning is ADR 0002.
 
 ## Size caps (enforced by the pusher, check 7; the post-edit hook warns)

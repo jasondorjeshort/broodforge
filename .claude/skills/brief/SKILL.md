@@ -11,7 +11,7 @@ the brief supplies what only this task knows.
 
 ## Steps
 
-1. Pick the agent by task (routing table in `CLAUDE.md`). If the task mixes kinds (design plus
+1. Pick the agent by task (routing table in `.claude/agreement/model-routing.md`). If the task mixes kinds (design plus
    code), split it into two briefs in sequence.
 2. Fill `template.md` in this directory. Every field is required; write "none" rather than
    leaving one out.

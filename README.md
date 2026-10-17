@@ -81,7 +81,8 @@ from it: they inherit the conditioning (the working agreement, the agents, the s
 and grow their own design and code. Existing projects adopt the same practice as files. It contains
 no application code. What it does contain:
 
-- `CLAUDE.md`: the working agreement Claude Code follows in the repo. Agents do all coding and
+- `CLAUDE.md` and `.claude/agreement/`: the working agreement Claude Code follows in the repo
+  (`CLAUDE.md` imports the ten agreement files, where the rules live). Agents do all coding and
   debugging, every feature ships with an agent-usable debug interface, major choices go through a
   proposal, a critic, and an ADR, and work stops when plan usage gets high.
 - `.claude/agents/`: six subagents with models matched to their job (architect and critic on
