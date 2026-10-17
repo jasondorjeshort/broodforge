@@ -17,6 +17,14 @@
 
 ## Commands, in order
 
+Before you start: mirror backups of hatchery, broodforge and dystopo are at `~/.claude/hatchery-rewrite/backup/<name>.git`. For any other repository make one first:
+
+```
+git clone --mirror <source> ~/.claude/hatchery-rewrite/backup/<name>.git
+```
+
+The script refuses a source with uncommitted changes, clones it with `--no-local` into `~/.claude/hatchery-rewrite/<name>` and rewrites only that clone; it never writes to the source repository or to any remote. The old history also survives in the working directories, the renamed GitHub repository and the sibling clones until you delete them.
+
 Account: the owner, any shell with git, Python and pip. Needs first: a clean working tree in each source, nothing unpushed.
 
 ```
