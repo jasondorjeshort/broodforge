@@ -103,5 +103,16 @@ Decisions so far:
   edits its README; `docs/design/`, `proposals/` and `reference/` stay written indexes. Contract
   and briefs in [the sibling](decisions/0017-queue-list.md). Supersedes in part 0002, 0006, 0007,
   0013. [no-check: the script exists once the ADR is implemented]
+- [0018 Personal data never leaves the machine](decisions/0018-personal-data-never-leaves-the-machine.md):
+  one scan, `.claude/hooks/privacy-scan.js`, read by guard rule 20 on every push from every
+  caller, by pusher check 5 and by a `pre-push` git hook for terminal pushes; every outgoing
+  commit (author, committer, message, added lines, added file names), never the net diff; classes
+  email, home path in every spelling including the project-folder slug, host, the machine's own
+  user and host name, an identity outside `privacy.identities`, session link, transcript, secret;
+  `privacy.allow` for what is not a person; the repository identity set at decant and adopt from
+  the policy; roles and `~` in committed text; the `Claude-Session:` trailer dropped; the history
+  rewrite and the repository's visibility are the owner's separate steps. Contract, harness group,
+  briefs and migration in [the sibling](decisions/0018-privacy-scan.md). Amends 0006 (key table);
+  adds rows to 0013. [no-check: the script exists once the ADR is implemented]
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).
