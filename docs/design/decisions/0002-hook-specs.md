@@ -190,7 +190,10 @@ Checks on `docs/**/*.md` (`<path>` from the root with forward slashes; line coun
 | a line starting `@<target>`, outside fenced blocks, in `CLAUDE.md`, `docs/HANDOFF.md` or `docs/handoff/*.md`, whose target does not exist when resolved from the file's directory | `post-edit: <path> imports @<target>, which resolves to <resolved> and does not exist (an import resolves from the importing file's directory).` |
 | `docs/findings/*.md` (not README) missing frontmatter `date:`, `status:` or `area:` | `post-edit: <path> lacks finding frontmatter (date, status, area). See the finding skill.` |
 | `docs/reference/*.md` (not README) missing `verified:` | `post-edit: <path> lacks verified: frontmatter. See .claude/rules/docs.md.` |
-| a file at least one directory below `docs/` (not `docs/handoff/*.md`, see the import row above), basename not `README.md` or `HANDOFF.md`, named in no `README.md` from its own folder up to `docs/<top>/README.md` | `post-edit: <path> is not listed in <folder>/README.md. Add one line.` |
+| a file at least one directory below `docs/` (not `docs/handoff/*.md`, see the import row above), basename not `README.md` or `HANDOFF.md`, named in no `README.md` from its own folder up to `docs/<top>/README.md`, unless it is `docs/<dir>/<file>.md` and `docs/<dir>/README.md` carries the marker line of ADR 0017 (`0017-queue-list.md`, section 4) | `post-edit: <path> is not listed in <folder>/README.md. Add one line.` |
+| `docs/<dir>/<file>.md` under a README with the valid marker for `<dir>`: each problem `read(<dir>, file)` of `queue-list.js` returns (a value outside the grammar that would list as `?`), after the frontmatter row | `post-edit: <path> would list as ? (<field> is "<value>"; allowed: <set>). See docs/<dir>/README.md.` (`<field> missing; allowed: <set>` for an absent value) |
+| the same file when the marker is valid but `queue-list.js` does not load, or its `read` throws (the index check is skipped too) | `post-edit: queue-list.js did not load; <path> was not checked.` |
+| an edited `docs/<dir>/README.md` (three segments) with a line starting `Listed on demand:` that is not the marker for `<dir>` (wrong mode word, wrong shape); one message per README; deeper READMEs are not read | `post-edit: docs/<dir>/README.md carries a Listed on demand: line that is not "Listed on demand: node .claude/hooks/queue-list.js <dir>"; the directory counts as indexed.` |
 | a backtick-quoted token holding `/` whose first segment is a top-level directory of the root (not `.git`), that does not exist | `post-edit: <path> names paths that do not exist: <list>. Fix them, or mark the paragraph [no-check: <reason>] (.claude/rules/docs.md).` |
 
 Path anchors skip files matching `edit.anchorExempt` (by default the closed records under
@@ -216,7 +219,12 @@ exit 0, no stdout. Harness cases P01 to P04 and PX01 to PX14 cover the checks ab
 formatter and the `CLAUDE.md` cap; PA the path anchors, closed records and list-item scope; PC cap
 exemptions and formatters from a policy file, a malformed policy, and the task-branches example;
 PH the handoff paths (ADR 0014): the stream and total caps, the map import, and the `@` line
-resolution, each case in its own scratch root (`ph-<id>`) so P02 keeps its tree.
+resolution, each case in its own scratch root (`ph-<id>`) so P02 keeps its tree; Q the queue
+listing and the marker switch (ADR 0017): `queue-list.js` run from scratch roots (Q01 to Q09) and
+the three hook messages above (Q10 to Q13, Q13 on a scratch copy of the hooks whose
+`queue-list.js` throws). The hook reads the README with CR removed, so a CRLF marker line is valid;
+it loads `queue-list.js` only when that README holds a `Listed on demand:` line, uses its exported
+`MARKER`, and keeps a copy of the regular expression for the case where the script does not load.
 
 ## 3. `usage-gate.js` and the status line
 

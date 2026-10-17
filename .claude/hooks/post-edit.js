@@ -4,10 +4,12 @@
 // and never denies. It returns hookSpecificOutput.additionalContext when an edit to CLAUDE.md,
 // .claude/agreement/*.md or .claude/project/*.md leaves a --claude-check FAIL (claudeCheck in
 // policy.js: sections, the 40 and 190 caps, unresolved imports), or an edited docs/**/*.md file
-// breaks a size cap, lacks required frontmatter, is missing from its directory index, or names a
-// repository path that does not exist, and it runs the formatter for the file's extension if one
-// is set. Every @ import is read by imports.js, the one parser.
-// Spec: docs/design/decisions/0002-hook-specs.md section 2; policy: ADR 0006; CLAUDE.md: ADR 0016.
+// breaks a size cap, lacks required frontmatter, is missing from its directory index (or, in a
+// queue directory listed on demand, would list as ? in queue-list.js), or names a repository path
+// that does not exist, and it runs the formatter for the file's extension if one is set. Every @
+// import is read by imports.js, the one parser; every queue file by queue-list.js's read().
+// Spec: docs/design/decisions/0002-hook-specs.md section 2; policy: ADR 0006; CLAUDE.md: ADR 0016;
+// queue directories: ADR 0017.
 // Test harness: node .claude/hooks/test-hooks.js
 'use strict';
 const fs = require('fs');
@@ -21,6 +23,22 @@ function resolve(root, file, opts) {
 }
 function claudeLines(root) {
   try { return claudeCheck(root, edit).lines; } catch (_) { return []; }
+}
+// The queue listing (ADR 0017) is loaded the same way, and only when a queue README carries a
+// Listed on demand: line: a missing or broken queue-list.js costs that check one line, never the
+// hook's other messages. The hook requires it and never spawns it.
+function queueList() {
+  try { return require('./queue-list'); } catch (_) { return null; }
+}
+// The marker line (0017-queue-list.md, section 4). queue-list.js exports it as MARKER and the hook
+// uses that; this copy only tells a marked directory apart when the script does not load.
+const QUEUE_MARKER = /^Listed on demand: node \.claude\/hooks\/queue-list\.js (ideas|operator|findings)[ \t]*$/m;
+const QUEUE_PREFIX = 'Listed on demand:';
+const queueMarker = (ql) => (ql && ql.MARKER instanceof RegExp ? ql.MARKER : QUEUE_MARKER);
+// True when the line is the marker for docs/<dir>/: the whole line, the captured word <dir>.
+function isQueueMarker(line, dir, marker) {
+  const m = marker.exec(line);
+  return !!m && m[1] === dir;
 }
 
 // Project choices from .claude/hooks/policy.json (edit block); a malformed policy means the base
@@ -101,13 +119,19 @@ function checkDocs(root, rel, abs) {
   }
   // Index check: a file under docs/<dir>/... must be named in a README.md, looking in its
   // own directory first and then in each parent up to docs/<dir>/ (ADRs, for example,
-  // are listed in docs/design/README.md).
+  // are listed in docs/design/README.md). A file directly in a queue directory whose README
+  // carries the marker is listed on demand instead (ADR 0017): no index check, the parser warning.
+  const queue = !isStream && parts.length === 3 && !INDEX_EXEMPT.has(base) ? queueLines(root, rel, abs, parts[1]) : null;
   if (isStream) {
     // docs/handoff/ has no README: a stream is listed when the map imports it.
     const map = resolve(root, 'docs/HANDOFF.md', { hops: 1 }).map((i) => i.target);
     if (!map.includes(rel)) {
       msgs.push(`post-edit: ${rel} is not imported by docs/HANDOFF.md. Add the line @handoff/${base} or delete the file.`);
     }
+  } else if (parts.length === 3 && base === 'README.md') {
+    msgs.push(...queueReadmeLines(rel, parts[1], text));
+  } else if (queue) {
+    msgs.push(...queue);
   } else if (parts.length >= 3 && !INDEX_EXEMPT.has(base)) {
     let listed = false;
     for (let depth = parts.length - 1; depth >= 2 && !listed; depth--) {
@@ -128,7 +152,33 @@ function checkDocs(root, rel, abs) {
   return msgs;
 }
 
-// Path anchors: a backtick-quoted token that looks like a repository path (it contains "/" and
+// docs/<dir>/<file>.md under a README carrying the marker for <dir>: the problems queue-list.js
+// reads in the file, one line each (0017-queue-list.md, section 4, item 1). null when the README
+// has no valid marker, so the caller runs the index check exactly as before.
+function queueLines(root, rel, abs, dir) {
+  const readme = readOr(path.join(root, 'docs', dir, 'README.md'), '').replace(/\r/g, '');
+  if (!readme.includes(QUEUE_PREFIX)) return null;
+  const ql = queueList();
+  const marker = queueMarker(ql);
+  if (!readme.split('\n').some((l) => isQueueMarker(l, dir, marker))) return null;
+  const notChecked = [`post-edit: queue-list.js did not load; ${rel} was not checked.`];
+  if (!ql || typeof ql.read !== 'function') return notChecked;
+  let problems;
+  try { problems = ql.read(dir, abs).problems; } catch (_) { return notChecked; }
+  return problems.map((p) => `post-edit: ${rel} would list as ? (${p.field} ${p.value === null ? 'missing' : `is "${p.value}"`}; allowed: ${p.allowed}). See docs/${dir}/README.md.`);
+}
+
+// docs/<dir>/README.md: a line starting "Listed on demand:" that is not the marker for <dir>
+// (section 4, item 2). One message however many such lines; the directory counts as indexed.
+function queueReadmeLines(rel, dir, text) {
+  const lines = text.replace(/\r/g, '').split('\n').filter((l) => l.startsWith(QUEUE_PREFIX));
+  if (lines.length === 0) return [];
+  const marker = queueMarker(queueList());
+  if (lines.every((l) => isQueueMarker(l, dir, marker))) return [];
+  return [`post-edit: ${rel} carries a Listed on demand: line that is not "Listed on demand: node .claude/hooks/queue-list.js ${dir}"; the directory counts as indexed.`];
+}
+
+// Path anchors:a backtick-quoted token that looks like a repository path (it contains "/" and
 // starts with an existing top-level directory such as docs or .claude) must exist, unless its
 // paragraph, or its list item, carries [no-check: ...]. Fenced blocks (indented ones too) and
 // placeholders (NNNN, <slug>, *) are skipped.

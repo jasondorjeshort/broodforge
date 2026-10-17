@@ -38,7 +38,9 @@
 // the files under .claude/agreement/ (both skipped where a hatchery remote exists, ADR 0016), and
 // policy.js and imports.js, copied into the O cases' scratch repositories; ~/.claude is never touched.
 // Groups IM (imports.js), CL (policy.js --claude-check) and O (ownership.js) cover ADR 0016's code;
-// the line above the totals lists the groups that ran. Exit codes: 0 all pass (a
+// group Q covers queue-list.js and post-edit's marker switch (ADR 0017), on scratch trees, with a
+// scratch copy of the hooks whose queue-list.js throws (Q13); the line above the totals lists the
+// groups that ran. Exit codes: 0 all pass (a
 // SKIP is not a failure), 1 any failure, 2 usage error.
 'use strict';
 const fs = require('fs');
@@ -2247,6 +2249,232 @@ function fitnessDeps(root) {
   }
 }
 function AG0(s) { return `## ${s}\n\nRule text.\n`; }
+
+// ---------- queue-list.js and the post-edit marker switch (group Q; ADR 0017, 0017-queue-list.md section 5) ----------
+// The script runs as a child process from a scratch root (its working directory is the root); the
+// hook cases run post-edit on the same trees. Each case checks exit code, stdout and stderr whole.
+{
+  const QL = path.join(HOOKS, 'queue-list.js');
+  const putQ = (root, files) => {
+    for (const [rel, text] of Object.entries(files)) {
+      const f = path.join(root, ...rel.split('/'));
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, text);
+    }
+  };
+  const ql = (root, args) => {
+    const r = spawnSync(NODE, [QL, ...args], { cwd: root, encoding: 'utf8', timeout: 30000 });
+    return { code: r.status, out: r.stdout || '', err: r.stderr || '' };
+  };
+  const qcase = (id, label, problems, out) => report(id, label, problems.length === 0, problems.join('; '), out);
+  // expect { code, out, err }: each compared whole when present.
+  const expectRun = (r, want, tag) => {
+    const p = [];
+    for (const k of ['code', 'out', 'err']) {
+      if (k in want && r[k] !== want[k]) p.push(`${tag ? `${tag}: ` : ''}${k} ${JSON.stringify(r[k])}, expected ${JSON.stringify(want[k])}`);
+    }
+    return p;
+  };
+  const fm = (keys) => `---\n${keys}\n---\n`;
+  const MK = (dir) => `Listed on demand: node .claude/hooks/queue-list.js ${dir}`;
+  const FINDINGS = {
+    'docs/findings/README.md': `# Findings\n\nFormat rules.\n\n${MK('findings')}\n`,
+    'docs/findings/2026-01-01-open.md': `${fm('date: 2026-01-01\nstatus: open\narea: t')}# Open one\n`,
+    'docs/findings/2026-01-02-resolved.md': `${fm('date: 2026-01-02\nstatus: resolved (ADR 0011, 2026-10-14)\narea: t')}# Resolved one\n`,
+    'docs/findings/2026-01-03-superseded.md': `${fm('date: 2026-01-03\nstatus: superseded\narea: t')}\n# Superseded one\n`,
+    'docs/findings/2026-01-05-done.md': `${fm('date: 2026-01-05\nstatus: done\narea: t')}# Done one\n`,
+    // Byte order puts N (0x4e) before d (0x64), where a locale sort would not.
+    'docs/findings/2026-01-05-Nofm.md': '# No frontmatter\n\n## Question\n',
+    'docs/findings/notes.txt': 'not a finding\n',
+    'docs/findings/sub/2026-01-09-deeper.md': '# Deeper, not read\n',
+  };
+  const IDEAS = {
+    'docs/ideas/README.md': `# Ideas\n\n${MK('ideas')}\n`,
+    'docs/ideas/2026-02-01-plan.md': `${fm('date: 2026-02-01\nkind: feature')}\n# Plan one\n\nBody.\n\nPlan: build it in one pass.\n`,
+    'docs/ideas/2026-02-02-question.md': `${fm('date: 2026-02-02\nkind: question')}\n# Question one\n\nQuestion: which shape?\nAnswer:\n\n`,
+    'docs/ideas/2026-02-03-answered.md': `${fm('date: 2026-02-03\nkind: question')}\n# Answered one\n\nQuestion: which shape?\nAnswer:\nThe first.\n`,
+    'docs/ideas/2026-02-04-waits.md': `${fm('date: 2026-02-04\nkind: chore\nrelated: [2026-02-01-plan.md]')}\n# Waits one\n\nWaits: a second contributor.\n`,
+    'docs/ideas/2026-02-05-untriaged.md': `${fm('date: 2026-02-05\nkind: bug')}\n# Untriaged one\n\n\`\`\`\nPlan: inside a fence, not a block\n\`\`\`\n`,
+    'docs/ideas/2026-02-06-kind-idea.md': `${fm('date: 2026-02-06\nkind: idea')}\n# Kind idea\n`,
+    'docs/ideas/2026-02-07-foreign.md': `${fm('date: 2026-02-07\nstatus: new\nkind: feature')}\n# Foreign\n\nPlan: x\n`,
+    'docs/ideas/2026-02-08-empty.md': '',
+  };
+  const OPERATOR = {
+    'docs/operator/README.md': '# Steps only the owner can take\n\nNo marker here.\n',
+    'docs/operator/2026-03-01-h1.md': '\n**Opening line.**\n\n# Run the thing\n',
+    'docs/operator/2026-03-02-first-line.md': '\n**Install the key.** It waits on the owner.\n\nMore.\n',
+    'docs/operator/2026-03-03-empty.md': '',
+  };
+  const qRoot = path.join(scratch, 'queue');
+  putQ(qRoot, Object.assign({}, FINDINGS, IDEAS, OPERATOR));
+  const cleanRoot = path.join(scratch, 'queue-clean');
+  putQ(cleanRoot, {
+    'docs/findings/2026-01-01-open.md': FINDINGS['docs/findings/2026-01-01-open.md'],
+    'docs/ideas/2026-02-01-plan.md': IDEAS['docs/ideas/2026-02-01-plan.md'],
+    'docs/operator/2026-03-01-h1.md': OPERATOR['docs/operator/2026-03-01-h1.md'],
+  });
+  const emptyRoot = path.join(scratch, 'queue-none');
+  fs.mkdirSync(emptyRoot, { recursive: true });
+
+  const F_ERR = 'queue-list: 2026-01-05-Nofm.md: status missing; allowed: open, resolved, superseded\n' +
+    'queue-list: 2026-01-05-done.md: status is "done"; allowed: open, resolved, superseded\n';
+  const F_ROWS = {
+    open: '2026-01-01-open.md\topen\tOpen one\n',
+    resolved: '2026-01-02-resolved.md\tresolved\tResolved one\n',
+    superseded: '2026-01-03-superseded.md\tsuperseded\tSuperseded one\n',
+    nofm: '2026-01-05-Nofm.md\t?\tNo frontmatter\n',
+    done: '2026-01-05-done.md\t?\tDone one\n',
+  };
+  const I_ERR = 'queue-list: 2026-02-06-kind-idea.md: kind is "idea"; allowed: bug, feature, question, chore\n' +
+    'queue-list: 2026-02-07-foreign.md: frontmatter is "status"; allowed: date, kind, related\n' +
+    'queue-list: 2026-02-08-empty.md: title missing; allowed: a # heading or a first line\n' +
+    'queue-list: 2026-02-08-empty.md: kind missing; allowed: bug, feature, question, chore\n';
+  const I_UNTRIAGED = '2026-02-05-untriaged.md\tbug\tuntriaged\tUntriaged one\n';
+  const O_ERR = 'queue-list: 2026-03-03-empty.md: title missing; allowed: a # heading or a first line\n';
+
+  if (selected('Q01')) {
+    const r = ql(qRoot, ['findings']);
+    qcase('Q01', 'findings text: three columns, byte order, resolved (...) reads resolved, ? rows, one stderr line per problem',
+      expectRun(r, { code: 0, out: Object.values(F_ROWS).join(''), err: F_ERR }), r.out);
+  }
+  if (selected('Q02')) {
+    const a = ql(qRoot, ['findings', '--status', 'open']);
+    const b = ql(qRoot, ['--status', 'resolved (ADR 0011, 2026-10-14)', 'findings']);
+    qcase('Q02', '--status open (column) and --status "resolved (ADR 0011, 2026-10-14)" (whole value) keep their file; stderr unchanged',
+      [...expectRun(a, { code: 0, out: F_ROWS.open, err: F_ERR }, 'open'), ...expectRun(b, { code: 0, out: F_ROWS.resolved, err: F_ERR }, 'whole')], a.out + b.out);
+  }
+  if (selected('Q03')) {
+    const r = ql(qRoot, ['findings', '--json']);
+    const p = expectRun(r, { code: 0, err: F_ERR });
+    const want = [['2026-01-01-open.md', 'open', 'Open one'], ['2026-01-02-resolved.md', 'resolved', 'Resolved one'],
+      ['2026-01-03-superseded.md', 'superseded', 'Superseded one'], ['2026-01-05-Nofm.md', '?', 'No frontmatter'], ['2026-01-05-done.md', '?', 'Done one']]
+      .map(([file, status, title]) => ({ file, status, title }));
+    let got = null;
+    try { got = JSON.parse(r.out); } catch (e) { p.push(`stdout is not JSON: ${e.message}`); }
+    if (got !== null && JSON.stringify(got) !== JSON.stringify(want)) p.push(`array ${JSON.stringify(got)}, expected ${JSON.stringify(want)}`);
+    qcase('Q03', 'findings --json: an array of { file, status, title } in file order, ? as "?"', p, r.out);
+  }
+  if (selected('Q04')) {
+    const r = ql(qRoot, ['ideas']);
+    const out = '2026-02-01-plan.md\tfeature\tplan\tPlan one\n' +
+      '2026-02-02-question.md\tquestion\tquestion\tQuestion one\n' +
+      '2026-02-03-answered.md\tquestion\tanswered\tAnswered one\n' +
+      '2026-02-04-waits.md\tchore\twaits\tWaits one\n' +
+      I_UNTRIAGED +
+      '2026-02-06-kind-idea.md\t?\tuntriaged\tKind idea\n' +
+      '2026-02-07-foreign.md\tfeature\t?\tForeign\n' +
+      '2026-02-08-empty.md\t?\tuntriaged\t?\n';
+    qcase('Q04', 'ideas text: plan, question, answered, waits, untriaged (a fenced Plan: is no block); kind: idea is ?; a foreign key makes block ?; empty file ? in title and kind',
+      expectRun(r, { code: 0, out, err: I_ERR }), r.out);
+  }
+  if (selected('Q05')) {
+    const r = ql(qRoot, ['ideas', '--untriaged']);
+    qcase('Q05', 'ideas --untriaged: the untriaged file only, never a file with a ?; stderr unchanged', expectRun(r, { code: 0, out: I_UNTRIAGED, err: I_ERR }), r.out);
+  }
+  if (selected('Q06')) {
+    const p = [];
+    for (const mode of ['findings', 'ideas', 'operator']) {
+      const bad = ql(qRoot, [mode, '--check']);
+      if (bad.code !== 1 || bad.out === '') p.push(`${mode} with problems: exit ${bad.code}, stdout ${JSON.stringify(bad.out)}`);
+      const good = ql(cleanRoot, [mode, '--check']);
+      if (good.code !== 0 || good.out === '' || good.err !== '') p.push(`${mode} clean: exit ${good.code}, stdout ${JSON.stringify(good.out)}, stderr ${JSON.stringify(good.err)}`);
+    }
+    const hidden = ql(qRoot, ['findings', '--status', 'open', '--check']);
+    p.push(...expectRun(hidden, { code: 1, out: F_ROWS.open }, 'a filter hides the ? rows'));
+    qcase('Q06', '--check: exit 1 on each directory with a problem (a filter notwithstanding), 0 on a clean copy; stdout printed in both', p);
+  }
+  if (selected('Q07')) {
+    const r = ql(qRoot, ['operator']);
+    const out = '2026-03-01-h1.md\tRun the thing\n2026-03-02-first-line.md\t**Install the key.** It waits on the owner.\n2026-03-03-empty.md\t?\n';
+    qcase('Q07', 'operator: the H1 title, the first-line title, ? for the empty file', expectRun(r, { code: 0, out, err: O_ERR }), r.out);
+  }
+  if (selected('Q08')) {
+    const r = ql(qRoot, ['findings', '--markdown']);
+    const out = '| File | Status | Title |\n|---|---|---|\n' +
+      '| `2026-01-01-open.md` | open | Open one |\n| `2026-01-02-resolved.md` | resolved | Resolved one |\n' +
+      '| `2026-01-03-superseded.md` | superseded | Superseded one |\n| `2026-01-05-Nofm.md` | ? | No frontmatter |\n' +
+      '| `2026-01-05-done.md` | ? | Done one |\n';
+    qcase('Q08', '--markdown: a header row and one | `<file>` | row per file', expectRun(r, { code: 0, out, err: F_ERR }), r.out);
+  }
+  if (selected('Q09')) {
+    const p = [];
+    for (const args of [[], ['tasks'], ['--untriaged', 'findings'], ['--status', 'open', 'ideas'], ['findings', '--json', '--markdown'],
+      ['findings', '--status'], ['findings', '--bogus'], ['findings', 'ideas']]) {
+      const r = ql(qRoot, args);
+      if (r.code !== 2 || r.out !== '' || !/^queue-list: usage: [^\n]*\n$/.test(r.err)) p.push(`[${args.join(' ')}]: exit ${r.code}, stdout ${JSON.stringify(r.out)}, stderr ${JSON.stringify(r.err)}`);
+    }
+    p.push(...expectRun(ql(emptyRoot, ['findings']), { code: 2, out: '', err: 'queue-list: docs/findings/ does not exist\n' }, 'absent directory'));
+    qcase('Q09', 'usage errors exit 2 with nothing on stdout and one queue-list: usage: line; an absent directory exits 2', p);
+  }
+
+  // Hook cases: post-edit on the trees above, under the Hatchery policy fixture.
+  const peQ = (root, rel, script) => {
+    const stdin = JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'Write', cwd: root, tool_input: { file_path: path.join(root, ...rel.split('/')) } });
+    const env = envWith({ HOOK_POLICY_FILE: POLICIES.hatchery });
+    let x;
+    if (script) {
+      const r = spawnSync(NODE, [script], { input: stdin, encoding: 'utf8', timeout: 30000, env });
+      x = { code: r.status, stdout: r.stdout || '' };
+    } else x = run('post-edit', stdin, env);
+    const d = x.stdout === '' ? null : parseDecision(x.stdout);
+    return { code: x.code, out: x.stdout, ctx: d && d.event === 'PostToolUse' ? d.context : (x.stdout === '' ? null : `unparsed: ${x.stdout}`) };
+  };
+  const expectHook = (root, rel, want, script) => {
+    const r = peQ(root, rel, script);
+    return r.code === 0 && r.ctx === want ? [] : [`${rel}: exit ${r.code}, context ${JSON.stringify(r.ctx)}, expected ${JSON.stringify(want)}`];
+  };
+  const wouldList = (rel, what, dir) => `post-edit: ${rel} would list as ? (${what}). See docs/${dir}/README.md.`;
+  const malformed = (dir) => `post-edit: docs/${dir}/README.md carries a Listed on demand: line that is not "Listed on demand: node .claude/hooks/queue-list.js ${dir}"; the directory counts as indexed.`;
+
+  if (selected('Q10')) {
+    const nofm = 'docs/findings/2026-01-05-Nofm.md';
+    qcase('Q10', 'hook, valid marker: no index warning; the ? warning for a bad field (after the frontmatter warning); a clean file gets nothing', [
+      ...expectHook(qRoot, 'docs/findings/2026-01-05-done.md', wouldList('docs/findings/2026-01-05-done.md', 'status is "done"; allowed: open, resolved, superseded', 'findings')),
+      ...expectHook(qRoot, nofm, `post-edit: ${nofm} lacks finding frontmatter (date, status, area). See the finding skill.\n${wouldList(nofm, 'status missing; allowed: open, resolved, superseded', 'findings')}`),
+      ...expectHook(qRoot, 'docs/ideas/2026-02-07-foreign.md', wouldList('docs/ideas/2026-02-07-foreign.md', 'frontmatter is "status"; allowed: date, kind, related', 'ideas')),
+      ...expectHook(qRoot, 'docs/findings/2026-01-01-open.md', null),
+      ...expectHook(qRoot, 'docs/ideas/2026-02-05-untriaged.md', null),
+      ...expectHook(qRoot, 'docs/findings/README.md', null),
+    ]);
+  }
+  if (selected('Q11')) {
+    qcase('Q11', 'hook, no marker: the index warning as today, no ? warning', [
+      ...expectHook(qRoot, 'docs/operator/2026-03-01-h1.md', 'post-edit: docs/operator/2026-03-01-h1.md is not listed in operator/README.md. Add one line.'),
+      ...expectHook(qRoot, 'docs/operator/2026-03-03-empty.md', 'post-edit: docs/operator/2026-03-03-empty.md is not listed in operator/README.md. Add one line.'),
+    ]);
+  }
+  if (selected('Q12')) {
+    const root = path.join(scratch, 'queue-badmarker');
+    putQ(root, {
+      'docs/ideas/README.md': `# Ideas\n\n${MK('findings')}\n`,
+      'docs/ideas/2026-02-01-x.md': IDEAS['docs/ideas/2026-02-07-foreign.md'],
+      'docs/findings/README.md': '# Findings\r\n\r\nListed on demand: node queue-list.js findings\r\n',
+      'docs/findings/2026-01-01-x.md': FINDINGS['docs/findings/2026-01-05-done.md'],
+      'docs/operator/README.md': `# Operator\r\n\r\n${MK('operator')} \t\r\n`,
+      'docs/operator/sub/README.md': '# Deeper\n\nListed on demand: anything\n',
+    });
+    qcase('Q12', 'hook: a wrong-directory marker and a malformed line each warn on the README edit; files under them get the index warning; a CRLF marker with trailing blanks is valid; a deeper README is not read', [
+      ...expectHook(root, 'docs/ideas/README.md', malformed('ideas')),
+      ...expectHook(root, 'docs/ideas/2026-02-01-x.md', 'post-edit: docs/ideas/2026-02-01-x.md is not listed in ideas/README.md. Add one line.'),
+      ...expectHook(root, 'docs/findings/README.md', malformed('findings')),
+      ...expectHook(root, 'docs/findings/2026-01-01-x.md', 'post-edit: docs/findings/2026-01-01-x.md is not listed in findings/README.md. Add one line.'),
+      ...expectHook(root, 'docs/operator/README.md', null),
+      ...expectHook(root, 'docs/operator/sub/README.md', null),
+    ]);
+  }
+  if (selected('Q13')) {
+    // A scratch copy of the hooks whose queue-list.js throws on load.
+    const dir = path.join(scratch, 'hooks-q13');
+    fs.mkdirSync(dir, { recursive: true });
+    for (const f of ['post-edit.js', 'policy.js', 'imports.js']) fs.copyFileSync(path.join(HOOKS, f), path.join(dir, f));
+    fs.writeFileSync(path.join(dir, 'queue-list.js'), "'use strict';\nthrow new Error('broken on purpose');\n");
+    const rel = 'docs/findings/2026-01-05-done.md';
+    qcase('Q13', 'hook, valid marker, queue-list.js unloadable: the did-not-load line, no index warning', [
+      ...expectHook(qRoot, rel, `post-edit: queue-list.js did not load; ${rel} was not checked.`, path.join(dir, 'post-edit.js')),
+      ...expectHook(qRoot, 'docs/operator/2026-03-01-h1.md', 'post-edit: docs/operator/2026-03-01-h1.md is not listed in operator/README.md. Add one line.', path.join(dir, 'post-edit.js')),
+    ]);
+  }
+}
 
 // ---------- policy files themselves ----------
 // The repository's own policy.json (whatever the project chose) and the examples must load; the
