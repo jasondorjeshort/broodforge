@@ -1,34 +1,33 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-16 by main session (Hatchery coordinator)
+Updated: 2026-10-17 by main session (Hatchery coordinator)
 
 ## Now
 
-- Everything is pushed: origin/main matches HEAD (pusher check 7 reads `edit.capExempt`; ADR 0006's
-  deferred item closed). This session: ADR 0015, the handoff shape chosen at decant, reviewed, committing.
-- `../regenesis`: the check 7 blocker is gone, master is at its origin, the finished handoffs worktree is
-  removed; its policy names its legacy docs one by one; its map plus streams total 146 lines.
-- Scans of 2026-10-16 filed seven ideas. `../broodforge` (decanted, live session) and
-  `../droplet-management` (adopted at 9d90716, never updated) still read `~/.claude/usage-state.json`;
-  `../dystopo` (adopted, patch mode) updates cleanly only after the patch-update ideas are fixed.
+- Proposal 0016 (`docs/design/proposals/0016-base-owned-and-project-owned-files.md`) is `under review`,
+  revised after the critic. Recommendation E: one patch-only update over a base-owned allowlist for
+  every project; the agreement as per-section base-owned files imported by a short project
+  `CLAUDE.md`; the base keeps its policy file. Evidence: the finding of 2026-10-17.
+- Pushed through 48a43e4; the finding (5b17d07) and proposal 0016 (b58a582, 7692c28) are not.
 
 ## Next
 
-1. The owner's answers (Waiting on user); the siblings' own fixes from the scans, each in its own session.
-2. `../regenesis`: at its next `update-from-hatchery`, take ADR 0015 with 0011 to 0014, drop
-   `../regenesis/docs/handoff/README.md`, and close streams until map plus streams are at most 120 (146 now).
-3. The first decant with the README prompt.
-4. Architect answers the critic reviews of proposals 0003 and 0005 (`docs/design/proposals/README.md`).
-5. Critic review of ADR 0006 as a whole, with the escape-hatch question in `.claude/skills/proposal/brief-critic.md`.
-6. Triage `docs/ideas/` (`triage` skill, opening with the ADR 0012 scan): the eight untriaged files
-   of 2026-10-16 first; also the post-edit warning that `docs/design/decisions/README.md` lists no ADRs.
-7. Research `docs/ideas/2026-10-15-review-fixes-amend-or-follow-up.md`; check `2026-10-15-statusline-command-cwd-relative.md`.
-8. Sibling two-way sync in its own session (`docs/ideas/2026-10-13-first-sync-with-the-build-phase-sibling.md`);
-   the open heredoc finding's Next steps (reproduce on Linux; check the changelog).
+1. The owner's three answers on 0016 (Waiting on user). Then a short critic pass on recommendation E
+   (the critic saw A), the compaction check the revision asks for, and the `adr` skill for ADR 0016
+   (amends ADRs 0004, 0006, 0008, 0009, 0013; absorbs `docs/ideas/2026-10-16-update-conflict-rule-wipes-mixed-files.md`).
+2. Implementation briefs from ADR 0016: the ownership map and its helper, the update and decant and
+   adopt skills, check 7, the agreement split; then each sibling's migration in its own session.
+3. Architect answers the critic reviews of proposals 0003 and 0005 (`docs/design/proposals/README.md`).
+4. Critic review of ADR 0006 as a whole (escape-hatch question: `.claude/skills/proposal/brief-critic.md`).
+5. Triage `docs/ideas/` (`triage` skill, ADR 0012 scan first); research `2026-10-15-review-fixes-amend-or-follow-up.md`.
+6. Sibling two-way sync in its own session (`docs/ideas/2026-10-13-first-sync-with-the-build-phase-sibling.md`).
 
 ## Waiting on user
 
+- Proposal 0016: (a) E drops merging for decanted projects, against the owner's 2026-10-12 sentence in
+  ADR 0004; (b) the project `CLAUDE.md` cap (40 with a lift, another number, or advisory);
+  (c) the switcher command's home (per project in `policy.json`, or per user).
 - ADR 0013 is `proposed`: its surfaces list (now with the handoff-paths row); one word confirms it.
 - `docs/ideas/2026-10-16-scheduled-architect-design-pass.md`: a scheduled Fable design pass, yes or no.
 - The HOLD deny's pool sentences (ADR 0011, The gate) have not been seen by a human.
