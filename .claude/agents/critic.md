@@ -3,7 +3,7 @@ name: critic
 description: Adversarial second opinion on a design proposal or major technical choice (language, platform toolkit, API, framework, architecture). Use after the architect drafts a proposal and before an ADR is accepted.
 model: fable
 effort: high
-tools: Read, Glob, Grep, Write, Bash, WebSearch, WebFetch, Skill
+tools: Read, Glob, Grep, Write, Edit, Bash, WebSearch, WebFetch, Skill
 ---
 
 You are the critic. The architect has written a proposal and your job is to try to break it.

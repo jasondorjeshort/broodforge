@@ -1,6 +1,6 @@
 ---
-verified: 2026-10-16
-source: observed (npm behaviour tested 2026-10-14; twelve waves of parallel agents on a downstream project; Windows 10 and 11, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1); hook and status line code read 2026-10-14, usage-gate grants 2026-10-15, per-session usage file 2026-10-16; robocopy and Remove-Item behaviour with junctions observed 2026-10-14
+verified: 2026-10-17
+source: observed (PowerShell pipe and MSYS git show rewrite 2026-10-17; npm behaviour tested 2026-10-14; twelve waves of parallel agents on a downstream project; Windows 10 and 11, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1); hook and status line code read 2026-10-14, usage-gate grants 2026-10-15, per-session usage file 2026-10-16; robocopy and Remove-Item behaviour with junctions observed 2026-10-14
 ---
 
 # Claude Code on Windows: what holds
@@ -52,6 +52,12 @@ source: observed (npm behaviour tested 2026-10-14; twelve waves of parallel agen
 - Windows PowerShell 5.1: quote arguments containing dots or dashes whole when calling
   `powershell -File`; it drops empty-string arguments; `&&` and `||` do not exist; `2>&1` on a
   native command wraps stderr in error records.
+- The PowerShell 5.1 pipe re-encodes a patch: `git diff ... | git apply --3way` fails every file with
+  `patch does not apply` and leaves `git status` empty; in Bash it applies. The update command
+  (`.claude/hooks/ownership.js --command`) is run in the Bash tool only.
+- Git Bash (MSYS) rewrites the argument of `git show hatchery/main:<path>`, quoted or not, and it
+  fails. `S=$(git rev-parse hatchery/main)` then `git show <sha>:<path>` works, as does
+  `MSYS_NO_PATHCONV=1`. Name the sha in a skill. Evidence: finding 2026-10-17-msys-rewrites-git-show-paths.
 - `gh ... --jq` with a backtick inside the expression breaks in PowerShell; run `gh` from bash.
 
 ## Working directory and git
