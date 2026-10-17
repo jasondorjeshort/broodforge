@@ -101,7 +101,7 @@ a project a fix to a base-owned file is a departure: a table row and a carry-bac
 
 Project file. `CLAUDE.md` becomes the project's: title, a provenance line, `@docs/HANDOFF.md`,
 `## Phase`, `Branch:`, nine lines `@.claude/agreement/<section>.md`, `## Project rules`; at most 40
-lines (owner question, below), the agreement files 150 together; `policy.js --cap-check` learns
+lines (decided under Recommendation), the agreement files 150 together; `policy.js --cap-check` learns
 both so `post-edit.js`, check 7 and update step 6 read one rule, and `edit.capExempt` lifts the 40
 as it lifts the 300. A project departs from a section by replacing its import line with
 `@.claude/project/<section>.md`, a project-owned file (the base never ships that directory;
@@ -142,7 +142,7 @@ Policy. The first draft deleted the base's `policy.json` and read `~/.claude/usa
 `usage.pool` is `null`. Withdrawn (objection 4): under the map the base's file is Hatchery's
 project-owned state like its handoff, so it reaches no project in either mode, and `usage.pool:
 null` keeps its meaning. `decant` step 5 sets `usage.pool` to `null` unless the machine has the
-switcher. The pool's home is an owner question, below.
+switcher. The pool's home is decided under Recommendation.
 
 Meets the constraints: no conflict on either file; the base's own state is removed after the fact,
 by a denylist. Risks: the denylist fails open (a base path outside the map lands in every decanted
@@ -250,12 +250,39 @@ owner wanting `git blame` on base files inside a decanted project to reach Hatch
 A's merge mode as corrected, the three restore steps printed by the helper); the loader dropping
 or requiring approval for an in-tree `@` import (then `.claude/CLAUDE.md`).
 
-Owner questions, open in the handoff; the recommendation does not decide them:
-- The project file's cap: 40 lines, lifted by `edit.capExempt`, or another number, or advisory.
-  Forty fits a decant, `../broodforge` and `../droplet-management`; `../regenesis` (about 76
-  project-only lines) and `../dystopo` (89) would trim or move text as described under A.
-- The switcher command's home: per project in `policy.json` (today, unchanged here) or per user
-  in `~/.claude/usage-pool.json` (its own proposal, with the `null`-meaning migration stated).
+Decided 2026-10-17. The owner takes the coordinator's recommendation on each question where a design
+agent's own research agrees; the architect checked the three against the siblings (read only) and
+agreed with each:
+
+- E is taken: merging ends for decanted projects, and the owner's 2026-10-12 sentence in ADR 0004
+  ("merging stays the path for projects that are based on Hatchery") is superseded. Evidence: in
+  `../broodforge`, the one merge-mode sibling, all three merges from `hatchery/main` were resolved
+  by hand and each removed the base's own state (their commit bodies); its four edits to base files
+  (`git-guard.js` twice, the `adr` skill, `pusher.md`) never reached Hatchery, and no Hatchery
+  commit carries a cherry-pick from it, so the shared DAG has carried nothing in either direction;
+  the carry-backs Hatchery did take came from patch-mode siblings by hand. What E costs it: after
+  the switch, `blame` on a base file names an update commit, and Hatchery's own commit is one hop
+  away in `git log hatchery/main -- <path>`.
+- The project file's cap is 40 lines, lifted by `edit.capExempt` naming `CLAUDE.md`. The lift is
+  new mechanism, not a reading of today's hooks: the 150 is a constant in `post-edit.js`, checked
+  by exact path and consulting no policy; `docCap` in `policy.js` covers `docs/` paths only; check
+  7's list is `docs/*.md`, so `CLAUDE.md` has no pusher cap at all today. The coder brief moves the
+  cap into `policy.js` beside `docCap`, where `capExempt` already applies. Overflow goes where A
+  says and never to a free `@` import: a departed section is a replacement file; facts go to
+  `docs/reference/`, path-scoped rules to `.claude/rules/`, procedures to a skill. A replacement
+  file is read by the loader every turn and by nothing else: no cap, no frontmatter or index check;
+  the import check tests existence only. Migration as read on 2026-10-17: `../regenesis` replaces
+  `git.md` and `licensing.md` (its Git and Licensing sections), moves its hooks paragraph to
+  `docs/reference/`, keeps its two-machines and live-data rules as project rules (about 50 lines,
+  then a trim or the lift); `../dystopo` carries none of the base's rule text, so most of its
+  sections become replacement files and its Rules section stays; the lift is for a project that
+  refuses the rewrite.
+- The switcher command stays per project in `policy.json`, unchanged. The only reason to move it
+  was the base policy deletion, withdrawn under objection 4. Cost today on this machine: one line,
+  present in Hatchery and `../droplet-management` (where it arrived through the policy patch this
+  proposal stops) and absent from the other three siblings, each a one-line edit to a file the
+  update never touches. A per-user file is its own proposal, with the `null`-meaning migration
+  stated, if that edit keeps recurring.
 
 First step: the compaction check (A, Debug interface). Then the ADR (0016), amending 0004, 0007,
 0008, 0009, 0010, and adding the map, the agreement imports and the `Branch:` line to 0013. Then
@@ -274,11 +301,19 @@ until it is), keep `policy.json`, write the departure table from its base-owned 
 
 - An in-tree `@` import needs approval, does not resolve, or does not re-expand after `/compact`:
   take `.claude/CLAUDE.md` with the hook and check 7 pointed at it.
-- The owner wants Hatchery's commits in a decanted project's `blame`: A's merge mode as corrected.
+- The owner wants Hatchery's commits in a decanted project's `blame`, or a decanted sibling carries
+  a base-file fix back through the DAG (a cherry-pick Hatchery takes, which none has done so far):
+  A's merge mode as corrected.
 - A project needs to override one sentence of a section, not the section: the agreement gains a
   parameter (a policy key) for that rule; the replacement file is the stopgap.
 - `git apply --3way` fails whole on most updates in practice: per-path application becomes the
   default, or renames get a `--find-renames` diff plus a rename step in the skill.
+- A project routes its overflow through an `@` import that replaces no section: the 40 then counts
+  the loaded total (`CLAUDE.md` plus its non-agreement imports), as the handoff's 120 counts its
+  imports, and the per-file number stops mattering.
+- The pool key is being added by hand at every decant and adoption on one machine, or the switcher
+  ships a hook surface of its own (ADR 0011's supersede trigger): the per-user file gets its
+  proposal; a `decant` step 5 default that reads the machine is the cheaper fix to try first.
 
 ## Claims to verify
 
@@ -311,7 +346,7 @@ writing the paths out is the fallback).
    promised meaning. Accepted: the coordinator's reading is the same; the base's file is Hatchery's
    project-owned state, off the list in both modes; `usage.pool: null` keeps its meaning; the
    deletion, the user-scope file, the ordering and the ADR 0006 amendment are withdrawn. The
-   switcher's home stays an owner question, its own proposal if wanted.
+   switcher's home was the owner's question; decided under Recommendation (per project, unchanged).
 5. The ten-year prediction is false on day one; siblings edit base-owned files routinely; no
    carry-back flow. Accepted with change: a dated, measurable prediction (Question); the departure
    table instead of an ADR per fix; the carry-back rule (base wins once Hatchery has the change);
@@ -326,7 +361,7 @@ writing the paths out is the fallback).
 8. The 40-line cap has no lift and nowhere for the overflow to go; project-added `.claude/` files
    are misclassified. Accepted with change: project-added paths under `.claude/` are project-owned
    (the diff never carries them; a collision is an `AA` conflict); the overflow path is named;
-   `edit.capExempt` is the lift. The number is the owner's question, kept open.
+   `edit.capExempt` is the lift. The number was the owner's question; decided under Recommendation (40).
 9. The map is not total and not readable from the tree. Accepted: `ownership.json`, a default
    class, the helper, F7; `.gitignore`, `.gitattributes`, `.editorconfig` project-owned;
    `fitness.json` mixed (`deps` the base's, `skip` the project's).

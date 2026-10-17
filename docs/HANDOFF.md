@@ -25,9 +25,6 @@ Updated: 2026-10-17 by main session (Hatchery coordinator)
 
 ## Waiting on user
 
-- Proposal 0016: (a) E drops merging for decanted projects, against the owner's 2026-10-12 sentence in
-  ADR 0004; (b) the project `CLAUDE.md` cap (40 with a lift, another number, or advisory);
-  (c) the switcher command's home (per project in `policy.json`, or per user).
 - ADR 0013 is `proposed`: its surfaces list (now with the handoff-paths row); one word confirms it.
 - `docs/ideas/2026-10-16-scheduled-architect-design-pass.md`: a scheduled Fable design pass, yes or no.
 - The HOLD deny's pool sentences (ADR 0011, The gate) have not been seen by a human.
