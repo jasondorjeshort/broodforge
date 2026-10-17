@@ -14,8 +14,8 @@ shape: `split.md` beside this file replaces steps 2 and 4 and the first rule bel
 
 1. Gather: `git status -sb`, `git log --oneline -8`,
    `git log -1 --format='%h %cs' -- docs/HANDOFF.md docs/handoff/` (the last handoff change; its
-   distance from `HEAD` and from today is the staleness), the Open column of
-   `docs/findings/README.md`, and what this session knows that is not yet in a file.
+   distance from `HEAD` and from today is the staleness), the open findings
+   (`node .claude/hooks/queue-list.js findings --status open --json`), and what this session knows that is not yet in a file.
    `grep -rh "^- Prediction, check by" docs/design/decisions/ | grep -v " Outcome " | grep -oE "[0-9]{4}-[0-9]{2}-[0-9]{2}" | sort | head -1`;
    a date on or before today, or a `FAIL` or `SKIP` fitness line in the last test run, puts
    "triage (the scan)" in Next. A claim about the state of another repository or checkout (for

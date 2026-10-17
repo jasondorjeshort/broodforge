@@ -6,11 +6,11 @@ Read the index of a directory before its files. Nothing here is loaded automatic
 | Path | What lives there | Loaded |
 |---|---|---|
 | `HANDOFF.md` | Now, Next, Waiting on user, Open findings; in the split shape, the map of `@handoff/<stream>.md` lines (`handoff` skill, `split.md`). Coordinator state, 40-line cap. | every session and subagent, via `CLAUDE.md` |
-| `ideas/` | One dated file per improvement nobody is working on, each anchored to code; triaged into `Plan:`, `Question:` or `Waits:`; deleted when built. | on demand; start at `ideas/README.md` |
-| `operator/` | One dated file per step only the owner can take (accounts, keys, elevation); deleted when done. | on demand; start at `operator/README.md` |
+| `ideas/` | One dated file per improvement nobody is working on, each anchored to code; triaged into `Plan:`, `Question:` or `Waits:`; deleted when built. | on demand; start at `ideas/README.md`, list with `node .claude/hooks/queue-list.js ideas` |
+| `operator/` | One dated file per step only the owner can take (accounts, keys, elevation); deleted when done. | on demand; start at `operator/README.md`, list with `node .claude/hooks/queue-list.js operator` |
 | `design/` | What we build and why: `00`-`06` design docs, `proposals/`, `decisions/` (ADRs). | on demand; start at `design/README.md` |
 | `reference/` | Durable facts about tools, APIs, platforms, environments. One topic per file, `verified:` date. | on demand; start at `reference/README.md` |
-| `findings/` | Dated, status-tagged results of investigations: root causes, benchmarks, failed approaches. | on demand; start at `findings/README.md` |
+| `findings/` | Dated, status-tagged results of investigations: root causes, benchmarks, failed approaches. | on demand; start at `findings/README.md`, list with `node .claude/hooks/queue-list.js findings` |
 
 Where does a new piece of text go? Ask in this order:
 

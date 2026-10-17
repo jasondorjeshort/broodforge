@@ -83,7 +83,7 @@ and findings. Everything below runs in the new project's clone.
      Updated: YYYY-MM-DD by main session
      Split shape (handoff skill, split.md): this file is the map; each @ line below imports one stream.
      Waiting on user: the Question: blocks in docs/ideas/ and each stream's Waiting line.
-     Open findings: the Status column of docs/findings/README.md.
+     Open findings: node .claude/hooks/queue-list.js findings --status open
 
      @handoff/design.md
      ```
@@ -107,9 +107,9 @@ and findings. Everything below runs in the new project's clone.
      `@docs/handoff/` (an import resolves from the importing file's directory). Add a `handoff/` row
      to `docs/README.md`, one line: "one file per open workstream; indexed by the map's `@handoff/`
      lines".
-7. `docs/ideas/` and `docs/operator/`: delete every file except `README.md`; reset each index
-   table to its empty row (`docs/operator/` is normally already at rest).
-8. `docs/findings/`: delete every file except `README.md`; reset its index table to its empty row.
+7. `docs/ideas/` and `docs/operator/`: delete every file except `README.md`; no table to
+   reset (their READMEs carry the marker line, ADR 0017).
+8. `docs/findings/`: delete every file except `README.md`; no table to reset.
    Hatchery's findings are about Hatchery. `docs/reference/`: keep `README.md`,
    `agreement-loading.md` (a hook cites it) and `claude-code-on-windows.md`, each with its README
    row (they describe the tool and the machine, not Hatchery); delete every other reference file

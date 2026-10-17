@@ -19,8 +19,9 @@ no block. The format of a file and its three blocks is `docs/ideas/README.md`; r
    for the ADR and the trigger, an existing one gets a dated line instead) ending in `Plan:` that
    names the architect and the deliverable (a superseding ADR, an amendment, or, for a prediction,
    the Outcome recorded on its line and a finding if it failed). The report counts hits.
-2. List `docs/ideas/*.md` except `README.md` and keep the files that end in no `Plan:`,
-   `Question:` or `Waits:`. Oldest first.
+2. Run `node .claude/hooks/queue-list.js ideas --untriaged --json` and parse it: the files that
+   end in no `Plan:`, `Question:` or `Waits:`, oldest first. Files the stderr names with a `?` were
+   not classified; the report lists them as such.
 3. For each: read the file, then the anchor it names (the file, route, command or screen), then
    enough around it to know what the change would touch. An idea whose anchor no longer exists is
    a `Question:` ("the anchor moved to X; still wanted?"), not a deletion.
@@ -46,7 +47,7 @@ no block. The format of a file and its three blocks is `docs/ideas/README.md`; r
 ## Bounds
 
 - Triage writes blocks and nothing else: no code, no doc edits outside the idea file (except the
-  scan's idea files and their index rows in `docs/ideas/README.md`), no deletion for taste.
+  scan's idea files and their rows where `docs/ideas/README.md` carries a table), no deletion for taste.
 - A `Waits:` is the owner's to write. If a file already carries a `Waits:` or a `Question:` with
   an `Answer:`, it is not yours; leave it.
 - One block per file. A file that needs both a Plan and a Question gets the Question; once the

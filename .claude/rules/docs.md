@@ -27,11 +27,15 @@ These load automatically when a file matching one of the `paths:` above (`docs/*
 
 ## Indexes
 
-- Every directory under `docs/` has a `README.md` with one line per file. Adding, renaming, resolving,
-  or deleting a file updates that index in the same edit. The post-edit hook warns about an unlisted file.
-  Exception: `docs/handoff/` has no README; its index is the `@handoff/<file>.md` lines of
-  `docs/HANDOFF.md` (`handoff` skill, `split.md`).
-- `docs/design/README.md` lists every ADR; `docs/findings/README.md` shows status per file.
+- A directory under `docs/` is either indexed (its `README.md` has one line per file; adding,
+  renaming, resolving or deleting a file updates that index in the same edit; the post-edit hook
+  warns about an unlisted file) or listed on demand (its README carries the marker line
+  `Listed on demand: node .claude/hooks/queue-list.js <dir>`, the format and never a file name).
+  The marker is the hook's switch: with it, the hook checks that an edited file lists without `?`
+  instead of checking an index. Only `docs/ideas/`, `docs/operator/` and `docs/findings/` may carry it
+  (ADR 0017). Exception: `docs/handoff/` has no README; its index is the `@handoff/<file>.md` lines
+  of `docs/HANDOFF.md` (`handoff` skill, `split.md`).
+- `docs/design/README.md` lists every ADR.
 - An index is the one list a doc may carry. Prose never inventories files, fields, routes or
   counts ("the twelve commands", "a 400-line file"): every ordinary commit moves the figure, and a
   later session then "corrects" it. Write the rule that generates the list instead.
@@ -49,7 +53,8 @@ These load automatically when a file matching one of the `paths:` above (`docs/*
 ## Frontmatter
 
 - `docs/findings/YYYY-MM-DD-<slug>.md`: required `date`, `status: open | resolved | superseded`,
-  `area`; optional `supersedes: <file>`, `promoted_to: <path>`. Sections in order: Question, What was
+  `area`; optional `supersedes: <file>`, `promoted_to: <path>`. The status is read by its first word
+  (`resolved (ADR 0011)` reads `resolved`). Sections in order: Question, What was
   tried, Result, Next (Next may be omitted when resolved). Use the `finding` skill.
 - `docs/ideas/YYYY-MM-DD-<slug>.md`: required `date`, `kind: bug | feature | question | chore`;
   optional `related: [<file>, ...]`. Search for an existing idea before adding one (its README,

@@ -58,7 +58,9 @@ Everything below runs in a private clone of the project, on its default branch, 
    docs/design/decisions/README.md docs/design/decisions/0001-licensing.md
    docs/design/decisions/0002-repository-layout.md docs/design/decisions/0002-hook-specs.md
    docs/design/decisions/0002-hook-specs-usage.md`, then
-   reset the `ideas/`, `findings/` and `reference/` index tables to their empty row and leave `docs/ideas/` with only its README.
+   reset the `reference/` index table to its empty row and leave `docs/ideas/` with only its README.
+   The three queue READMEs carry no table (ADR 0017); an adopted project keeps its own tables and
+   warnings where it already has the file.
    `docs/design/README.md`: absent, write one that lists the existing design files one line each plus
    "Decisions so far"; present, add the list. `docs/README.md`: add one row per added path to the
    project's own map; move nothing. The handoff: ask the owner, in these words, "Will more than one

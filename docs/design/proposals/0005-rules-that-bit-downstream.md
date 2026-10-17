@@ -1,7 +1,7 @@
 # 0005. Four rules that bit downstream and are missing from the base
 
 Date: 2026-10-12
-Status: draft
+Status: under review
 
 Source: Dystopo task T84 (Hatchery alignment), which brought the base's hooks, rules and skills into
 Dystopo and compared the two working agreements line by line. Dystopo's records: its `CLAUDE.md`

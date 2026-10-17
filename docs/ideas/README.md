@@ -63,41 +63,9 @@ owner's no is the deletion. An idea that sits here for months is at rest, not st
 listing outgrows a screen, the owner reads the whole of it in one sitting, answers what is asked and
 deletes what they do not want; no agent runs that sitting.
 
-## Index
+## Listing
 
-One line per file; the post-edit hook warns about an unlisted one.
+No file here is listed by hand: kind and block are read from the file itself. `--untriaged` shows
+the files with no block; a file that lists as `?` names the field to fix on stderr.
 
-| File | Kind | One line |
-|---|---|---|
-| `2026-10-13-coder-project-memory.md` | chore | Coder agent gets a project memory scope; waits on repeated facts |
-| `2026-10-13-debug-interface-doc-hooks-section.md` | chore | Debug-interface design doc gets a hooks section when it is written |
-| `2026-10-13-fable-per-model-usage-gate.md` | feature | Fable launches gated on a per-model meter; waits on statusline field |
-| `2026-10-13-first-install-on-real-device-lesson.md` | chore | First install on a real device before a release is called done |
-| `2026-10-13-first-sync-with-the-build-phase-sibling.md` | chore | First two-way sync with the build-phase sibling; what its first patch run needs |
-| `2026-10-13-github-issues-for-intake.md` | question | Intake in GitHub Issues; waits on a second contributor or public users |
-| `2026-10-13-haiku-runner-escalates-to-sonnet.md` | chore | Haiku runner escalates to Sonnet only when a sweep fails |
-| `2026-10-13-per-agent-port-emulator-allocation.md` | chore | Briefs allocate a distinct port and emulator per parallel agent |
-| `2026-10-13-post-edit-formatters-cmd-shims.md` | bug | post-edit formatters cannot spawn `.cmd` shims on Windows |
-| `2026-10-13-private-terms-guard-hook.md` | feature | Guard that scans commits, PR text and artifacts for private terms |
-| `2026-10-13-release-skill-tag-driven.md` | feature | Release skill driven by a tag, verified from the draft |
-| `2026-10-13-sessionstart-matcher-lists-fork.md` | chore | Any future SessionStart matcher list includes `fork` |
-| `2026-10-13-sessionstart-resume-context-hook.md` | feature | SessionStart hook reporting resume context; waits on a trigger |
-| `2026-10-13-shared-doc-caps-limits-json.md` | chore | Doc caps in a limits.json once a third enforcer exists |
-| `2026-10-13-stop-hook-stale-handoff-block.md` | feature | Stop hook blocks once when HANDOFF.md is stale; waits on evidence |
-| `2026-10-13-subagent-deny-protected-files-hook.md` | feature | Deny subagent writes to CLAUDE.md and settings in a PreToolUse hook |
-| `2026-10-13-sweep-skill-json-summary.md` | feature | Sweep skill: one command, JSON summary, contact sheet |
-| `2026-10-13-verify-agent-reads-reports-not-diffs.md` | question | Is a verify agent that runs the change still wanted beside the reviewer? |
-| `2026-10-13-malformed-policy-falls-back-silently.md` | bug | Usage gate and status line use base defaults on a malformed policy with only a stderr note |
-| `2026-10-13-usage-gate-stale-deny-not-liftable.md` | bug | The stale-data deny has no lift; a headless session is not gated at all |
-| `2026-10-15-review-fixes-amend-or-follow-up.md` | question | Review fixes before a push: amend, fixup and autosquash, or a follow-up commit |
-| `2026-10-15-statusline-command-cwd-relative.md` | bug | Status line command is cwd-relative, unlike the hooks; plain or `:-.` project-dir form |
-| `2026-10-16-deps-check-reach.md` | chore | What the dependency check does not reach: path globs, dynamic loading, unknown keys, direct-dependency licences |
-| `2026-10-16-handoff-import-check-residue.md` | chore | ADR 0014 import check: `~`/absolute targets, fence rules differ between hook and pusher, space-split names |
-| `2026-10-16-scheduled-architect-design-pass.md` | question | A scheduled Fable design pass beside the trigger scan; recommendation no; the owner's call |
-| `2026-10-16-patch-update-fails-on-files-the-project-never-took.md` | bug | Patch-mode update: `git apply --3way` applies nothing when the diff touches a file the project never took |
-| `2026-10-16-patch-update-never-moves-the-base-docs.md` | bug | Patch-mode update diffs only `.claude CLAUDE.md LICENSES`; the base docs adopt copied never move |
-| `2026-10-16-update-conflict-rule-wipes-mixed-files.md` | bug | Update steps 5 and 6: mixed files read as base-wins; threshold cells and provenance line not slots; cap trim rule |
-| `2026-10-16-base-only-sentences-survive-decant-and-adopt.md` | chore | Phase section, design-doc names, bare ADR numbers and the Windows reference: what decant and adopt leave wrong |
-| `2026-10-16-anchor-check-rejects-elided-paths.md` | bug | The post-edit path check warns on `.../` elided paths that exist |
-| `2026-10-16-downstream-improvements-to-carry-back.md` | chore | A sibling's pusher check 5a (personal data) and ADR skill Amendments section, to take into the base |
-| `2026-10-16-adopt-step-7-dangling-pointers.md` | chore | Adopt step 7's checkout list leaves pointers to ADRs 0006 and 0014 and proposals rows dangling |
+Listed on demand: node .claude/hooks/queue-list.js ideas

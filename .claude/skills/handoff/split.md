@@ -12,7 +12,7 @@ re-expand after `/compact` is unverified; a session that has compacted re-reads 
 - `docs/HANDOFF.md` is the map, aim under 15 lines, cap 40: the title; `Coordinator state.
   Subagents follow their brief, not this file.`; `Updated: YYYY-MM-DD by <who>`; one line naming
   this shape and this file; `Waiting on user: the Question: blocks in docs/ideas/ and each
-  stream's Waiting line.`; `Open findings: the Status column of docs/findings/README.md.`; then
+  stream's Waiting line.`; `Open findings: node .claude/hooks/queue-list.js findings --status open`; then
   one bare line `@handoff/<stream>.md` per open stream, nothing else on it. An import resolves
   from the importing file's directory, so `@handoff/`, never `@docs/handoff/`: that spelling
   loads `docs/docs/handoff/` and nothing says so.

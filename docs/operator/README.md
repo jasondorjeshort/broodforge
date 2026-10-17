@@ -33,7 +33,8 @@ in order, independent steps separate files. Every entry carries:
 Verify before filing: an entry says the step is still waiting, so check the host or the service
 rather than trusting a status line, and drop a step already done.
 
-## Index
+## Listing
 
-| File | One line |
-|---|---|
+The files are the list; a file name carries the date and the claim.
+
+Listed on demand: node .claude/hooks/queue-list.js operator

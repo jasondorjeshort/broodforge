@@ -1,7 +1,7 @@
 # 0003. Wave workflow for the build phase: task board, worktrees, verifier, sweeps, release
 
 Date: 2026-10-11
-Status: draft
+Status: under review
 
 Source: the Dystopo project (https://github.com/jasondorjeshort/dystopo), which ran twelve waves,
 83 tasks and 78 pull requests this way between 2026-10-01 and 2026-10-11 with one coordinator
