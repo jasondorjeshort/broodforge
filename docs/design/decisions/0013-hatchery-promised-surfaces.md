@@ -1,10 +1,13 @@
 # 0013. Hatchery's promised surfaces and its reference fitness check
 
 Date: 2026-10-16
-Status: proposed
-Amended by [0016](0016-base-owned-and-project-owned-files.md), 2026-10-17: three surfaces join the
-table below, listed in that record's item 7 (the ownership map, the agreement files with their
-import lines, the `Branch:` line); `update.exclude` is an addition under the policy row.
+Status: proposed, superseded in part by 0016
+Superseded in part by [0016](0016-base-owned-and-project-owned-files.md), 2026-10-17 (this table
+is not living, so the rows are added by that record, item 7): the ownership map, the agreement
+files with their import lines, the `Branch:` line, the departure table, the record paths under
+`docs/hatchery/`; the idea-grammar row's record becomes ADR 0007 and `.claude/rules/docs.md`, its
+`docs/ideas/README.md` being the project's copy; `update.exclude` is an addition under the policy
+row. Every row below stands; the owner's question stands.
 
 Record: no proposal; this ADR applies ADR 0012 to the base itself, as its critic review asked
 (objection 6). `proposed` because three of the surfaces are files the owner writes by hand (the

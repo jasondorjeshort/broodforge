@@ -1,12 +1,12 @@
 # 0002. Repository layout for agent-driven projects
 
 Date: 2026-10-11
-Status: accepted, superseded in part by 0014
+Status: accepted, superseded in part by 0014 and 0016
 
-Superseded in part by 0014 (`0014-handoff-layout.md`): Session continuity's Updated line and handoff commit; the 40-line cap now also covers `docs/handoff/*.md`, 120 in total. Everything else stands.
-Amended by 0016 (`0016-base-owned-and-project-owned-files.md`), 2026-10-17: the layout gains the
-base-owned subtree `docs/hatchery/` (Hatchery's records), and `CLAUDE.md` becomes a 40-line project
-file importing the rule sections from `.claude/agreement/`.
+Superseded in part by 0014 (`0014-handoff-layout.md`): Session continuity's Updated line and handoff commit; the 40-line cap now also covers `docs/handoff/*.md`, 120 in total.
+Superseded in part by 0016 (`0016-base-owned-and-project-owned-files.md`), 2026-10-17: the layout
+gains the base-owned subtree `docs/hatchery/` (Hatchery's records), and `CLAUDE.md` becomes a
+40-line project file importing the rule sections from `.claude/agreement/`. Everything else stands.
 
 Record: proposal `../proposals/0002-repository-layout.md` (with the critic's objections answered),
 review `../proposals/0002-critic-review.md`. These proposals are in Hatchery's tree; a decanted

@@ -25,7 +25,8 @@ Decisions so far:
 - [0001 Licensing](decisions/0001-licensing.md): GPL-3.0-or-later by default, LGPL for linkable components.
 - [0002 Repository layout](decisions/0002-repository-layout.md): where knowledge, state, procedures,
   rules, and hooks live; skills, permissions, and continuity by `@docs/HANDOFF.md` import, superseded
-  in part by 0014 (handoff). Companion [hook specifications](decisions/0002-hook-specs.md) for the
+  in part by 0014 (handoff) and 0016 (the Hatchery records subtree; `CLAUDE.md` as a 40-line
+  importing file). Companion [hook specifications](decisions/0002-hook-specs.md) for the
   hooks, and [section 3, the usage gate and status line](decisions/0002-hook-specs-usage.md).
 - [0004 Adopting the Hatchery practice](decisions/0004-adopt-hatchery.md): an existing project takes
   the practice as files from `hatchery/main`, records the base commit in its own ADR, and updates by
@@ -35,9 +36,11 @@ Decisions so far:
 - [0006 Hook policy file](decisions/0006-hook-policy-file.md): each project's choices for the hooks
   (who commits and pushes, deletable branches, usage lines, cap exemptions) live in
   `.claude/hooks/policy.json`, not in the scripts; the guard fails closed, the usage gate open.
+  Superseded in part by 0016 (the `CLAUDE.md` cap constant; `update.exclude` in the living table).
 - [0007 Queues, triage and one review](decisions/0007-queues-triage-and-one-review.md): `docs/ideas/`
   and `docs/operator/` as delete-when-done queues with triage blocks; a `reviewer` agent and one
-  independent review per change; amends ADR 0002 where it names `backlog.md`.
+  independent review per change; amends ADR 0002 where it names `backlog.md`. Superseded in part
+  by 0016 (the queue READMEs and `docs/design/README.md` are project-owned).
 - [0008 ADR numbers, and what a decant keeps](decisions/0008-adr-numbers-and-what-decant-keeps.md):
   Hatchery uses `0001` to `0019` and a decanted project starts at `0020`; a decant keeps every
   Hatchery ADR and the Windows reference, deletes proposals, findings, ideas and operator entries;
@@ -64,7 +67,8 @@ Decisions so far:
 - [0013 Hatchery's promised surfaces](decisions/0013-hatchery-promised-surfaces.md): the policy
   file, grant files, the idea grammar, the base line, the usage cache and the hook seams, with
   what is not promised; the reference fitness check (hooks require only Node built-ins) in the
-  harness, group `F`. Proposed until the owner confirms the list.
+  harness, group `F`. Proposed until the owner confirms the list. Superseded in part by 0016 (five
+  rows added by its item 7; the idea-grammar row's record).
 - [0014 Handoff layout](decisions/0014-handoff-layout.md): one
   `docs/HANDOFF.md` by default, no hash, the edit rides in the work commit; a per-stream split
   (`@handoff/<file>.md` lines, 40 each, 120 together, no README, no fixed files) the tooling
@@ -85,7 +89,7 @@ Decisions so far:
   `--claude-check`); Hatchery's records in the base-owned subtree `docs/hatchery/`, Hatchery
   numbering from 0016 up, projects from 0001; `update.exclude`. Siblings: [the map](decisions/0016-ownership-map.md),
   [the procedure](decisions/0016-update-procedure.md), [the migration](decisions/0016-migration.md).
-  Supersedes 0008; supersedes in part 0004, 0009, 0010; amends 0002, 0006, 0007, 0013.
+  Supersedes 0008; supersedes in part 0002, 0004, 0006, 0007, 0009, 0010, 0013.
   [no-check: the map and the subtree exist once the ADR is implemented]
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).
