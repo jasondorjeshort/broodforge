@@ -1,7 +1,8 @@
 ---
 date: 2026-10-17
-status: open
+status: resolved
 area: process / base-to-project updates
+promoted_to: docs/design/decisions/0016-base-owned-and-project-owned-files.md
 ---
 
 # Bases update cleanly when the project never edits a file the base also edits

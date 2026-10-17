@@ -1,7 +1,8 @@
 ---
 date: 2026-10-17
-status: open
+status: resolved
 area: process / indexes of queue directories
+promoted_to: docs/design/decisions/0017-queue-directories-list-on-demand.md
 ---
 
 # One-file-per-item projects keep no hand index: a tool lists the files when asked; git only narrows the conflict
