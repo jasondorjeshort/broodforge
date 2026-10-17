@@ -14,7 +14,14 @@ const fs = require('fs');
 const path = require('path');
 const childProcess = require('child_process');
 const { load, matches, docCap, lineCount, claudeCheck, DOCS_CAP, HANDOFF_CAP } = require('./policy');
-const { resolve } = require('./imports');
+// The parser is loaded lazily and guarded, as policy.js loads it: a missing or broken imports.js
+// drops the import checks, never the hook's other messages, and never makes it exit non-zero.
+function resolve(root, file, opts) {
+  try { return require('./imports').resolve(root, file, opts); } catch (_) { return []; }
+}
+function claudeLines(root) {
+  try { return claudeCheck(root, edit).lines; } catch (_) { return []; }
+}
 
 // Project choices from .claude/hooks/policy.json (edit block); a malformed policy means the base
 // defaults here, since this hook only advises.
@@ -149,8 +156,8 @@ function missingPaths(root, text) {
 // whitespace, outside code spans and fences) resolves from the importing file's directory (Claude
 // Code's rule); an absent target loads nothing and says nothing.
 function missingImports(root, rel) {
-  return resolve(root, rel, { hops: 1 }).filter((i) => !i.exists).map((i) =>
-    `post-edit: ${rel} imports @${i.token}, which resolves to ${i.target} and does not exist (an import resolves from the importing file's directory).`);
+  return resolve(root, rel, { hops: 1 }).filter((i) => !i.outside && !i.exists).map((i) =>
+    `post-edit: ${rel} imports @${i.token}, which resolves to ${i.target} and ${i.isDir ? 'is a directory, which loads nothing' : 'does not exist'} (an import resolves from the importing file's directory).`);
 }
 
 function runFormatter(argv, abs, rel) {
@@ -180,7 +187,7 @@ function main(raw) {
   // The project CLAUDE.md and the files it is built from: the same FAIL lines as pusher check 7's
   // policy.js --claude-check, for the whole tree, since an edit to one file can break another's line.
   if (inside && (rel === 'CLAUDE.md' || /^\.claude\/(agreement|project)\/[^/]+\.md$/.test(rel))) {
-    msgs.push(...claudeCheck(root, edit).lines);
+    msgs.push(...claudeLines(root));
   }
   const fmt = FORMATTERS[path.extname(abs).toLowerCase()];
   if (Array.isArray(fmt) && fmt.length > 0) msgs.push(...runFormatter(fmt, abs, rel));

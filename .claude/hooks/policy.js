@@ -20,7 +20,10 @@
 // Checks): every .claude/agreement/<s>.md imported or replaced once, every .claude/project/<s>.md
 // replacing a section, CLAUDE.md at most CLAUDE_MD_CAP lines and loading at most CLAUDE_LOADED_CAP
 // (the handoff chain excepted), and every @ import from CLAUDE.md and the handoff files resolving.
-// One FAIL line per problem, exit 1 on any, a malformed policy included; the last stdout line is
+// One FAIL line per problem (a directory target included), exit 1 on any, a malformed policy
+// included; imports outside the root are listed in one "info: <n> imports outside the repository,
+// not counted: ..." line, never
+// failed; the last stdout line is
 // always "claude-check: <n> files, <m> FAIL". post-edit.js prints the same FAIL lines; the parser
 // is imports.js.
 // Cap check: node .claude/hooks/policy.js --cap-check <listfile>  reads a newline list of
@@ -382,8 +385,9 @@ function capCheck(listFile) {
 }
 
 // The --claude-check lines for the tree at root, under the policy's edit block. Returns { lines,
-// files, code }: lines are the FAIL lines (post-edit.js prints them as they are), files the count of
-// files read. imports.js is required here, not at the top, so the guard, which needs only load(),
+// info, files, code }: lines are the FAIL lines (post-edit.js prints them as they are), info the one
+// "info: <n> imports outside the repository, not counted: ..." line or null (imports of ~/, absolute or ../ paths above the root
+// are never read, counted or failed), files the count of files read. imports.js is required here, not at the top, so the guard, which needs only load(),
 // never depends on it.
 function claudeCheck(root, edit) {
   const { resolve, absOf } = require('./imports');
@@ -424,15 +428,19 @@ function claudeCheck(root, edit) {
   const starts = ['CLAUDE.md', 'docs/HANDOFF.md', ...mdIn('docs/handoff').map((n) => `docs/handoff/${n}`)]
     .filter((f) => read(f) !== null);
   const said = new Set();
+  const outside = [];
   for (const start of starts) {
     files.add(start);
     for (const i of resolve(root, start)) {
+      if (i.outside) { if (!outside.includes(i.target)) outside.push(i.target); continue; }
       if (i.exists) { files.add(i.target); continue; }
-      const line = `FAIL ${i.file}: @${i.token} resolves to ${i.target}, which does not exist`;
+      // A directory loads nothing, so it fails like an absent file, with its own wording.
+      const line = `FAIL ${i.file}: @${i.token} resolves to ${i.target}, which ${i.isDir ? 'is a directory' : 'does not exist'}`;
       if (!said.has(line)) { said.add(line); lines.push(line); }
     }
   }
-  return { lines, files: files.size, code: lines.length ? 1 : 0 };
+  const info = outside.length ? `info: ${outside.length} imports outside the repository, not counted: ${outside.join(', ')}` : null;
+  return { lines, info, files: files.size, code: lines.length ? 1 : 0 };
 }
 
 module.exports = { load, matches, docCap, lineCount, capCheck, claudeCheck, DOCS_CAP, HANDOFF_CAP, CLAUDE_MD_CAP, CLAUDE_LOADED_CAP, claudeCapsLifted, usageVerdict, meterThresholds, classifyGrant, readGrants, judgeGrants, holdCovered, holdLifted, readAccount, accountLabel, accountsDiffer, DEFAULTS };
@@ -447,7 +455,7 @@ if (require.main === module && process.argv[2] === '--cap-check') {
   // A policy that does not load is a FAIL here, never the defaults, as in --cap-check.
   const r = load();
   const c = r.error ? { lines: [`FAIL policy: ${r.error}`], files: 0, code: 1 } : claudeCheck(process.cwd(), r.policy.edit);
-  process.stdout.write(`${c.lines.map((l) => `${l}\n`).join('')}claude-check: ${c.files} files, ${c.lines.length} FAIL\n`);
+  process.stdout.write(`${c.lines.map((l) => `${l}\n`).join('')}${c.info ? `${c.info}\n` : ''}claude-check: ${c.files} files, ${c.lines.length} FAIL\n`);
   process.exitCode = c.code;
 } else if (require.main === module) {
   const r = load(process.argv[2]);

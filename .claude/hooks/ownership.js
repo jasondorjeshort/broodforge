@@ -10,13 +10,18 @@
 //
 // Usage, exactly one flag per run:
 //   node .claude/hooks/ownership.js --command  --ref <sha> [--exclude <pattern>]...
-//       one line: git diff -M <FROM> <sha> -- <pathspecs> | git apply --3way
+//       one line: git diff -M --binary <FROM> <sha> -- <pathspecs> | git apply --3way
 //   node .claude/hooks/ownership.js --per-path --ref <sha> [--exclude <pattern>]...
-//       per changed entry, a "# <status> <path>" line and its own diff | apply line
+//       per changed entry, a "# <status> <path>" line ("# R <old> -> <new>" for a rename) and its
+//       own diff | apply line
 //   node .claude/hooks/ownership.js --report   --ref <sha> [--exclude <pattern>]...
 //       the sections unclassified, excluded, replaced sections, unimported, collisions
 //   node .claude/hooks/ownership.js --check
 //       every tracked path that matches no list of the working tree's map; Hatchery's tree only
+// Run the printed lines in the Bash tool, not PowerShell: PowerShell 5.1 re-encodes the patch in
+// the pipe and git apply refuses it whole (a stderr line says so on every --command and --per-path).
+// When nothing in the set changed in FROM..sha, --command and --per-path print nothing on stdout,
+// "ownership: nothing to apply: <FROM>..<sha> touches no path in the set" on stderr, and exit 0.
 // Exit 0 on success (--check: 0 clean, 1 a path unclassified); 1 with one "ownership: ..." line on
 // stderr naming the fix (no base line and no merge-base, two base lines, a map malformed or absent
 // at <sha>, a policy the tree's policy.js rejects); 2 on a usage error.
@@ -32,7 +37,12 @@ const { spawnSync } = require('child_process');
 const MAP = '.claude/hooks/ownership.json';
 const LISTS = ['baseOwned', 'baseExcluded', 'mixed', 'projectOwned'];
 const cwd = process.cwd();
-const USAGE = 'usage: node .claude/hooks/ownership.js (--command | --per-path | --report) --ref <sha> [--exclude <pattern>]... | --check';
+// PowerShell 5.1 re-encodes the patch in the pipe, so git apply refuses every file and the update
+// reads as a whole failure; the printed lines are for the Bash tool only. Said on stderr, so stdout
+// stays the bare lines.
+const BASH_ONLY = 'ownership: run the printed line(s) in the Bash tool, not PowerShell (PowerShell re-encodes the patch in the pipe)';
+const USAGE = 'usage: node .claude/hooks/ownership.js (--command | --per-path | --report) --ref <sha> [--exclude <pattern>]... | --check\n' +
+  'Run the printed lines in the Bash tool, not PowerShell.';
 
 class Stop extends Error {
   constructor(message, code) { super(message); this.code = code === undefined ? 1 : code; }
@@ -145,7 +155,7 @@ function policyExcludes(sha) {
   }
   if (r.error) {
     // The guard denies every git command while the policy is malformed, so the key goes first.
-    throw new Stop(`ownership: .claude/hooks/policy.json malformed: ${r.error}; a key from a newer base is one cause: remove the key with the Edit tool, then bring .claude/hooks/policy.js in (git checkout ${sha} -- .claude/hooks/policy.js) and put the key back`);
+    throw new Stop(`ownership: .claude/hooks/policy.json malformed: ${r.error}; a key from a newer base is one cause: remove it with the Edit tool (git is denied while the policy is malformed), run the update, which brings the new policy.js, then put the key back`);
   }
   return (r.policy.update && r.policy.update.exclude) || [];
 }
@@ -185,15 +195,22 @@ function findFrom(sha) {
 }
 
 const quote = (s) => `'${s.replace(/'/g, `'\\''`)}'`;
+// A policy pattern as a git pathspec: * stays the wildcard (a plain pathspec's * crosses "/", as the
+// policy matcher's does); ? and [ are literal in the matcher, so each becomes a one-character class
+// ([?], [[]). Not a backslash: Git for Windows reads \ in a pathspec as a directory separator, so
+// x\[1].md would match nothing there (tested 2026-10-17, git 2.56.0.windows.2).
+const patternSpec = (p) => p.replace(/[?[]/g, '[$&]');
+// A path git listed, as a pathspec matching only itself.
+const literalSpec = (p) => p.replace(/[*?[]/g, '[$&]');
 
 // The pathspecs: base-owned and mixed entries, then excludes: base-excluded entries, project-owned
 // entries lying under an included entry (".claude/project" under ".claude": the class rule), and
-// every update.exclude and --exclude pattern. A plain :(exclude) pathspec's * crosses "/", as the
-// policy matcher's does.
+// every update.exclude and --exclude pattern. Map entries are literal paths without wildcards
+// (parseMap), so they need no escaping.
 function pathspecs(lists, patterns) {
   const include = [...lists.baseOwned, ...lists.mixed];
   const under = (e) => include.some((i) => e.startsWith(`${i}/`));
-  const exclude = [...lists.baseExcluded, ...lists.projectOwned.filter(under), ...patterns];
+  const exclude = [...lists.baseExcluded, ...lists.projectOwned.filter(under), ...patterns.map(patternSpec)];
   return { include, all: [...include, ...[...new Set(exclude)].map((p) => `:(exclude)${p}`)] };
 }
 
@@ -268,18 +285,21 @@ function main(argv) {
   const lists = mapAt(sha);
   const specs = pathspecs(lists, [...policyExcludes(sha), ...o.exclude]);
   const from = findFrom(sha);
-  if (o.mode === '--command') {
-    return { out: `git diff -M ${from} ${sha} -- ${specs.all.map(quote).join(' ')} | git apply --3way\n`, code: 0 };
-  }
-  if (o.mode === '--per-path') {
-    const out = nameStatus(from, sha, specs.all).map((e) =>
-      `# ${e.status} ${e.paths.join(' ')}\ngit diff -M ${from} ${sha} -- ${e.paths.map(quote).join(' ')} | git apply --3way\n`).join('');
-    return { out, code: 0 };
+  if (o.mode === '--command' || o.mode === '--per-path') {
+    // Nothing in the set changed: an empty patch would make git apply exit 128, so say so instead.
+    const entries = nameStatus(from, sha, specs.all);
+    if (entries.length === 0) return { out: '', err: `ownership: nothing to apply: ${from}..${sha} touches no path in the set\n`, code: 0 };
+    // --binary: the set may hold binary files (a skill's asset), which a plain diff cannot carry.
+    const out = o.mode === '--command'
+      ? `git diff -M --binary ${from} ${sha} -- ${specs.all.map(quote).join(' ')} | git apply --3way\n`
+      : entries.map((e) => `${e.paths.length === 2 ? `# ${e.status[0]} ${e.paths[0]} -> ${e.paths[1]}` : `# ${e.status} ${e.paths[0]}`}\n` +
+        `git diff -M --binary ${from} ${sha} -- ${e.paths.map((p) => quote(literalSpec(p))).join(' ')} | git apply --3way\n`).join('');
+    return { out, err: `${BASH_ONLY}\n`, code: 0 };
   }
   return { out: report(lists, from, sha, specs), code: 0 };
 }
 
-module.exports = { parseMap, classOf, pathspecs, quote };
+module.exports = { parseMap, classOf, pathspecs, quote, patternSpec, literalSpec };
 
 if (require.main === module) {
   let r;

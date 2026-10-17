@@ -1814,6 +1814,8 @@ function fitnessDeps(root) {
     ['IM05', 'trailing . , ; : ) are stripped', '(see @a.md). @b.md, @c.md; @d.md:\n', ['a.md', 'b.md', 'c.md', 'd.md']],
     ['IM06', 'an @ inside a word (an address) is not an import', 'mail me@example.com or x@y\n', []],
     ['IM07', 'an @ right after a code span is not after whitespace', '`x`@a.md\n', []],
+    ['IM10', 'a ``` line whose info string holds a backtick is not a fence', '``` `x`\n@a.md\n', ['a.md']],
+    ['IM11', 'a code span crossing a line break is skipped; a blank line ends it', 'Write `foo\n@bar.md` here.\n\n@baz.md\n', ['baz.md']],
   ];
   for (const [id, label, text, want] of IM) {
     if (!selected(id)) continue;
@@ -1827,14 +1829,26 @@ function fitnessDeps(root) {
   for (let k = 0; k <= 5; k++) put(`chain/c${k}.md`, `# c${k}\n@c${k + 1}.md\n`);
   if (selected('IM08')) {
     const r = resolve(root, 'docs/HANDOFF.md');
-    const want = [{ file: 'docs/HANDOFF.md', line: 2, token: 'handoff/x.md', target: 'docs/handoff/x.md', exists: true, hop: 1 },
-      { file: 'docs/handoff/x.md', line: 2, token: '../HANDOFF.md', target: 'docs/HANDOFF.md', exists: true, hop: 2 }];
+    const want = [{ file: 'docs/HANDOFF.md', line: 2, token: 'handoff/x.md', target: 'docs/handoff/x.md', outside: false, exists: true, isDir: false, hop: 1 },
+      { file: 'docs/handoff/x.md', line: 2, token: '../HANDOFF.md', target: 'docs/HANDOFF.md', outside: false, exists: true, isDir: false, hop: 2 }];
     report('IM08', 'resolve: each import from its own file; a cycle is read once', JSON.stringify(r) === JSON.stringify(want), `got ${JSON.stringify(r)}`);
   }
   if (selected('IM09')) {
     const r = resolve(root, 'chain/c0.md').map((i) => `${i.hop}:${i.target}`);
     const want = ['1:chain/c1.md', '2:chain/c2.md', '3:chain/c3.md', '4:chain/c4.md'];
     report('IM09', 'resolve: four hops; the imports of a hop-4 file are not followed', JSON.stringify(r) === JSON.stringify(want), `got ${JSON.stringify(r)}`);
+  }
+  if (selected('IM12')) {
+    put('dirs/a.md', '@../chain\n');
+    const r = resolve(root, 'dirs/a.md');
+    report('IM12', 'resolve: a directory target is not a file (exists false, isDir true) and is not followed',
+      r.length === 1 && r[0].target === 'chain' && r[0].exists === false && r[0].isDir === true, `got ${JSON.stringify(r)}`);
+  }
+  if (selected('IM13')) {
+    put('out/a.md', '@~/.claude/mine.md @/etc/hosts @C:/x.md @../../up.md\n');
+    const r = resolve(root, 'out/a.md').map((i) => [i.target, i.outside, i.exists]);
+    const want = [['~/.claude/mine.md', true, null], ['/etc/hosts', true, null], ['C:/x.md', true, null], ['../up.md', true, null]];
+    report('IM13', 'resolve: targets outside the root are marked outside, never stat\'ed (exists null) or followed', JSON.stringify(r) === JSON.stringify(want), `got ${JSON.stringify(r)}`);
   }
 }
 
@@ -1871,6 +1885,11 @@ function fitnessDeps(root) {
       POLICIES.hatchery, 1, 'FAIL CLAUDE.md: @docs/GONE.md resolves to docs/GONE.md, which does not exist\n' +
         'FAIL docs/handoff/a.md: @missing.md resolves to docs/handoff/missing.md, which does not exist\n' +
         'FAIL docs/handoff/b.md: @../nope.md resolves to docs/nope.md, which does not exist\nclaude-check: 4 files, 3 FAIL\n'],
+    ['CL15', 'imports outside the root: one info line, not counted toward 190, no FAIL', {
+      'CLAUDE.md': `@~/.claude/mine.md\nSee @../sibling/x.md.\n@.claude/agreement/a.md\n`, '.claude/agreement/a.md': lines(187) },
+      POLICIES.hatchery, 0, 'info: 2 imports outside the repository, not counted: ~/.claude/mine.md, ../sibling/x.md\nclaude-check: 2 files, 0 FAIL\n'],
+    ['CL16', 'a directory target is a FAIL (it loads nothing)', { 'CLAUDE.md': '# T\n@docs\n', 'docs/x.md': 'x\n' },
+      POLICIES.hatchery, 1, 'FAIL CLAUDE.md: @docs resolves to docs, which is a directory\nclaude-check: 1 files, 1 FAIL\n'],
     ['CL12', 'a malformed policy fails loudly', { 'CLAUDE.md': '# T\n' }, scratchPolicy('cl-bad', '{ nope'), 1,
       (out) => /^FAIL policy: .+\nclaude-check: 0 files, 1 FAIL\n$/.test(out) || 'expected one "FAIL policy: ..." line and the sentinel'],
   ];
@@ -1983,15 +2002,29 @@ function fitnessDeps(root) {
   };
   const bash = (dir, line) => spawnSync('bash', ['-c', line], { cwd: dir, encoding: 'utf8', timeout: 60000 });
   const unmerged = (dir) => og(dir, 'status', '--porcelain').split('\n').filter((l) => /^(U.|.U|AA|DD) /.test(l));
-  const lineRe = /^git diff -M ([0-9a-f]{40}) ([0-9a-f]{40}) -- (.*) \| git apply --3way\n$/;
+  const lineRe = /^git diff -M --binary ([0-9a-f]{40}) ([0-9a-f]{40}) -- (.*) \| git apply --3way\n$/;
+  const BASH_LINE = 'ownership: run the printed line(s) in the Bash tool, not PowerShell (PowerShell re-encodes the patch in the pipe)\n';
+  // A base commit with one change in the set, and HEAD (branch proj) at its parent, so FROM..sha
+  // is not empty. Returns { dir, base, next }.
+  const changedRepo = (name, files) => {
+    const { dir, base } = newRepo(name);
+    const next = commit(dir, files || { '.claude/x.md': 'x\n' }, 'base 1');
+    og(dir, 'checkout', '-q', '-b', 'proj', base);
+    return { dir, base, next };
+  };
+  // The printed command's diff, with --name-only and without the apply: the paths it would carry.
+  const carried = (dir, line) => {
+    const r = bash(dir, line.trim().replace('git diff -M --binary', 'git diff --name-only -M').replace(/ \| git apply --3way$/, ''));
+    return r.status === 0 ? r.stdout.split('\n').filter((l) => l !== '') : [`(exit ${r.status}: ${r.stderr.trim()})`];
+  };
 
   // O2: shell-inert. Outside single quotes no * ? [ $ or backtick; every word after -- up to | is
   // single-quoted; every quoted word holding a wildcard is pathspec magic (starts with ":(").
-  let o2line = null;
-  if (selected('O2') || selected('O7')) {
-    const { dir, base } = newRepo('O2');
-    const r = helper(dir, ['--command', '--ref', base, '--exclude', 'LICENSES'], scratchPolicy('o2', { update: { exclude: ['docs/legacy/*'] } }));
-    o2line = r.out;
+  let o2 = null;
+  if (selected('O2') || selected('O9') || selected('O10')) {
+    const { dir, base, next } = changedRepo('O2');
+    const r = helper(dir, ['--command', '--ref', next, '--exclude', 'LICENSES'], scratchPolicy('o2', { update: { exclude: ['docs/legacy/*'] } }));
+    o2 = r;
     const problems = [];
     const m = lineRe.exec(r.out);
     if (r.code !== 0 || !m) problems.push(`exit ${r.code}, not one command line; stderr ${r.err.trim()}`);
@@ -2008,26 +2041,98 @@ function fitnessDeps(root) {
       for (const want of [':(exclude)docs/legacy/*', ':(exclude)LICENSES', ':(exclude).claude/hooks/policy.json', '.claude', 'docs/hatchery']) {
         if (!words.includes(want)) problems.push(`no pathspec ${want}`);
       }
-      if (m[1] !== base || m[2] !== base) problems.push('FROM and sha are not the literal base sha');
+      if (m[1] !== base || m[2] !== next) problems.push('FROM and sha are not the literal shas');
     }
     if (selected('O2')) report('O2', 'ownership --command is shell-inert, with update.exclude and --exclude as plain :(exclude) pathspecs', problems.length === 0, problems.join('; '), r.out);
   }
-  // O7: the printed command passes git-guard for a subagent and the main session.
-  if (o2line) {
-    guardCase('O7a', { command: o2line.trim(), agent: 'coder' }, 'allow');
-    guardCase('O7b', { command: o2line.trim() }, 'allow');
+  // O9: the printed command passes git-guard for a subagent and the main session.
+  if (o2 && o2.out) {
+    guardCase('O9a', { command: o2.out.trim(), agent: 'coder' }, 'allow');
+    guardCase('O9b', { command: o2.out.trim() }, 'allow');
+  }
+  // O10: stdout is the bare command (one line, no comment line); the Bash-only note is on stderr.
+  if (o2 && selected('O10')) {
+    const rows = o2.out.split('\n').filter((l) => l !== '');
+    report('O10', '--command: stdout is one bare line, no comment; stderr says to run it in the Bash tool, not PowerShell',
+      rows.length === 1 && !rows[0].startsWith('#') && o2.err === BASH_LINE, `stdout ${JSON.stringify(o2.out)}; stderr ${JSON.stringify(o2.err)}`);
   }
 
   // O3: a commit adding a path and its map entry together: the command at that commit carries it,
   // the command at its parent does not.
   if (selected('O3')) {
     const { dir, base } = newRepo('O3');
-    const next = commit(dir, { 'tools/x.sh': 'echo x\n', '.claude/hooks/ownership.json': JSON.stringify(Object.assign({}, O_MAP, { baseOwned: [...O_MAP.baseOwned, 'tools'] })) }, 'base 1');
-    const at = helper(dir, ['--command', '--ref', next]);
-    const before = helper(dir, ['--command', '--ref', base]);
+    const next = commit(dir, { '.claude/x.md': 'x\n' }, 'base 1');
+    const third = commit(dir, { 'tools/x.sh': 'echo x\n', '.claude/hooks/ownership.json': JSON.stringify(Object.assign({}, O_MAP, { baseOwned: [...O_MAP.baseOwned, 'tools'] })) }, 'base 2');
+    og(dir, 'checkout', '-q', '--detach', base);
+    const at = helper(dir, ['--command', '--ref', third]);
+    const before = helper(dir, ['--command', '--ref', next]);
     report('O3', 'a path added with its map entry is in the command at that commit, not at its parent',
       at.code === 0 && at.out.includes(' \'tools\' ') && before.code === 0 && lineRe.test(before.out) && !before.out.includes('\'tools\''),
       `at ${JSON.stringify(at.out || at.err)}; parent ${JSON.stringify(before.out || before.err)}`);
+  }
+
+  // O7: --command and --per-path with a base line naming HEAD: nothing to apply, nothing on stdout,
+  // exit 0 (an empty patch would make git apply exit 128).
+  if (selected('O7')) {
+    const { dir, base } = newRepo('O7');
+    putIn(dir, { 'docs/design/decisions/0001-decanted-from-hatchery.md': `# 0001\n\nHatchery base: ${base}\n` });
+    const want = `ownership: nothing to apply: ${base}..${base} touches no path in the set\n`;
+    const rc = helper(dir, ['--command', '--ref', 'HEAD']);
+    const rp = helper(dir, ['--per-path', '--ref', 'HEAD']);
+    report('O7', 'a base line at HEAD: --command and --per-path print nothing, say nothing to apply, exit 0',
+      [rc, rp].every((r) => r.code === 0 && r.out === '' && r.err === want), `command ${JSON.stringify(rc)}; per-path ${JSON.stringify(rp)}`);
+  }
+
+  // O11: ? and [ in a pattern are literal, as in the policy matcher: x[1].md is excluded, x1.md not.
+  if (selected('O11')) {
+    const { dir, next } = changedRepo('O11', { 'docs/hatchery/x[1].md': 'a\n', 'docs/hatchery/x1.md': 'b\n', 'docs/hatchery/qa.md': 'c\n' });
+    const r = helper(dir, ['--command', '--ref', next, '--exclude', 'docs/hatchery/x[1].md', '--exclude', 'docs/hatchery/q?.md']);
+    const paths = r.out ? carried(dir, r.out) : [];
+    report('O11', '? and [ in an exclude are escaped as [?] and [[] and match only themselves',
+      r.out.includes('\':(exclude)docs/hatchery/x[[]1].md\'') && r.out.includes('\':(exclude)docs/hatchery/q[?].md\'') &&
+      JSON.stringify(paths) === JSON.stringify(['docs/hatchery/qa.md', 'docs/hatchery/x1.md']),
+      `carried ${JSON.stringify(paths)}; stderr ${r.err.trim()}`, r.out);
+  }
+
+  // O12: an exclude pattern holding a space and a quote is quoted so that git reads it whole, and
+  // the line passes the guard for the tester.
+  let o12 = null;
+  if (selected('O12')) {
+    const { dir, next } = changedRepo('O12', { 'docs/hatchery/it\'s here/a.md': 'a\n', 'docs/hatchery/keep.md': 'k\n' });
+    o12 = helper(dir, ['--command', '--ref', next, '--exclude', 'docs/hatchery/it\'s here/*']);
+    const paths = o12.out ? carried(dir, o12.out) : [];
+    report('O12', 'an exclude with a space and a quote excludes its file and nothing else',
+      o12.out.includes('\':(exclude)docs/hatchery/it\'\\\'\'s here/*\'') && JSON.stringify(paths) === JSON.stringify(['docs/hatchery/keep.md']),
+      `carried ${JSON.stringify(paths)}; stderr ${o12.err.trim()}`, o12.out);
+  }
+  if (o12 && o12.out) guardCase('O12a', { command: o12.out.trim(), agent: 'tester' }, 'allow');
+
+  // O13 and O14: git-guard and post-edit with imports.js gone and a malformed ownership.json beside
+  // them: the guard still allows git status, post-edit still exits 0 and keeps its other messages.
+  if (selected('O13') || selected('O14')) {
+    const min = path.join(scratch, 'hooks-min');
+    fs.mkdirSync(min, { recursive: true });
+    for (const f of ['git-guard.js', 'policy.js', 'shell-parse.js', 'post-edit.js']) fs.copyFileSync(path.join(HOOKS, f), path.join(min, f));
+    fs.writeFileSync(path.join(min, 'ownership.json'), '{ nope');
+    const runMin = (hook, stdin) => {
+      const r = spawnSync(NODE, [path.join(min, `${hook}.js`)], { input: stdin, encoding: 'utf8', timeout: 30000, env: envWith({ HOOK_POLICY_FILE: POLICIES.hatchery }) });
+      return { code: r.status, out: r.stdout || '', err: r.stderr || '' };
+    };
+    if (selected('O13')) {
+      const r = runMin('git-guard', JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Bash', cwd: repoMain, tool_input: { command: 'git status' } }));
+      report('O13', 'git-guard allows git status with imports.js deleted and ownership.json malformed', r.code === 0 && r.out === '', `exit ${r.code}; stderr ${r.err.trim()}`, r.out);
+    }
+    if (selected('O14')) {
+      const root = path.join(scratch, 'pe-min');
+      putIn(root, { 'CLAUDE.md': lines(41), 'docs/HANDOFF.md': `@handoff/gone.md\n${lines(40)}` });
+      const pe = (rel) => runMin('post-edit', JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'Write', cwd: root, tool_input: { file_path: path.join(root, ...rel.split('/')) } }));
+      const a = pe('CLAUDE.md');
+      const b = pe('docs/HANDOFF.md');
+      const d = parseDecision(b.out);
+      report('O14', 'post-edit exits 0 with imports.js deleted; the import checks drop, the handoff cap still warns',
+        a.code === 0 && a.out === '' && b.code === 0 && !!d && d.context === 'post-edit: docs/HANDOFF.md is 41 lines; cap is 40. Move detail to docs/ideas/ or a finding.',
+        `CLAUDE.md: exit ${a.code} ${JSON.stringify(a.out)}; HANDOFF: exit ${b.code} ${JSON.stringify(b.out)}`);
+    }
   }
 
   // O4: a malformed map at <sha>, a policy with an unknown key, and a commit without a map: no
@@ -2037,6 +2142,12 @@ function fitnessDeps(root) {
     const a = newRepo('O4a', JSON.stringify(Object.assign({}, O_MAP, { mixed: '.claude/settings.json' })));
     const ra = helper(a.dir, ['--command', '--ref', a.base]);
     if (!(ra.code === 1 && ra.out === '' && new RegExp(`^ownership: ownership\\.json at ${a.base} malformed: mixed is not an array\\n$`).test(ra.err))) problems.push(`malformed map: exit ${ra.code}, ${JSON.stringify(ra.out + ra.err)}`);
+    for (const [name, map, reason] of [['O4k', Object.assign({ basOwned: [] }, O_MAP), 'unknown key basOwned'],
+      ['O4w', Object.assign({}, O_MAP, { baseOwned: ['.claude', 'docs/*'] }), 'baseOwned entry "docs/*" is not a literal repository-relative path']]) {
+      const x = newRepo(name, JSON.stringify(map));
+      const rx = helper(x.dir, ['--command', '--ref', x.base]);
+      if (!(rx.code === 1 && rx.out === '' && rx.err === `ownership: ownership.json at ${x.base} malformed: ${reason}\n`)) problems.push(`${reason}: exit ${rx.code}, ${JSON.stringify(rx.out + rx.err)}`);
+    }
     const b = newRepo('O4b');
     const rb = helper(b.dir, ['--per-path', '--ref', b.base], scratchPolicy('o4', { update: { exclud: [] } }));
     if (!(rb.code === 1 && rb.out === '' && /^ownership: \.claude\/hooks\/policy\.json malformed: .*unknown key update\.exclud; .*the Edit tool/.test(rb.err))) problems.push(`unknown key: exit ${rb.code}, ${JSON.stringify(rb.out + rb.err)}`);
@@ -2068,7 +2179,28 @@ function fitnessDeps(root) {
       og(dir, 'checkout', 'HEAD', '--', '.claude/f.txt');
     }
     void base;
-    report('O5', 'a conflict from git apply --3way is cleared by git checkout <sha> -- <path> and by git checkout HEAD -- <path>', problems.length === 0, problems.join('; '));
+    // A base rename the project edited on the same line: D <old>, UU <new>. With a departure row,
+    // git show HEAD:<old> > <new> then git add <new>; without, git checkout <sha> -- <new>. Each
+    // leaves R <old> -> <new> staged, no U, with the side's text.
+    const body = Array.from({ length: 12 }, (_, i) => `line ${i + 1}\n`).join('');
+    for (const [name, fix, want] of [['O5row', 'git show HEAD:.claude/old.md > .claude/new.md && git add .claude/new.md', 'line 2, project\n'],
+      ['O5base', 'git checkout <sha> -- .claude/new.md', 'line 2, base\n']]) {
+      const x = newRepo(name);
+      const r0 = commit(x.dir, { '.claude/old.md': body }, 'base old');
+      const r1 = commit(x.dir, { '.claude/old.md': null, '.claude/new.md': body.replace('line 2\n', 'line 2, base\n') }, 'base rename');
+      og(x.dir, 'checkout', '-q', '-b', 'proj', r0);
+      commit(x.dir, { '.claude/old.md': body.replace('line 2\n', 'line 2, project\n') }, 'project edit');
+      const ap = bash(x.dir, helper(x.dir, ['--command', '--ref', r1]).out);
+      const st = og(x.dir, 'status', '--porcelain');
+      if (ap.status !== 1 || !/^D  \.claude\/old\.md$/m.test(st) || !/^UU \.claude\/new\.md$/m.test(st)) { problems.push(`${name}: apply gave exit ${ap.status}, status ${JSON.stringify(st)}`); continue; }
+      const fx = bash(x.dir, fix.replace('<sha>', r1));
+      const after = og(x.dir, 'status', '--porcelain');
+      const text = fs.readFileSync(path.join(x.dir, '.claude', 'new.md'), 'utf8');
+      if (fx.status !== 0 || after !== 'R  .claude/old.md -> .claude/new.md' || !text.includes(want)) {
+        problems.push(`${name}: after "${fix}" exit ${fx.status}, status ${JSON.stringify(after)}, new.md ${text.includes(want) ? 'right' : 'wrong'}`);
+      }
+    }
+    report('O5', 'a conflict is cleared by git checkout <sha> -- <path> or git checkout HEAD -- <path>; a renamed-and-edited file by its two rename forms', problems.length === 0, problems.join('; '));
   }
 
   // O6: --per-path on a base rename: one line carries both paths, and running it leaves the renamed
@@ -2086,7 +2218,7 @@ function fitnessDeps(root) {
     const rows = r.out.split('\n').filter((l) => l !== '');
     const cmds = rows.filter((l) => !l.startsWith('#'));
     const problems = [];
-    if (!(rows.length === 2 && /^# R\d* docs\/hatchery\/old\.md docs\/hatchery\/new\.md$/.test(rows[0]) && cmds.length === 1 &&
+    if (!(rows.length === 2 && rows[0] === '# R docs/hatchery/old.md -> docs/hatchery/new.md' && cmds.length === 1 &&
       cmds[0].includes(' -- \'docs/hatchery/old.md\' \'docs/hatchery/new.md\' | git apply --3way'))) problems.push(`output ${JSON.stringify(r.out || r.err)}`);
     else {
       const ap = bash(dir, cmds[0]);

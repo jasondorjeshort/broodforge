@@ -560,7 +560,7 @@ function decide(command, dialect, agent, cwd, loaded) {
   if (invs.length === 0) return null;
   const clip = (t) => (t.length > 200 ? `${t.slice(0, 200)}...` : t);
   if (loaded.error) {
-    return `git-guard: policy file is malformed (${loaded.error}): \`${clip(invs[0].text)}\`. Every git command is denied until it is fixed; ask the user. A key from a newer base is one cause: remove it with the Edit tool, run \`git checkout <sha> -- .claude/hooks/policy.js\`, then put it back.`;
+    return `git-guard: policy file is malformed (${loaded.error}): \`${clip(invs[0].text)}\`. Every git command is denied until it is fixed; ask the user. A key from a newer base is one cause: remove it with the Edit tool (git, this checkout included, is denied until the policy loads), run the update, which brings the new policy.js, then put the key back.`;
   }
   // Config by environment (GIT_CONFIG_KEY_n=..., GIT_CONFIG_GLOBAL=..., $env:GIT_CONFIG_... = ...).
   const envConfig = [];
