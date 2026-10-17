@@ -1,7 +1,12 @@
 # 0008. ADR numbers, and what a decant keeps
 
 Date: 2026-10-14
-Status: accepted
+Status: superseded by 0016
+Superseded by [0016](0016-base-owned-and-project-owned-files.md), 2026-10-17: Hatchery's records
+ship in the base-owned subtree `docs/hatchery/`, Hatchery numbers there from `0016` up with no
+ceiling and a project numbers its own `docs/design/decisions/` from `0001`; merging ends, so the
+three merge-mode exceptions below are moot. The Consequences' trigger (Hatchery's next number would
+be `0020`) had not fired; the supersession came first, with three numbers left.
 Amended by [0009](0009-adr-numbers-when-both-tests-pass.md) for a tree that passes both numbering tests.
 
 Record: no proposal; owner decision of 2026-10-14 against a real case, as ADR 0004 was. The case:

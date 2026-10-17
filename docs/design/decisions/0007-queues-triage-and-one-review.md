@@ -2,6 +2,10 @@
 
 Date: 2026-10-13
 Status: accepted
+Amended by [0016](0016-base-owned-and-project-owned-files.md), 2026-10-17: the queue directories,
+their READMEs and `docs/design/README.md` are project-owned and never patched from the base; the
+grammar they share lives in base-owned `.claude/rules/docs.md` and here, and a grammar change is
+an incompatible surface change whose migration names the READMEs.
 
 Record: no proposal. Merged from the two downstream projects in one sitting with the owner, who
 holds all three repositories; see Context.

@@ -1,7 +1,7 @@
 # 0016. Base-owned and project-owned files: an update touches nothing the project wrote
 
 Date: 2026-10-17
-Status: under review
+Status: promoted to ADR 0016 (`../decisions/0016-base-owned-and-project-owned-files.md`)
 
 ## Question
 

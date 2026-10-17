@@ -2,6 +2,11 @@
 
 Date: 2026-10-13
 Status: accepted
+Amended by [0016](0016-base-owned-and-project-owned-files.md), 2026-10-17: the living key table
+gains `update.exclude` and the new meaning of `edit.capExempt`; the sentence under the table that
+keeps the 150-line `CLAUDE.md` cap a constant in `post-edit.js` is superseded (the project file's
+caps are 40 and 190, in `policy.js`), and the policy file is never patched rather than kept on
+conflict.
 
 The key table and "The HOLD override" section are living: they are amended in place as keys and
 formats change, and keep the provenance notes a decision record carries (the projects a key came
@@ -60,7 +65,8 @@ per model seen downstream (task branches, single branch, per-meter thresholds), 
 | `usage.overrideEnv` | variable name or `null` | `null` | An environment variable that, set to `1` when the session starts, lifts HOLD on both meters for that session (never the deny line): the launch-time form of a session grant (The HOLD override). |
 | `usage.pool` | `null` or `{ "command": argv, "timeoutSeconds": integer 1 to 60 }` | `null` | A command run once, without a shell, only when the gate is about to deny at HOLD; its stdout is read as the `cswap list --json` contract and the deny names another account with room, or says there is none or no reading (ADR 0011). `timeoutSeconds` defaults to `15`. Hatchery's own file sets `["cswap", "list", "--json"]`. |
 | `usage.holdAdvice` / `usage.denyAdvice` | text | the base's wording | The sentence after the threshold in each deny. |
-| `edit.capExempt` | path patterns | `[]` | Docs exempt from the 300-line cap. |
+| `edit.capExempt` | path patterns | `[]` | Paths exempt from the docs caps; `CLAUDE.md` by exact name also exempts the project file's 40 and the loaded 190 (ADR 0016), so a broad pattern never lifts them unmeant. |
+| `update.exclude` | path patterns | `[]` | Base-owned paths an update from Hatchery never brings: files the project removed or replaced for good. A departure from a hook or skill is a departure-table row, not an exclude (ADR 0016). |
 | `edit.anchorExempt` | path patterns | proposals, decisions, findings | Docs whose backtick-quoted paths are not checked: closed records that name paths as they were. |
 | `edit.formatters` | extension to argv | `{}` | Formatter per file extension, e.g. `".rs": ["rustfmt"]`. |
 

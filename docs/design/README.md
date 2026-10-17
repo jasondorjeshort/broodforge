@@ -30,7 +30,8 @@ Decisions so far:
 - [0004 Adopting the Hatchery practice](decisions/0004-adopt-hatchery.md): an existing project takes
   the practice as files from `hatchery/main`, records the base commit in its own ADR, and updates by
   three-way patch; merging stays the path for decanted projects. (0003 and 0005 are proposals in
-  Hatchery not yet promoted; the numbers stay theirs.)
+  Hatchery not yet promoted; the numbers stay theirs.) Superseded in part by 0016 (the merging
+  sentence, the practice-set table, the fold, the two modes).
 - [0006 Hook policy file](decisions/0006-hook-policy-file.md): each project's choices for the hooks
   (who commits and pushes, deletable branches, usage lines, cap exemptions) live in
   `.claude/hooks/policy.json`, not in the scripts; the guard fails closed, the usage gate open.
@@ -41,12 +42,14 @@ Decisions so far:
   Hatchery uses `0001` to `0019` and a decanted project starts at `0020`; a decant keeps every
   Hatchery ADR and the Windows reference, deletes proposals, findings, ideas and operator entries;
   resolves the deferral in ADR 0004 and amends ADR 0002 where it says only 0001 and 0002 are kept.
+  Superseded by 0016.
 - [0009 ADR numbers when both tests pass](decisions/0009-adr-numbers-when-both-tests-pass.md): a
   tree that is both joined to the base and holds a `Hatchery base: <sha>` line numbers as adopted; the
-  line wins. Amends 0008, Numbers.
+  line wins. Amends 0008, Numbers. Superseded in part by 0016 (the tie-break is moot).
 - [0010 Update mode when both tests pass](decisions/0010-update-mode-when-both-tests-pass.md): the
   anchored `Hatchery base: <sha>` line means patch mode from that sha whatever `merge-base` says;
   a join merge is a project's recorded departure, not base procedure. Amends 0009 and 0004.
+  Superseded in part by 0016 (one mode; the line decides `FROM` only).
 - [0011 Usage cache per session, pool advice at HOLD](decisions/0011-usage-cache-per-session-and-pool-advice.md):
   the status line caches the meters per `session_id` with the account as a label, the gate treats a
   changed login as stale, and at HOLD it reports the pool account with room through `usage.pool`;
@@ -73,5 +76,16 @@ Decisions so far:
   from the first commit; no: the single file); a single-file project switches the day a second
   parallel session opens, not at a conflict count; the map stays the index and the stream
   directory has no README; Hatchery stays single-file; the caps do not move. Supersedes in part 0014.
+- [0016 Base-owned and project-owned files](decisions/0016-base-owned-and-project-owned-files.md):
+  ownership as data (`.claude/hooks/ownership.json`, one set for every tree); one patch-only update
+  from the base-owned set for decanted and adopted projects alike, printed by a helper and run
+  verbatim, conflicts base-wins unless a departure-table row, whole failures per path; the rule
+  sections as base-owned `.claude/agreement/<section>.md` imported by a 40-line project `CLAUDE.md`
+  (loads at most 190; `edit.capExempt` naming `CLAUDE.md` lifts both; `imports.js` and
+  `--claude-check`); Hatchery's records in the base-owned subtree `docs/hatchery/`, Hatchery
+  numbering from 0016 up, projects from 0001; `update.exclude`. Siblings: [the map](decisions/0016-ownership-map.md),
+  [the procedure](decisions/0016-update-procedure.md), [the migration](decisions/0016-migration.md).
+  Supersedes 0008; supersedes in part 0004, 0009, 0010; amends 0002, 0006, 0007, 0013.
+  [no-check: the map and the subtree exist once the ADR is implemented]
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).
