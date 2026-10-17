@@ -760,6 +760,12 @@ for (const [n, command, agent, cwd, want] of GP) {
     const tagWord = pvRepo('tag-word');
     must(tagWord.dir, ['tag', '-a', 'v9', '-m', `release, questions to ${OTHER}`]);
     pv('PV36', 'git push origin tag v9', tagWord, 20, { extra: says('tag v9 message (email: ') });
+    // PV37: a listed identity's address passes in an added line of .claude/hooks/policy.json, which
+    // declares it, and in no other file (PV28a is plain content).
+    const idLine = `{ "identities": [{ "name": "hooks-test", "email": "${OTHER}" }] }`;
+    pv('PV37a', PUSH, pvRepo('id-policy', [line('.claude/hooks/policy.json', idLine)]), 'allow', { policy: ids });
+    pv('PV37b', PUSH, pvRepo('id-policy-other', [line('.claude/policy.json', idLine)]), 20,
+      { policy: ids, extra: says('.claude/policy.json:1 (email: ') });
   }
 }
 

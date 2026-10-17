@@ -1,57 +1,47 @@
-**Rewrite the Hatchery history so the 28 root commits carry the owner's identity and no session links, then force-push it and re-record each project's base line.** It waits on the owner because the guard denies force-pushes for every agent, so the push of a rewritten history is a command from the owner's own terminal, and because whether to rewrite at all is the owner's call. The reasoning is in `docs/findings/2026-10-17-personal-data-leak-protocol-gap.md` (Result 4) and ADR 0018, whose paragraph on the owner's separate steps reads: "the history rewrite of the 28 root commits and the trailers, which starts at Hatchery, reaches every project that cloned it and re-records each base line".
+**Rewrite the Hatchery history so the 28 root commits carry the owner's identity and no session links, publish it as a fresh repository, and re-record each project's base line.** It waits on the owner because git filter-repo is not installed and the guard denies it to every agent in every repository, so the rewrite runs from the owner's own terminal. The reasoning is in `docs/findings/2026-10-17-personal-data-leak-protocol-gap.md` (Result 4) and ADR 0018 (Consequences, the `--preserve-commit-hashes` bullet).
 
-## What the rewrite touches (classes and counts, no values)
+## What the dry run established
 
-- 28 root commits of 2026-10-11 and 2026-10-12, the root included, carry a third-party git author and committer identity: the machine's global identity before the owner set theirs on 2026-10-15. All are on origin/main.
-- 25 commit messages carry a session-link trailer.
-- The two sibling checkouts that cloned Hatchery carry the same 28 commits (and the trailers), so a rewrite starts here; each sibling's recorded base line (a sha of this history) changes and is re-recorded afterwards.
-- Not covered here: the two first names on one line of `docs/findings/2026-10-16-handoff-split-default.md`. The coordinator replaces those in an ordinary commit; the rewrite does not need to.
+- The rewrite kit is in `~/.claude/hatchery-rewrite/`: `run.sh`, the mailmap, the message filter, a preflight script. It is outside the repository because the mailmap holds a personal value.
+- The preflight showed one identity after the mailmap and 25 messages losing their session-link lines. The tree at HEAD must come out identical.
+- `run.sh` refuses a source with uncommitted changes. It prints the checks: one identity, no trailers, equal commit counts, identical tree, the privacy scan.
+- The scan's remaining hits on the old history are exactly the classes the rewrite clears: identity, email on the 28 commits, session links in messages.
+- The rewrite runs with `--preserve-commit-hashes`, so a hash quoted in a message is translated only when that commit is in the repository being rewritten. That is why a sibling is rewritten after Hatchery, with Hatchery's map available for the shared base commits.
 
-## Decide first (the owner's)
+## Decided (the owner's)
 
-1. Rewrite or leave the history as is. Leaving it is a choice: the identity stays public for as long as the repository is.
-2. Whether to go private before rewriting: see `docs/operator/2026-10-17-hatchery-repository-visibility.md`. Rewriting a public repository does not unpublish clones, forks or cached views; going private first stops new copies while the rewrite is prepared.
-3. The order against the visibility step.
+- All repositories are private now.
+- Hatchery and Dystopo get a fresh repository: rename the old one on the host, create a new one under the old name, push.
+- Broodforge gets the same rewrite.
+- Regenesis and droplet-management keep their history; they only re-record their base line from the hash map after fetching the new Hatchery.
 
-## Sketch (untested, an agent can refine it; nothing here was run)
+## Commands, in order
 
-Account: the owner, in a terminal on the machine holding the checkouts, any shell with git and `git-filter-repo` installed. Needs first: a clean working tree, no unpushed work, and a mirror backup kept outside the checkout until the rewrite is verified.
+Account: the owner, any shell with git, Python and pip. Needs first: a clean working tree in each source, nothing unpushed.
 
 ```
-# 1. Backup, outside the working tree.
-git clone --mirror <hatchery-remote-url> <backup-dir>/hatchery-before.git
-
-# 2. Work on a fresh clone, because filter-repo wants one and drops the remote.
-git clone <hatchery-remote-url> <work-dir>/hatchery-rewrite
-cd <work-dir>/hatchery-rewrite
-
-# 3. Mailmap: old third-party identity to the owner's. One line, owner fills the placeholders.
-#    Format: <new name> <new email> <old name> <old email>   (written to <work-dir>/mailmap)
-git filter-repo --mailmap <work-dir>/mailmap \
-  --message-callback 'import re; return re.sub(rb"(?m)^Claude-Session:.*\n?", b"", message)'
-
-# 4. Check before pushing.
-git log --all --format='%an|%ae|%cn|%ce' | sort -u      # only the owner's identity remains
-git log --all --format=%B | grep -c '^Claude-Session:'   # 0
-git rev-list --all --count                               # the same count as the backup
-
-# 5. Push the rewritten history (the guard denies this for agents; this is the owner's terminal).
-git remote add origin <hatchery-remote-url>
-git push --force --all origin
-git push --force --tags origin
+pip install git-filter-repo
+bash ~/.claude/hatchery-rewrite/run.sh <path to this repository>
 ```
 
-Expect every sha to change from the root on, so the commit shas quoted in docs and findings go stale; the quoted ones are history, leave them.
+Read the printed checks; all must pass before pushing. Then, with the new repository created empty on the host:
+
+```
+git -C ~/.claude/hatchery-rewrite/hatchery remote add origin <new url>
+git -C ~/.claude/hatchery-rewrite/hatchery push -u origin main
+```
+
+For Dystopo and Broodforge, after Hatchery's run, the same `run.sh` with the sibling's path, then the same two push commands against that sibling's kit directory and its new url.
 
 ## After the push
 
-- Replace the local Hatchery checkout with a fresh clone of the rewritten remote (or `git fetch` and `git reset --hard` to it, from the owner's terminal); old clones still hold the old objects.
-- In each of the two sibling checkouts: their history contains the old 28 commits, so a decanted project keeps them until it is itself rewritten (same tool, same mailmap, from the same root) and its base line is re-recorded to the new Hatchery sha. Each project's session does that through `update-from-hatchery`; do not rewrite a sibling that has unpushed work without its owner's say.
-- GitHub keeps old commits reachable by sha and in cached views until its support purges them; a rewrite alone does not remove them. Ask GitHub support to run garbage collection and purge cached views if the old identity must be gone from the host.
-- Check it took: the three commands under step 4, run again in the fresh clone.
+- Replace every clone with a fresh clone, Hatchery's first. Old clones still hold the old objects.
+- Regenesis and droplet-management: fetch the new Hatchery and re-record the base line from the hash map.
+- A tester re-records the cited hashes from the map: 13 in living documents of this repository.
+- The old, renamed repository can be deleted on the host when nothing needs it.
 
-Time: about half an hour for Hatchery; more for each sibling.
+Time: about half an hour for Hatchery; less for each sibling once the kit is proven.
 
 ## When done
 
-Delete this file. Update the finding's Next (the rewrite item) and `docs/HANDOFF.md`'s Waiting on user in the same sitting; the coordinator records the new base-line sha wherever a sibling's base line is kept.
+Delete this file. Update the finding's Next (the rewrite item) and `docs/HANDOFF.md`'s Waiting on user in the same sitting; the coordinator records the new base-line hash wherever a sibling's base line is kept.

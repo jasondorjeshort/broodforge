@@ -38,6 +38,7 @@ const MAX_BUFFER = 512 * 1024 * 1024;
 const SUBST = '\u0000'; // shell-parse's mark for a value the guard's reader cannot see
 const MATCH_CAP = 80;
 const BASE_REMOTE = 'hatchery'; // the published base: its commits are never outgoing
+const POLICY_PATH = '.claude/hooks/policy.json'; // declares privacy.identities: their addresses pass in its added lines
 const ZEROS = /^0+$/;
 
 // A failure to work out or read what a push sends. Its message reads after "cannot ".
@@ -212,13 +213,14 @@ function scanSetup(privacy) {
   return { allow, userAllow, identities, words, notices, said: new Set() };
 }
 
-// An address the email class passes. person: an author, committer or tagger field, where an
-// identity's own address passes; in content only a listed GitHub noreply address does.
-function emailOk(addr, before, c, person) {
+// An address the email class passes. own: an author, committer or tagger field, or an added line
+// of the policy file that declares the identities, where an identity's own address passes; in any
+// other content only a listed GitHub noreply address does.
+function emailOk(addr, before, c, own) {
   const e = addr.toLowerCase();
   const at = e.indexOf('@');
   const listed = c.identities.some((i) => i.email === e);
-  return (listed && (person || GITHUB_NOREPLY.test(e))) || e === 'noreply@anthropic.com' || e.endsWith('@noreply.anthropic.com') ||
+  return (listed && (own || GITHUB_NOREPLY.test(e))) || e === 'noreply@anthropic.com' || e.endsWith('@noreply.anthropic.com') ||
     PLACEHOLDER_DOMAIN.test(e.slice(at + 1)) || URL_USERS.has(e.slice(0, at)) || URL_SCHEME.test(before);
 }
 function isTranscript(text) {
@@ -262,9 +264,10 @@ function addresses(text) {
 }
 
 // The hits in one line of text, appended to out. opts.transcript: run the transcript class.
+// opts.policyLine: an added line of POLICY_PATH, where a listed identity's address passes.
 function lineHits(text, where, commit, c, out, opts) {
   const add = (cls, match, key) => push(out, c, cls, where, commit, match, key);
-  for (const { addr, before } of addresses(text)) if (!emailOk(addr, before, c, false)) add('email', addr);
+  for (const { addr, before } of addresses(text)) if (!emailOk(addr, before, c, opts.policyLine === true)) add('email', addr);
   const ends = new Set();
   for (const re of [HOME_DRIVE, HOME_ROOT, HOME_WSL]) {
     for (const m of text.matchAll(re)) {
@@ -401,7 +404,7 @@ function computePush(g, refs, remote, extra, c) {
     personHits(k.an, k.ae, `${s7} author`, k.sha, c, hits);
     personHits(k.cn, k.ce, `${s7} committer`, k.sha, c, hits);
     for (const l of k.message) lineHits(l, `${s7} message`, k.sha, c, hits, { transcript: true });
-    for (const a of k.lines) lineHits(a.text, `${s7} ${a.file}:${a.n}`, k.sha, c, hits, { transcript: true });
+    for (const a of k.lines) lineHits(a.text, `${s7} ${a.file}:${a.n}`, k.sha, c, hits, { transcript: true, policyLine: a.file === POLICY_PATH });
     for (const p of k.files) {
       const where = `${s7} file ${p}`;
       lineHits(p, where, k.sha, c, hits, { transcript: false });

@@ -133,13 +133,18 @@ write-time warning from `post-edit.js` using `--text` (no new contract: the CLI 
   agree because they are one script; a difference between the pusher and the guard is a bug.
 - The tracked identity is a noreply address by recommendation, so the policy publishes nothing
   the commits do not; an owner who lists a real address publishes it in one more place, by choice
-  at decant or adopt, and it is exempt only where it already stands (author, committer, tagger).
+  at decant or adopt, and it is exempt only in that place (the added lines of
+  `.claude/hooks/policy.json`) and where it already stands (author, committer, tagger).
 - Costs: a hook script and a sh hook to keep; a harness group; a per-clone config step at decant
   and adopt; git runs on every push (one timeout per call); a push on a shared line is re-run
   alone. The `word` class can hit a common word when a user name is one; the user-scope allow
   file is the answer, the tracked one only for a non-person.
 - A hit shows the matched text to the agent that was refused; its report may carry only the class
   and location (item 9). The paste rule is what keeps a refusal from becoming the next leak.
+- The owner's history rewrite (identity and session links) runs `git filter-repo` with
+  `--preserve-commit-hashes`: filter-repo translates a hash quoted in a message only when that commit
+  is in the repository being rewritten, so a base message quoting a sibling commit would come out
+  different in that sibling, and every shared base commit after it would get a different hash.
 - Supersede when Claude Code passes hooks a parsed push plan, or when a project needs a PR scan.
 
 Predictions (the trigger scan reads these):
