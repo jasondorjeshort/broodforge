@@ -162,7 +162,15 @@ function main(argv) {
     .filter((n) => { try { return fs.statSync(path.join(dir, n)).isFile(); } catch (_) { return false; } })
     .sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
 
-  const rows = files.map((n) => read(o.mode, path.join(dir, n)));
+  const rows = [];
+  let unreadable = 0;
+  for (const n of files) {
+    try { rows.push(read(o.mode, path.join(dir, n))); } catch (e) {
+      unreadable++;
+      process.stderr.write(`queue-list: ${n}: unreadable (${e.code || e.message})
+`);
+    }
+  }
   let problemCount = 0;
   for (const r of rows) {
     for (const p of r.problems) {
@@ -190,7 +198,7 @@ function main(argv) {
     out = shown.map((r) => `${fields.map((f) => r[f]).join('\t')}\n`).join('');
   }
   process.stdout.write(out);
-  process.exitCode = o.check && problemCount > 0 ? 1 : 0;
+  process.exitCode = unreadable > 0 ? 2 : o.check && problemCount > 0 ? 1 : 0;
 }
 
 module.exports = { read, MODES, MARKER };

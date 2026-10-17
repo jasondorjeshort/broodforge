@@ -33,7 +33,7 @@ even if the answer is "unresolved, here is what was ruled out".
 ## Supersede
 
 When a later finding replaces an earlier one, write the new file with `supersedes: <old file>`,
-set the old to `status: superseded`, and, where the README carries an index table, update both rows.
+set the old to `status: superseded`, and, where the README carries an index table, update both rows. Remove the old finding from the handoff's Open findings, as Resolve step 3 does.
 
 ## Rules
 

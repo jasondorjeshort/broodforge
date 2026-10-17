@@ -20,7 +20,8 @@ node .claude/hooks/queue-list.js <ideas|operator|findings> [--status <v>] [--unt
   exclusive. `--check` combines with anything.
 - Usage error, exit 2, nothing on stdout, one stderr line starting `queue-list: usage:`: no mode,
   an unknown mode or flag, a flag on the wrong mode, both output flags, `--status` without a value.
-  Directory absent: exit 2, stderr `queue-list: docs/<mode>/ does not exist`.
+  Directory absent: exit 2, stderr `queue-list: docs/<mode>/ does not exist`. A file that cannot be
+  read: stderr `queue-list: <file>: unreadable (<error>)`, the other files still listed, exit 2.
 - Exit 0: the listing printed, `?` rows included, `--check` absent. Exit 1: `--check` present and
   at least one file read has a problem (section 2), whether or not a filter hid its row; the listing
   still prints. Nothing else exits 1.

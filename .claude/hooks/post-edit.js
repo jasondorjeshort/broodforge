@@ -34,6 +34,7 @@ function queueList() {
 // uses that; this copy only tells a marked directory apart when the script does not load.
 const QUEUE_MARKER = /^Listed on demand: node \.claude\/hooks\/queue-list\.js (ideas|operator|findings)[ \t]*$/m;
 const QUEUE_PREFIX = 'Listed on demand:';
+const QUEUE_DIRS = ['ideas', 'operator', 'findings']; // the only directories that may carry the marker
 const queueMarker = (ql) => (ql && ql.MARKER instanceof RegExp ? ql.MARKER : QUEUE_MARKER);
 // True when the line is the marker for docs/<dir>/: the whole line, the captured word <dir>.
 function isQueueMarker(line, dir, marker) {
@@ -129,7 +130,7 @@ function checkDocs(root, rel, abs) {
       msgs.push(`post-edit: ${rel} is not imported by docs/HANDOFF.md. Add the line @handoff/${base} or delete the file.`);
     }
   } else if (parts.length === 3 && base === 'README.md') {
-    msgs.push(...queueReadmeLines(rel, parts[1], text));
+    if (QUEUE_DIRS.includes(parts[1])) msgs.push(...queueReadmeLines(rel, parts[1], text));
   } else if (queue) {
     msgs.push(...queue);
   } else if (parts.length >= 3 && !INDEX_EXEMPT.has(base)) {
@@ -178,7 +179,7 @@ function queueReadmeLines(rel, dir, text) {
   return [`post-edit: ${rel} carries a Listed on demand: line that is not "Listed on demand: node .claude/hooks/queue-list.js ${dir}"; the directory counts as indexed.`];
 }
 
-// Path anchors:a backtick-quoted token that looks like a repository path (it contains "/" and
+// Path anchors: a backtick-quoted token that looks like a repository path (it contains "/" and
 // starts with an existing top-level directory such as docs or .claude) must exist, unless its
 // paragraph, or its list item, carries [no-check: ...]. Fenced blocks (indented ones too) and
 // placeholders (NNNN, <slug>, *) are skipped.

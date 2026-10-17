@@ -2474,6 +2474,50 @@ function AG0(s) { return `## ${s}\n\nRule text.\n`; }
       ...expectHook(qRoot, 'docs/operator/2026-03-01-h1.md', 'post-edit: docs/operator/2026-03-01-h1.md is not listed in operator/README.md. Add one line.', path.join(dir, 'post-edit.js')),
     ]);
   }
+  if (selected('Q14')) {
+    // A directory cannot be made unreadable portably, so the wrapper stubs fs.readFileSync for one file.
+    const root = path.join(scratch, 'queue-unreadable');
+    putQ(root, {
+      'docs/findings/2026-01-01-open.md': FINDINGS['docs/findings/2026-01-01-open.md'],
+      'docs/findings/2026-01-02-locked.md': FINDINGS['docs/findings/2026-01-02-resolved.md'],
+    });
+    const wrap = path.join(scratch, 'q14-wrap.js');
+    fs.writeFileSync(wrap, "'use strict';\nconst fs = require('fs');\nconst real = fs.readFileSync;\n" +
+      "fs.readFileSync = function (p, ...a) {\n  if (String(p).endsWith('locked.md')) { const e = new Error('denied'); e.code = 'EACCES'; throw e; }\n  return real.call(this, p, ...a);\n};\n" +
+      "process.argv.splice(1, 1, process.argv[2]);\nprocess.argv.splice(2, 1);\nrequire('module')._load(process.argv[1], null, true);\n");
+    const s = spawnSync(NODE, [wrap, QL, 'findings'], { cwd: root, encoding: 'utf8', timeout: 30000 });
+    qcase('Q14', 'an unreadable file: the others still listed, one unreadable line on stderr, exit 2, no stack trace',
+      expectRun({ code: s.status, out: s.stdout || '', err: s.stderr || '' }, { code: 2, out: '2026-01-01-open.md\topen\tOpen one\n', err: 'queue-list: 2026-01-02-locked.md: unreadable (EACCES)\n' }), s.stdout);
+  }
+  if (selected('Q15')) {
+    const root = path.join(scratch, 'queue-crlf');
+    putQ(root, {
+      'docs/findings/README.md': '# Findings\r\n\r\n' + MK('findings') + '\r\n',
+      'docs/findings/2026-01-05-done.md': FINDINGS['docs/findings/2026-01-05-done.md'],
+    });
+    const rel = 'docs/findings/2026-01-05-done.md';
+    qcase('Q15', 'hook, CRLF marker README: the marker is valid, the ? warning shows and no index warning',
+      expectHook(root, rel, wouldList(rel, 'status is "done"; allowed: open, resolved, superseded', 'findings')));
+  }
+  if (selected('Q16')) {
+    // A scratch copy of the hooks with no queue-list.js at all.
+    const dir = path.join(scratch, 'hooks-q16');
+    fs.mkdirSync(dir, { recursive: true });
+    for (const f of ['post-edit.js', 'policy.js', 'imports.js']) fs.copyFileSync(path.join(HOOKS, f), path.join(dir, f));
+    const rel = 'docs/findings/2026-01-05-done.md';
+    qcase('Q16', 'hook, valid marker, queue-list.js deleted: the did-not-load line, no index warning',
+      expectHook(qRoot, rel, "post-edit: queue-list.js did not load; " + rel + " was not checked.", path.join(dir, 'post-edit.js')));
+  }
+  if (selected('Q17')) {
+    const root = path.join(scratch, 'queue-answer');
+    putQ(root, {
+      'docs/ideas/2026-02-01-same-line.md': fm('date: 2026-02-01\nkind: question') + '\n# Same line\n\nQuestion: which? Answer: the first.\n',
+      'docs/ideas/2026-02-02-no-answer.md': fm('date: 2026-02-02\nkind: question') + '\n# No answer\n\nQuestion: which shape?\n',
+    });
+    const r = ql(root, ['ideas']);
+    qcase('Q17', 'ideas: Answer: text on the Question: line is no answer, and a Question: with no Answer: line, both read question',
+      expectRun(r, { code: 0, out: '2026-02-01-same-line.md\tquestion\tquestion\tSame line\n2026-02-02-no-answer.md\tquestion\tquestion\tNo answer\n', err: '' }), r.out);
+  }
 }
 
 // ---------- policy files themselves ----------

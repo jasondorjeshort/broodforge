@@ -21,7 +21,7 @@ no block. The format of a file and its three blocks is `docs/ideas/README.md`; r
    the Outcome recorded on its line and a finding if it failed). The report counts hits.
 2. Run `node .claude/hooks/queue-list.js ideas --untriaged --json` and parse it: the files that
    end in no `Plan:`, `Question:` or `Waits:`, oldest first. Files the stderr names with a `?` were
-   not classified; the report lists them as such.
+   not read as untriaged; the report lists each with its field and value.
 3. For each: read the file, then the anchor it names (the file, route, command or screen), then
    enough around it to know what the change would touch. An idea whose anchor no longer exists is
    a `Question:` ("the anchor moved to X; still wanted?"), not a deletion.
