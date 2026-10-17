@@ -40,7 +40,7 @@ learn.chatgpt.com and docs.devin.ai and were read there. No source failed.
 - regenesis took the base's single file 2026-10-12 15:50 (e4d61c7e), split 2026-10-16 07:23
   (af2b8d27): 3.6 days, 256 own commits, 35 touching the handoff, 18 nothing else. Since (to
   12:02): 13 own, 11 touching the handoff paths, 2 only those. Handoff commit authors (base
-  included): Dorje, two spellings, 44; one other local identity 14; another 1. Nine author names on all commits.
+  included): the owner, two spellings, 44; one other local identity 14; another 1. Nine author names on all commits.
 - Stream files ever added 8 (seven imported, one README), 8 exist, none closed. Loaded per launch:
   map 14 lines plus seven files 132 = 146 lines, 8,199 bytes, over ADR 0014's 120; the other four
   handoffs, single files, are 34 to 40 lines, 1,747 to 2,668 bytes. From 07:23 to 09:58
