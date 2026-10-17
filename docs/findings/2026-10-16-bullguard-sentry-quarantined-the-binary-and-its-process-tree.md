@@ -40,6 +40,6 @@ because they ran as the binary's children.
 
 Resolution is the owner's. The owner uninstalled BullGuard on 2026-10-16 instead of restoring entry
 681, so Git for Windows is reinstalled rather than restored
-(`docs/operator/2026-10-16-bullguard-restore-quarantine-681-and-exclude-the-build.md`). Until that
-is done no agent runs the binary, `go test` or a scratch root on this PC. The standing rule is
+(the operator entry for it, Git for Windows reinstalled, reboot, tools confirmed, was completed and
+retired on 2026-10-17). Until that was done no agent ran the binary, `go test` or a scratch root on this PC. The standing rule is
 promoted to `docs/reference/claude-code-on-windows.md`.

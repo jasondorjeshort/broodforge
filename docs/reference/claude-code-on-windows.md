@@ -94,8 +94,7 @@ source: observed (Go toolchain and mingw-w64 observed 2026-10-16; npm behaviour 
 - `filepath.EvalSymlinks` does not follow directory junctions (Go 1.27) while `os.Readlink` reads both junctions and symlinks; resolve links by hand where a junction matters (`docs/findings/2026-10-16-go-evalsymlinks-does-not-follow-windows-junctions.md`).
 - A behavioural scanner on this PC took a fresh unsigned build and the Git tools its process tree
   ran; BullGuard was removed 2026-10-16. If tools vanish at the instant a run ends, check the
-  scanner's quarantine first (`docs/findings/2026-10-16-bullguard-sentry-quarantined-the-binary-and-its-process-tree.md`,
-  `docs/operator/2026-10-16-bullguard-restore-quarantine-681-and-exclude-the-build.md`).
+  scanner's quarantine first (`docs/findings/2026-10-16-bullguard-sentry-quarantined-the-binary-and-its-process-tree.md`).
 - The `broodforge` instance account never runs tests and needs none of this.
 
 ## Shared state
