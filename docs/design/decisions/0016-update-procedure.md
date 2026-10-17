@@ -162,7 +162,7 @@ summary line `claude-check: <n> files, <m> FAIL` last:
 - `FAIL CLAUDE.md: loads <n> lines, cap 190; lift: edit.capExempt naming CLAUDE.md` (the sum of
   `CLAUDE.md` and every file reached at any hop, each once, excluding `docs/HANDOFF.md` and
   everything reached through it, which keep ADR 0014's 120).
-- `FAIL <file>: @<p> resolves to <path>, which does not exist` (check 7's `^@` grep line today,
+- `FAIL <file>: @<p> resolves to <path>, which does not exist` (or `which is a directory`, for a target that is a directory and so loads nothing; check 7's `^@` grep line today,
   now from the parser, for `CLAUDE.md`, the handoff files and every file they import; the grep
   line goes).
 
