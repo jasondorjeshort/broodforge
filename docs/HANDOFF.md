@@ -38,3 +38,4 @@ Updated: 2026-10-16 by main session (Hatchery coordinator)
 ## Open findings
 
 - `docs/findings/2026-10-11-bash-heredoc-apostrophes.md`
+- `docs/findings/2026-10-17-base-repo-defaults-and-upstream-merges.md`
