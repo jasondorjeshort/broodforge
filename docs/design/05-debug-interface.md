@@ -125,7 +125,7 @@ dir> --prompt "<text>" [--model <m>]` runs the real engine and writes the raw li
 directory, `--resume` the previous turn's, from `fixture.json` or its `init`) plus a `fixture.json` without delays (claim
 `recorded`, `engine.version`); an `--out` under `--root` or `--cwd` is `error: out-in-session`. The recorder redacts
 nothing, so record with a credential made for recording; before a commit the import rewrite (`go run
-./internal/tools/importfixture`, P1, generalised when `engine record` lands) replaces the recording host's home with `/home/user`,
+./internal/tools/importfixture [--user <pc user>] <out> fixtures/engine/<name>`, P1) replaces the recording host's home with `/home/user`,
 then an agent that did not record reads every file with nested JSON decoded, confirms no name, email, hostname, real host path or
 repository content survives, and reports in a few lines what is account-level or personal and no script can classify (the owner
 decides on that report, never by reading the files).

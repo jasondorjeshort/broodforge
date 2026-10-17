@@ -2,15 +2,23 @@
 
 Recorded Claude Code stream-json turns, replayed by the fake engine. Each directory holds
 `turn-<n>.jsonl` (the engine's stdout, verbatim but for paths) and `fixture.json` (`claim`,
-`engineVersion`, `recorded`, and `turns: [{n, exit, engineSessionId}]`). The spike recorded them
-on the PC with engine 2.1.296; the import rewrote the PC home to `/home/user`, the spike root to
-`/home/user/bf-spike`, and the engine's project slug to match, and changed nothing else.
+`engineVersion`, `recorded`, and `turns: [{n, exit, engineSessionId}]`). All were recorded on the
+PC with engine 2.1.296, by the spike or by `engine record` (claim `recorded`); the import rewrote
+the PC home to `/home/user`, the spike root to `/home/user/bf-spike`, and the engine's project
+slugs to match, and changed nothing else.
 `events-<n>.jsonl` is the parser's golden for `turn-<n>.jsonl`, one `EngineEvent` per line;
 `go test ./internal/engine/` compares them field by field, `-run TestGolden -update` rewrites them.
 
-Import one spike fixture (refuses a non-empty destination unless `--force`):
+Import one recorded directory (refuses a non-empty destination unless `--force`, and any output
+that still names the PC user):
 
-    go run ./internal/tools/importfixture [--force] <spike root>/fx/<name> fixtures/engine/<name>
+    go run ./internal/tools/importfixture [--force] [--user <pc user>] <src> fixtures/engine/<name>
+
+`<src>` is a spike fixture, `<spike root>/fx/<name>`, whose `meta-<n>.json` files build
+`fixture.json` with the claim the tool knows for `<name>`; or a directory `engine record` wrote,
+whose own `fixture.json` is copied through the same rewrite. The PC user is `--user`, else read
+from the source path's `C:/Users/<user>` prefix. Read the result as `docs/design/05-debug-interface.md`
+(`engine record`) says before committing it.
 
 | Fixture | Claim | Turns | What it shows |
 |---|---|---|---|
@@ -24,3 +32,5 @@ Import one spike fixture (refuses a non-empty destination unless `--force`):
 | `scrub` | C34 | 1 | Under `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, no `ANTHROPIC_*` was set, and no `CLAUDE_CONFIG_DIR` reaches Bash. |
 | `settings-a` | C26 | 1 | The hook given by `--settings <file>` runs under `--setting-sources user` with an empty user settings file (the Read's `tool_result_meta` source is `hook`). |
 | `settings-b` | C26 | 1 | The same with `--setting-sources ""`. |
+| `recorded-read` | recorded | 1 | `engine record` through the owner's credential: a Read of `hello.txt` the hook allows, answer `hello`. |
+| `closing` | recorded | 1 | The closing turn, no tools: a pull-request title line, a blank line, a Markdown body. |

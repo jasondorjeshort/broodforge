@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Command importfixture copies one spike fixture directory into fixtures/engine/<name>/,
+// Command importfixture copies one recorded fixture directory into fixtures/engine/<name>/,
 // rewriting every PC home and spike-root path to a placeholder (docs/design/08-implementation-plan.md, P1).
 //
-//	go run ./internal/tools/importfixture [--force] <src> <dst>
+//	go run ./internal/tools/importfixture [--force] [--user <pc user>] <src> <dst>
 //
-// <src> is C:/Users/<pc user>/AppData/Local/Temp/bf-spike/fx/<name>; the PC user is read from it.
-// Only turn-<n>.jsonl is copied; meta-<n>.json feeds fixture.json. The rewrite is textual: every
-// byte outside a rewritten path token or project slug is kept, so the fake replays the real stream.
+// <src> is a spike fixture, C:/Users/<pc user>/AppData/Local/Temp/bf-spike/fx/<name>, or a
+// directory engine record wrote. The PC user is --user, else read from the source path's
+// C:/Users/<user> prefix. Only turn-<n>.jsonl and fixture.json are written: fixture.json is built
+// from the spike's meta-<n>.json when every turn has one, else it is the source's own fixture.json,
+// rewritten like the turns. The rewrite is textual: every byte outside a rewritten path token or
+// project slug is kept, so the fake replays the real stream.
 // Exit codes: 0 done, 1 failure with one line on stderr, 2 usage.
 package main
 
@@ -49,6 +52,9 @@ var spikeUnderHome = []string{"AppData", "Local", "Temp", "bf-spike"}
 
 var srcPattern = regexp.MustCompile(`(?i)^[a-z]:/Users/([^/]+)/AppData/Local/Temp/bf-spike/fx/([^/]+)$`)
 
+// homePattern reads the PC user from any source under the PC home.
+var homePattern = regexp.MustCompile(`(?i)^[a-z]:/Users/([^/]+)/`)
+
 var turnPattern = regexp.MustCompile(`^turn-([0-9]+)\.jsonl$`)
 
 func main() {
@@ -58,9 +64,10 @@ func main() {
 func run(args []string) int {
 	fs := flag.NewFlagSet("importfixture", flag.ContinueOnError)
 	force := fs.Bool("force", false, "write into a non-empty <dst>, replacing its turn files and fixture.json")
+	user := fs.String("user", "", "the PC user whose home the source's paths name (default: read from <src>)")
 	fs.SetOutput(os.Stderr)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: importfixture [--force] <src> <dst>")
+		fmt.Fprintln(os.Stderr, "usage: importfixture [--force] [--user <pc user>] <src> <dst>")
 	}
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -69,7 +76,7 @@ func run(args []string) int {
 		fs.Usage()
 		return 2
 	}
-	if err := importDir(fs.Arg(0), fs.Arg(1), *force); err != nil {
+	if err := importDir(fs.Arg(0), fs.Arg(1), *user, *force); err != nil {
 		fmt.Fprintln(os.Stderr, "error: "+err.Error())
 		return 1
 	}
@@ -100,19 +107,16 @@ type meta struct {
 	} `json:"exit"`
 }
 
-func importDir(src, dst string, force bool) error {
+func importDir(src, dst, user string, force bool) error {
 	abs, err := filepath.Abs(src)
 	if err != nil {
 		return err
 	}
-	m := srcPattern.FindStringSubmatch(filepath.ToSlash(abs))
-	if m == nil {
-		return fmt.Errorf("source %s is not <drive>:/Users/<user>/AppData/Local/Temp/bf-spike/fx/<name>", src)
-	}
-	user, name := m[1], m[2]
-	claim, ok := claims[name]
-	if !ok {
-		return fmt.Errorf("no claim known for fixture %q", name)
+	if user == "" {
+		user, err = userFromPath(filepath.ToSlash(abs))
+		if err != nil {
+			return err
+		}
 	}
 
 	entries, err := os.ReadDir(src)
@@ -138,36 +142,38 @@ func importDir(src, dst string, force bool) error {
 	// Everything is rewritten and scanned in memory first, so a refusal leaves dst untouched.
 	r := newRewriter(user)
 	outs := map[string][]byte{}
-	fx := fixture{Claim: claim}
 	for _, n := range ns {
 		raw, err := os.ReadFile(filepath.Join(src, fmt.Sprintf("turn-%d.jsonl", n)))
 		if err != nil {
 			return err
 		}
 		outs[fmt.Sprintf("turn-%d.jsonl", n)] = r.rewrite(raw)
-		mb, err := os.ReadFile(filepath.Join(src, fmt.Sprintf("meta-%d.json", n)))
+	}
+	metas := 0
+	for _, n := range ns {
+		if _, err := os.Stat(filepath.Join(src, fmt.Sprintf("meta-%d.json", n))); err == nil {
+			metas++
+		}
+	}
+	switch metas {
+	case len(ns):
+		if _, err := os.Stat(filepath.Join(src, "fixture.json")); err == nil {
+			return fmt.Errorf("%s has both meta-<n>.json and fixture.json; remove the one that is not the record", src)
+		}
+		out, err := fixtureFromMetas(src, filepath.Base(abs), ns)
 		if err != nil {
 			return err
 		}
-		var md meta
-		if err := json.Unmarshal(mb, &md); err != nil {
-			return fmt.Errorf("meta-%d.json: %w", n, err)
+		outs["fixture.json"] = out
+	case 0:
+		out, err := recordedFixture(src, ns)
+		if err != nil {
+			return err
 		}
-		if fx.EngineVersion == "" {
-			fx.EngineVersion = md.EngineVersion
-			if len(md.StartedAt) >= len("2006-01-02") {
-				fx.Recorded = md.StartedAt[:len("2006-01-02")]
-			}
-		} else if md.EngineVersion != fx.EngineVersion {
-			return fmt.Errorf("meta-%d.json: engine %s, turn %d had %s", n, md.EngineVersion, ns[0], fx.EngineVersion)
-		}
-		fx.Turns = append(fx.Turns, turn{N: n, Exit: md.Exit.Code, EngineSessionID: md.EngineSessionID})
+		outs["fixture.json"] = r.rewrite(out)
+	default:
+		return fmt.Errorf("%s has meta-<n>.json for %d of %d turns", src, metas, len(ns))
 	}
-	out, err := json.MarshalIndent(fx, "", "  ")
-	if err != nil {
-		return err
-	}
-	outs["fixture.json"] = append(out, '\n')
 	if err := scanLeak(user, outs); err != nil {
 		return err
 	}
@@ -184,8 +190,82 @@ func importDir(src, dst string, force bool) error {
 	return os.WriteFile(filepath.Join(dst, "fixture.json"), outs["fixture.json"], 0o644)
 }
 
+// userFromPath reads the PC user from a spike fixture path or any path under C:/Users/<user>.
+func userFromPath(abs string) (string, error) {
+	if m := srcPattern.FindStringSubmatch(abs); m != nil {
+		return m[1], nil
+	}
+	if m := homePattern.FindStringSubmatch(abs); m != nil {
+		return m[1], nil
+	}
+	return "", fmt.Errorf("source %s is not under <drive>:/Users/<user>; pass --user", abs)
+}
+
+// fixtureFromMetas builds fixture.json from the spike's meta-<n>.json files; the claim comes
+// from the spike fixture's name.
+func fixtureFromMetas(src, name string, ns []int) ([]byte, error) {
+	claim, ok := claims[name]
+	if !ok {
+		return nil, fmt.Errorf("no claim known for fixture %q", name)
+	}
+	fx := fixture{Claim: claim}
+	for _, n := range ns {
+		mb, err := os.ReadFile(filepath.Join(src, fmt.Sprintf("meta-%d.json", n)))
+		if err != nil {
+			return nil, err
+		}
+		var md meta
+		if err := json.Unmarshal(mb, &md); err != nil {
+			return nil, fmt.Errorf("meta-%d.json: %w", n, err)
+		}
+		if fx.EngineVersion == "" {
+			fx.EngineVersion = md.EngineVersion
+			if len(md.StartedAt) >= len("2006-01-02") {
+				fx.Recorded = md.StartedAt[:len("2006-01-02")]
+			}
+		} else if md.EngineVersion != fx.EngineVersion {
+			return nil, fmt.Errorf("meta-%d.json: engine %s, turn %d had %s", n, md.EngineVersion, ns[0], fx.EngineVersion)
+		}
+		fx.Turns = append(fx.Turns, turn{N: n, Exit: md.Exit.Code, EngineSessionID: md.EngineSessionID})
+	}
+	out, err := json.MarshalIndent(fx, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(out, '\n'), nil
+}
+
+// recordedFixture returns the source's own fixture.json, as engine record wrote it, after
+// checking it names a claim and an engine version and lists exactly the turn files found.
+func recordedFixture(src string, ns []int) ([]byte, error) {
+	b, err := os.ReadFile(filepath.Join(src, "fixture.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("%s has neither meta-<n>.json nor fixture.json", src)
+	}
+	if err != nil {
+		return nil, err
+	}
+	var fx fixture
+	if err := json.Unmarshal(b, &fx); err != nil {
+		return nil, fmt.Errorf("fixture.json: %w", err)
+	}
+	if fx.Claim == "" || fx.EngineVersion == "" {
+		return nil, fmt.Errorf("fixture.json: claim or engineVersion missing")
+	}
+	if len(fx.Turns) != len(ns) {
+		return nil, fmt.Errorf("fixture.json lists %d turns, %s has %d turn files", len(fx.Turns), src, len(ns))
+	}
+	for k, t := range fx.Turns {
+		if t.N != ns[k] {
+			return nil, fmt.Errorf("fixture.json turn %d does not match turn-%d.jsonl", t.N, ns[k])
+		}
+	}
+	return b, nil
+}
+
 // checkDst refuses a destination that is the source or lies under the spike root (the bf-spike
-// ancestor of src), where --force would delete the only copy of the recordings.
+// ancestor of src; src itself when it is not under one), where --force would delete the only
+// copy of the recordings.
 func checkDst(absSrc, dst string) error {
 	d, err := filepath.Abs(dst)
 	if err != nil {
@@ -203,8 +283,19 @@ func checkDst(absSrc, dst string) error {
 	return nil
 }
 
-// scanLeak refuses output that still contains the PC user name in any form, case-insensitively:
-// the rewrite covers known path forms only.
+// leakPatterns are what no rewritten output may hold whoever the user is: a Users path token in
+// any separator form the rewrite knows (/, \, and the 2- and 4-backslash JSON escapes), and the
+// engine's home slug, either of which names some account's home.
+var leakPatterns = []struct {
+	what string
+	re   *regexp.Regexp
+}{
+	{"a Users path", regexp.MustCompile(`(?i)(^|[^a-z0-9_])users(/|\\{1,4})[^/\\\s"'` + "`" + `]`)},
+	{"a C--Users- slug", regexp.MustCompile(`(?i)[a-z]--users-`)},
+}
+
+// scanLeak refuses output that still contains the PC user name in any form, case-insensitively,
+// or any user's home path or slug: the rewrite covers known path forms of one user only.
 func scanLeak(user string, outs map[string][]byte) error {
 	needle := []byte(strings.ToLower(user))
 	names := make([]string, 0, len(outs))
@@ -218,6 +309,12 @@ func scanLeak(user string, outs map[string][]byte) error {
 		if k := bytes.Index(low, needle); k >= 0 {
 			line := bytes.Count(low[:k], []byte("\n")) + 1
 			return fmt.Errorf("the PC user name survives the rewrite in %s line %d; extend the rewrite", name, line)
+		}
+		for _, p := range leakPatterns {
+			if loc := p.re.FindIndex(b); loc != nil {
+				line := bytes.Count(b[:loc[0]], []byte("\n")) + 1
+				return fmt.Errorf("%s survives the rewrite in %s line %d; check --user or extend the rewrite", p.what, name, line)
+			}
 		}
 	}
 	return nil

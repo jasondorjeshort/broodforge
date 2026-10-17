@@ -50,6 +50,9 @@ func TestRewrite(t *testing.T) {
 		{"case-insensitive drive and segments",
 			`c:\\users\\Alice\\appdata\\local\\temp\\BF-SPIKE\\tree`,
 			`/home/user/bf-spike/tree`},
+		{"engine record: a credential config dir and the tree slug under home",
+			`"auto":"C:\\Users\\alice\\bf-owner\\harness\\cred-x1\\projects\\C--Users-alice-bf-p7-tree\\memory\\"`,
+			`"auto":"/home/user/bf-owner/harness/cred-x1/projects/-home-user-bf-p7-tree/memory/"`},
 		{"a segment that only starts like the spike root is under home",
 			`C:/Users/alice/AppData/Local/Temp/bf-spike2/x`,
 			`/home/user/AppData/Local/Temp/bf-spike2/x`},
@@ -95,6 +98,122 @@ func TestSourcePattern(t *testing.T) {
 	}
 	if srcPattern.MatchString("/home/alice/bf-spike/fx/basic") {
 		t.Fatal("matched a non-PC path")
+	}
+}
+
+func TestUserFromPath(t *testing.T) {
+	for in, want := range map[string]string{
+		"C:/Users/alice/AppData/Local/Temp/bf-spike/fx/basic": "alice",
+		"C:/Users/alice/bf-p7/rec":                            "alice",
+		"d:/users/alice/x":                                    "alice",
+	} {
+		if got, err := userFromPath(in); err != nil || got != want {
+			t.Errorf("%s: got %q, %v", in, got, err)
+		}
+	}
+	for _, in := range []string{"/home/alice/rec", "C:/Users", "C:/tmp/rec"} {
+		if got, err := userFromPath(in); err == nil {
+			t.Errorf("%s: read user %q", in, got)
+		}
+	}
+}
+
+// writeFiles writes name to content pairs into a new temporary directory.
+func writeFiles(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+const recordedFx = "{\n  \"claim\": \"recorded\",\n  \"engineVersion\": \"2.1.296\",\n  \"recorded\": \"2026-10-17\",\n" +
+	"  \"turns\": [\n    {\n      \"n\": 1,\n      \"exit\": 0,\n      \"engineSessionId\": \"s1\"\n    }\n  ]\n}\n"
+
+func TestImportRecordedDirectory(t *testing.T) {
+	turn := "{\"type\":\"system\",\"cwd\":\"C:\\\\Users\\\\alice\\\\bf-p7\\\\tree\"," +
+		"\"auto\":\"C:\\\\Users\\\\alice\\\\bf-owner\\\\cred\\\\projects\\\\C--Users-alice-bf-p7-tree\\\\memory\\\\\"}\n" +
+		"{\"type\":\"result\",\"result\":\"hello\"}\n"
+	src := writeFiles(t, map[string]string{"turn-1.jsonl": turn, "fixture.json": recordedFx, "received-1.json": "{}"})
+	dst := filepath.Join(t.TempDir(), "recorded-read")
+	if err := importDir(src, dst, user, false); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(dst, "turn-1.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "{\"type\":\"system\",\"cwd\":\"/home/user/bf-p7/tree\"," +
+		"\"auto\":\"/home/user/bf-owner/cred/projects/-home-user-bf-p7-tree/memory/\"}\n" +
+		"{\"type\":\"result\",\"result\":\"hello\"}\n"
+	if string(got) != want {
+		t.Errorf("turn-1.jsonl:\n got  %s\n want %s", got, want)
+	}
+	fx, err := os.ReadFile(filepath.Join(dst, "fixture.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(fx) != recordedFx {
+		t.Errorf("fixture.json changed:\n%s", fx)
+	}
+	left, _ := os.ReadDir(dst)
+	if len(left) != 2 {
+		t.Errorf("wrote %v, want turn-1.jsonl and fixture.json only", left)
+	}
+}
+
+func TestImportRecordedRefusals(t *testing.T) {
+	turn := "{\"type\":\"result\"}\n"
+	for name, files := range map[string]map[string]string{
+		"no fixture.json":          {"turn-1.jsonl": turn},
+		"turn list does not match": {"turn-1.jsonl": turn, "turn-2.jsonl": turn, "fixture.json": recordedFx},
+		"meta for some turns only": {"turn-1.jsonl": turn, "turn-2.jsonl": turn, "meta-1.json": "{}", "fixture.json": recordedFx},
+		"user survives":            {"turn-1.jsonl": "{\"p\":\"/c/Users/alice/x\"}\n", "fixture.json": recordedFx},
+	} {
+		src := writeFiles(t, files)
+		dst := filepath.Join(t.TempDir(), "out")
+		if err := importDir(src, dst, user, false); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+		if _, err := os.Stat(dst); err == nil {
+			t.Errorf("%s: wrote %s", name, dst)
+		}
+	}
+}
+
+func TestMetasBesideFixtureJSONRefused(t *testing.T) {
+	src := writeFiles(t, map[string]string{"turn-1.jsonl": "{}\n", "meta-1.json": "{}", "fixture.json": recordedFx})
+	dst := filepath.Join(t.TempDir(), "out")
+	if err := importDir(src, dst, user, false); err == nil {
+		t.Fatal("meta-1.json and fixture.json together accepted")
+	}
+	if _, err := os.Stat(dst); err == nil {
+		t.Fatalf("wrote %s", dst)
+	}
+}
+
+func TestOtherUsersHomeRefused(t *testing.T) {
+	r := newRewriter(user)
+	for _, in := range []string{
+		`C:/Users/bob/x`,
+		`C:\Users\bob\x`,
+		`"p":"C:\\Users\\bob\\x"`,
+		`"stdin":"{\"p\":\"C:\\\\Users\\\\bob\\\\x\"}"`,
+		`/c/Users/bob/x`,
+		`projects/C--Users-bob-tree/`,
+	} {
+		out := map[string][]byte{"turn-1.jsonl": r.rewrite([]byte("{}\n" + in + "\n"))}
+		if err := scanLeak(user, out); err == nil {
+			t.Errorf("%s passed the scan", in)
+		}
+	}
+	for _, in := range []string{`"/home/user/bf-p7/tree"`, `-home-user-bf-p7-tree`, `the users. Then`, `MyUsers/x`} {
+		if err := scanLeak(user, map[string][]byte{"turn-1.jsonl": []byte(in)}); err != nil {
+			t.Errorf("%s refused: %v", in, err)
+		}
 	}
 }
 
