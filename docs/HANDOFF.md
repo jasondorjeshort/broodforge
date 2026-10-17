@@ -35,3 +35,4 @@ Updated: 2026-10-17 by main session (Hatchery coordinator)
 
 - `docs/findings/2026-10-11-bash-heredoc-apostrophes.md`
 - `docs/findings/2026-10-17-base-repo-defaults-and-upstream-merges.md`
+- `docs/findings/2026-10-17-queue-directory-indexes.md`
