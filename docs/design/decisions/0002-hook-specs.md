@@ -98,6 +98,7 @@ unreadable branch match no pattern list but `*`.
 | 17 | `worktree remove` with `-f` or `--force` | `forced worktree removal` |
 | 18 | `checkout -B <b>`, `switch -C`/`--force-create <b>`, or `branch -f <b>` (not deleting, moving or copying) when `<b>` is the current branch or matches `git.commit.protectedBranches` | `forced branch reset` |
 | 19 | an invocation with an unknown subcommand; or an opaque invocation of `push`, `send-pack`, `reset`, `checkout`, `switch`, `restore`, `clean`, `branch`, `worktree`, `stash`, `config`, `reflog` or a rule-4 subcommand. Other subcommands (`log`, `diff`, `add`, ...) stay allowed. | `unexpanded argument` |
+| 20 | tried right after rule 3: `push` or `send-pack` from any caller, the main session and `--dry-run` included, when the push shares its line with another git invocation, or when `privacy-scan.js` reports a hit or an error for the commits the push sends (an opaque push is left to rule 19). The require and the scan sit in one try: any throw is this rule's deny, and no other rule is affected. Advice: shared line, run the push on a line of its own; hits, fix the text and fold the edit into the unpushed commit, a false positive is the owner's via `privacy.allow` or the user allow file; error, run the scan by hand and read its `cannot` line. | `personal data in the outgoing commits` |
 
 The merged-PR check runs `gh pr list --head <branch> --state merged --json number --limit 1` in the
 invocation's directory, once per branch; any failure counts as not merged. Test seam:
@@ -225,6 +226,17 @@ the three hook messages above (Q10 to Q13, Q13 on a scratch copy of the hooks wh
 `queue-list.js` throws). The hook reads the README with CR removed, so a CRLF marker line is valid;
 it loads `queue-list.js` only when that README holds a `Listed on demand:` line, uses its exported
 `MARKER`, and keeps a copy of the regular expression for the case where the script does not load.
+
+## 2b. `git/pre-push` (a git hook, not a Claude Code hook)
+
+`.claude/hooks/git/pre-push`, POSIX sh, executable in git. Enabled per clone by `git config
+core.hooksPath .claude/hooks/git`, the value `git.hooksPath` names (rule 14 allows exactly that
+value). git passes the remote name and URL as arguments and the refs on stdin; the script finds the
+top level and runs `privacy-scan.js --pre-push "$1" "$2"` with stdout redirected to stderr (`>&2`),
+so its exit status is the scan's: 0 clean, 1 hits, 2 cannot compute; any non-zero refuses the push.
+Git for Windows 2.56 shows only a hook's stderr, so without `>&2` the `HIT` lines are lost
+(`docs/findings/2026-10-17-git-for-windows-hides-pre-push-stdout.md`). Node absent refuses the
+push. The CLI and its output lines: ADR 0018's scan sibling, section 3. Harness group `PV`.
 
 ## 3. `usage-gate.js` and the status line
 

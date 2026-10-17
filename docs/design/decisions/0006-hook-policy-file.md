@@ -62,6 +62,8 @@ per model seen downstream (task branches, single branch, per-meter thresholds), 
 | `git.branchDelete.branches` | branch patterns | `[]` | `branch -D` and `push --delete` are allowed only for these. |
 | `git.branchDelete.requireMergedPr` | boolean | `false` | Also require a merged pull request on GitHub (`gh`, fails closed). |
 | `git.hooksPath` | path or `null` | `null` | The one value `core.hooksPath` may be set to; `null` allows none. |
+| `privacy.allow` | literal strings, case-insensitive; a `*` or `/` is malformed | `["user"]` | Lifts a hit of any class of the privacy scan whose match equals an entry. Non-personal literals only; edited by the owner from the main session (ADR 0018, scan contract section 2). |
+| `privacy.identities` | list of `{ "name", "email" }`, each a non-empty string, the email with one `@` | `[]` | The identities allowed as author, committer or tagger; the first is the repository identity decant and adopt set. Empty turns the `identity` class off with a notice on stderr (ADR 0018). |
 | `usage.hold` / `usage.deny` | percent / percent or `null` | `50` / `null` | No new subagents at `hold`; stop at `deny`, a ceiling no override lifts. `null` means no deny line: HOLD is the only line, and the override can lift it up to and past a saturated meter. `hold` may not exceed a `deny` that is set. |
 | `usage.fiveHour` / `usage.sevenDay` | `{ "hold", "deny" }`, each percent or `null` | both `null` | Per-meter thresholds; `null` inherits `usage.hold` / `usage.deny`, so a meter has no deny line when its own and the shared `deny` are both `null`. Each meter is judged by its own pair and the worse verdict wins (ReGenesis, its ADR 0004). |
 | `usage.staleSeconds` | seconds | `7200` | Older usage data is stale. |

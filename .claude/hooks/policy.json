@@ -4,7 +4,7 @@
     "commit": { "subagents": ["runner"], "protectedBranches": [] },
     "push": { "subagents": ["pusher"], "branches": ["*"], "mainSession": true, "forceWithLease": [] },
     "branchDelete": { "branches": [], "requireMergedPr": false },
-    "hooksPath": null
+    "hooksPath": ".claude/hooks/git"
   },
   "usage": {
     "hold": 50, "deny": null, "staleSeconds": 7200, "whenStale": "allow",
