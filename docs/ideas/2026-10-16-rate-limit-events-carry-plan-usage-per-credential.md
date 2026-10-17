@@ -25,3 +25,8 @@ Possible uses:
 
 - Whether the event is emitted on every turn or only near a limit; every event seen carried the windows, but how often events appear is not yet known.
 - Whether `unifiedWindows` is stable across engine versions, or needs a pin and a fake-engine field.
+
+2026-10-17: the owner's first real P7 turn (one Read, engine 2.1.296) carried one `rate_limit_event`
+after the first assistant message, `status: allowed_warning`, `seven_day` 0.68, `five_hour` 0.09,
+plus `overageStatus` and `overageEnabled`. So it is emitted on an ordinary turn, not only near a
+limit; the per-turn frequency question above is half answered.

@@ -14,6 +14,14 @@ closing-turn comment). Today the fallback title always stands. Done: a `closing`
 `fixtures/engine/`, recorded with the real engine, drives the fake and `session end` uses its
 title and body. It waits on an owner turn through `engine record`, so nothing is plannable yet.
 
+2026-10-17 (coordinator): the first closing recording, with a prompt that told the engine to use
+`git log` and `git diff`, ended `tool_deferred` on its first Bash, because the standalone run takes
+`defaults.mode` and the owner root is in prompt mode; a session-end turn has nobody to click, and
+under read-only reach Bash is denied outright. Decision: the closing turn uses no tools. `session`
+runs `git log` and `git diff --stat` over base..HEAD itself and inlines both in the fixed prompt,
+which also says not to run tools; the turn is then mode- and reach-independent and one process. The
+`closing` fixture is recorded with that prompt shape.
+
 ## Auth error marks the credential needs-login
 
 Anchor: `docs/design/03-architecture.md` (Failure modes, `engine` row); `internal/credentials/service.go`
