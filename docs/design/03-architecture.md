@@ -28,7 +28,7 @@ names; everything else goes through `SessionService`. Host differences live in `
 | `spawn` | `SpawnBackend`: `same-account` and `linux-sudo-bwrap`; interrupt; `engine-entry`; preflight | the OS |
 | `backup` | `backup snapshot`, `verify`, `rehearse` (never scheduled by the bot) | `store` |
 | `config` | Loading, validation, last-good, `reload`, `config check` | `credentials` (id existence) |
-| `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control`; `credentials` (`credential init`, the reads' store fallback, the bot's handlers); `session` (`serve` builds the service and serves it); `git` and `policy` (the worktree handlers) |
+| `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control`; `credentials` (`credential init`, the reads' store fallback, the bot's handlers); `session` (`serve` builds the service and serves it); `discord` (`serve`'s adapter, the standalone `discord render`); `git` and `policy` (the worktree handlers) |
 
 `SessionService` is the boundary N-11 names: `start`, `submit`, `answer`, `setMode`, `interrupt`,
 `end`, `invite`, `status`, `subscribe(sessionId)`. The Discord adapter and the control socket call

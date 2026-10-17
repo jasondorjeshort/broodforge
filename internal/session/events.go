@@ -44,6 +44,59 @@ type Event struct {
 	Reason    string    `json:"reason,omitempty"`
 	Text      string    `json:"text,omitempty"`
 	Result    string    `json:"result,omitempty"`
+	// The payloads the Discord renderer needs beyond the summary (P11): the header's facts on
+	// session-started, the footer's on turn-ended, the summary's on session-ended.
+	Start *StartInfo `json:"start,omitempty"`
+	Usage *TurnUsage `json:"usage,omitempty"`
+	End   *EndInfo   `json:"end,omitempty"`
+}
+
+// StartInfo is what the venue's pinned header shows (04, Starting and the first message).
+type StartInfo struct {
+	Channel        string   `json:"channel"`
+	ProjectName    string   `json:"projectName"`
+	Branch         string   `json:"branch"`
+	Driver         string   `json:"driver"`
+	DriverName     string   `json:"driverName"`
+	Mode           string   `json:"mode"`
+	ChannelMode    string   `json:"channelMode"`
+	Reach          string   `json:"reach"`
+	Credential     string   `json:"credential"`
+	CredentialKind string   `json:"credentialKind"`
+	IdleTimeout    string   `json:"idleTimeout"` // 04's words: "60 minutes"
+	Answer         []string `json:"answer"`
+}
+
+// TurnUsage is a turn's footer (04, The turn loop): the turn's tokens over every engine process
+// it ran (in counts cache reads and writes), the session's so far, the model and the mode the
+// turn ran in. OutUnknown is a process without a result (a stop, S2); Exit is the last
+// process's exit code, "" when it is not known.
+type TurnUsage struct {
+	In         int64  `json:"in"`
+	Out        int64  `json:"out"`
+	OutUnknown bool   `json:"outUnknown,omitempty"`
+	SessionIn  int64  `json:"sessionIn"`
+	SessionOut int64  `json:"sessionOut"`
+	Model      string `json:"model,omitempty"`
+	Mode       string `json:"mode"`
+	Exit       string `json:"exit,omitempty"`
+}
+
+// EndInfo is the summary's facts (04, Ending a session).
+type EndInfo struct {
+	By        string   `json:"by"` // who ended it, by name; "" for the idle timeout
+	Reason    string   `json:"reason"`
+	StartedAt string   `json:"startedAt"`
+	Turns     int      `json:"turns"`
+	In        int64    `json:"in"`
+	Out       int64    `json:"out"`
+	Model     string   `json:"model,omitempty"`
+	Branch    string   `json:"branch"`
+	Outcome   string   `json:"outcome"`
+	Commits   int      `json:"commits"`
+	URL       string   `json:"url,omitempty"`
+	Author    string   `json:"author"`
+	CoAuthors []string `json:"coAuthors"`
 }
 
 // eventLog is one session's events in memory: appended by the session's own goroutines,

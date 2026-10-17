@@ -39,6 +39,23 @@ show=$("$bf" session show "$id")
 printf '%s\n' "$show"
 grep -q '^pending: toolu_01NmkmkiJgpriuU7yQrtDWYi  Write  .*hi\.txt  since .*  until ' <<<"$show" ||
 	fail "session show has no pending line while waiting"
+# The renderer's prompt (P11): the driver mentioned, the three buttons with 03's custom ids.
+# It is posted once the coalescer lets it out; a person can click only after that, so wait.
+# --json bodies come back with < and > escaped by the control wire (<), so a line with a
+# mention or an arrow is matched in text mode or loosely.
+outbox_has() {
+	for _ in $(seq 1 40); do
+		"$bf" "${@:3}" session outbox "$1" --all | grep -q -- "$2" && return 0
+		sleep 0.25
+	done
+	return 1
+}
+tid=toolu_01NmkmkiJgpriuU7yQrtDWYi
+outbox_has "$id" '  create  m[0-9]*  [0-9]*  <@1001> Permission needed · turn 1$' || fail "session outbox has no permission prompt"
+for b in "Allow\",\"customId\":\"bf:$id:$tid:allow\"" "Deny\",\"customId\":\"bf:$id:$tid:deny\"" \
+	"Allow Write this session\",\"customId\":\"bf:$id:$tid:allow-session\""; do
+	"$bf" --json session outbox "$id" --all | grep -q -- "$b" || fail "the prompt has no button $b"
+done
 "$bf" session answer "$id" allow --as 1001 --roles 11 --expect refused
 "$bf" session answer "$id" allow --as 1001 --roles 10 --wait --expect turn-ended >/dev/null
 
@@ -61,6 +78,15 @@ for want in \
 	grep -q -- "$want" <<<"$tail" || fail "session tail has no line matching: $want"
 done
 [ "$(grep -c '  turn-ended  end_turn$' <<<"$tail")" = 2 ] || fail "both turns did not end"
+# The renderer: the first prompt became 04's `Allowed by`, the second `No answer; denied`, and
+# turn 2's final message carries the timeout's trace line (04, Owner 16).
+outbox_has "$id" '  edit  m[0-9]*  [0-9]*  Allowed by Ada Example$' || fail "the answered prompt does not say Allowed by"
+# A 3 s timeout can fire before the coalescer posts the second prompt; it is then created
+# answered (an edit merges into a queued create), so either op counts.
+outbox_has "$id" '  \(create\|edit\)  m[0-9]*  [0-9]*  No answer; denied$' || fail "the timed-out prompt does not say No answer; denied"
+outbox_has "$id" '\[Write\] [^"]*bye\.txt -[^ ]* denied: the prompt timed out after 3 seconds\.\\n.*\\nDone · turn 2 · ' --json ||
+	fail "session outbox has no timeout trace line in turn 2's final message"
+"$bf" session outbox "$id" --all
 
 # Parallel calls: the engine keeps the message's last call and drops the other (C28).
 par=$("$bf" session start --channel 100 --as 1001 --roles 10 --credential cred-scratch --fixture parallel)

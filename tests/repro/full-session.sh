@@ -47,6 +47,27 @@ for want in \
 	grep -q -- "$want" <<<"$tail" || fail "session tail has no line matching: $want"
 done
 
+# The dry-run renderer's posts (P11): the venue, the pinned header, the working message, then
+# the turn's final message ending in 04's footer. The coalescer paces them, so poll.
+outbox_has() {
+	for _ in $(seq 1 40); do
+		"$bf" --json session outbox "$1" --all | grep -q -- "$2" && return 0
+		sleep 0.25
+	done
+	return 1
+}
+outbox_has "$id" '\\nDone · turn 1 · [0-9:]* · [0-9.k]* in / [0-9.k]* out · session [0-9.k]* · Haiku · acts freely"' ||
+	fail "session outbox has no final message ending in the footer"
+outbox=$("$bf" session outbox "$id" --all)
+printf '%s\n' "$outbox"
+for want in \
+	'  channel  s0001  0  #s0001-ada$' \
+	'  create  m[0-9]*  [0-9]*  Session s0001 on Scratch, branch broodforge/' \
+	'  create  m[0-9]*  [0-9]*  Working · turn 1 · ' \
+	'  delete  m[0-9]*  0  -$'; do
+	grep -q -- "$want" <<<"$outbox" || fail "session outbox has no line matching: $want"
+done
+
 audit=$("$bf" audit --all)
 printf '%s\n' "$audit"
 for want in \

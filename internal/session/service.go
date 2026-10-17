@@ -152,6 +152,9 @@ type Config struct {
 	Audit   *audit.Writer
 	// Clock is the injectable clock the idle and prompt timeouts run on; nil is RealClock.
 	Clock Clock
+	// Started, when set, is called with each new session's id once it is open, before any
+	// message can reach it: the Discord adapter follows its events from the first (P11).
+	Started func(id string)
 }
 
 // Service is SessionService (03-architecture.md, Components; N-11): start, submit, answer,
@@ -226,6 +229,23 @@ type registration struct {
 	User, Name, Email, DefaultCredential string
 }
 
+// Registered is the user's registration and whether there is one: the Discord adapter's
+// register reply and the names it shows (04).
+func (s *Service) Registered(user string) (Registration, bool, error) {
+	r, err := ShowRegistration(s.cfg.Store, user)
+	var se *Error
+	if errors.As(err, &se) && se.Code == CodeUnregistered {
+		return Registration{}, false, nil
+	}
+	return r, err == nil, err
+}
+
+// Refuse audits an action refused for a caller outside this package (the Discord adapter's
+// key-paste scan, 03 Data flow step 1) and returns the refusal with code and message.
+func (s *Service) Refuse(actor, sessionID, action, reason, code, message string) error {
+	return s.refuse(actorOf(actor), sessionID, action, reason, &Error{code, message})
+}
+
 func (s *Service) registration(user string) (registration, bool, error) {
 	r := registration{User: user}
 	found := false
@@ -292,6 +312,14 @@ type live struct {
 
 	idleTimer, promptTimer Timer
 	idleGen, promptGen     int
+
+	// The footer's and the summary's counts (04): the running turn's tokens over its processes,
+	// the session's, and each model's share, by which the footer names one.
+	startedAt                 string
+	turnIn, turnOut           int64
+	turnOutUnknown            bool
+	sessIn, sessOut           int64
+	turnModels, sessionModels map[string]int64
 }
 
 // queued is a message waiting for the next turn (ADR 0020: queued, not injected).
@@ -462,6 +490,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, store.Int(n), store.Text(id), store.T
 	l.mu.Lock()
 	s.armIdleLocked(l)
 	l.mu.Unlock()
+	if s.cfg.Started != nil {
+		s.cfg.Started(id)
+	}
 	return Started{ID: id}, nil
 }
 
@@ -524,7 +555,8 @@ func (s *Service) open(ctx context.Context, ch Channel, gs git.Session, reg regi
 	l := &live{id: gs.ID, ch: ch, mode: mode, reach: reach, driver: reg, credential: credID, delivery: delivery,
 		eng: eng, git: gs, tree: tree, home: home, idleTimeout: ch.IdleTimeout, promptTimeout: ch.PromptTimeout,
 		log: newEventLog(), state: StateWaitingForInput, participants: map[string]string{reg.User: RoleDriver}, calls: map[string]call{},
-		answers: map[string]answerRec{}, baselines: map[string]map[string]engine.ModelUsage{}}
+		answers: map[string]answerRec{}, baselines: map[string]map[string]engine.ModelUsage{},
+		turnModels: map[string]int64{}, sessionModels: map[string]int64{}}
 	if req.IdleTimeoutSeconds > 0 {
 		l.idleTimeout = time.Duration(req.IdleTimeoutSeconds) * time.Second
 	}
@@ -549,9 +581,17 @@ func (s *Service) open(ctx context.Context, ch Channel, gs git.Session, reg regi
 	if err != nil {
 		return fail(stageStore, err)
 	}
-	// 04, Starting and the first message: the header's first line.
+	l.startedAt = now
+	kind := credentials.KindSubscription
+	if delivery.Kind == engine.DeliveryAPIKey {
+		kind = credentials.KindAPIKey
+	}
+	// 04, Starting and the first message: the header's first line, and its facts.
 	l.log.add(Event{Time: now, Type: EventSessionStarted, User: reg.User,
-		Summary: "Session " + gs.ID + " on " + ch.ProjectName + ", branch " + gs.Branch() + ", driver " + reg.Name + "."})
+		Summary: "Session " + gs.ID + " on " + ch.ProjectName + ", branch " + gs.Branch() + ", driver " + reg.Name + ".",
+		Start: &StartInfo{Channel: ch.ID, ProjectName: ch.ProjectName, Branch: gs.Branch(), Driver: reg.User, DriverName: reg.Name,
+			Mode: mode, ChannelMode: ch.Mode, Reach: reach, Credential: credID, CredentialKind: kind,
+			IdleTimeout: humanDuration(l.idleTimeout), Answer: append([]string{}, ch.Roles.Answer...)}})
 	return l, "", nil
 }
 

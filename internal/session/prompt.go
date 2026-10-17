@@ -130,6 +130,27 @@ const (
 	reachDenyMarker = " is outside this channel's reach ("
 )
 
+// NoAnswerCause is the cause a trace line gives when the hook gave the engine no answer and
+// the engine's own default decided (decided by config, C39). Which of 04's two phrasings the
+// owner wants is pending: this one function holds the choice for every place the line is shown
+// (session tail, the Discord posts, the transcript), so one edit flips them all; return
+// causeFailed for the other.
+func NoAnswerCause() string { return causeTimedOut }
+
+// BypassLine is the trace line for a call the engine decided without Broodforge's check:
+// outcome, then cause (04, Permission prompts). A hook exit the engine ignored (decided by
+// unknown) is always "failed".
+func BypassLine(trace string, ran bool, decidedBy string) string {
+	cause := causeFailed
+	if decidedBy == DecidedByConfig {
+		cause = NoAnswerCause()
+	}
+	if ran {
+		return trace + " -> " + traceRanWithout + cause
+	}
+	return trace + " -> " + traceRefusedBy + cause
+}
+
 // ResultLine is a tool result's trace line: the call's line, with its outcome appended only
 // when it is not a plain success (04: a result is appended only when it is an error; a
 // bypassed check is always shown).
@@ -144,14 +165,7 @@ func ResultLine(tool, target, reach string, isError bool, text string, c Classif
 	case ClassHookFailed:
 		return line + " -> " + traceHookFailed
 	case ClassBypassed:
-		cause := causeFailed
-		if c.DecidedBy == DecidedByConfig {
-			cause = causeTimedOut
-		}
-		if c.Ran {
-			return line + " -> " + traceRanWithout + cause
-		}
-		return line + " -> " + traceRefusedBy + cause
+		return BypassLine(line, c.Ran, c.DecidedBy)
 	case ClassNoDecision, ClassAllowed:
 	}
 	if isError {
@@ -168,4 +182,19 @@ func stripToolUseError(s string) string {
 		s = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(rest), "</tool_use_error>"))
 	}
 	return s
+}
+
+// FullCommand is a shell call's whole command, which a permission prompt shows after the mask
+// (04, Permission prompts: `Command: <command>`); "" for any other tool.
+func FullCommand(tool string, input json.RawMessage) string {
+	if tool != "Bash" && tool != "PowerShell" {
+		return ""
+	}
+	var in struct {
+		Command string `json:"command"`
+	}
+	if json.Unmarshal(input, &in) != nil {
+		return ""
+	}
+	return in.Command
 }

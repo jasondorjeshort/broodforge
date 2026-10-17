@@ -177,7 +177,9 @@ func (s *Service) startTurnLocked(l *live, msgs []queued) (int, error) {
 		return 0, s.turnNotStarted(l, n, msgs[0].user, err)
 	}
 	l.turn, l.state, l.turnMode, l.requester, l.proc = n, StateRunningTurn, l.mode, msgs[0].user, 0
-	l.log.add(Event{Time: now, Type: EventTurnStarted, Turn: n, User: msgs[0].user, Summary: firstRunes(input, summaryRunes)})
+	l.turnIn, l.turnOut, l.turnOutUnknown, l.turnModels = 0, 0, false, map[string]int64{}
+	// Text is the whole input, From lines included: the transcript shows every message (04).
+	l.log.add(Event{Time: now, Type: EventTurnStarted, Turn: n, User: msgs[0].user, Summary: firstRunes(input, summaryRunes), Text: input})
 	_ = s.startProcessLocked(l, input, nil, "") // a failure ends the turn and publishes it
 	return n, nil
 }
@@ -357,6 +359,9 @@ func (s *Service) processEndedLocked(l *live, n, k int, esid string, evs []engin
 		return
 	}
 	ended := s.endTurnLocked(l, n, r, u, "", usageRef{esid: esid, k: k})
+	if ended.Usage != nil {
+		ended.Usage.Exit = exitOf(evs)
+	}
 	s.settleLocked(l, ended)
 }
 
@@ -412,7 +417,7 @@ func (s *Service) deferLocked(l *live, n, k int, esid string, u engine.TurnUsage
 			return err
 		}
 		for _, id := range dropped {
-			reason := "the engine kept only the last call of its message (C28)"
+			reason := "the engine kept only the last call of its message"
 			if err := s.decisionTx(tx, l, n, id, l.calls[id], DecisionDropped, DecidedByPolicy, ActorPolicy, "", reason, ""); err != nil {
 				return err
 			}
@@ -424,6 +429,7 @@ func (s *Service) deferLocked(l *live, n, k int, esid string, u engine.TurnUsage
 		s.failTurnLocked(l, err)
 		return
 	}
+	l.countUsageLocked(u)
 	for _, id := range append([]string{d.ToolUseID}, dropped...) {
 		dc := l.calls[id]
 		dec := DecisionDropped
@@ -440,7 +446,7 @@ func (s *Service) deferLocked(l *live, n, k int, esid string, u engine.TurnUsage
 	s.armPromptLocked(l)
 	s.armIdleLocked(l)
 	l.log.add(Event{Time: stamp, Type: EventWaitingForAnswer, Turn: n, ToolUseID: d.ToolUseID, Tool: c.tool, Target: c.target,
-		Summary: d.ToolUseID + " " + TraceLine(c.tool, c.target)})
+		Summary: d.ToolUseID + " " + TraceLine(c.tool, c.target), Text: FullCommand(c.tool, d.Input)})
 }
 
 func sortStrings(s []string) { sort.Strings(s) }
@@ -635,10 +641,14 @@ func (s *Service) endTurnLocked(l *live, n int, r *engine.ResultEvent, u engine.
 	})
 	if err != nil {
 		reason = errors.Join(errors.New(reason), err).Error()
+	} else if len(refs) > 0 {
+		l.countUsageLocked(u)
 	}
 	l.pending = nil
 	s.disarmPromptLocked(l)
-	return Event{Time: now, Type: EventTurnEnded, Turn: n, Result: res, Summary: reason}
+	usage := &TurnUsage{In: l.turnIn, Out: l.turnOut, OutUnknown: l.turnOutUnknown, SessionIn: l.sessIn, SessionOut: l.sessOut,
+		Model: topModel(l.turnModels, l.ch.Model), Mode: l.turnMode}
+	return Event{Time: now, Type: EventTurnEnded, Turn: n, Result: res, Summary: reason, Usage: usage}
 }
 
 // Follow hands the session's events after seq to fn in order, waiting for new ones, until fn
@@ -660,4 +670,48 @@ func (s *Service) Events(id string, seq int64) ([]Event, error) {
 	}
 	evs, _, _ := l.log.since(seq)
 	return evs, nil
+}
+
+// countUsageLocked adds one engine process's usage to the running turn's and the session's
+// counts, the footer's figures (04): in is input plus cache reads and writes. l.mu is held.
+func (l *live) countUsageLocked(u engine.TurnUsage) {
+	for model, d := range u.Delta {
+		in := int64(d["inputTokens"] + d["cacheReadInputTokens"] + d["cacheCreationInputTokens"])
+		out := int64(d["outputTokens"])
+		l.turnIn += in
+		l.turnOut += out
+		l.sessIn += in
+		l.sessOut += out
+		l.turnModels[model] += in + out
+		l.sessionModels[model] += in + out
+	}
+	if u.Interrupted {
+		l.turnOutUnknown = true
+	}
+}
+
+// topModel is the model with the most tokens, the one a footer names; fallback when none ran.
+func topModel(models map[string]int64, fallback string) string {
+	best, name := int64(-1), fallback
+	keys := make([]string, 0, len(models))
+	for m := range models {
+		keys = append(keys, m)
+	}
+	sortStrings(keys)
+	for _, m := range keys {
+		if models[m] > best {
+			best, name = models[m], m
+		}
+	}
+	return name
+}
+
+// exitOf is the process's exit code as text, "" when the stream has no exit or no code.
+func exitOf(evs []engine.EngineEvent) string {
+	for i := len(evs) - 1; i >= 0; i-- {
+		if evs[i].Kind == engine.KindExit && evs[i].Exit != nil && evs[i].Exit.Code != nil {
+			return strconv.Itoa(*evs[i].Exit.Code)
+		}
+	}
+	return ""
 }

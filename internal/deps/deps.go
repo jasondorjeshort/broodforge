@@ -6,7 +6,9 @@
 package deps
 
 import (
-	// discord's library (ADR 0023).
+	// discord's library (ADR 0023). discord imports disgo's types package since P11; the module
+	// root stays held here for the gateway's requirements (gorilla/websocket and the rest) until
+	// P12 imports the gateway and deletes this package, so go.mod stays tidy meanwhile.
 	_ "github.com/disgoorg/disgo"
 	// spawn's and control's module; cpu is held because it builds on every host, whereas
 	// x/sys/windows builds only on Windows. The module, not the package, is what is pinned.

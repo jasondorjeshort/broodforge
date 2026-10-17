@@ -24,6 +24,7 @@ import (
 	"github.com/jasondorjeshort/broodforge/internal/config"
 	"github.com/jasondorjeshort/broodforge/internal/control"
 	"github.com/jasondorjeshort/broodforge/internal/credentials"
+	"github.com/jasondorjeshort/broodforge/internal/discord"
 	"github.com/jasondorjeshort/broodforge/internal/engine"
 	"github.com/jasondorjeshort/broodforge/internal/git"
 	"github.com/jasondorjeshort/broodforge/internal/session"
@@ -78,6 +79,7 @@ type bot struct {
 	creds      *credentials.Service
 	backend    spawn.Backend
 	svc        *session.Service
+	adapter    *discord.Adapter
 	wt         *WorktreeService
 	srv        *control.Server
 	addr       string
@@ -172,6 +174,9 @@ func runServe(_ context.Context, env *Env) error {
 }
 
 func (b *bot) close() {
+	if b.adapter != nil {
+		b.adapter.Close()
+	}
 	_ = b.srv.Close()
 	_ = b.st.Close()
 }
@@ -303,8 +308,11 @@ func startBot(env *Env) (*bot, error) {
 
 	b.wt = &WorktreeService{Root: root, Config: c, Current: b.config, Store: b.st, Audit: b.aud, Backend: b.backend,
 		Secret: b.creds.Secret}
+	// The Discord adapter without the gateway (P11): the service tells it of each new session.
+	b.adapter = discord.New(discord.Config{Config: b.config, Channel: b.channel, DryRun: b.discord == config.DiscordDryRun,
+		Groups: func() map[string][]string { return b.config().Instance.RoleGroups }})
 	b.svc = session.New(session.Config{
-		Root: root, Instance: c.Instance.InstanceName, DryRun: b.discord == config.DiscordDryRun,
+		Root: root, Instance: c.Instance.InstanceName, DryRun: b.discord == config.DiscordDryRun, Started: b.adapter.SessionStarted,
 		Groups:  func() map[string][]string { return b.config().Instance.RoleGroups },
 		Channel: b.channel, Fixtures: fixturesDir(c), Handoff: b.wt.Handoff,
 		Engine: b.engine, CreateTree: func(ctx context.Context, s git.Session) (string, error) {
@@ -313,6 +321,7 @@ func startBot(env *Env) (*bot, error) {
 		RemoveTree: func(ctx context.Context, s git.Session) error { return git.Discard(ctx, b.backend, s) },
 		Store:      b.st, Audit: b.aud,
 	})
+	b.adapter.Attach(b.svc)
 
 	// (8) The control socket.
 	reg := control.NewRegistry()
@@ -320,6 +329,7 @@ func startBot(env *Env) (*bot, error) {
 	if b.srv, err = control.Listen(b.addr, reg); err != nil {
 		return fail(stepControl, err)
 	}
+	b.adapter.Run()
 	return b, nil
 }
 
@@ -481,6 +491,7 @@ func (b *bot) register(reg *control.Registry) {
 	CredentialHandlers(b.creds)(reg)
 	WorktreeHandlers(b.wt)(reg)
 	SessionHandlers(b.svc)(reg)
+	DiscordHandlers(b.adapter, b.svc)(reg)
 	reg.Handle("status", b.status)
 	reg.Handle("stop", b.stop)
 	reg.Handle("config.reload", b.reload)

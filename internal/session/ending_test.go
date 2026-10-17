@@ -100,7 +100,7 @@ func TestIdleTickRacingASend(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.svc.idleFired(l, gen) // the tick that was due when the send came in
-	if _, err := h.svc.end(ctx, l, ActorInstance, "idle", "x", gen); code(err) != CodeSessionClosed {
+	if _, err := h.svc.end(ctx, l, ActorInstance, "", "idle", "x", gen); code(err) != CodeSessionClosed {
 		t.Errorf("an idle end with a stale generation: %v", err)
 	}
 	if d, _ := h.svc.Show("s0001"); d.State != StateRunningTurn {

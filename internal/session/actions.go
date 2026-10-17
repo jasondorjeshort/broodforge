@@ -347,7 +347,7 @@ func (s *Service) End(ctx context.Context, req EndRequest) (git.Outcome, error) 
 		return git.Outcome{}, err
 	}
 	summary := "Session " + l.id + " ended by " + who + "." // 04, Ending a session
-	return s.end(ctx, l, actorOf(req.As), "end", summary, noGen)
+	return s.end(ctx, l, actorOf(req.As), who, "end", summary, noGen)
 }
 
 // end runs the end-of-session sequence for an actor and a reason (end, idle).
@@ -358,7 +358,7 @@ func (s *Service) End(ctx context.Context, req EndRequest) (git.Outcome, error) 
 // noGen is end's idle generation for a caller that is not the idle timer.
 const noGen = -1
 
-func (s *Service) end(ctx context.Context, l *live, actor, reason, summary string, idleGen int) (git.Outcome, error) {
+func (s *Service) end(ctx context.Context, l *live, actor, who, reason, summary string, idleGen int) (git.Outcome, error) {
 	l.mu.Lock()
 	switch l.state {
 	case StateEnded, StateInterrupted, StateEnding:
@@ -404,18 +404,18 @@ func (s *Service) end(ctx context.Context, l *live, actor, reason, summary strin
 				if reason != "idle" {
 					s.armIdleLocked(l)
 				}
-				l.log.add(Event{Time: s.stamp(), Type: EventHandoffRefused, Result: ge.Code, Summary: firstRunes(ge.Message, summaryRunes)})
+				l.log.add(Event{Time: s.stamp(), Type: EventHandoffRefused, Result: ge.Code, Summary: firstRunes(ge.Message, summaryRunes), Text: ge.Message})
 				l.mu.Unlock()
 				return out, err
 			}
-			s.closeSession(l, actor, reason, before, "failed: "+errCode(err), summary)
+			s.closeSession(l, actor, reason, before, "failed: "+errCode(err), summary, out, who)
 			return out, err
 		}
-		s.closeSession(l, actor, reason, before, out.Outcome, summary)
+		s.closeSession(l, actor, reason, before, out.Outcome, summary, out, who)
 		return out, nil
 	}
 	out.Outcome = git.OutcomeNone
-	s.closeSession(l, actor, reason, before, out.Outcome, summary)
+	s.closeSession(l, actor, reason, before, out.Outcome, summary, out, who)
 	return out, nil
 }
 
@@ -468,9 +468,10 @@ func errCode(err error) string {
 }
 
 // closeSession marks the session ended with its audit event and closes its log.
-func (s *Service) closeSession(l *live, actor, reason, before, outcome, summary string) {
+func (s *Service) closeSession(l *live, actor, reason, before, outcome, summary string, out git.Outcome, by string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	info := s.endInfo(l, reason, outcome, out, by)
 	now := s.stamp()
 	_ = s.cfg.Store.Write(func(tx *store.Tx) error {
 		if _, err := tx.Exec("UPDATE session SET state = ?, ended_at = ?, end_outcome = coalesce(end_outcome, ?) WHERE id = ?",
@@ -482,7 +483,7 @@ func (s *Service) closeSession(l *live, actor, reason, before, outcome, summary 
 		return err
 	})
 	l.state = StateEnded
-	l.log.add(Event{Time: now, Type: EventSessionEnded, Result: outcome, Summary: summary})
+	l.log.add(Event{Time: now, Type: EventSessionEnded, Result: outcome, Summary: summary, End: info})
 	l.log.close()
 }
 
@@ -516,7 +517,7 @@ func (s *Service) idleFired(l *live, gen int) {
 	}
 	// 04, Failure flows (session-ended).
 	summary := "Session " + l.id + " ended: no activity for " + humanDuration(l.idleTimeout) + "."
-	_, _ = s.end(context.Background(), l, ActorInstance, "idle", summary, gen)
+	_, _ = s.end(context.Background(), l, ActorInstance, "", "idle", summary, gen)
 }
 
 func (s *Service) armPromptLocked(l *live) {
@@ -605,4 +606,30 @@ func Reach(q store.Querier, id string) (ReachReport, error) {
 			Elsewhere: policy.CellFor(row.Class, r, out).String()})
 	}
 	return rep, nil
+}
+
+// endInfo is the summary's facts for a session ending (04, Ending a session): who, how long,
+// the turns and tokens, the branch and its handoff, and the people and models credited (the
+// trailers' names, 03 Attribution). l.mu is held.
+func (s *Service) endInfo(l *live, reason, outcome string, out git.Outcome, by string) *EndInfo {
+	info := &EndInfo{By: by, Reason: reason, StartedAt: l.startedAt, Turns: l.turn, In: l.sessIn, Out: l.sessOut,
+		Model: topModel(l.sessionModels, l.ch.Model), Branch: l.git.Branch(), Outcome: outcome, Commits: out.Commits,
+		Author: l.driver.Name, CoAuthors: []string{}}
+	switch {
+	case out.Request != nil:
+		info.URL = out.Request.URL
+	case out.URL != nil:
+		info.URL = *out.URL
+	}
+	lines, err := s.trailers(l)
+	if err == nil {
+		for _, line := range lines {
+			name := strings.TrimSpace(strings.TrimPrefix(line, git.TrailerKey+":"))
+			if i := strings.LastIndex(name, " <"); i > 0 {
+				name = name[:i]
+			}
+			info.CoAuthors = append(info.CoAuthors, name)
+		}
+	}
+	return info
 }

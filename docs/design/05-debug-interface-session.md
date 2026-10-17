@@ -92,12 +92,13 @@ memory: without the bot `tail` is `not-running`, and a session an earlier run he
 `session-closed`. `session reach-report <id>` prints one `<tools>  <cell under the tree or
 canonical>  <cell elsewhere>` line per row of the policy table for the session's reach (`*` for
 every other tool), then `binds: -`, the empty bind list until P14; `--json` both; `--expect` the
-reach. P11 (the renderer, `05-debug-interface-discord.md`): `session outbox <id> [--follow]`
-prints the dry-run renderer's posts: `<seq>  <time>  create|edit|attach  <message id>  <length>
-<first line>`, `--json` with the full body; `session transcript <id> [--out <file>]` prints 04's
-Markdown transcript as the summary would attach it; `broodforge panel post <channel id>` posts or
-refreshes the project channel's panel (04) and records its message id in the store, which `panel
-show <channel id>` prints back; on a dry-run instance it lands in the outbox.
+reach. P11 (the renderer, `05-debug-interface-discord.md`, which has the detail): `session outbox
+<id> [--follow]` prints the dry-run renderer's posts: `<seq>  <time>  channel|create|edit|delete|attach
+<message id>  <length>  <first line>`, `--json` with the full body; `session transcript <id> [--out
+<file>]` prints 04's Markdown transcript as the summary would attach it; `broodforge panel post
+<channel id>` posts or refreshes the project channel's panel (04) and keeps its message id in the
+bot's memory (a store record is later), which `panel show <channel id>` prints back; on a dry-run
+instance it lands in the outbox.
 Observe. `session show`, `session tail --json` (every field: tool, target, decision, decided by,
 reason, result), `audit --kind permission-decision --session <id>`, the fake's
 `sessions/<id>/fake/received-<n>.json` (the exact `TurnRequest`), `usage --session <id> --by turn

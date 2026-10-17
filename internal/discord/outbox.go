@@ -1,0 +1,214 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+package discord
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"sync"
+	"time"
+
+	dg "github.com/disgoorg/disgo/discord"
+)
+
+// Op is what one outbox post does: a REST call the gateway would make (P12).
+type Op string
+
+const (
+	// OpChannel creates a session's private channel (04, Venue A).
+	OpChannel Op = "channel"
+	// OpCreate posts a new message.
+	OpCreate Op = "create"
+	// OpEdit replaces a message's content and buttons.
+	OpEdit Op = "edit"
+	// OpDelete deletes a message (04's delete-and-replace at a turn's end).
+	OpDelete Op = "delete"
+	// OpAttach attaches a file to a message (the transcript, 04 Owner 11).
+	OpAttach Op = "attach"
+)
+
+// Button styles, Discord's.
+const (
+	StylePrimary   = "primary"
+	StyleSecondary = "secondary"
+	StyleSuccess   = "success"
+	StyleDanger    = "danger"
+)
+
+// Button is one button of a post: its label and its custom id (03).
+type Button struct {
+	Label    string `json:"label"`
+	CustomID string `json:"customId"`
+	Style    string `json:"style"`
+}
+
+// Post is one outbox line: `<seq>  <time>  <op>  <message id>  <length>  <first line>`, --json
+// every field. Payload is the request body the gateway would send for it, as disgo builds it
+// (a MessageCreate or a MessageUpdate), so a dry run shows what P12 sends. Message ids are the
+// adapter's own; the gateway maps them to Discord's.
+type Post struct {
+	Seq       int64           `json:"seq"`
+	Time      string          `json:"time"`
+	Op        Op              `json:"op"`
+	Session   string          `json:"session,omitempty"`
+	Channel   string          `json:"channel"`
+	MessageID string          `json:"messageId"`
+	Length    int             `json:"length"`
+	First     string          `json:"first,omitempty"`
+	Body      string          `json:"body,omitempty"`
+	Buttons   []Button        `json:"buttons,omitempty"`
+	Pinned    bool            `json:"pinned,omitempty"`
+	File      string          `json:"file,omitempty"`
+	Payload   json.RawMessage `json:"payload,omitempty"`
+}
+
+// OutboxColumns are a post's text columns.
+var OutboxColumns = []string{"seq", "time", "op", "messageId", "length", "first"}
+
+// TimeLayout is an outbox time: UTC to the millisecond, so the coalescer's spacing shows.
+const TimeLayout = "2006-01-02T15:04:05.000Z07:00"
+
+// finish fills the fields derived from the body: the length, the first line and the payload.
+func (p *Post) finish() {
+	p.Length = len([]rune(p.Body))
+	switch p.Op {
+	case OpChannel, OpAttach:
+		// First is the channel name or the file name, set by the caller.
+	case OpCreate, OpEdit, OpDelete:
+		p.First = p.Body
+		if i := strings.IndexByte(p.First, '\n'); i >= 0 {
+			p.First = p.First[:i]
+		}
+	}
+	p.Payload = payload(*p)
+}
+
+// payload is the request body for the post, built with disgo's types (ADR 0023: disgo's types
+// appear in this package only).
+func payload(p Post) json.RawMessage {
+	var rows []dg.LayoutComponent
+	if len(p.Buttons) > 0 {
+		bs := make([]dg.InteractiveComponent, len(p.Buttons))
+		for i, b := range p.Buttons {
+			style := dg.ButtonStylePrimary
+			switch b.Style {
+			case StyleSecondary:
+				style = dg.ButtonStyleSecondary
+			case StyleSuccess:
+				style = dg.ButtonStyleSuccess
+			case StyleDanger:
+				style = dg.ButtonStyleDanger
+			}
+			bs[i] = dg.NewButton(style, b.Label, b.CustomID, "", 0)
+		}
+		rows = []dg.LayoutComponent{dg.NewActionRow(bs...)}
+	}
+	var b []byte
+	var err error
+	switch p.Op {
+	case OpCreate:
+		b, err = json.Marshal(dg.MessageCreate{Content: p.Body, Components: rows,
+			AllowedMentions: &dg.AllowedMentions{Parse: []dg.AllowedMentionType{dg.AllowedMentionTypeUsers}}})
+	case OpEdit:
+		content := p.Body
+		if rows == nil {
+			rows = []dg.LayoutComponent{}
+		}
+		b, err = json.Marshal(dg.MessageUpdate{Content: &content, Components: &rows})
+	case OpChannel, OpDelete, OpAttach:
+		return nil
+	}
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// Outbox is the dry-run sink: every post the coalescer sends, in order, read by `session
+// outbox` and `panel show`. A follower waits on changed, closed and replaced on every append.
+type Outbox struct {
+	mu      sync.Mutex
+	posts   []Post
+	done    map[string]bool // sessions whose last post is out
+	changed chan struct{}
+}
+
+// NewOutbox returns an empty outbox.
+func NewOutbox() *Outbox { return &Outbox{done: map[string]bool{}, changed: make(chan struct{})} }
+
+func (o *Outbox) add(now time.Time, p Post) Post {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	p.Seq = int64(len(o.posts)) + 1
+	p.Time = now.UTC().Format(TimeLayout)
+	o.posts = append(o.posts, p)
+	o.wakeLocked()
+	return p
+}
+
+func (o *Outbox) wakeLocked() {
+	close(o.changed)
+	o.changed = make(chan struct{})
+}
+
+func (o *Outbox) markDone(id string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.done[id] = true
+	o.wakeLocked()
+}
+
+// Posts is every post so far, of one session when id is not "".
+func (o *Outbox) Posts(id string, since int64) []Post {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.postsLocked(id, since)
+}
+
+func (o *Outbox) postsLocked(id string, since int64) []Post {
+	out := []Post{}
+	for _, p := range o.posts {
+		if p.Seq > since && (id == "" || p.Session == id) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// Channel is every post to one channel.
+func (o *Outbox) Channel(channel string) []Post {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	out := []Post{}
+	for _, p := range o.posts {
+		if p.Channel == channel {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// Follow hands the session's posts after since to fn in order, waiting for new ones, until the
+// session's last post is out, fn says stop or ctx ends.
+func (o *Outbox) Follow(ctx context.Context, id string, since int64, fn func(Post) (bool, error)) error {
+	for {
+		o.mu.Lock()
+		posts, changed, done := o.postsLocked(id, since), o.changed, o.done[id]
+		o.mu.Unlock()
+		for _, p := range posts {
+			since = p.Seq
+			if stop, err := fn(p); err != nil || stop {
+				return err
+			}
+		}
+		if done {
+			return nil
+		}
+		select {
+		case <-changed:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}

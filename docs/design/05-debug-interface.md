@@ -235,7 +235,7 @@ Isolation. A rehearsal is itself a scratch root; the nightly job is never starte
 
 ## The Discord adapter
 
-Moved to `05-debug-interface-discord.md`: `discord check|render|inject`, the dry-run renderer and what only a live guild exercises.
+Moved to `05-debug-interface-discord.md`: `discord check|render|inject`, the dry-run renderer, its outbox and pacing, `panel post|show`, and what only a live guild exercises.
 
 ## Command tree
 

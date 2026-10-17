@@ -23,9 +23,13 @@ through `GOPROXY` and the checksum database).
 | `golang.org/x/sys` | v0.49.0 | BSD-3-Clause | `spawn`, `control` |
 
 `control` imports `golang.org/x/sys/windows` (Windows build only); `store` imports
-`zombiezen.com/go/sqlite` and its `sqlitex`, and no other package does. Until its owner imports it,
-each other module is held by a blank import in `internal/deps/deps.go`; x/sys stays pinned there
-through `golang.org/x/sys/cpu` because `x/sys/windows` does not build on Linux.
+`zombiezen.com/go/sqlite` and its `sqlitex`, and no other package does; `discord` imports
+`github.com/disgoorg/disgo/discord` (the message, component and button types the outbox's
+payloads are built with), and no other package does. Until its owner imports what it needs,
+each module is held by a blank import in `internal/deps/deps.go`: disgo's root package stays
+there until P12 imports the gateway, because only the root pulls in the gateway's requirements
+(gorilla/websocket and the rest) and `go mod tidy` would drop them otherwise; x/sys stays pinned
+there through `golang.org/x/sys/cpu` because `x/sys/windows` does not build on Linux.
 
 zombiezen facts (finding `docs/findings/2026-10-16-sqlite-facts-seen-while-building-the-store.md`):
 
