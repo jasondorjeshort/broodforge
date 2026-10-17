@@ -1,12 +1,16 @@
 # 0007. Ideas and operator queues, triage blocks, and one independent review per change
 
 Date: 2026-10-13
-Status: accepted, superseded in part by 0016
+Status: accepted, superseded in part by 0016 and 0017
 Superseded in part by [0016](0016-base-owned-and-project-owned-files.md), 2026-10-17: the queue
 directories, their READMEs and `docs/design/README.md` are project-owned and never patched from
 the base; the grammar they share is recorded in base-owned `.claude/rules/docs.md` and here, and a
 grammar change is an incompatible surface change whose migration names the READMEs. Everything
 else stands.
+Superseded in part by [0017](0017-queue-directories-list-on-demand.md), 2026-10-17: the queue
+READMEs carry no index table ("every idea costs a file and an index line", and the table the hook
+nags about, under Consequences); `queue-list.js` lists the files and reads the blocks the same way
+`triage` does. The grammar, the three blocks and the review rule stand.
 
 Record: no proposal. Merged from the two downstream projects in one sitting with the owner, who
 holds all three repositories; see Context.
