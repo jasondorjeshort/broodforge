@@ -67,7 +67,7 @@ func TestRewrite(t *testing.T) {
 
 func TestRewriteLeavesOtherTextAlone(t *testing.T) {
 	for _, in := range []string{
-		`C:\\Users\\alicia\\x`,
+		`C:\\Users\\user\\x`,
 		`C:\\Users\\bob\\alice\\x`,
 		`"powershell_path":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"`,
 		`"messaging_socket_path":"\\\\.\\pipe\\LOCAL\\cc-msg-1"`,

@@ -156,13 +156,13 @@ func TestExpand(t *testing.T) {
 	sep := string(filepath.Separator)
 	cases := map[string]string{"  a.go\t": "a.go", "\ufeff\u00a0a.go\u2028": "a.go", "\u200ba.go": "\u200ba.go", "\u0085a.go": "\u0085a.go", "~": "/h", "~/x": "/h" + sep + "x", `~\x`: "/h" + sep + "x", "/tmp/x": "/tmp/x"}
 	if drives {
-		cases["/c/Users/x"] = `C:\Users/x`
+		cases["/c/Users/user"] = `C:\Users/user`
 		cases["/d/"] = `D:\`
 		cases["/d"] = "/d"
 		cases[`/c\x`] = `/c\x`
 		cases["/cc/x"] = "/cc/x"
 	} else {
-		cases["/c/Users/x"] = "/c/Users/x"
+		cases["/c/Users/user"] = "/c/Users/user"
 	}
 	for in, want := range cases {
 		if got, err := expand(in, "/h"); err != nil || got != want {

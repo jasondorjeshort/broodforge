@@ -1,8 +1,8 @@
 {
-  "$comment": "Per-meter model: a live service on one branch (master) with several sessions a day. Among subagents only the runner commits and only the pusher pushes; the main session may do both. Usage is judged per meter: the session meter strands in-flight agents when it hits its cap, so it holds earlier than the weekly one, which runs down slowly. The design docs and three legacy folders are exempt from the line cap, and the history folder from the path check as well.",
+  "$comment": "Per-meter model: a live service on one branch (master) with several sessions a day. Among subagents only the runner commits and only the pusher pushes; the main session may do both. Usage is judged per meter: the session meter strands in-flight agents when it hits its cap, so it holds earlier than the weekly one, which runs down slowly. The design docs and three legacy folders are exempt from the line cap, and the history folder from the path check as well. Every push is scanned for personal data; only the placeholder user name user passes.",
   "git": {
     "commit": { "subagents": ["runner"], "protectedBranches": [] },
-    "push": { "subagents": ["pusher"], "branches": ["master"], "mainSession": true, "forceWithLease": [] },
+    "push": { "subagents": ["pusher"], "branches": ["master"], "mainSession": true, "forceWithLease": [], "privacyAllow": ["user"] },
     "branchDelete": { "branches": [], "requireMergedPr": false },
     "hooksPath": null
   },

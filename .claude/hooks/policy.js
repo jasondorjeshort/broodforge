@@ -31,7 +31,9 @@ const path = require('path');
 const DEFAULTS = {
   git: {
     commit: { subagents: ['runner'], protectedBranches: [] },
-    push: { subagents: ['pusher'], branches: ['*'], mainSession: true, forceWithLease: [] },
+    // privacyAllow: home-directory and host segments git-guard rule 20 lets through (placeholders and
+    // service accounts), compared case-insensitively; a person's user name never belongs here.
+    push: { subagents: ['pusher'], branches: ['*'], mainSession: true, forceWithLease: [], privacyAllow: ['user'] },
     branchDelete: { branches: [], requireMergedPr: false },
     hooksPath: null,
   },
@@ -69,6 +71,8 @@ const isStrings = (v) => Array.isArray(v) && v.every((s) => typeof s === 'string
 const TYPES = {
   who: (v) => v === 'any' || v === 'none' || isStrings(v),
   patterns: isStrings,
+  // Literal names (a path segment or a host), never patterns: no glob character, separator or space.
+  names: (v) => isStrings(v) && v.every((s) => /^[^\s*?[\]\\/]+$/.test(s)),
   bool: (v) => typeof v === 'boolean',
   pathOrNull: (v) => v === null || (typeof v === 'string' && v !== ''),
   envNameOrNull: (v) => v === null || (typeof v === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(v)),
@@ -90,7 +94,7 @@ const TYPES = {
 const SCHEMA = {
   git: {
     commit: { subagents: 'who', protectedBranches: 'patterns' },
-    push: { subagents: 'who', branches: 'patterns', mainSession: 'bool', forceWithLease: 'patterns' },
+    push: { subagents: 'who', branches: 'patterns', mainSession: 'bool', forceWithLease: 'patterns', privacyAllow: 'names' },
     branchDelete: { branches: 'patterns', requireMergedPr: 'bool' },
     hooksPath: 'pathOrNull',
   },

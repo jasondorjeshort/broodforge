@@ -1,34 +1,38 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-17, at commit d00bb95, by main session
+Updated: 2026-10-17, after the rule-20 commit, by main session
 
 ## Now
 
-- P7's owner turns are done (2026-10-17): credential `cred-p5o7jb1n3` on the owner root
-  `~/bf-owner` (prompt mode), login landed, a real turn, a recorded turn that replays,
-  a closing recording; both imported as `fixtures/engine/{closing,recorded-read}/` (`d00bb95`,
-  reviewed; the owner kept the account-level content in the streams).
-- Push of `main` requested by the owner ("push now"); the first pusher stopped on the PC user name
-  in two doc paths, fixed in the next commit. PC runs are clear again (BullGuard entry
-  retired). Session on the PC's account; owner-root turns spend the owner's plan (weekly 69%).
+- Privacy check promoted: git-guard rule 20 scans every commit a push sends, from every caller
+  (Opus; three review passes, 613 hook cases). Committed with `CLAUDE.md`, the commit skill, the
+  finding, the operator entry and this file; one commit ahead of `origin`, push not yet requested.
+- Public history carries the PC user name in five commits and the machine's git identity on the 28
+  Hatchery root commits (finding below); both repos are private; the owner rewrites after this lands.
+- P7's owner turns are done (`d00bb95`): credential `cred-p5o7jb1n3` on `~/bf-owner`, fixtures
+  `closing` and `recorded-read`. Session on the PC's account.
 
 ## Next
 
-1. Tester: `session end` runs the closing turn from the `closing` fixture per the P10 remainder
-   idea's 2026-10-17 decision line (no tools; log and diff inlined); then its other `Plan:` items.
-2. Triage: the three ideas dated 2026-10-17 and the rate-limit idea, now half answered.
-3. P12 (Discord live) needs the bot token and a test guild from the owner; leftovers in the
-   P11 remainder idea. Architect: the surfaces ADR (ADR 0012). Tester: the instance-credentials idea.
-4. Owner: droplet entries, the PC account entry; then droplet claims, P14 (held), `spike/` deleted.
+1. Owner: the history rewrite, per the operator entry of 2026-10-17; then re-clone, a tester pass
+   on the docs that cite hashes, resolve the finding.
+2. Architect, then coder: the earlier privacy layers, a PreToolUse scan of Write and Edit content
+   and a commit-time scan (the owner: a plain staged grep "could be better"; shape it first).
+3. Tester: `session end` runs the closing turn from the `closing` fixture per the P10 remainder
+   idea's 2026-10-17 decision line; then its other `Plan:` items.
+4. Triage the ideas dated 2026-10-17. P12 needs the bot token and a test guild. Architect: the
+   surfaces ADR (ADR 0012). Owner: the droplet and PC account entries; then P14, `spike/`.
 
 ## Waiting on user
 
-- Which command the frozen Git Bash sat on, if remembered. Wording: the hook no-answer
-  phrase (one for both, recommended); first vs full names in Discord; "acts freely" short or long.
+- The push of the rule-20 commit, in so many words.
+- Wording: the hook no-answer phrase (one for both, recommended); first vs full names in Discord;
+  "acts freely" short or long.
 
 ## Open findings
 
+- `docs/findings/2026-10-17-net-diff-privacy-scan-let-named-commits-go-public.md` (rewrite pending)
 - `docs/findings/2026-10-15-spike-login-claims-for-adr-0020.md`,
   `docs/findings/2026-10-15-spike-stream-and-process-claims-for-adr-0020.md`,
   `docs/findings/2026-10-15-spike-hook-flow-claims-for-adr-0020.md` (PC rows hold, droplet open)

@@ -50,6 +50,7 @@ per model seen downstream (task branches, single branch, per-meter thresholds), 
 | `git.push.branches` | branch patterns | `["*"]` | Every branch a subagent's push updates must match. |
 | `git.push.mainSession` | boolean | `true` | Whether the main session pushes. |
 | `git.push.forceWithLease` | branch patterns | `[]` | `--force-with-lease` is allowed, for anyone, when every target matches; otherwise it is a force push. |
+| `git.push.privacyAllow` | list of names | `["user"]` | Placeholder and service-account names that `git-guard` rule 20, the push privacy scan, lets through: the path segment after `Users/` or `home/`, or a host segment, compared case-insensitively. Emails are not listed here (the repository's `user.email`, Anthropic's noreply addresses and the RFC 2606 reserved domains pass); a person's user name never belongs in it. |
 | `git.branchDelete.branches` | branch patterns | `[]` | `branch -D` and `push --delete` are allowed only for these. |
 | `git.branchDelete.requireMergedPr` | boolean | `false` | Also require a merged pull request on GitHub (`gh`, fails closed). |
 | `git.hooksPath` | path or `null` | `null` | The one value `core.hooksPath` may be set to; `null` allows none. |

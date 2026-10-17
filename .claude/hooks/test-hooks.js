@@ -115,7 +115,7 @@ const fwd = (p) => p.split(path.sep).join('/');
 const HATCHERY_POLICY = {
   git: {
     commit: { subagents: ['runner'], protectedBranches: [] },
-    push: { subagents: ['pusher'], branches: ['*'], mainSession: true, forceWithLease: [] },
+    push: { subagents: ['pusher'], branches: ['*'], mainSession: true, forceWithLease: [], privacyAllow: ['user'] },
     branchDelete: { branches: [], requireMergedPr: false },
     hooksPath: null,
   },
@@ -154,6 +154,8 @@ for (const [dir, branch] of [[repoMain, 'main'], [repoTask, 'task/T1']]) {
   git(dir, 'init', '-q');
   git(dir, 'checkout', '-q', '-b', branch);
   git(dir, 'commit', '-q', '--allow-empty', '-m', 'init');
+  git(dir, 'tag', 'v1.0'); // GP16 pushes it; rule 20 scans what a push sends, so it must exist
+  git(dir, 'remote', 'add', 'origin', `${dir}-origin.git`); // rule 20 denies a push to a remote that is not configured
 }
 
 // ---------- git-guard ----------
@@ -177,6 +179,7 @@ const PREFIX = {
   17: 'forced worktree removal',
   18: 'forced branch reset',
   19: 'unexpanded argument',
+  20: 'personal data in the outgoing commits',
   policy: 'policy file is malformed (',
 };
 const NOTE_MARK = 'git-guard reads the command line, not what runs';
@@ -384,7 +387,7 @@ const GR = [
   ['GR24b', "$g = 'git'; & $g push --force", 'PowerShell', null, 19],
   ['GR24c', String.raw`grep -r '\.git' . | $filter`, 'Bash', null, 'allow'],
   ['GR24d', String.raw`grep -rn "git push" . | $filter`, 'Bash', null, 'allow'],
-  ['GR24e', String.raw`powershell -NoProfile -Command "Get-ChildItem -Path 'C:\Users\someone' -Recurse -Depth 5 -Filter package.json -ErrorAction SilentlyContinue | Where-Object { \$_.FullName -notmatch '\\(node_modules|AppData|\.git)(\\|$)' } | ForEach-Object { try { \$j = Get-Content -LiteralPath \$_.FullName -Raw | ConvertFrom-Json; [pscustomobject]@{ Path=\$_.FullName; Name=\$j.name; Folder=\$_.Directory.Name; Desc=\$j.description; Bin=(\$j.bin | ConvertTo-Json -Compress); Deps=(\$j.dependencies.PSObject.Properties.Name -join ','); Modified=\$_.LastWriteTime.ToString('yyyy-MM-dd') } } catch { } } | Where-Object { \$_.Name -in @('bot-folder','project') -or \$_.Folder -in @('bot-folder','project') } | Format-List" 2>&1; echo "exit=$?"`, 'Bash', null, 'allow'],
+  ['GR24e', String.raw`powershell -NoProfile -Command "Get-ChildItem -Path 'C:\Users\user' -Recurse -Depth 5 -Filter package.json -ErrorAction SilentlyContinue | Where-Object { \$_.FullName -notmatch '\\(node_modules|AppData|\.git)(\\|$)' } | ForEach-Object { try { \$j = Get-Content -LiteralPath \$_.FullName -Raw | ConvertFrom-Json; [pscustomobject]@{ Path=\$_.FullName; Name=\$j.name; Folder=\$_.Directory.Name; Desc=\$j.description; Bin=(\$j.bin | ConvertTo-Json -Compress); Deps=(\$j.dependencies.PSObject.Properties.Name -join ','); Modified=\$_.LastWriteTime.ToString('yyyy-MM-dd') } } catch { } } | Where-Object { \$_.Name -in @('bot-folder','project') -or \$_.Folder -in @('bot-folder','project') } | Format-List" 2>&1; echo "exit=$?"`, 'Bash', null, 'allow'],
   // PowerShell launchers.
   ['GR25', 'Start-Process git -ArgumentList "push --force"', 'PowerShell', null, 1],
   ['GR26', 'Start-Process git -ArgumentList "push","--force"', 'PowerShell', null, 1],
@@ -480,6 +483,267 @@ for (const [n, command, agent, cwd, want] of GP) {
     guardCase(`GP${n}${tag}`, { command, agent, cwd, policy: POLICIES[p], policyName: p }, want[p === 'none' ? H : p]);
   }
 }
+
+// ---------- git-guard rule 20: personal data in the outgoing commits ----------
+// The sample data is built from pieces so no line of this file matches the scan, which runs on
+// the push that carries this file too.
+const AT = '@';
+const USERS = 'Us' + 'ers';
+const HOME_DIR = 'ho' + 'me';
+const DESK = 'DESK' + 'TOP-';
+// Not an RFC 2606 reserved domain, so only the rule's other exceptions can let it through.
+const MAIL = 'unreserved-sample.net';
+const OWNER = `owner${AT}${MAIL}`;
+// Writes files into dir and commits them (an empty commit when there are none).
+function privCommit(dir, files, message = 'change', ...extra) {
+  for (const [rel, text] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), text);
+  }
+  git(dir, 'add', '-A');
+  git(dir, ...extra, 'commit', '-q', '--allow-empty', '-m', message);
+}
+// A scratch repository on main with user.email OWNER and a bare remote origin: a first commit
+// holding base files, pushed to origin when upstream is true (so it is not outgoing), then one
+// outgoing commit with files and message, then the commits in more ([files, message] each).
+function privRepo(name, { base = {}, files = {}, message = 'change', upstream = true, more = [] }) {
+  const dir = path.join(scratch, `priv-${name}`);
+  const bare = path.join(scratch, `priv-${name}.git`);
+  git(scratch, 'init', '-q', '--bare', bare);
+  fs.mkdirSync(dir, { recursive: true });
+  git(dir, 'init', '-q');
+  git(dir, 'checkout', '-q', '-b', 'main');
+  git(dir, 'config', 'user.email', OWNER);
+  git(dir, 'remote', 'add', 'origin', bare);
+  privCommit(dir, Object.assign({ 'README.md': 'scratch\n' }, base), 'init');
+  if (upstream) git(dir, 'push', '-q', '-u', 'origin', 'main');
+  privCommit(dir, files, message);
+  for (const [f, m] of more) privCommit(dir, f, m);
+  return dir;
+}
+const says = (...parts) => (d) => parts.every((p) => d.reason.includes(p)) || `reason should include ${JSON.stringify(parts)}; got ${JSON.stringify(d.reason)}`;
+const ADVICE20 = 'The repo is public: write `~`, a role or a placeholder instead. The fix is to amend or squash the unpushed commit, never a later commit on top, and never a change to this rule.';
+const privDiff = privRepo('diff', { files: { 'docs/a.md': `line one\nsee C:/${USERS}/someone/x\n` } });
+const privMsg = privRepo('msg', { files: { 'docs/b.md': 'clean\n' }, message: `fix\n\nasked by carol${AT}${MAIL}` });
+const privName = privRepo('name', { files: { [`logs/${DESK}AB12.log`]: '' } });
+const privPlace = privRepo('place', { files: { 'docs/c.md': `C:/${USERS}/user/x and C:\\${USERS}\\USER\\y\n` } });
+const privOwner = privRepo('owner', { files: { 'docs/d.md': `mail ${OWNER.toUpperCase()}\n` } });
+const privTrailer = privRepo('trailer', { message: `fix\n\nCo-Authored-By: Claude Opus 5.5 <noreply${AT}anthropic.com>` });
+const privHomeUser = privRepo('homeuser', { files: { 'docs/e.md': `run /${HOME_DIR}/user/bin/x\n` } });
+const privHomeOther = privRepo('homeother', { files: { 'docs/e.md': `run "/${HOME_DIR}/someone/bin/x"\n` } });
+const privSess = privRepo('sess', { files: { 'docs/f.md': `the log is <sess>/${HOME_DIR}/hook.log\n` } });
+const privNoUp = privRepo('noup', { base: { 'docs/g.md': `x\nC:/${USERS}/someone\n` }, upstream: false });
+const privNoUpClean = privRepo('noupclean', { files: { 'docs/g.md': 'x\n' }, upstream: false });
+const privOld = privRepo('old', { base: { 'docs/h.md': `C:/${USERS}/someone\n` }, files: { 'docs/i.md': 'clean\n' } });
+const privMany = privRepo('many', { files: { 'docs/j.md': ['a', 'b', 'c', 'd'].map((n) => `${n}${AT}${MAIL}`).join('\n') } });
+const privReserved = privRepo('reserved', { files: { 'docs/l.md': ['example.com', 'mail.example.net', 'example.org', 'host.invalid', 'ci.test', 'box.example', 'my.localhost']
+  .map((d, i) => `u${i}${AT}${d}`).join('\n') } });
+const privProse = privRepo('prose', { files: { 'docs/m.md': `a host such as \`<name>-Desk${'top'}\` or \`${DESK}...\`\n` } });
+const privHolders = privRepo('holders', { files: { 'docs/p.md': ['<name>', '$USER', '%USERNAME%', '~', '...'].map((s) => `C:/${USERS}/${s}/x /${HOME_DIR}/${s}/x`).join('\n') } });
+const privProfiles = privRepo('profiles', { files: { 'docs/q.md': ['Public', 'PUBLIC', 'Default', 'Default User', 'All Users']
+  .map((s) => `C:/${USERS}/${s}/x C:\\${USERS}\\${s}\\y`).join('\n') } });
+const privProfileNear = privRepo('profile-near', { files: { 'docs/q.md': `C:/${USERS}/Publicity/x and C:/${USERS}/All/x\n` } });
+const privUrlUsers = privRepo('url-users', { files: { 'docs/r.md': ['git', 'GIT', 'x-access-token', 'oauth2']
+  .map((u) => `${u}${AT}${MAIL}:o/r`).concat([`https://someone${AT}${MAIL}/o/r`, `ssh://someone${AT}${MAIL}/o/r`]).join('\n') } });
+const privUrlNear = privRepo('url-near', { files: { 'docs/r.md': `gitter${AT}${MAIL} and https:/someone${AT}${MAIL}\n` } });
+// main and a second branch other: the hit is on other only. On main, or checked out on other; a
+// tag t1 on other's commit in the first.
+function privTwo(name, checkout) {
+  const dir = privRepo(name, { files: { 'docs/n.md': 'clean\n' } });
+  git(dir, 'checkout', '-q', '-b', 'other');
+  fs.writeFileSync(path.join(dir, 'docs', 'o.md'), `C:/${USERS}/someone\n`);
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'other');
+  if (checkout === 'main') { git(dir, 'tag', 't1'); git(dir, 'checkout', '-q', 'main'); }
+  return dir;
+}
+const privOnMain = privTwo('two-main', 'main');
+const privOnOther = privTwo('two-other', 'other');
+// Per-commit scanning and what a push sends (B1, S1 to S6, M1 to M3 of the 2026-10-17 review).
+const LEAK = `C:/${USERS}/someone/x\n`;
+const ZED = `zed${AT}${MAIL}`;
+const privAddRemove = privRepo('add-remove', { files: { 'docs/a.md': LEAK }, more: [[{ 'docs/a.md': 'clean\n' }, 'scrub']] });
+const privAddRemoveNew = privRepo('add-remove-new', { upstream: false, files: { 'docs/a.md': LEAK }, more: [[{ 'docs/a.md': 'clean\n' }, 'scrub']] });
+const privLocalUp = privRepo('local-up', { files: { 'docs/a.md': LEAK } });
+git(privLocalUp, 'checkout', '-q', '-b', 'feat');
+git(privLocalUp, 'branch', '-q', '--set-upstream-to=main', 'feat');
+privCommit(privLocalUp, { 'docs/b.md': 'clean\n' });
+const privPub = privRepo('pub', { files: { 'docs/a.md': LEAK } });
+git(privPub, 'push', '-q', 'origin', 'main');
+git(scratch, 'init', '-q', '--bare', path.join(scratch, 'priv-pub-2.git'));
+git(privPub, 'remote', 'add', 'pub', path.join(scratch, 'priv-pub-2.git'));
+privCommit(privPub, { 'docs/b.md': 'clean\n' });
+function privOtherLeak(name, setup) {
+  const dir = privRepo(name, { files: { 'docs/n.md': 'clean\n' } });
+  git(dir, 'checkout', '-q', '-b', 'other');
+  if (setup === 'matching') git(dir, 'push', '-q', '-u', 'origin', 'other');
+  privCommit(dir, { 'docs/o.md': LEAK });
+  git(dir, 'checkout', '-q', 'main');
+  if (setup === 'matching') git(dir, 'config', 'push.default', 'matching');
+  else git(dir, 'config', 'remote.origin.push', 'refs/heads/other:refs/heads/other');
+  return dir;
+}
+const privCfgPush = privOtherLeak('cfg-push', 'push');
+const privMatching = privOtherLeak('matching', 'matching');
+const privNothing = privRepo('nothing', { files: { 'docs/a.md': LEAK } });
+git(privNothing, 'config', 'push.default', 'nothing');
+const privClean2 = privRepo('clean2', { files: { 'docs/k.md': 'clean\n' } });
+const leakGitDir = `${fwd(privAddRemove)}/.git`;
+const privTagGlob = privRepo('tag-glob', { files: { 'docs/n.md': 'clean\n' } });
+git(privTagGlob, 'checkout', '-q', '--detach');
+privCommit(privTagGlob, { 'docs/a.md': LEAK });
+git(privTagGlob, 'tag', 'v9');
+git(privTagGlob, 'checkout', '-q', 'main');
+const privAnnotated = privRepo('annotated', { files: { 'docs/n.md': 'clean\n' } });
+git(privAnnotated, 'tag', '-a', 'v1', '-m', `release by ${ZED}`);
+const privMounts = privRepo('mounts', { files: { 'docs/a.md': [`cd /c/${USERS}/someone/x`, `cd /cygdrive/c/${USERS}/someone/x`,
+  `cd /mnt/c/${USERS}/someone/x`, `PATH=/usr/bin:/${HOME_DIR}/someone/bin`, `[/${HOME_DIR}/someone/x]`, `file:///${HOME_DIR}/someone/x`].join('\n') } });
+const privAuthor = privRepo('author', {});
+privCommit(privAuthor, { 'docs/z.md': 'clean\n' }, 'x', '-c', `user.email=${ZED}`);
+const privPlusPlus = privRepo('plusplus', { files: { 'docs/a.md': `++ ${LEAK}` } });
+const privWholeSeg = privRepo('whole-seg', { files: { 'docs/a.md': ['Default-someone', 'Public.someone', '.someone', '...someone']
+  .map((s) => `C:/${USERS}/${s}/x`).join('\n') } });
+const privUserinfo = privRepo('userinfo', { files: { 'docs/a.md': [`//someone${AT}${MAIL}`, `ftp://someone${AT}${MAIL}`, `git://someone${AT}${MAIL}`].join('\n') } });
+const privCodeText = privRepo('code-text', { files: { 'internal/x.go': [`re := \`^[a-z]:/${USERS}/([^/]+)/\``,
+  `// the segment after /${HOME_DIR}/, /${USERS}/, or C:/${USERS}/;`, `x = "/${HOME_DIR}/{user}"`].join('\n') } });
+const privMerge = privRepo('merge', { files: { 'docs/n.md': 'clean\n' } });
+git(privMerge, 'checkout', '-q', '-b', 'side');
+privCommit(privMerge, { 'docs/s.md': 'clean\n' });
+git(privMerge, 'checkout', '-q', 'main');
+privCommit(privMerge, { 'docs/m.md': 'clean\n' });
+git(privMerge, 'merge', '-q', '--no-ff', 'side', '-m', `Merge by ${ZED}`);
+const privAllBehind = privRepo('all-behind', { files: { 'docs/a.md': LEAK } });
+git(privAllBehind, 'push', '-q', 'origin', 'main');
+git(privAllBehind, 'branch', '-q', 'b2', 'main~1');
+// S1': the remote git picks. Each has the leak on origin, pushed, and a remote pub that lacks it.
+function privTwoRemotes(name, config) {
+  const dir = privRepo(name, { files: { 'docs/a.md': LEAK } });
+  git(dir, 'push', '-q', 'origin', 'main');
+  git(scratch, 'init', '-q', '--bare', `${dir}-pub.git`);
+  git(dir, 'remote', 'add', 'pub', `${dir}-pub.git`);
+  for (const [k, v] of Object.entries(config)) git(dir, 'config', k, v);
+  return dir;
+}
+const privRemotes = privTwoRemotes('remotes', {});
+const privPushRemote = privTwoRemotes('push-remote', { 'branch.main.pushRemote': 'pub' });
+const privPushDefault = privTwoRemotes('push-default', { 'remote.pushDefault': 'pub' });
+const privBranchRemote = privTwoRemotes('branch-remote', { 'branch.main.remote': 'pub' });
+const privGhostRemote = privTwoRemotes('ghost-remote', { 'branch.main.remote': 'ghost' });
+const notRepo = path.join(scratch, 'not-a-repo');
+fs.mkdirSync(notRepo, { recursive: true });
+const allowSomeone = scratchPolicy('privacy-someone', { git: { push: { privacyAllow: ['SomeOne'] } } });
+// [id, command, agent, cwd, expect, extra, policy]
+const GV = [
+  ['GV01', 'git push origin main', 'pusher', privDiff, 20, says('docs/a.md:2', `C:/${USERS}/someone`, ADVICE20)],
+  ['GV02', 'git push origin main', 'pusher', privMsg, 20, says('message ', `carol${AT}${MAIL}`)],
+  ['GV03', 'git push origin main', 'pusher', privName, 20, says(`file name logs/${DESK}AB12.log (${DESK}AB12)`)],
+  ['GV04', 'git push origin main', 'pusher', privPlace, 'allow'], // the placeholder user, any case
+  ['GV05', 'git push origin main', 'pusher', privOwner, 'allow'], // the repository's user.email, any case
+  ['GV06', 'git push origin main', 'pusher', privTrailer, 'allow'], // the Co-Authored-By trailer
+  ['GV07', 'git push origin main', 'pusher', privHomeUser, 'allow'],
+  ['GV08', 'git push origin main', 'pusher', privHomeOther, 20, says('docs/e.md:1', `/${HOME_DIR}/someone`)],
+  ['GV09', 'git push origin main', 'pusher', privSess, 'allow'], // not a path that starts at /home
+  ['GV10', 'git push -u origin main', 'pusher', privNoUp, 20, says('docs/g.md:2')], // no upstream: the whole tree
+  ['GV11', 'git push -u origin main', 'pusher', privNoUpClean, 'allow'],
+  ['GV12', 'git push --dry-run origin main', 'pusher', privDiff, 20],
+  ['GV13', 'git push -n origin main', null, privDiff, 20],
+  ['GV14', 'git push origin main', null, privDiff, 20, noNote], // the main session is scanned too
+  ['GV15', 'git push origin main', null, privDiff, 'allow', null, allowSomeone], // listed in privacyAllow
+  ['GV16', 'git push origin main', 'pusher', privOld, 'allow'], // already upstream: not outgoing
+  ['GV17', 'git push origin main', 'pusher', privMany, 20, says('4 hits, the first three: ', 'docs/j.md:1', 'docs/j.md:3', `c${AT}${MAIL}`)],
+  ['GV18', 'git push origin main', null, notRepo, 20, says('could not work out what this push sends')],
+  ['GV19', 'git send-pack origin main', null, privDiff, 20],
+  ['GV20', `git -C ${fwd(privDiff)} push origin main`, null, privClean(), 20], // the directory git runs in
+  ['GV21', 'git push origin main', 'runner', privDiff, 3], // a caller who may not push hears that first
+  ['GV22', 'git push origin main', 'pusher', privPlace, 'allow', null, POLICIES.none], // no file: the default list
+  ['GV23', 'git diff origin/main', 'pusher', privDiff, 'allow'], // not a push
+  ['GV24', 'git push origin main', 'pusher', privReserved, 'allow'], // RFC 2606 reserved domains
+  ['GV25', 'git push origin main', 'pusher', privProse, 'allow'], // placeholder prose around the host marker
+  ['GV35', 'git push origin main', 'pusher', privHolders, 'allow'], // <name>, $USER, %USERNAME%, ~, an ellipsis
+  ['GV36', 'git push origin main', 'pusher', privProfiles, 'allow'], // the Windows system profiles, any case
+  ['GV37', 'git push origin main', 'pusher', privProfileNear, 20, says('2 hits', `C:/${USERS}/Publicity`, `C:/${USERS}/All`)],
+  ['GV38', 'git push origin main', 'pusher', privUrlUsers, 'allow'], // git, x-access-token, oauth2, URL userinfo
+  ['GV39', 'git push origin main', 'pusher', privUrlNear, 20, says('2 hits', `gitter${AT}${MAIL}`, `someone${AT}${MAIL}`)],
+  // The range follows what the push sends, not HEAD.
+  ['GV26', 'git push origin other', 'pusher', privOnMain, 20, says('docs/o.md:1')],
+  ['GV27', 'git push origin main', 'pusher', privOnOther, 'allow'],
+  ['GV28', 'git push --all origin', 'pusher', privOnMain, 20, says('docs/o.md:1')],
+  ['GV29', 'git push origin main', 'pusher', privOnMain, 'allow'],
+  ['GV30', 'git push origin other:refs/heads/x', 'pusher', privOnMain, 20],
+  ['GV31', 'git push --tags origin', 'pusher', privOnMain, 20, says('docs/o.md:1')],
+  ['GV32', 'git push origin HEAD', 'pusher', privOnOther, 20],
+  ['GV33', 'git push origin --delete other', null, privOnMain, 'allow', null, // a deletion sends nothing
+    scratchPolicy('privacy-delete', { git: { branchDelete: { branches: ['other'] } } })],
+  ['GV34', 'git push origin nosuch', 'pusher', privOnMain, 20, says('could not work out', 'nosuch')],
+  // B1: every outgoing commit, so a later commit that removes the hit does not hide it.
+  ['GV40', 'git push origin main', 'pusher', privAddRemove, 20, says('1 hit', 'docs/a.md:1', ADVICE20)],
+  ['GV41', 'git push -u origin main', 'pusher', privAddRemoveNew, 20, says('docs/a.md:1')],
+  // S1: what the remote lacks, not the upstream.
+  ['GV42', 'git push origin feat', 'pusher', privLocalUp, 20, says('docs/a.md:1')], // upstream is local main, unpushed
+  ['GV43', 'git push pub main', 'pusher', privPub, 20, says('docs/a.md:1')], // on origin, not on pub
+  ['GV44', 'git push origin main', 'pusher', privPub, 'allow'],
+  ['GV62', 'git push --all origin', 'pusher', privAllBehind, 'allow'], // b2 sits behind what origin has
+  // S2: with no refspec, what git would send.
+  ['GV45', 'git push', 'pusher', privCfgPush, 20, says('docs/o.md:1')], // remote.origin.push
+  ['GV46', 'git push origin', 'pusher', privCfgPush, 20, says('docs/o.md:1')],
+  ['GV47', 'git push origin', 'pusher', privMatching, 20, says('docs/o.md:1')], // push.default=matching
+  ['GV48', 'git push origin', 'pusher', privNothing, 'allow'], // push.default=nothing sends nothing
+  // S3: the repository --git-dir or GIT_DIR names, not the cwd.
+  ['GV49', `git --git-dir=${leakGitDir} push origin main`, null, privClean2, 20, says('docs/a.md:1')],
+  ['GV50', `GIT_DIR=${leakGitDir} git push origin main`, null, privClean2, 20, says('docs/a.md:1')],
+  ['GV51', `export GIT_DIR=${leakGitDir}; git push origin main`, null, privClean2, 20, says('docs/a.md:1')],
+  ['GV52', `$env:GIT_DIR = '${leakGitDir}'; git push origin main`, null, privClean2, 20, says('docs/a.md:1'), null, 'PowerShell'],
+  ['GV53', 'GIT_DIR=$X git push origin main', null, privClean2, 20, says('could not work out', 'GIT_DIR')],
+  ['GV63', `GIT_DIR=${leakGitDir} git status; git push origin main`, null, privClean2, 'allow'], // a prefix covers its own command
+  // S4: tags.
+  ['GV54', "git push origin 'refs/tags/*:refs/tags/*'", 'pusher', privTagGlob, 20, says('docs/a.md:1')],
+  ['GV55', 'git push origin v1', 'pusher', privAnnotated, 20, says('tag v1 message', ZED)],
+  // S5, S6, M1 to M3, and a merge message.
+  ['GV56', 'git push origin main', 'pusher', privMounts, 20, says('6 hits')],
+  ['GV57', 'git push origin main', 'pusher', privAuthor, 20, says(' author (', ' committer (', ZED)],
+  ['GV58', 'git push origin main', 'pusher', privPlusPlus, 20, says('docs/a.md:1')],
+  ['GV59', 'git push origin main', 'pusher', privWholeSeg, 20, says('4 hits')],
+  ['GV60', 'git push origin main', 'pusher', privUserinfo, 20, says('2 hits', 'docs/a.md:1', 'docs/a.md:2')], // only git:// passes
+  ['GV61', 'git push origin main', 'pusher', privMerge, 20, says(' message (', ZED)],
+  ['GV64', 'git push origin main', 'pusher', privCodeText, 'allow'], // a regex, prose, a template: no name starts there
+  // S1': the remote, as git picks it; origin already has the leak, pub does not.
+  ['GV65', 'git push --repo=pub', 'pusher', privRemotes, 20, says('docs/a.md:1')],
+  ['GV66', 'git push --repo pub', 'pusher', privRemotes, 20, says('docs/a.md:1')],
+  ['GV67', 'git push', 'pusher', privPushRemote, 20, says('docs/a.md:1')], // branch.main.pushRemote
+  ['GV68', 'git push', 'pusher', privPushDefault, 20, says('docs/a.md:1')], // remote.pushDefault
+  ['GV69', 'git push', 'pusher', privBranchRemote, 20, says('docs/a.md:1')], // branch.main.remote
+  ['GV70', 'git push', 'pusher', privRemotes, 'allow'], // origin, which has it
+  ['GV71', 'git push', 'pusher', privGhostRemote, 20, says('could not work out', 'ghost is not a configured remote')],
+  ['GV72', 'git push nowhere main', 'pusher', privRemotes, 20, says('nowhere is not a configured remote')],
+  // S2': the invocation's own config; a mirror remote gets every ref.
+  ['GV73', 'git push origin', 'pusher', privOnMain, 'allow'], // simple: main, which is clean
+  ['GV74', 'git -c remote.origin.push=refs/heads/other:refs/heads/other push origin', 'pusher', privOnMain, 20, says('docs/o.md:1')],
+  ['GV75', 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0=refs/heads/other:refs/heads/other git push origin', 'pusher', privOnMain, 20, says('docs/o.md:1')],
+  ['GV76', 'P=refs/heads/other:refs/heads/other git --config-env=remote.origin.push=P push origin', 'pusher', privOnMain, 20, says('docs/o.md:1')],
+  ['GV77', 'git -c remote.origin.mirror=true push origin', 'pusher', privOnMain, 20, says('docs/o.md:1')],
+  ['GV78', 'git -c remote.origin.push=$SPEC push origin', 'pusher', privOnMain, 19], // a hidden -c value: rule 19's
+  // S3': other ways a shell sets GIT_DIR.
+  ['GV79', `GIT_DIR=${leakGitDir}; export GIT_DIR; git push origin main`, null, privClean2, 20, says('docs/a.md:1')],
+  ['GV80', `declare -x GIT_DIR=${leakGitDir}; git push origin main`, null, privClean2, 20, says('docs/a.md:1')],
+  ['GV81', `Set-Item -Path env:GIT_DIR -Value '${leakGitDir}'; git push origin main`, null, privClean2, 20, says('docs/a.md:1'), null, 'PowerShell'],
+  ['GV82', 'Set-Item -Path env:GIT_DIR -Value $d; git push origin main', null, privClean2, 20, says('GIT_DIR has a value'), null, 'PowerShell'],
+  ['GV83', `GIT_DIR=${leakGitDir}; git push origin main`, null, privClean2, 'allow'], // not exported: git never sees it
+  ['GV84', `export GIT_DIR=${leakGitDir}; unset GIT_DIR; git push origin main`, null, privClean2, 'allow'],
+  // A GIT_DIR the tracker cannot follow denies.
+  ['GV85', `set -a; GIT_DIR=${leakGitDir}; git push origin main`, null, privClean2, 20, says('cannot follow')],
+  ['GV86', `[Environment]::SetEnvironmentVariable('GIT_DIR','${leakGitDir}'); git push origin main`, null, privClean2, 20, says('cannot follow'), null, 'PowerShell'],
+  ['GV87', `New-Item -Path env:GIT_DIR -Value '${leakGitDir}'; git push origin main`, null, privClean2, 20, says('cannot follow'), null, 'PowerShell'],
+  ['GV88', 'read GIT_DIR < f; export GIT_DIR; git push origin main', null, privClean2, 20, says('cannot follow')],
+  ['GV89', 'git commit -m "fix GIT_DIR handling"; git push origin main', null, privClean2, 'allow'], // prose, not a setting
+];
+function privClean() { return privRepo('clean', { files: { 'docs/k.md': 'clean\n' } }); }
+for (const [id, command, agent, cwd, expect, extra, policy, tool] of GV) {
+  guardCase(id, { command, agent, cwd, tool: tool || undefined, policy: policy || undefined }, expect, extra || undefined);
+}
+guardCase('GF07', { command: 'git status', policy: scratchPolicy('privacy-string', { git: { push: { privacyAllow: 'user' } } }), policyName: 'privacyAllow a string' }, 'policy');
+// M4: privacyAllow holds literal names, never patterns.
+guardCase('GF08', { command: 'git status', policy: scratchPolicy('privacy-glob', { git: { push: { privacyAllow: ['us*'] } } }), policyName: 'privacyAllow a glob' }, 'policy');
+guardCase('GF09', { command: 'git status', policy: scratchPolicy('privacy-path', { git: { push: { privacyAllow: ['a/b'] } } }), policyName: 'privacyAllow a path' }, 'policy');
 
 // ---------- post-edit ----------
 const write = (rel, text) => {

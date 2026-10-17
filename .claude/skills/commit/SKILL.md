@@ -52,7 +52,11 @@ work is unfinished. No heredocs for the message (apostrophes break them here).
 ## Pushing
 
 The `pusher` pushes, or the main session when the user asked for the push in so many words, or
-the user. Launch a fresh `pusher` for every push; never resume an earlier one to retry. When the
+the user. A main-session push runs the pusher's check 5a first (its grep over the outgoing diff,
+commit messages and added file names, plus a read of the diff for names and identifiers) and
+quotes the result, "none" or the hits, before pushing. A hit is an edit to roles and placeholders,
+committed first; the git-guard hook denies the push anyway on a mechanical hit, whoever pushes.
+Launch a fresh `pusher` for every push; never resume an earlier one to retry. When the
 pusher stops on behind or diverged (check 3), the committing agent under the policy (the `runner`
 in the base) runs `git pull --rebase origin <branch>`; a conflict on the handoff is resolved by
 rewriting the file with the `handoff` skill, any other goes back to whoever wrote the hunk; then

@@ -121,6 +121,14 @@ see and touch, and anything the reviewer marked blocking that the coordinator ov
   (a resumed pusher's retry gets blocked; the `commit` skill says why); the main session may push
   when the user asked for the push in so many words. Never force-push. A push that is blocked
   anyway goes back to the user to run `git push` themselves; never route around the block.
+- The privacy check runs before every push, whoever pushes, and is never skipped: the repo is
+  public, and it names roles and placeholders, never other people, host names or a username in a
+  path (`~`, not `C:/Users/<name>`). The `git-guard` hook runs its mechanical scan on every push
+  from every caller (rule 20; placeholders are listed in `git.push.privacyAllow`); the `pusher`'s
+  check 5a adds the human read. Both scan every outgoing commit, not the net diff: on 2026-10-17 a
+  net-diff scan caught a hit, the fix commit removed the lines, and the rescan let the commits
+  that still carried the name go public. A hit in an unpushed commit is amended or squashed out,
+  never fixed by a change to the rule or the list without the owner's words quoted in the brief.
 - The `git-guard` hook denies destructive git for everyone, agents included, in Bash and
   PowerShell alike. Which agents may commit and push is policy in `.claude/hooks/policy.json`
   (the base: `git commit` only from the `runner`, `git push` only from the `pusher`, the main

@@ -86,6 +86,7 @@ unreadable branch match no pattern list but `*`.
 | 1 | `push` or `send-pack` with `--force`, `--force=...`, `-f` or `+<refspec>`; or `--force-with-lease`/`--force-if-includes` unless `git.push.forceWithLease` lists patterns matching every target of a `push` | `force push` |
 | 2 | `push` or `send-pack` with `--mirror` or `--prune`; or `--delete`, `-d` or `:<ref>`, unless every deleted branch matches `git.branchDelete.branches` and, when `requireMergedPr`, GitHub shows a merged PR from it | `remote branch deletion` |
 | 3 | `push` or `send-pack` from the main session when `git.push.mainSession` is false; from a subagent not allowed by `git.push.subagents`; from an allowed subagent when `git.push.branches` is not `["*"]` and some target matches none of them | `push not permitted for this caller` |
+| 20 | tried right after rule 3: `push` or `send-pack` from any caller, the main session and `--dry-run` included, when what it sends matches pusher check 5a's mechanical grep (an email, a home path that carries a user name, a host-name marker with a word character on the hyphen's far side), run with the repository and config the invocation has (its directory, `--git-dir`, `--work-tree`, `-c`, `--config-env`, and `GIT_DIR`, `GIT_WORK_TREE` and `GIT_CONFIG_COUNT`/`_KEY_n`/`_VALUE_n` prefixed to it or exported earlier in the line: `export`, `declare -x`, `$env:`, `Set-Item env:`). An opaque push is left to rule 19. The remote `<r>` is git's pick: the command line's, `--repo`, `branch.<b>.pushRemote`, `remote.pushDefault`, `branch.<b>.remote`, `origin`; a name that is not a configured remote denies. The refs it sends: each refspec's source (`HEAD` as itself; a glob, such as `refs/tags/*`, as every ref it matches); with no refspec every ref when `remote.<r>.mirror` is true, else `remote.<r>.push`, else `push.default` (`matching`: each local branch the remote has; `nothing`: none; otherwise HEAD); every local branch for `--all` or `--branches`; every tag for `--tags` or `--follow-tags`; nothing for a deletion. Scanned per commit in `git rev-list <refs> --not --remotes=<r>` (all reachable commits for a URL remote or one not fetched yet): its added lines (a merge: the lines it adds against every parent), added file names, message, and author and committer emails; and each annotated tag sent, its message and tagger email. A hit passes when its home or host segment is in `git.push.privacyAllow` (case-insensitive; default `["user"]`), or its whole home segment is a Windows system profile (`Public`, `Default`, `Default User`, `All Users`, any case) or exactly `...`, or its email is the repository's `user.email`, `noreply@anthropic.com`, `*@noreply.anthropic.com`, at an RFC 2606 reserved domain, has the user part `git`, `x-access-token` or `oauth2`, or is URL userinfo after `http://`, `https://`, `ssh://` or `git://`. A ref, range or repository the guard cannot compute denies with its own sentence | `personal data in the outgoing commits` |
 | 4 | `commit`, `merge`, `pull`, `cherry-pick`, `revert`, `am` or `rebase` (not with `--abort` or `--quit`) from a subagent not allowed by `git.commit.subagents`, or on a current branch matching `git.commit.protectedBranches` | `commit not permitted for this caller` |
 | 5 | `reset` with `--hard` or `--merge` | `destructive reset` |
 | 6 | `clean` without `-n` or `--dry-run` | `git clean deletes untracked files` |
@@ -107,9 +108,29 @@ The merged-PR check runs `gh pr list --head <branch> --state merged --json numbe
 invocation's directory, once per branch; any failure counts as not merged. Test seam:
 `GIT_GUARD_MERGED`, comma-separated branch names, replaces the call.
 
+Rule 20 followed the 2026-10-17 catch: pusher check 5a stopped a push that carried the PC user name
+in two doc paths, and the owner asked that the check never be skipped; until then a main-session
+push ran no checks at all. Decision: the mechanical half lives in the guard, so every push runs it;
+the pusher keeps the human read (names of people, numbers, addresses). The first version scanned
+the net diff against the upstream and the tip tree, so a commit that added a name and a later one
+that removed it both went out allowed, which is how this repository's history came to carry the
+PC user name that same day; an independent review found it. The rule scans per commit for that
+reason, against what the remote lacks rather than the upstream, and its advice is to amend or
+squash, since a later commit on top leaves the name in history. The expression is check 5a's,
+written in JS (PCRE's `(?-i:...)` has no JS form) and fed by read-only git (`log -z`, `log -p --cc
+-U0`, `for-each-ref`, `rev-parse --verify`, `config`), each with a 20-second timeout. A segment
+starting with `<`, `$`, `%` or `~` is a placeholder, never a name, and one starting with a
+character no user name starts with (a quote, a bracket or brace, `: ; , | = + * ? >`) is code or
+prose, such as a regular expression's `[a-z]:/Users/([^/]+)`. Reserved-domain emails and the
+host marker's word-character edge keep the base's own harness and the pusher's prose clean.
+
 Deny output, exit 0. The advice is the rule's own sentence, or, for rules 1 to 4, 9, 14 and 18, a
 sentence built from the policy (which agents may act, which branches); rule 19's says the guard
-cannot see what the expansion becomes:
+cannot see what the expansion becomes; rule 20's gives the hit count and the first three hits
+(`<sha> file:line`, `<sha> message`, `<sha> file name <path>`, `<sha> author`, `<sha> committer`
+or `tag <t> message`, each with the matched text), then ``The repo is public: write `~`, a role or a
+placeholder instead. The fix is to amend or squash the unpushed commit, never a later commit on
+top, and never a change to this rule.``:
 
 ```json
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny",
@@ -137,7 +158,8 @@ data); GN covers rules 12 to 17 and lease-as-force; GQ the parser in both shells
 independent review reproduced as bypasses on 2026-10-13 (abbreviated options, opaque arguments,
 PowerShell launchers, commit-making subcommands, config by environment and include, forced branch
 resets, `send-pack`, whole-tree spellings), with the false positives they must not cause; GF
-malformed and absent policy files; GP one command set under the Hatchery policy, no policy, and
+malformed and absent policy files; GV rule 20 on scratch repositories with a bare `origin` (one commit
+pushed, the rest outgoing), with sample data built from pieces so the suite's own lines never match the scan; GP one command set under the Hatchery policy, no policy, and
 the two examples, in scratch repositories on `main` and on `task/T1`, which shows the absent file
 behaving as the
 Hatchery one. LIVE01 to LIVE04 check that the repository's own `policy.json` and the examples
