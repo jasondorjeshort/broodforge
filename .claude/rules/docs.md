@@ -2,6 +2,8 @@
 paths:
   - "docs/**"
   - "CLAUDE.md"
+  - ".claude/agreement/**"
+  - ".claude/project/**"
 ---
 
 # Conventions for docs/
@@ -19,7 +21,8 @@ These load automatically when a file under `docs/` or `CLAUDE.md` is read or edi
   must stay capped. Aim under 300 anyway.
 - `docs/HANDOFF.md`, and each `docs/handoff/*.md` where that directory exists: at most 40 lines, at most 120 together. Detail
   goes to an idea or a finding; the handoff links.
-- `CLAUDE.md`: at most 150 lines. A new paragraph of facts goes to `docs/reference/` with a pointer.
+- `CLAUDE.md`: at most 40 lines, loading at most 190 (`node .claude/hooks/policy.js --claude-check`);
+  `edit.capExempt` naming `CLAUDE.md` lifts both. A new paragraph of facts goes to `docs/reference/` with a pointer.
 
 ## Indexes
 

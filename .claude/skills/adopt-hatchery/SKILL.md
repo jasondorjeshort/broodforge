@@ -8,7 +8,7 @@ description: Bring the Hatchery practice (working agreement, agents, skills, hoo
 A project that already exists keeps its history and takes the practice as files. The files come
 from `hatchery/main`; what was copied and from which commit is recorded in the project's own ADR, so
 `update-from-hatchery` can patch forward later (patch mode). Reasoning and the full table of what is
-copied, merged, or added: Hatchery ADR 0004 (`git show hatchery/main:docs/design/decisions/0004-adopt-hatchery.md`).
+copied, merged, or added: Hatchery ADR 0004 (after `S=$(git rev-parse hatchery/main)`, `git show $S:docs/design/decisions/0004-adopt-hatchery.md`).
 Everything below runs in a private clone of the project, on its default branch, as the main session.
 
 ## Steps
@@ -21,30 +21,36 @@ Everything below runs in a private clone of the project, on its default branch, 
 2. Remote: `git remote add hatchery https://github.com/jasondorjeshort/hatchery.git` if missing;
    `git fetch hatchery`; `BASE=$(git rev-parse hatchery/main)`. Read this skill and ADR 0004 from
    `hatchery/main` if you have not already.
-3. Verbatim files (base wins): `git checkout hatchery/main -- .claude/agents .claude/skills
-   .claude/hooks .claude/statusline.js .claude/package.json .claude/rules/README.md
-   .claude/rules/docs.md` (`.claude/package.json` keeps the scripts CommonJS when the project's
-   root `package.json` says `"type": "module"`; without it every hook crashes). Then
-   `.claude/hooks/policy.json` becomes the project's: who commits and pushes, deletable branches,
-   usage thresholds (ADR 0006; `.claude/hooks/policy.examples/` has two worked ones). Ask the user
+3. Verbatim files (base wins): the base-owned set of `.claude/hooks/ownership.json` without
+   `LICENSE` and `LICENSES` (step 8 decides those): `git checkout hatchery/main -- .claude/agents
+   .claude/skills .claude/hooks .claude/agreement .claude/statusline.js .claude/package.json
+   .claude/rules/README.md .claude/rules/docs.md` (`.claude/package.json` keeps the scripts
+   CommonJS when the project's root `package.json` says `"type": "module"`; without it every hook
+   crashes). Then `.claude/hooks/policy.json` becomes the project's: who commits and pushes,
+   deletable branches, usage thresholds, `usage.pool` (`null` unless this machine has the
+   switcher), and `update.exclude` (step 8 writes it on a licence decline) (ADR 0006;
+   `.claude/hooks/policy.examples/` has two worked ones). Ask the user
    where the project's existing rules do not say; `node .claude/hooks/policy.js` must print it.
 4. `.claude/settings.json`: if absent, take Hatchery's. If present, write the union: Hatchery's
    `statusLine`, `permissions` (allow and deny lists appended, no duplicates), and every Hatchery
    hook entry, plus every existing project hook entry under its own event. Nothing of the project's
    is dropped. Note each project hook whose purpose contradicts a Hatchery rule (for step 6).
 5. `.gitignore`: append `.claude/settings.local.json` if absent. `README.md`: untouched.
-6. `CLAUDE.md` fold. Read the project's file and Hatchery's (`git show hatchery/main:CLAUDE.md`).
-   Classify every project rule as one of: every-turn and compatible (goes to a new `## Project rules`
-   section, condensed); path-scoped (goes to `.claude/rules/<name>.md` with `paths:`); a procedure
-   (stays in the project's docs, or becomes a skill later; one pointer line); a fact (`docs/reference/`);
-   a contradiction of a Hatchery rule section (This agreement is part of the work, Where things
-   live, Delegation, Debug interface, Major decisions, Usage gating, Model routing, Git, Licensing).
-   Present every contradiction to the user with both texts quoted, one pair per item, and wait; do
-   not write `CLAUDE.md` with a guess. Then write it with the Write tool: Hatchery's text in the rule
-   sections (the user's choices applied), the project in the slots: title; provenance sentence
-   "adopted from Hatchery at `<BASE>`, see ADR NNNN"; `## Phase` as the project's actual phase;
-   thresholds; routing table; branch name in `## Git`; `## Licensing` per step 8; `## Project rules`.
-   `wc -l CLAUDE.md` at most 150; move more to `.claude/rules/` until it is.
+6. `CLAUDE.md` rewrite (ADR 0016). Read the project's file and the ten files in
+   `.claude/agreement/` (step 3 brought them). Classify every project rule as one of: every-turn
+   and compatible (goes to `## Project rules`, condensed); path-scoped (`.claude/rules/<name>.md`
+   with `paths:`); a procedure (stays in the project's docs, or becomes a skill later; one pointer
+   line); a fact (`docs/reference/`); a contradiction of an agreement section (file name in
+   `.claude/agreement/`). Present every contradiction to the user with both texts quoted, one pair
+   per item, and wait; do not write `CLAUDE.md` with a guess. Each kept contradiction becomes
+   `.claude/project/<section>.md`, one line: "Replaces `.claude/agreement/<section>.md` for this
+   project: <the rule>. Decided in ADR <NNNN>." (the replaced path in backticks), plus one
+   departure row in step 10's ADR. Then write `CLAUDE.md` with the Write tool in the shape of
+   `decant` step 4's template, with "Adopted from Hatchery" in the provenance line, no routing
+   slot, each replaced section's `@.claude/agreement/<s>.md` line swapped for
+   `@.claude/project/<s>.md`, and the project's actual phase and branch (`Branch: <name>`).
+   `node .claude/hooks/policy.js --claude-check` prints no `FAIL`: at most 40 lines; move more to
+   `## Project rules`, `.claude/rules/` or `docs/reference/` until it does.
 7. Docs skeleton, only where the project lacks the file: `git checkout hatchery/main -- docs/HANDOFF.md
    docs/ideas/README.md docs/operator/README.md docs/findings/README.md docs/reference/README.md docs/design/proposals/README.md
    docs/design/decisions/README.md docs/design/decisions/0001-licensing.md
@@ -66,11 +72,13 @@ Everything below runs in a private clone of the project, on its default branch, 
    300 lines. Per file the user chooses split or exempt; an exemption is the path (or a glob) added
    to `edit.capExempt` in `.claude/hooks/policy.json`, which the post-edit hook and pusher check 7
    both read, recorded in step 10 as the reason to differ. Never edit check 7 for it.
-10. The project's ADR: `docs/design/decisions/NNNN-adopt-hatchery.md` from `template-adr.md` beside
-    this skill (NNNN: `adr` skill numbering). The line `Hatchery base: <BASE>` is required and living.
-    Add it to "Decisions so far".
+10. The project's provenance ADR: `docs/design/decisions/NNNN-adopt-hatchery.md` from
+    `template-adr.md` beside this skill, title `Adopted from` (NNNN: `adr` skill numbering). The
+    line `Hatchery base: <BASE>` is required and living; the departure table gets its header row and
+    one row per replaced section and per base-owned file the project edits (including the cap
+    exemption of step 9). Add it to "Decisions so far".
 11. Verify: `git status --short` lists only the paths above; `grep -rn "^<<<<<<<\|^>>>>>>>" .` empty;
-    `wc -l CLAUDE.md` at most 150; stage the handoff first, since the commit step takes it anyway (`git add docs/HANDOFF.md` and,
+    `node .claude/hooks/policy.js --claude-check` prints no `FAIL`; stage the handoff first, since the commit step takes it anyway (`git add docs/HANDOFF.md` and,
     where it exists, `git add docs/handoff/`), so an untracked stream file is checked too; then the
     three command lines of pusher check 7 (`.claude/agents/pusher.md`)
     print no `FAIL` (both handoff shapes); `node .claude/hooks/usage-gate.js < /dev/null`

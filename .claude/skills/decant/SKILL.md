@@ -26,15 +26,47 @@ and findings. Everything below runs in the new project's clone.
    (the pusher's `git push -u origin <branch>`).
 3. `README.md`: replace with the project's README, keeping the License section. Keep nothing about
    decanting; that lives here.
-4. `CLAUDE.md`: set the title line to the project name, keep the sentence saying it comes from
-   Hatchery, and review the project-specific parts: platform list reference and model routing.
-   Thresholds are not here; they are policy (step 5), and the usage table reads them from there.
-   Change only what the project needs.
+4. `CLAUDE.md`: write it anew with the Write tool, exactly this shape (ADR 0016; at most 40 lines;
+   the rule text lives in the base-owned `.claude/agreement/` files, which are never copied in).
+   `<NNNN>` is the provenance ADR of step 9; `Phase` is one or two lines; the branch is this
+   project's. Nothing else goes in: a rule the project adds goes under `## Project rules`, a rule
+   that contradicts a section is a replacement file later (the departure table of step 9).
+
+   ```
+   # <Project> working agreement
+
+   Decanted from Hatchery; provenance and departures: `docs/design/decisions/<NNNN>-decanted-from-hatchery.md`.
+   Where work stands right now (coordinator state; subagents follow their brief, not this):
+
+   @docs/HANDOFF.md
+
+   ## Phase
+
+   <one or two lines>
+
+   Branch: <name>
+
+   @.claude/agreement/this-agreement.md
+   @.claude/agreement/where-things-live.md
+   @.claude/agreement/delegation.md
+   @.claude/agreement/debug-interface.md
+   @.claude/agreement/major-decisions.md
+   @.claude/agreement/usage-gating.md
+   @.claude/agreement/model-routing.md
+   @.claude/agreement/one-review.md
+   @.claude/agreement/git.md
+   @.claude/agreement/licensing.md
+
+   ## Project rules
+
+   <none yet>
+   ```
 5. `.claude/hooks/policy.json`: the project's choices for the hooks, never edits to the scripts
    (ADR 0006): usage thresholds (`usage.hold`, `usage.deny`, per meter under `usage.fiveHour` and
    `usage.sevenDay`), who commits and pushes (`git.commit.subagents`, `git.push.subagents`,
    `git.push.mainSession`), and cap exemptions (`edit.capExempt`). Thresholds and overage are the
-   owner's money: ask, do not guess. `.claude/hooks/policy.examples/` has worked ones; copy the
+   owner's money: ask, do not guess. `usage.pool` is `null` unless this machine has the account
+   switcher (ADR 0011). `.claude/hooks/policy.examples/` has worked ones; copy the
    closest and edit. `node .claude/hooks/policy.js` must print the effective policy, not an error.
 6. The handoff. Ask the owner one question, in these words: "Will more than one session work this
    branch at the same time?" (ADR 0015: the shape follows the writer count; the answer goes in the
@@ -83,12 +115,17 @@ and findings. Everything below runs in the new project's clone.
    Hatchery); delete every other reference file and its row.
 9. `docs/design/`: keep `README.md`, every file under `decisions/`, and the `proposals/` README;
    delete every proposal and reset the proposals index table to its header. The "Decisions so
-   far" list stays as it is: the project's own decisions are added below it from 0020 up. If the
-   project wants a different license, supersede 0001 with the `adr` skill (as 0020) and replace
-   `LICENSE`.
+   far" list stays as it is: the project's own decisions are added below it from 0020 up. Then
+   write `docs/design/decisions/NNNN-decanted-from-hatchery.md` (NNNN by the `adr` skill's rule,
+   0020 in a fresh decant) from `.claude/skills/adopt-hatchery/template-adr.md`, title `Decanted
+   from`: the base line `Hatchery base: ` plus `git rev-parse hatchery/main`, the licence
+   decision, and the departure table with its header row and no rows. Add it to "Decisions so
+   far". If the project wants a different license, supersede 0001 with the `adr` skill (as the
+   next number) and replace `LICENSE`.
 10. `.claude/settings.json`: keep as is. `.claude/rules/`: keep `docs.md`; add language rules
     later per `.claude/rules/README.md`.
-11. Verify: `git status --short` shows only the intended edits; `wc -l CLAUDE.md` is at most 150;
+11. Verify: `git status --short` shows only the intended edits; `node .claude/hooks/policy.js
+    --claude-check` prints no `FAIL` (the 40 and 190 caps, every section imported once);
     stage the handoff first, since the commit step takes it anyway (`git add docs/HANDOFF.md` and,
     where it exists, `git add docs/handoff/`), so an untracked stream file is checked too; then the
     three command lines of pusher check 7 (`.claude/agents/pusher.md`) print no `FAIL` (they

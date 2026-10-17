@@ -25,8 +25,8 @@ Create a new project from the Hatchery base. Preconditions, stop and tell me if 
 --version` and `gh --version` work; `git status --porcelain` is empty; `git remote -v` shows
 `origin` pointing at the Hatchery repository; the `decant` skill is listed. Rename the remote
 `origin` to `hatchery`, add `origin` pointing at <new project remote URL>, and confirm both with
-`git remote -v`. Load the `decant` skill and follow it to the end: replace the README, retitle
-CLAUDE.md, set .claude/hooks/policy.json (ask me about thresholds), reset docs/HANDOFF.md and
+`git remote -v`. Load the `decant` skill and follow it to the end: replace the README, write
+CLAUDE.md from the skill's template (the agreement imports), set .claude/hooks/policy.json (ask me about thresholds), reset docs/HANDOFF.md and
 docs/ideas/, clear docs/findings/ and docs/reference/ except the Windows reference, keep every
 Hatchery ADR and delete the proposals (my own ADRs start at 0020), and commit through the runner.
 Do not push. Report the remotes, the files you changed, the policy choices, and the first design step.
@@ -41,14 +41,13 @@ does: the file .claude/skills/update-from-hatchery/SKILL.md exists here (if not,
 never came from Hatchery: stop and tell me to use the "Adopt the Hatchery practice" prompt from
 the Hatchery README); `git status --porcelain` is empty; I am on this project's working branch.
 Then load the `update-from-hatchery` skill and follow it: add the remote `hatchery`
-(https://github.com/jasondorjeshort/hatchery.git) if missing, fetch it, pick the mode the skill
-describes (patch when the project's adopt-hatchery ADR records a Hatchery base commit, even if
-there is a merge-base; otherwise merge when there is a merge-base), and resolve conflicts by the skill's rule: this project's own text wins in
-README.md, the project-specific sections of CLAUDE.md, docs/HANDOFF.md, docs/ideas/, and
-everything under docs/design/, docs/findings/, docs/reference/; the base wins under .claude/
-unless an ADR here records a reason to differ. Leave no conflict markers. Re-run the project's
-checks and tests. Do not push. Report the mode, what changed in the base, how each conflict was
-resolved, and what I should act on.
+(https://github.com/jasondorjeshort/hatchery.git) if missing, fetch it, read the skill from the
+fetched commit `<sha>` (`git show <sha>:.claude/skills/update-from-hatchery/SKILL.md`, after
+`S=$(git rev-parse hatchery/main)`), and apply the patch it describes over the base-owned set,
+in the Bash tool. Resolve conflicts by the skill's rule: the base wins unless the departure
+table in this project's provenance ADR has a row for the path; the project's own files are
+never in the patch. Leave no conflict markers. Re-run the project's checks and tests. Do not
+push. Report what changed in the base, how each conflict was resolved, and what I should act on.
 ```
 
 **Adopt the Hatchery practice in an existing project** that was never decanted from it. The
@@ -62,12 +61,13 @@ no rebase, no history rewrite. Preconditions, stop and tell me which failed if o
 working branch (whatever its name); this clone is mine alone, not a shared working tree; there is
 no .claude/agents/ directory here (if there is, use the update prompt instead). Then run
 `git remote add hatchery https://github.com/jasondorjeshort/hatchery.git` (skip if present) and
-`git fetch hatchery`, read the procedure with
-`git show hatchery/main:.claude/skills/adopt-hatchery/SKILL.md`, and follow it to the end: copy
+`git fetch hatchery`, read the procedure with `S=$(git rev-parse hatchery/main)` then
+`git show $S:.claude/skills/adopt-hatchery/SKILL.md`, and follow it to the end: copy
 .claude/agents, skills, hooks, statusline, and rules from hatchery/main; merge Hatchery's hook
-entries and permissions into my .claude/settings.json keeping every hook I already have; fold
-Hatchery's working agreement into my CLAUDE.md keeping my own rules, and ask me, with both texts
-quoted, about every rule of mine that contradicts one of Hatchery's; add the docs skeleton only
+entries and permissions into my .claude/settings.json keeping every hook I already have; write
+my CLAUDE.md from the template with the agreement imports, my compatible rules under Project
+rules, and ask me, with both texts quoted, about every rule of mine that contradicts an agreement
+section (each kept one becomes a replacement file and a departure row); add the docs skeleton only
 where I lack a file and add rows to my docs/README.md without moving anything; ask me before
 adding a LICENSE; list my docs over 300 lines and ask split or exempt; write the adopt-hatchery
 ADR with the Hatchery base commit; commit from this session. Do not push. Report what was copied,
@@ -110,13 +110,13 @@ an adoption (third prompt), not a decant.
 
 ## Pulling base improvements into a project
 
-The second prompt above does this for either kind of project. By hand, decanted project:
-`git fetch hatchery && git merge hatchery/main`. Adopted project: `git fetch hatchery`, then apply
-`git diff <recorded Hatchery base> hatchery/main -- .claude CLAUDE.md` with `git apply --3way` and
-bump the base line in your `adopt-hatchery` ADR. Either way, resolve conflicts by the rule in
-`.claude/skills/update-from-hatchery/SKILL.md`: the base wins under `.claude/` and on Hatchery's
-own ADRs (0001 to 0019, apart from lines the project added to them), the project wins in its own
-README, design, handoff, ideas, findings, and reference.
+The second prompt above does this for either kind of project, by one procedure (ADR 0016). By
+hand: `git fetch hatchery`, then in the Bash tool run the command that
+`node .claude/hooks/ownership.js --command --ref <sha>` prints (`<sha>` is `git rev-parse
+hatchery/main`; it patches only the base-owned set, never a file the project wrote), and bump the
+base line in your provenance ADR. Resolve conflicts by the rule in
+`.claude/skills/update-from-hatchery/SKILL.md`: the base wins unless the departure table in your
+provenance ADR has a row for the path; the project's own files are never in the patch.
 
 ## Adopting the practice in an existing project
 
