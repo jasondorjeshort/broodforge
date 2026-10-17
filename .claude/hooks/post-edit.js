@@ -1,17 +1,20 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: GPL-3.0-or-later
 // PostToolUse hook for the Write and Edit tools. Non-blocking: it never exits non-zero
-// and never denies. It returns hookSpecificOutput.additionalContext when CLAUDE.md passes
-// its 150-line cap or an edited docs/**/*.md file breaks a size cap, lacks required frontmatter, is missing from its
-// directory index, or names a repository path that does not exist, and it runs the
-// formatter for the file's extension if one is set.
-// Spec: docs/design/decisions/0002-hook-specs.md section 2; policy: ADR 0006.
+// and never denies. It returns hookSpecificOutput.additionalContext when an edit to CLAUDE.md,
+// .claude/agreement/*.md or .claude/project/*.md leaves a --claude-check FAIL (claudeCheck in
+// policy.js: sections, the 40 and 190 caps, unresolved imports), or an edited docs/**/*.md file
+// breaks a size cap, lacks required frontmatter, is missing from its directory index, or names a
+// repository path that does not exist, and it runs the formatter for the file's extension if one
+// is set. Every @ import is read by imports.js, the one parser.
+// Spec: docs/design/decisions/0002-hook-specs.md section 2; policy: ADR 0006; CLAUDE.md: ADR 0016.
 // Test harness: node .claude/hooks/test-hooks.js
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const childProcess = require('child_process');
-const { load, matches, docCap, lineCount, DOCS_CAP, HANDOFF_CAP } = require('./policy');
+const { load, matches, docCap, lineCount, claudeCheck, DOCS_CAP, HANDOFF_CAP } = require('./policy');
+const { resolve } = require('./imports');
 
 // Project choices from .claude/hooks/policy.json (edit block); a malformed policy means the base
 // defaults here, since this hook only advises.
@@ -30,7 +33,7 @@ if (process.env.POST_EDIT_FORMATTERS_JSON) {
 // The per-file caps (DOCS_CAP 300, HANDOFF_CAP 40) and which applies are docCap in policy.js, the
 // one rule this hook and pusher check 7 share.
 const HANDOFF_TOTAL_CAP = 120; // docs/HANDOFF.md plus every docs/handoff/*.md
-const CLAUDE_MD_CAP = 150; // .claude/rules/docs.md; loaded every turn, so the tightest cap
+// The CLAUDE.md caps (40, and 190 loaded) are CLAUDE_MD_CAP and CLAUDE_LOADED_CAP in policy.js.
 const INDEX_EXEMPT = new Set(['README.md', 'HANDOFF.md']);
 
 // True when the file starts with ---, closes with --- within the first 20 lines,
@@ -94,8 +97,8 @@ function checkDocs(root, rel, abs) {
   // are listed in docs/design/README.md).
   if (isStream) {
     // docs/handoff/ has no README: a stream is listed when the map imports it.
-    const map = importTargets(readOr(path.join(root, 'docs', 'HANDOFF.md'), ''));
-    if (!map.includes(`handoff/${base}`)) {
+    const map = resolve(root, 'docs/HANDOFF.md', { hops: 1 }).map((i) => i.target);
+    if (!map.includes(rel)) {
       msgs.push(`post-edit: ${rel} is not imported by docs/HANDOFF.md. Add the line @handoff/${base} or delete the file.`);
     }
   } else if (parts.length >= 3 && !INDEX_EXEMPT.has(base)) {
@@ -142,34 +145,12 @@ function missingPaths(root, text) {
   return missing;
 }
 
-// Import check: each line starting with @<target>, outside fenced blocks, resolves from the
-// importing file's directory (Claude Code's rule); an absent target loads nothing and says nothing.
-function importTargets(text) {
-  const targets = [];
-  let fence = null;
-  for (const line of text.replace(/\r/g, '').split('\n')) {
-    const f = line.match(/^[ \t]*(```|~~~)/);
-    if (f) {
-      if (fence === null) fence = f[1]; else if (fence === f[1]) fence = null;
-      continue;
-    }
-    if (fence !== null) continue;
-    const m = line.match(/^@(\S+)/);
-    if (m) targets.push(m[1]);
-  }
-  return targets;
-}
-
-function missingImports(root, rel, text) {
-  const msgs = [];
-  const dir = path.posix.dirname(rel);
-  for (const target of importTargets(text)) {
-    const resolved = path.posix.normalize(path.posix.join(dir, target));
-    if (!fs.existsSync(path.join(root, ...resolved.split('/')))) {
-      msgs.push(`post-edit: ${rel} imports @${target}, which resolves to ${resolved} and does not exist (an import resolves from the importing file's directory).`);
-    }
-  }
-  return msgs;
+// Import check for a handoff file: each of its own @ imports (imports.js: line start or after
+// whitespace, outside code spans and fences) resolves from the importing file's directory (Claude
+// Code's rule); an absent target loads nothing and says nothing.
+function missingImports(root, rel) {
+  return resolve(root, rel, { hops: 1 }).filter((i) => !i.exists).map((i) =>
+    `post-edit: ${rel} imports @${i.token}, which resolves to ${i.target} and does not exist (an import resolves from the importing file's directory).`);
 }
 
 function runFormatter(argv, abs, rel) {
@@ -193,12 +174,13 @@ function main(raw) {
 
   const msgs = [];
   if (inside && rel.startsWith('docs/') && rel.endsWith('.md')) msgs.push(...checkDocs(root, rel, abs));
-  if (inside && (rel === 'CLAUDE.md' || rel === 'docs/HANDOFF.md' || /^docs\/handoff\/[^/]+\.md$/.test(rel))) {
-    msgs.push(...missingImports(root, rel, fs.readFileSync(abs, 'utf8')));
+  if (inside && (rel === 'docs/HANDOFF.md' || /^docs\/handoff\/[^/]+\.md$/.test(rel))) {
+    msgs.push(...missingImports(root, rel));
   }
-  if (inside && rel === 'CLAUDE.md') {
-    const n = lineCount(fs.readFileSync(abs, 'utf8'));
-    if (n > CLAUDE_MD_CAP) msgs.push(`post-edit: CLAUDE.md is ${n} lines; cap is ${CLAUDE_MD_CAP} (.claude/rules/docs.md). Move facts to docs/reference/ and path-scoped rules to .claude/rules/.`);
+  // The project CLAUDE.md and the files it is built from: the same FAIL lines as pusher check 7's
+  // policy.js --claude-check, for the whole tree, since an edit to one file can break another's line.
+  if (inside && (rel === 'CLAUDE.md' || /^\.claude\/(agreement|project)\/[^/]+\.md$/.test(rel))) {
+    msgs.push(...claudeCheck(root, edit).lines);
   }
   const fmt = FORMATTERS[path.extname(abs).toLowerCase()];
   if (Array.isArray(fmt) && fmt.length > 0) msgs.push(...runFormatter(fmt, abs, rel));

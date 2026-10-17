@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Loads .claude/hooks/policy.json, the one file that holds a project's choices for the hooks
 // (who commits and pushes, which branches may be deleted, usage thresholds, docs cap exemptions,
-// formatters), and the helpers the usage gate and the status line share (thresholds, grants, the
+// formatters, update excludes), and the helpers the usage gate and the status line share (thresholds, grants, the
 // account label). The scripts hold mechanism only, so update-from-hatchery can patch them without
 // touching a project's policy. Schema and fail modes: docs/design/decisions/0006-hook-policy-file.md.
 //
@@ -15,6 +15,14 @@
 // Keys starting with "$" (for example "$comment") are ignored at any level.
 //
 // Debug: node .claude/hooks/policy.js [file]  prints the effective policy, or the error and exit 1.
+// CLAUDE.md check: node .claude/hooks/policy.js --claude-check  checks CLAUDE.md in the current
+// directory and the files it loads (ADR 0016; docs/design/decisions/0016-update-procedure.md,
+// Checks): every .claude/agreement/<s>.md imported or replaced once, every .claude/project/<s>.md
+// replacing a section, CLAUDE.md at most CLAUDE_MD_CAP lines and loading at most CLAUDE_LOADED_CAP
+// (the handoff chain excepted), and every @ import from CLAUDE.md and the handoff files resolving.
+// One FAIL line per problem, exit 1 on any, a malformed policy included; the last stdout line is
+// always "claude-check: <n> files, <m> FAIL". post-edit.js prints the same FAIL lines; the parser
+// is imports.js.
 // Cap check: node .claude/hooks/policy.js --cap-check <listfile>  reads a newline list of
 // repo-relative docs paths (relative to the current directory) and prints one
 // "FAIL <path>: <n> lines, cap <cap>" per file over its docCap; exit 1 on any FAIL, a malformed
@@ -59,9 +67,12 @@ const DEFAULTS = {
   },
   edit: {
     capExempt: [],
-    anchorExempt: ['docs/design/proposals/*', 'docs/design/decisions/*', 'docs/findings/*'],
+    anchorExempt: ['docs/design/proposals/*', 'docs/design/decisions/*', 'docs/findings/*', 'docs/hatchery/*'],
     formatters: {},
   },
+  // Base-owned paths an update from Hatchery never brings (ADR 0016): files the project removed or
+  // replaced for good. ownership.js turns each into an exclude pathspec.
+  update: { exclude: [] },
 };
 
 const isStrings = (v) => Array.isArray(v) && v.every((s) => typeof s === 'string' && s !== '');
@@ -101,6 +112,7 @@ const SCHEMA = {
     staleSeconds: 'seconds', whenStale: 'stale', overrideEnv: 'envNameOrNull', pool: 'pool', holdAdvice: 'text', denyAdvice: 'text',
   },
   edit: { capExempt: 'patterns', anchorExempt: 'patterns', formatters: 'formatters' },
+  update: { exclude: 'patterns' },
 };
 
 // Walks value against schema, merging over defaults. Throws on the first problem.
@@ -332,6 +344,14 @@ function docCap(edit, rel) {
 }
 const lineCount = (text) => (text.match(/\n/g) || []).length; // same as wc -l
 
+// The project CLAUDE.md caps (ADR 0016): the file itself, and what it loads at every hop (itself and
+// each file reached once, docs/HANDOFF.md and its chain excepted, which keep the 120 of ADR 0014).
+// Lifted together, and only, by edit.capExempt holding the exact string CLAUDE.md; a pattern never
+// lifts them.
+const CLAUDE_MD_CAP = 40;
+const CLAUDE_LOADED_CAP = 190;
+const claudeCapsLifted = (edit) => edit.capExempt.includes('CLAUDE.md');
+
 // The --cap-check mode: returns { lines, code } so the CLI below only prints. A policy that does not
 // load is a FAIL here, never the defaults: the push must not pass on rules the project did not set.
 // files counts the listed files checked against a cap (exempt and deleted ones are not).
@@ -361,7 +381,61 @@ function capCheck(listFile) {
   return { lines: out, files, code: out.length ? 1 : 0 };
 }
 
-module.exports = { load, matches, docCap, lineCount, capCheck, DOCS_CAP, HANDOFF_CAP, usageVerdict, meterThresholds, classifyGrant, readGrants, judgeGrants, holdCovered, holdLifted, readAccount, accountLabel, accountsDiffer, DEFAULTS };
+// The --claude-check lines for the tree at root, under the policy's edit block. Returns { lines,
+// files, code }: lines are the FAIL lines (post-edit.js prints them as they are), files the count of
+// files read. imports.js is required here, not at the top, so the guard, which needs only load(),
+// never depends on it.
+function claudeCheck(root, edit) {
+  const { resolve, absOf } = require('./imports');
+  const lines = [];
+  const read = (rel) => { try { return fs.readFileSync(absOf(root, rel), 'utf8'); } catch (_) { return null; } };
+  const mdIn = (dir) => {
+    try {
+      return fs.readdirSync(absOf(root, dir), { withFileTypes: true })
+        .filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name).sort();
+    } catch (_) { return []; }
+  };
+  const claude = read('CLAUDE.md');
+  const files = new Set();
+  // Every import reached from CLAUDE.md, at any hop up to four: a replacement file that itself
+  // imports the section it replaces counts twice.
+  const reached = claude === null ? [] : resolve(root, 'CLAUDE.md');
+  const sections = mdIn('.claude/agreement').map((n) => n.slice(0, -3));
+  for (const s of sections) {
+    const n = reached.filter((i) => i.target === `.claude/agreement/${s}.md` || i.target === `.claude/project/${s}.md`).length;
+    if (n === 0) lines.push(`FAIL CLAUDE.md: section ${s} neither imported nor replaced`);
+    if (n > 1) lines.push(`FAIL CLAUDE.md: section ${s} imported twice`);
+  }
+  for (const n of mdIn('.claude/project')) {
+    if (!sections.includes(n.slice(0, -3))) lines.push(`FAIL .claude/project/${n} replaces no agreement section`);
+  }
+  if (claude !== null && !claudeCapsLifted(edit)) {
+    const n = lineCount(claude);
+    if (n > CLAUDE_MD_CAP) lines.push(`FAIL CLAUDE.md: ${n} lines, cap ${CLAUDE_MD_CAP}; lift: edit.capExempt naming CLAUDE.md`);
+    const loaded = new Set(['CLAUDE.md']);
+    for (const i of resolve(root, 'CLAUDE.md', { skip: ['docs/HANDOFF.md'] })) {
+      if (i.exists && i.target !== 'docs/HANDOFF.md') loaded.add(i.target);
+    }
+    let total = 0;
+    for (const f of loaded) { const t = read(f); if (t !== null) total += lineCount(t); }
+    if (total > CLAUDE_LOADED_CAP) lines.push(`FAIL CLAUDE.md: loads ${total} lines, cap ${CLAUDE_LOADED_CAP}; lift: edit.capExempt naming CLAUDE.md`);
+  }
+  // Unresolved imports from CLAUDE.md, the handoff files, and every file they import.
+  const starts = ['CLAUDE.md', 'docs/HANDOFF.md', ...mdIn('docs/handoff').map((n) => `docs/handoff/${n}`)]
+    .filter((f) => read(f) !== null);
+  const said = new Set();
+  for (const start of starts) {
+    files.add(start);
+    for (const i of resolve(root, start)) {
+      if (i.exists) { files.add(i.target); continue; }
+      const line = `FAIL ${i.file}: @${i.token} resolves to ${i.target}, which does not exist`;
+      if (!said.has(line)) { said.add(line); lines.push(line); }
+    }
+  }
+  return { lines, files: files.size, code: lines.length ? 1 : 0 };
+}
+
+module.exports = { load, matches, docCap, lineCount, capCheck, claudeCheck, DOCS_CAP, HANDOFF_CAP, CLAUDE_MD_CAP, CLAUDE_LOADED_CAP, claudeCapsLifted, usageVerdict, meterThresholds, classifyGrant, readGrants, judgeGrants, holdCovered, holdLifted, readAccount, accountLabel, accountsDiffer, DEFAULTS };
 
 if (require.main === module && process.argv[2] === '--cap-check') {
   const c = process.argv[3] ? capCheck(process.argv[3])
@@ -369,6 +443,12 @@ if (require.main === module && process.argv[2] === '--cap-check') {
   if (c.code === 2) process.stderr.write('usage: node .claude/hooks/policy.js --cap-check <listfile>\n');
   process.stdout.write(`${c.lines.map((l) => `${l}\n`).join('')}cap-check: ${c.files} files, ${c.lines.length} over cap\n`);
   process.exitCode = c.code; // not process.exit: a write to a pipe may still be in flight
+} else if (require.main === module && process.argv[2] === '--claude-check') {
+  // A policy that does not load is a FAIL here, never the defaults, as in --cap-check.
+  const r = load();
+  const c = r.error ? { lines: [`FAIL policy: ${r.error}`], files: 0, code: 1 } : claudeCheck(process.cwd(), r.policy.edit);
+  process.stdout.write(`${c.lines.map((l) => `${l}\n`).join('')}claude-check: ${c.files} files, ${c.lines.length} FAIL\n`);
+  process.exitCode = c.code;
 } else if (require.main === module) {
   const r = load(process.argv[2]);
   if (r.error) { process.stderr.write(`policy: ${r.error}\n`); process.exit(1); }

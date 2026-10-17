@@ -33,8 +33,12 @@
 // usage-gate and statusline cases point HOME/USERPROFILE at a scratch dir and remove
 // CLAUDE_CONFIG_DIR unless the case sets it to a scratch dir. Every case names
 // its policy file through HOOK_POLICY_FILE: the Hatchery fixture, an example, none, or a scratch
-// file. No file of the repository is read except to check that policy.json loads and, in F1, the
-// files .claude/hooks/fitness.json names; ~/.claude is never touched. Exit codes: 0 all pass (a
+// file. No file of the repository is read except to check that policy.json loads, in F1 the
+// files .claude/hooks/fitness.json names, in O1 the tracked paths against ownership.json and in A1
+// the files under .claude/agreement/ (both skipped where a hatchery remote exists, ADR 0016), and
+// policy.js and imports.js, copied into the O cases' scratch repositories; ~/.claude is never touched.
+// Groups IM (imports.js), CL (policy.js --claude-check) and O (ownership.js) cover ADR 0016's code;
+// the line above the totals lists the groups that ran. Exit codes: 0 all pass (a
 // SKIP is not a failure), 1 any failure, 2 usage error.
 'use strict';
 const fs = require('fs');
@@ -87,8 +91,12 @@ if (opt.input) {
 let pass = 0;
 let fail = 0;
 let skipped = 0;
+// The case groups that ran (an id's leading letters), listed above the totals.
+const groups = new Set();
+const noteGroup = (id) => groups.add(id.replace(/\d.*$/, ''));
 function report(id, label, ok, detail, stdout) {
   if (opt.only && !id.startsWith(opt.only)) return;
+  noteGroup(id);
   if (ok) pass++; else fail++;
   process.stdout.write(`${ok ? 'PASS' : 'FAIL'} ${id} ${label}\n`);
   if (!ok) process.stdout.write(`     ${detail}\n`);
@@ -120,7 +128,7 @@ const HATCHERY_POLICY = {
     hooksPath: null,
   },
   usage: { hold: 50, deny: null, staleSeconds: 7200, whenStale: 'allow' },
-  edit: { capExempt: [], anchorExempt: ['docs/design/proposals/*', 'docs/design/decisions/*', 'docs/findings/*'], formatters: {} },
+  edit: { capExempt: [], anchorExempt: ['docs/design/proposals/*', 'docs/design/decisions/*', 'docs/findings/*', 'docs/hatchery/*'], formatters: {} },
 };
 fs.writeFileSync(path.join(scratch, 'policy-hatchery.json'), JSON.stringify(HATCHERY_POLICY));
 const POLICIES = {
@@ -494,9 +502,9 @@ write('docs/design/proposals/README.md', '# Proposals\n\n`0009-long.md`\n');
 write('docs/design/proposals/0009-long.md', lines(320));
 write('src/app.txt', 'not a doc\n');
 write('README.md', lines(400));
-write('CLAUDE.md', lines(151));
-write('src/CLAUDE.md', lines(151));
-write('root150/CLAUDE.md', lines(150));
+write('CLAUDE.md', lines(41));
+write('src/CLAUDE.md', lines(41));
+write('root40/CLAUDE.md', lines(40));
 
 const absOf = (rel) => path.join(scratch, ...rel.split('/'));
 const fmtOk = { '.txt': [NODE, '-e', 'process.exit(0)'] };
@@ -527,10 +535,10 @@ const P = [
   ['PX08', 'non-doc file, empty formatter table', absOf('src/app.txt'), null],
   ['PX09', 'malformed stdin', '(n/a)', null, 'not json'],
   ['PX10', 'formatter that succeeds', absOf('src/app.txt'), null, null, fmtOk],
-  ['PX12', '151-line CLAUDE.md', absOf('CLAUDE.md'),
-    'post-edit: CLAUDE.md is 151 lines; cap is 150 (.claude/rules/docs.md). Move facts to docs/reference/ and path-scoped rules to .claude/rules/.'],
-  ['PX13', '150-line CLAUDE.md at another root', absOf('root150/CLAUDE.md'), null, null, null, null, absOf('root150')],
-  ['PX14', '151-line CLAUDE.md below the root', absOf('src/CLAUDE.md'), null],
+  ['PX12', '41-line CLAUDE.md (cap 40, ADR 0016)', absOf('CLAUDE.md'),
+    'FAIL CLAUDE.md: 41 lines, cap 40; lift: edit.capExempt naming CLAUDE.md'],
+  ['PX13', '40-line CLAUDE.md at another root', absOf('root40/CLAUDE.md'), null, null, null, null, absOf('root40')],
+  ['PX14', '41-line CLAUDE.md below the root', absOf('src/CLAUDE.md'), null],
   ['PX11', 'formatter that fails', absOf('src/app.txt'),
     `post-edit: formatter ${NODE} failed on src/app.txt: bad formatter output`, null, fmtBad],
   // Path anchors: backtick-quoted repo paths must exist.
@@ -630,11 +638,14 @@ for (const [id, label, filePath, expect, rawOverride, fmt, policy, root] of P) {
       { 'CLAUDE.md': '# C\n\n@docs/HANDOFF.md\n', 'docs/HANDOFF.md': mapOf() }, 'CLAUDE.md', null],
     ['PH11', 'root CLAUDE.md importing an absent @docs/GONE.md warns',
       { 'CLAUDE.md': '# C\n\n@docs/GONE.md\n' }, 'CLAUDE.md',
-      'post-edit: CLAUDE.md imports @docs/GONE.md, which resolves to docs/GONE.md and does not exist (an import resolves from the importing file\'s directory).'],
+      'FAIL CLAUDE.md: @docs/GONE.md resolves to docs/GONE.md, which does not exist'],
     ['PH12', 'an @ line inside a fenced block warns nothing',
       { 'docs/HANDOFF.md': '# Handoff\n\n```\n@docs/GONE.md\n```\n' }, 'docs/HANDOFF.md', null],
     ['PH13', 'an @ inside a code span warns nothing',
-      { 'docs/HANDOFF.md': '# Handoff\n\nWrite `@docs/GONE.md` as @handoff/x.md in the map.\n' }, 'docs/HANDOFF.md', null],
+      { 'docs/HANDOFF.md': '# Handoff\n\nWrite `@docs/GONE.md` as @handoff/x.md in the map.\n', 'docs/handoff/x.md': lines(3) }, 'docs/HANDOFF.md', null],
+    ['PH17', 'a mid-line @ outside a code span is an import (the loader\'s rule) and warns when absent',
+      { 'docs/HANDOFF.md': '# Handoff\n\nSee @handoff/gone.md.\n' }, 'docs/HANDOFF.md',
+      'post-edit: docs/HANDOFF.md imports @handoff/gone.md, which resolves to docs/handoff/gone.md and does not exist (an import resolves from the importing file\'s directory).'],
     ['PH14', 'a stream line @../x.md resolves from the stream directory',
       { 'docs/HANDOFF.md': mapOf('@handoff/x.md'), 'docs/handoff/x.md': '# X\n@../HANDOFF.md\n' }, 'docs/handoff/x.md', null],
     ['PH15', 'a map holding only @handoff/x.md.old does not list x.md',
@@ -1709,6 +1720,7 @@ function fitnessDeps(root) {
     process.stdout.write(`${r.status} F1 ${r.rest}\n`);
     if (opt.verbose) for (const l of r.log) process.stdout.write(`     ${l}\n`);
     if (r.status === 'FAIL') fail++; else if (r.status === 'SKIP') skipped++; else pass++;
+    noteGroup('F1');
   }
 
   // Scratch trees. The call name is split so that this file does not itself require the fixtures.
@@ -1790,6 +1802,320 @@ function fitnessDeps(root) {
   }
 }
 
+// ---------- imports.js: the one @ import parser (group IM; ADR 0016, item 4) ----------
+{
+  const { parse, resolve } = require('./imports');
+  const tokens = (text) => parse(text).map((i) => i.token);
+  const IM = [
+    ['IM01', 'an @ at line start', '@a.md\n', ['a.md']],
+    ['IM02', 'an @ mid-line after whitespace (See @README)', 'See @README for more.\n', ['README']],
+    ['IM03', 'an @ in a code span, single or double backtick, is skipped', 'Write `@x.md` or ``a ` @y.md`` here.\n', []],
+    ['IM04', 'an @ in a fenced block (``` or ~~~, indented too) is skipped', '```\n@x.md\n```\n~~~~\n@y.md\n~~~~\n  ```sh\n  @z.md\n  ```\n@after.md\n', ['after.md']],
+    ['IM05', 'trailing . , ; : ) are stripped', '(see @a.md). @b.md, @c.md; @d.md:\n', ['a.md', 'b.md', 'c.md', 'd.md']],
+    ['IM06', 'an @ inside a word (an address) is not an import', 'mail me@example.com or x@y\n', []],
+    ['IM07', 'an @ right after a code span is not after whitespace', '`x`@a.md\n', []],
+  ];
+  for (const [id, label, text, want] of IM) {
+    if (!selected(id)) continue;
+    const got = tokens(text);
+    report(id, `parse: ${label}`, JSON.stringify(got) === JSON.stringify(want), `expected ${JSON.stringify(want)}, got ${JSON.stringify(got)}`);
+  }
+  const root = path.join(scratch, 'imports');
+  const put = (rel, text) => { const f = path.join(root, ...rel.split('/')); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, text); };
+  put('docs/HANDOFF.md', '# H\n@handoff/x.md\n');
+  put('docs/handoff/x.md', '# X\n@../HANDOFF.md\n');
+  for (let k = 0; k <= 5; k++) put(`chain/c${k}.md`, `# c${k}\n@c${k + 1}.md\n`);
+  if (selected('IM08')) {
+    const r = resolve(root, 'docs/HANDOFF.md');
+    const want = [{ file: 'docs/HANDOFF.md', line: 2, token: 'handoff/x.md', target: 'docs/handoff/x.md', exists: true, hop: 1 },
+      { file: 'docs/handoff/x.md', line: 2, token: '../HANDOFF.md', target: 'docs/HANDOFF.md', exists: true, hop: 2 }];
+    report('IM08', 'resolve: each import from its own file; a cycle is read once', JSON.stringify(r) === JSON.stringify(want), `got ${JSON.stringify(r)}`);
+  }
+  if (selected('IM09')) {
+    const r = resolve(root, 'chain/c0.md').map((i) => `${i.hop}:${i.target}`);
+    const want = ['1:chain/c1.md', '2:chain/c2.md', '3:chain/c3.md', '4:chain/c4.md'];
+    report('IM09', 'resolve: four hops; the imports of a hop-4 file are not followed', JSON.stringify(r) === JSON.stringify(want), `got ${JSON.stringify(r)}`);
+  }
+}
+
+// ---------- policy.js --claude-check and post-edit on the agreement files (group CL; ADR 0016) ----------
+// Each case is its own scratch root; [id, label, files { rel: text }, policy, expected exit, expected stdout].
+{
+  const AG = (s) => `## ${s}\n\nRule text.\n`;
+  const FIX = 'FAIL CLAUDE.md: section';
+  const CL = [
+    ['CL01', 'today\'s shape: CLAUDE.md importing only @docs/HANDOFF.md, no .claude/agreement/', { 'CLAUDE.md': '# T\n\n@docs/HANDOFF.md\n', 'docs/HANDOFF.md': '# H\n' },
+      POLICIES.hatchery, 0, 'claude-check: 2 files, 0 FAIL\n'],
+    ['CL02', 'a section neither imported nor replaced', { 'CLAUDE.md': '# T\n@.claude/agreement/a.md\n', '.claude/agreement/a.md': AG('a'), '.claude/agreement/b.md': AG('b') },
+      POLICIES.hatchery, 1, `${FIX} b neither imported nor replaced\nclaude-check: 2 files, 1 FAIL\n`],
+    ['CL03', 'a section imported and replaced', { 'CLAUDE.md': '# T\n@.claude/agreement/a.md\n@.claude/project/a.md\n', '.claude/agreement/a.md': AG('a'), '.claude/project/a.md': 'Replaces `.claude/agreement/a.md`.\n' },
+      POLICIES.hatchery, 1, `${FIX} a imported twice\nclaude-check: 3 files, 1 FAIL\n`],
+    ['CL04', 'a replacement that itself imports the section it replaces (any hop counts)', { 'CLAUDE.md': '# T\n@.claude/project/a.md\n', '.claude/agreement/a.md': AG('a'), '.claude/project/a.md': 'Replaces it.\n@../agreement/a.md\n' },
+      POLICIES.hatchery, 1, `${FIX} a imported twice\nclaude-check: 3 files, 1 FAIL\n`],
+    ['CL05', 'a replacement file with no agreement section', { 'CLAUDE.md': '# T\n@.claude/agreement/a.md\n', '.claude/agreement/a.md': AG('a'), '.claude/project/z.md': 'Replaces nothing.\n' },
+      POLICIES.hatchery, 1, 'FAIL .claude/project/z.md replaces no agreement section\nclaude-check: 2 files, 1 FAIL\n'],
+    ['CL06', '41-line CLAUDE.md', { 'CLAUDE.md': lines(41) }, POLICIES.hatchery, 1,
+      'FAIL CLAUDE.md: 41 lines, cap 40; lift: edit.capExempt naming CLAUDE.md\nclaude-check: 1 files, 1 FAIL\n'],
+    ['CL07', 'the same, edit.capExempt naming CLAUDE.md lifts it', { 'CLAUDE.md': lines(41) },
+      scratchPolicy('cl-lift', { edit: { capExempt: ['CLAUDE.md'] } }), 0, 'claude-check: 1 files, 0 FAIL\n'],
+    ['CL08', 'the same, a pattern matching CLAUDE.md does not lift it', { 'CLAUDE.md': lines(41) },
+      scratchPolicy('cl-glob', { edit: { capExempt: ['*'] } }), 1,
+      'FAIL CLAUDE.md: 41 lines, cap 40; lift: edit.capExempt naming CLAUDE.md\nclaude-check: 1 files, 1 FAIL\n'],
+    ['CL09', 'loads 191 lines; the handoff chain does not count', {
+      'CLAUDE.md': `@docs/HANDOFF.md\n@.claude/agreement/a.md\n${lines(8)}`, '.claude/agreement/a.md': lines(181), 'docs/HANDOFF.md': `@handoff/s.md\n${lines(39)}`, 'docs/handoff/s.md': lines(40) },
+      POLICIES.hatchery, 1, 'FAIL CLAUDE.md: loads 191 lines, cap 190; lift: edit.capExempt naming CLAUDE.md\nclaude-check: 4 files, 1 FAIL\n'],
+    ['CL10', 'loads 190 lines is silent', { 'CLAUDE.md': `@.claude/agreement/a.md\n${lines(9)}`, '.claude/agreement/a.md': lines(180) },
+      POLICIES.hatchery, 0, 'claude-check: 2 files, 0 FAIL\n'],
+    ['CL11', 'unresolved imports: mid-line in CLAUDE.md, at hop 2, and in a stream the map does not import', {
+      'CLAUDE.md': '# T\nSee @docs/GONE.md.\n@docs/HANDOFF.md\n', 'docs/HANDOFF.md': '# H\n@handoff/a.md\n', 'docs/handoff/a.md': '@missing.md\n', 'docs/handoff/b.md': '@../nope.md\n' },
+      POLICIES.hatchery, 1, 'FAIL CLAUDE.md: @docs/GONE.md resolves to docs/GONE.md, which does not exist\n' +
+        'FAIL docs/handoff/a.md: @missing.md resolves to docs/handoff/missing.md, which does not exist\n' +
+        'FAIL docs/handoff/b.md: @../nope.md resolves to docs/nope.md, which does not exist\nclaude-check: 4 files, 3 FAIL\n'],
+    ['CL12', 'a malformed policy fails loudly', { 'CLAUDE.md': '# T\n' }, scratchPolicy('cl-bad', '{ nope'), 1,
+      (out) => /^FAIL policy: .+\nclaude-check: 0 files, 1 FAIL\n$/.test(out) || 'expected one "FAIL policy: ..." line and the sentinel'],
+  ];
+  for (const [id, label, files, policy, code, expect] of CL) {
+    if (!selected(id)) continue;
+    const root = path.join(scratch, `cl-${id}`);
+    for (const [rel, text] of Object.entries(files)) {
+      const f = path.join(root, ...rel.split('/'));
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, text);
+    }
+    const r = spawnSync(NODE, [path.join(HOOKS, 'policy.js'), '--claude-check'], { cwd: root, encoding: 'utf8', timeout: 30000, env: envWith({ HOOK_POLICY_FILE: policy }) });
+    const out = r.stdout || '';
+    let ok = r.status === code;
+    let detail = `exit ${r.status}, expected ${code}; stderr: ${(r.stderr || '').trim()}`;
+    if (ok) {
+      const v = typeof expect === 'function' ? expect(out) : out === expect || `expected stdout ${JSON.stringify(expect)}`;
+      ok = v === true;
+      if (!ok) detail = v;
+    }
+    report(id, `--claude-check: ${label} -> exit ${code}`, ok, detail, out);
+  }
+  // post-edit prints the same FAIL lines on an edit to an agreement or replacement file.
+  for (const [id, label, edited, want] of [
+    ['CL13', 'post-edit on .claude/agreement/b.md prints the FAIL line', '.claude/agreement/b.md', `${FIX} b neither imported nor replaced`],
+    ['CL14', 'post-edit on .claude/project/z.md prints the FAIL line', '.claude/project/z.md', 'FAIL .claude/project/z.md replaces no agreement section']]) {
+    if (!selected(id)) continue;
+    const root = path.join(scratch, `cl-${id}`);
+    for (const [rel, text] of Object.entries({ 'CLAUDE.md': '# T\n@.claude/agreement/a.md\n', '.claude/agreement/a.md': AG('a'), [edited]: 'x\n' })) {
+      const f = path.join(root, ...rel.split('/'));
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, text);
+    }
+    const stdin = JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'Write', cwd: root, tool_input: { file_path: path.join(root, ...edited.split('/')) } });
+    const r = run('post-edit', stdin, envWith({ HOOK_POLICY_FILE: POLICIES.hatchery }));
+    const d = parseDecision(r.stdout);
+    report(id, label, r.code === 0 && !!d && d.context === want, `expected additionalContext ${JSON.stringify(want)}`, r.stdout);
+  }
+}
+
+// ---------- ownership.js, the update helper (group O) and the agreement cap (group A; ADR 0016) ----------
+// Lines follow the ADR 0013 contract for O1 and A1, which read this repository (like F1); O2 to O7
+// run on scratch repositories whose commits stand in for base commits. The helper reads the map at
+// --ref through git and the policy through the scratch tree's own copy of policy.js.
+{
+  const ROOT = path.resolve(HOOKS, '..', '..');
+  const contract = (id, status, rest) => {
+    noteGroup(id);
+    process.stdout.write(`${status} ${id} ${rest}\n`);
+    if (status === 'FAIL') fail++; else if (status === 'SKIP') skipped++; else pass++;
+  };
+  const remotes = spawnSync('git', ['-C', ROOT, 'remote'], { encoding: 'utf8' });
+  const hasHatcheryRemote = (remotes.stdout || '').split(/\r?\n/).includes('hatchery');
+  const helper = (cwd, args, policy) => {
+    const r = spawnSync(NODE, [path.join(HOOKS, 'ownership.js'), ...args],
+      { cwd, encoding: 'utf8', timeout: 60000, env: envWith({ HOOK_POLICY_FILE: policy || POLICIES.hatchery }) });
+    return { code: r.status, out: r.stdout || '', err: r.stderr || '' };
+  };
+  if (selected('O1')) {
+    if (hasHatcheryRemote) contract('O1', 'SKIP', 'ownership: a hatchery remote exists; --check classifies Hatchery\'s own tree');
+    else {
+      const r = helper(ROOT, ['--check'], path.join(HOOKS, 'policy.json'));
+      if (r.code === 0 && r.out === '') contract('O1', 'PASS', 'ownership');
+      else contract('O1', 'FAIL', `ownership: ${r.out.trim().split(/\r?\n/).join(', ') || r.err.trim()} matches no list in .claude/hooks/ownership.json; lift: classify it`);
+    }
+  }
+  if (selected('A1')) {
+    if (hasHatcheryRemote) contract('A1', 'SKIP', 'agreement: a hatchery remote exists; the cap is Hatchery\'s');
+    else {
+      const files = [];
+      const walk = (d) => { let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch (_) { return; } for (const e of es) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else if (e.isFile()) files.push(p); } };
+      walk(path.join(ROOT, '.claude', 'agreement'));
+      const n = files.reduce((t, f) => t + (fs.readFileSync(f, 'utf8').match(/\n/g) || []).length, 0);
+      if (n <= 150) contract('A1', 'PASS', 'agreement'); else contract('A1', 'FAIL', `agreement: ${n} lines, cap 150; lift: ADR amendment (architect)`);
+    }
+  }
+
+  // Scratch repositories. og runs git there and returns stdout; a failure stops the harness (exit 2).
+  const og = (dir, ...args) => {
+    const r = spawnSync('git', ['-C', dir, '-c', 'user.name=hooks-test', '-c', 'user.email=hooks-test@example.invalid',
+      '-c', 'commit.gpgsign=false', ...args], { encoding: 'utf8' });
+    if (r.status !== 0) { process.stderr.write(`test-hooks: git ${args.join(' ')} failed: ${r.stderr}\n`); process.exit(2); }
+    return (r.stdout || '').trim();
+  };
+  const O_MAP = {
+    baseOwned: ['.claude', 'LICENSE', 'LICENSES', 'docs/hatchery'],
+    baseExcluded: ['.claude/hooks/policy.json', '.claude/settings.local.json'],
+    mixed: ['.claude/settings.json', '.claude/hooks/fitness.json'],
+    projectOwned: ['CLAUDE.md', 'README.md', '.claude/project', 'docs/README.md', 'docs/HANDOFF.md', 'docs/design'],
+  };
+  const HOOK_FILES = { '.claude/hooks/policy.js': fs.readFileSync(path.join(HOOKS, 'policy.js'), 'utf8'),
+    '.claude/hooks/imports.js': fs.readFileSync(path.join(HOOKS, 'imports.js'), 'utf8') };
+  const putIn = (dir, files) => {
+    for (const [rel, text] of Object.entries(files)) {
+      const f = path.join(dir, ...rel.split('/'));
+      if (text === null) { fs.rmSync(f, { force: true }); continue; }
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, text);
+    }
+  };
+  const commit = (dir, files, msg) => { putIn(dir, files); og(dir, 'add', '-A'); og(dir, 'commit', '-q', '--allow-empty', '-m', msg); return og(dir, 'rev-parse', 'HEAD'); };
+  const newRepo = (name, map) => {
+    const dir = path.join(scratch, `own-${name}`);
+    fs.mkdirSync(dir, { recursive: true });
+    og(dir, 'init', '-q');
+    og(dir, 'config', 'core.autocrlf', 'false');
+    og(dir, 'checkout', '-q', '-b', 'main');
+    const base = commit(dir, Object.assign({ '.claude/hooks/ownership.json': typeof map === 'string' ? map : JSON.stringify(map || O_MAP) }, HOOK_FILES), 'base 0');
+    return { dir, base };
+  };
+  const bash = (dir, line) => spawnSync('bash', ['-c', line], { cwd: dir, encoding: 'utf8', timeout: 60000 });
+  const unmerged = (dir) => og(dir, 'status', '--porcelain').split('\n').filter((l) => /^(U.|.U|AA|DD) /.test(l));
+  const lineRe = /^git diff -M ([0-9a-f]{40}) ([0-9a-f]{40}) -- (.*) \| git apply --3way\n$/;
+
+  // O2: shell-inert. Outside single quotes no * ? [ $ or backtick; every word after -- up to | is
+  // single-quoted; every quoted word holding a wildcard is pathspec magic (starts with ":(").
+  let o2line = null;
+  if (selected('O2') || selected('O7')) {
+    const { dir, base } = newRepo('O2');
+    const r = helper(dir, ['--command', '--ref', base, '--exclude', 'LICENSES'], scratchPolicy('o2', { update: { exclude: ['docs/legacy/*'] } }));
+    o2line = r.out;
+    const problems = [];
+    const m = lineRe.exec(r.out);
+    if (r.code !== 0 || !m) problems.push(`exit ${r.code}, not one command line; stderr ${r.err.trim()}`);
+    else {
+      const words = [];
+      let unquoted = '';
+      for (const w of m[3].match(/'(?:[^']|'\\'')*'|\S+/g)) {
+        if (!w.startsWith('\'')) { unquoted += w; problems.push(`unquoted pathspec ${w}`); continue; }
+        words.push(w.slice(1, -1));
+      }
+      const outside = r.out.replace(/'[^']*'/g, '');
+      if (/[*?[$`]/.test(outside + unquoted)) problems.push('a shell-active character outside single quotes');
+      for (const w of words) if (/[*?[]/.test(w) && !w.startsWith(':(')) problems.push(`wildcard pathspec without magic: ${w}`);
+      for (const want of [':(exclude)docs/legacy/*', ':(exclude)LICENSES', ':(exclude).claude/hooks/policy.json', '.claude', 'docs/hatchery']) {
+        if (!words.includes(want)) problems.push(`no pathspec ${want}`);
+      }
+      if (m[1] !== base || m[2] !== base) problems.push('FROM and sha are not the literal base sha');
+    }
+    if (selected('O2')) report('O2', 'ownership --command is shell-inert, with update.exclude and --exclude as plain :(exclude) pathspecs', problems.length === 0, problems.join('; '), r.out);
+  }
+  // O7: the printed command passes git-guard for a subagent and the main session.
+  if (o2line) {
+    guardCase('O7a', { command: o2line.trim(), agent: 'coder' }, 'allow');
+    guardCase('O7b', { command: o2line.trim() }, 'allow');
+  }
+
+  // O3: a commit adding a path and its map entry together: the command at that commit carries it,
+  // the command at its parent does not.
+  if (selected('O3')) {
+    const { dir, base } = newRepo('O3');
+    const next = commit(dir, { 'tools/x.sh': 'echo x\n', '.claude/hooks/ownership.json': JSON.stringify(Object.assign({}, O_MAP, { baseOwned: [...O_MAP.baseOwned, 'tools'] })) }, 'base 1');
+    const at = helper(dir, ['--command', '--ref', next]);
+    const before = helper(dir, ['--command', '--ref', base]);
+    report('O3', 'a path added with its map entry is in the command at that commit, not at its parent',
+      at.code === 0 && at.out.includes(' \'tools\' ') && before.code === 0 && lineRe.test(before.out) && !before.out.includes('\'tools\''),
+      `at ${JSON.stringify(at.out || at.err)}; parent ${JSON.stringify(before.out || before.err)}`);
+  }
+
+  // O4: a malformed map at <sha>, a policy with an unknown key, and a commit without a map: no
+  // command, one line naming the fix, exit 1.
+  if (selected('O4')) {
+    const problems = [];
+    const a = newRepo('O4a', JSON.stringify(Object.assign({}, O_MAP, { mixed: '.claude/settings.json' })));
+    const ra = helper(a.dir, ['--command', '--ref', a.base]);
+    if (!(ra.code === 1 && ra.out === '' && new RegExp(`^ownership: ownership\\.json at ${a.base} malformed: mixed is not an array\\n$`).test(ra.err))) problems.push(`malformed map: exit ${ra.code}, ${JSON.stringify(ra.out + ra.err)}`);
+    const b = newRepo('O4b');
+    const rb = helper(b.dir, ['--per-path', '--ref', b.base], scratchPolicy('o4', { update: { exclud: [] } }));
+    if (!(rb.code === 1 && rb.out === '' && /^ownership: \.claude\/hooks\/policy\.json malformed: .*unknown key update\.exclud; .*the Edit tool/.test(rb.err))) problems.push(`unknown key: exit ${rb.code}, ${JSON.stringify(rb.out + rb.err)}`);
+    const pre = commit(b.dir, { '.claude/hooks/ownership.json': null }, 'no map');
+    const rc = helper(b.dir, ['--report', '--ref', pre]);
+    if (!(rc.code === 1 && rc.out === '' && rc.err === `ownership: ${pre} predates the map; update from a newer base\n`)) problems.push(`no map: exit ${rc.code}, ${JSON.stringify(rc.out + rc.err)}`);
+    report('O4', 'a malformed map, an unknown policy key, a commit before the map: no command, the fix named, exit 1', problems.length === 0, problems.join('; '));
+  }
+
+  // O5: after a conflicted apply, git checkout <sha> -- <path> and git checkout HEAD -- <path> each
+  // clear the unmerged entry.
+  if (selected('O5')) {
+    const { dir, base } = newRepo('O5');
+    commit(dir, { '.claude/f.txt': 'a\nb\nc\n' }, 'base f');
+    const b0 = og(dir, 'rev-parse', 'HEAD');
+    const b1 = commit(dir, { '.claude/f.txt': 'a\nB\nc\n' }, 'base edit');
+    og(dir, 'checkout', '-q', '-b', 'proj', b0);
+    commit(dir, { '.claude/f.txt': 'a\nP\nc\n' }, 'project edit');
+    const line = helper(dir, ['--command', '--ref', b1]).out;
+    const problems = [];
+    for (const [ref, want] of [[b1, 'a\nB\nc\n'], ['HEAD', 'a\nP\nc\n']]) {
+      const ap = bash(dir, line);
+      if (ap.status !== 1 || unmerged(dir).length === 0) { problems.push(`apply did not conflict (exit ${ap.status}, ${ap.stderr.trim()})`); break; }
+      og(dir, 'checkout', ref, '--', '.claude/f.txt');
+      const left = unmerged(dir);
+      const text = fs.readFileSync(path.join(dir, '.claude', 'f.txt'), 'utf8');
+      if (left.length) problems.push(`git checkout ${ref === 'HEAD' ? 'HEAD' : '<sha>'} -- <path> left ${JSON.stringify(left)}`);
+      if (text !== want) problems.push(`after checkout ${ref} the file holds ${JSON.stringify(text)}`);
+      og(dir, 'checkout', 'HEAD', '--', '.claude/f.txt');
+    }
+    void base;
+    report('O5', 'a conflict from git apply --3way is cleared by git checkout <sha> -- <path> and by git checkout HEAD -- <path>', problems.length === 0, problems.join('; '));
+  }
+
+  // O6: --per-path on a base rename: one line carries both paths, and running it leaves the renamed
+  // file with the project's edit and no stranded copy.
+  if (selected('O6')) {
+    const { dir } = newRepo('O6');
+    const body = Array.from({ length: 20 }, (_, i) => `line ${i + 1}\n`);
+    const b0 = commit(dir, { 'docs/hatchery/old.md': body.join('') }, 'base old');
+    const moved = body.slice(); moved[1] = 'line 2, base\n';
+    const b1 = commit(dir, { 'docs/hatchery/old.md': null, 'docs/hatchery/new.md': moved.join('') }, 'base rename');
+    og(dir, 'checkout', '-q', '-b', 'proj', b0);
+    const mine = body.slice(); mine[17] = 'line 18, project\n';
+    commit(dir, { 'docs/hatchery/old.md': mine.join('') }, 'project edit');
+    const r = helper(dir, ['--per-path', '--ref', b1]);
+    const rows = r.out.split('\n').filter((l) => l !== '');
+    const cmds = rows.filter((l) => !l.startsWith('#'));
+    const problems = [];
+    if (!(rows.length === 2 && /^# R\d* docs\/hatchery\/old\.md docs\/hatchery\/new\.md$/.test(rows[0]) && cmds.length === 1 &&
+      cmds[0].includes(' -- \'docs/hatchery/old.md\' \'docs/hatchery/new.md\' | git apply --3way'))) problems.push(`output ${JSON.stringify(r.out || r.err)}`);
+    else {
+      const ap = bash(dir, cmds[0]);
+      const now = (() => { try { return fs.readFileSync(path.join(dir, 'docs', 'hatchery', 'new.md'), 'utf8'); } catch (_) { return null; } })();
+      if (ap.status !== 0) problems.push(`apply exit ${ap.status}: ${ap.stderr.trim()}`);
+      if (fs.existsSync(path.join(dir, 'docs', 'hatchery', 'old.md'))) problems.push('old.md stranded');
+      if (!now || !now.includes('line 2, base\n') || !now.includes('line 18, project\n')) problems.push(`new.md is ${JSON.stringify(now)}`);
+    }
+    report('O6', '--per-path carries both paths of a rename; the apply keeps the project\'s edit and strands nothing', problems.length === 0, problems.join('; '), r.out);
+  }
+
+  // O8: --report on a fixture with one entry per section.
+  if (selected('O8')) {
+    const { dir } = newRepo('O8');
+    const b0 = commit(dir, { '.claude/agreement/a.md': AG0('a'), '.claude/agreement/b.md': AG0('b'), '.claude/hooks/policy.json': '{}\n' }, 'base sections');
+    const b1 = commit(dir, { '.claude/agreement/a.md': `${AG0('a')}More.\n`, '.claude/agreement/c.md': AG0('c'), 'tools/new.sh': 'x\n',
+      '.claude/hooks/policy.json': '{ "$comment": "base" }\n', 'LICENSE': 'base licence\n', '.claude/skills/x.md': 'base x\n' }, 'base changes');
+    og(dir, 'checkout', '-q', '-b', 'proj', b0);
+    commit(dir, { 'CLAUDE.md': '# P\n@.claude/project/a.md\n@.claude/agreement/b.md\n', '.claude/project/a.md': 'Replaces `.claude/agreement/a.md`.\n',
+      '.claude/skills/x.md': 'project x\n' }, 'project');
+    const r = helper(dir, ['--report', '--ref', b1, '--exclude', 'LICENSE']);
+    const want = 'unclassified:\n  tools/new.sh\nexcluded:\n  .claude/hooks/policy.json\n  LICENSE\nreplaced sections:\n' +
+      `  a: .claude/agreement/a.md changed in ${b0.slice(0, 7)}..${b1.slice(0, 7)}\nunimported:\n  .claude/agreement/c.md\ncollisions:\n  .claude/skills/x.md\n`;
+    report('O8', '--report: unclassified, excluded (map and --exclude), replaced sections, unimported, collisions', r.code === 0 && r.out === want,
+      `exit ${r.code}; expected ${JSON.stringify(want)}; stderr ${r.err.trim()}`, r.out);
+  }
+}
+function AG0(s) { return `## ${s}\n\nRule text.\n`; }
+
 // ---------- policy files themselves ----------
 // The repository's own policy.json (whatever the project chose) and the examples must load; the
 // Hatchery fixture must equal the loader's defaults, since an absent file means those.
@@ -1826,5 +2152,5 @@ if (opt.only && pass + fail + skipped === 0) {
   process.exit(2);
 }
 
-process.stdout.write(`\n${pass} passed, ${fail} failed, ${skipped ? `${skipped} skipped, ` : ''}${pass + fail + skipped} total\n`);
+process.stdout.write(`\ngroups: ${[...groups].join(' ')}\n${pass} passed, ${fail} failed, ${skipped ? `${skipped} skipped, ` : ''}${pass + fail + skipped} total\n`);
 process.exit(fail > 0 ? 1 : 0);
