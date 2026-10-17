@@ -66,6 +66,18 @@ These load automatically when a file matching one of the `paths:` above (`docs/*
   `Date:` and `Status:` lines under the title are the record. Templates are in the `adr` and
   `proposal` skills; status values are in the directory READMEs.
 
+## Personal data (ADR 0018)
+
+- Tracked text (docs, commit messages, tests, fixtures, hook examples) never carries: a home path
+  with a user segment in any spelling (drive, root, cygdrive, mnt, or a project-folder slug), an
+  email or a person's name other than a listed identity (`privacy.identities`; write the role
+  instead: the owner, the coordinator, a downstream project's owner), a host name, a session link,
+  a recorded conversation, or a grant file's content.
+- Write paths as `~`, `<repo>`, `../<dir>` or `<scratchpad>`. Briefs are not committed and keep
+  absolute paths; a tracked file an agent writes from one follows this section.
+- A refused push is fixed in the text and folded into the unpushed commit, never lifted; a false
+  positive is the owner's (`git.md` of the agreement).
+
 ## Content rules
 
 - `HANDOFF.md` in the single-file shape has exactly the sections Now, Next, Waiting on user, Open

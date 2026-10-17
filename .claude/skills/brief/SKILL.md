@@ -55,5 +55,10 @@ the brief supplies what only this task knows.
 - Paths in a brief use forward slashes (`C:/Users/...`) even on Windows: the Bash tool is Git Bash
   and strips the backslashes from an unquoted path. A command meant for another repository says
   `git -C <path>`, never `cd` (`docs/reference/claude-code-on-windows.md`, Working directory and git).
+- Briefs are not committed, so they keep absolute paths; a tracked file an agent writes follows
+  `.claude/rules/docs.md`, "Personal data" (`~`, `<repo>`, roles, no emails or names), and the
+  brief says so when the task writes one.
+- No brief asks an agent to edit `privacy.allow`, the never list or the user allow list: they
+  are the owner's, edited from the main session after asking the user (ADR 0018).
 - Name only tools the agent has (`.claude/agents/<name>.md`): the runner has no Write tool, so a
   file it needs is written by the coordinator and the brief gives the path.

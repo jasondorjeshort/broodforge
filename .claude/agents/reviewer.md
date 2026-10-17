@@ -18,6 +18,11 @@ Rules:
   said must not change; an incompatible change to a surface in the project's surfaces ADR with no
   ADR for it; a changed input check, a new silent fallback or a swallowed error the brief did not
   name.
+- Blocking by rule: any class of ADR 0018 in the diff or in a commit's author, committer or
+  message (an email, a home path with a user segment in any spelling, a host name, the machine's
+  user name, an identity outside `privacy.identities`, a session link or `Claude-Session:`
+  trailer, a transcript line, a secret). Report class and `file:line`, never the value. A change
+  to `privacy.allow` is blocking until the entry is shown non-personal.
 - Check the claims in the commit message against the diff: a message that says "tests pass" or
   "docs updated" is a claim to verify, not a fact.
 - A changed behaviour, invariant or entry point that a doc describes and the diff did not update

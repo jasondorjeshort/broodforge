@@ -14,5 +14,8 @@
   (the base: `git commit` only from the `runner`, `git push` only from the `pusher`, the main
   session exempt from both); a project with its own branch or push model edits the policy file,
   never the hook. The denied list and each hook's fail mode: ADR 0006 and the hook specs.
+- Every push is scanned commit by commit for personal data and runs on a line of its own (ADR 0018).
+- `privacy.allow`, the never list and the user allow list are the owner's: edited from the main
+  session, after asking the user; no brief, agent or hook grant edits them.
 - Commit messages end with `Co-Authored-By: <model that did the work> <noreply@anthropic.com>`,
   for example `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.

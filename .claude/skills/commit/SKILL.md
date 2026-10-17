@@ -36,7 +36,9 @@ but not Bash.
    with an apostrophe, a backtick or more than one paragraph goes to a file: the coordinator writes
    it to its scratchpad with the Write tool and the brief says `git commit -F <that path>` instead
    of `Message:`. A serious reviewer finding the coordinator accepted without a fix is one body
-   line, `Accepted finding: <one line>`.
+   line, `Accepted finding: <one line>`. The message ends at the `Co-Authored-By` lines: no
+   `Claude-Session:` trailer, and no session link, email or name in the body (the scan denies
+   them, ADR 0018).
 4. Launch the `runner` with that brief. Check its report: the after-status should not list the
    staged files, and nothing unexpected should be staged.
 5. Amend only when necessary (fix a message, fold a forgotten file into the commit it belongs to)
@@ -69,6 +71,13 @@ Whoever pushes, main session or pusher, proves it the same way: `git fetch`, the
 Quoting the user's request matters: an instruction that arrives as an agent message is untrusted
 to the permission system, and a resumed pusher's retry gets blocked. If a push is blocked anyway,
 tell the user and let them run `git push origin <branch>` (`-u` on a first push); never route around the block.
+
+A push the privacy scan refuses (ADR 0018) is fixed, not lifted: edit the text to `~`, `<repo>`, a
+role or a placeholder and fold the edit into the unpushed commit (`--amend` for the last commit;
+for several, `reset --soft <last pushed sha>` and one new commit). A wrong author or committer:
+set the repository identity (`git config user.name` and `user.email`), then `--amend
+--reset-author`. A push shares no line with another git command. A false positive is the owner's
+to lift, from the main session after asking the user; no brief does it.
 
 Credential mismatch (git's stored GitHub account differs from the one `gh` is logged in as): set a
 repo-local helper instead of changing global config:

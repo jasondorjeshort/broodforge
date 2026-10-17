@@ -1,7 +1,7 @@
 # 0013. Hatchery's promised surfaces and its reference fitness check
 
 Date: 2026-10-16
-Status: proposed, superseded in part by 0016 and 0017
+Status: proposed, superseded in part by 0016, 0017 and 0018
 Superseded in part by [0016](0016-base-owned-and-project-owned-files.md), 2026-10-17 (this table
 is not living, so the rows are added by that record, item 7): the ownership map, the agreement
 files with their import lines, the `Branch:` line, the departure table, the record paths under
@@ -12,6 +12,12 @@ Superseded in part by [0017](0017-queue-directories-list-on-demand.md), 2026-10-
 its item 5): the listing CLI `.claude/hooks/queue-list.js` (modes, flags, `--json` fields, exit
 codes, the first word of a finding `status:`) and the README marker line; a finding's `status:`
 leaves the not-promised list, its trigger having fired. Every row below stands.
+Superseded in part by [0018](0018-personal-data-never-leaves-the-machine.md), 2026-10-17 (rows
+added by its sibling, section 5): `privacy.allow` and `privacy.identities` under the policy row;
+the never list `~/.claude/privacy-never.txt` and the user allow list `~/.claude/privacy-allow.txt`;
+the scan CLI `.claude/hooks/privacy-scan.js` (flags, `HIT` lines, last line, exit codes, `--json`);
+the pre-push hook path `.claude/hooks/git/pre-push` and the `core.hooksPath` value. Every row
+below stands.
 
 Record: no proposal; this ADR applies ADR 0012 to the base itself, as its critic review asked
 (objection 6). `proposed` because three of the surfaces are files the owner writes by hand (the

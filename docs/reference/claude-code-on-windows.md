@@ -1,6 +1,6 @@
 ---
 verified: 2026-10-17
-source: observed (PowerShell pipe and MSYS git show rewrite 2026-10-17; npm behaviour tested 2026-10-14; twelve waves of parallel agents on a downstream project; Windows 10 and 11, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1); hook and status line code read 2026-10-14, usage-gate grants 2026-10-15, per-session usage file 2026-10-16; robocopy and Remove-Item behaviour with junctions observed 2026-10-14
+source: observed (machine user name in paths, ADR 0018 evidence 2026-10-17; PowerShell pipe and MSYS git show rewrite 2026-10-17; npm behaviour tested 2026-10-14; twelve waves of parallel agents on a downstream project; Windows 10 and 11, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1); hook and status line code read 2026-10-14, usage-gate grants 2026-10-15, per-session usage file 2026-10-16; robocopy and Remove-Item behaviour with junctions observed 2026-10-14
 ---
 
 # Claude Code on Windows: what holds
@@ -69,6 +69,14 @@ source: observed (PowerShell pipe and MSYS git show rewrite 2026-10-17; npm beha
 - Prove a push: after `git push`, `git fetch` and compare `git rev-parse HEAD` with the remote ref;
   report both SHAs. A command's own success output is not evidence of what reached the remote.
 - Never truncate a status check to its first line; `git status --short` in full.
+
+## The machine user name is in every path
+
+- Every absolute path on a Windows PC carries the machine user name: the profile folder, the
+  session scratchpad, the project-folder slug under `~/.claude/projects/` (the drive and profile
+  path with separators turned into hyphens), and a grant file's `project` scope. None of these
+  belongs in committed text; write `~`, `<repo>` or `<scratchpad>`. The push scan reads every
+  spelling (ADR 0018, `.claude/rules/docs.md`, "Personal data").
 
 ## npm on this PC
 

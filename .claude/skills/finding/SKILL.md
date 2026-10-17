@@ -39,4 +39,7 @@ set the old to `status: superseded`, and, where the README carries an index tabl
 
 - Cap 150 lines; link to logs rather than pasting them. Large evidence goes under `tmp/`
   (gitignored) or in the report, not in the finding.
+- Paste rule (ADR 0018): command output goes in as classes, counts and `file:line`, scrubbed. A
+  value that would itself be a hit (a home path with a user segment, an email, a name, a host,
+  a session link) is never quoted, in a finding or in a report; write `~`, `<repo>` or a role.
 - Never edit a finding to say something different from what was observed; write a new one.

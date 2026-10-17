@@ -70,8 +70,9 @@ Decisions so far:
   file, grant files, the idea grammar, the base line, the usage cache and the hook seams, with
   what is not promised; the reference fitness check (hooks require only Node built-ins) in the
   harness, group `F`. Proposed until the owner confirms the list. Superseded in part by 0016 (five
-  rows added by its item 7; the idea-grammar row's record) and 0017 (the listing CLI and the
-  marker line rows).
+  rows added by its item 7; the idea-grammar row's record), 0017 (the listing CLI and the
+  marker line rows) and 0018 (the privacy keys, the never and user allow lists, the scan CLI and
+  the pre-push hook path).
 - [0014 Handoff layout](decisions/0014-handoff-layout.md): one
   `docs/HANDOFF.md` by default, no hash, the edit rides in the work commit; a per-stream split
   (`@handoff/<file>.md` lines, 40 each, 120 together, no README, no fixed files) the tooling

@@ -19,7 +19,7 @@ Everything below runs in a private clone of the project, on its default branch, 
    private (not a working tree shared with other sessions); `.claude/agents/` does not exist (if it
    does, the project is already decanted or adopted: use `update-from-hatchery`).
 2. Remote: `git remote add hatchery https://github.com/jasondorjeshort/hatchery.git` if missing;
-   `git fetch hatchery`; `BASE=$(git rev-parse hatchery/main)`; `S=$BASE`. Read this skill and ADR 0004
+   `git fetch --prune hatchery`; `BASE=$(git rev-parse hatchery/main)`; `S=$BASE`. Read this skill and ADR 0004
    with `git show $S:<path>` if you have not already.
 3. Verbatim files (base wins): the base-owned set of `.claude/hooks/ownership.json` without
    `LICENSE` and `LICENSES` (step 8 decides those): `git checkout hatchery/main -- .claude/agents
@@ -31,6 +31,17 @@ Everything below runs in a private clone of the project, on its default branch, 
    switcher), and `update.exclude` (step 8 writes it on a licence decline) (ADR 0006;
    `.claude/hooks/policy.examples/` has two worked ones). Ask the user
    where the project's existing rules do not say; `node .claude/hooks/policy.js` must print it.
+   Identity (ADR 0018): ask the owner, in these words, "Which name and email go on this project's
+   commits?" Recommend a `users.noreply.github.com` address; during a transition list both.
+   Write `privacy.identities` (`[{ "name", "email" }]`, first entry is the repository identity)
+   and `git.hooksPath`, then set `git config user.name` and `user.email` repo-local from the first
+   entry (the global identity is not read). Before the `core.hooksPath` line, look: `git config
+   --get core.hooksPath` printing anything, or a file under `.git/hooks/` not ending `.sample`,
+   means the project has hooks. Stop and ask the owner to chain them (theirs runs
+   `.claude/hooks/git/pre-push`, or ours is listed in theirs) or to decline the pre-push hook
+   (`git.hooksPath` stays `null`, no config line; pusher check 5 is then the only layer). Never
+   overwrite a hook. Without hooks, or once chained: `git config core.hooksPath .claude/hooks/git`.
+   Step 10's ADR records the chain or decline outcome.
 4. `.claude/settings.json`: if absent, take Hatchery's. If present, write the union: Hatchery's
    `statusLine`, `permissions` (allow and deny lists appended, no duplicates), and every Hatchery
    hook entry, plus every existing project hook entry under its own event. Nothing of the project's
@@ -85,7 +96,8 @@ Everything below runs in a private clone of the project, on its default branch, 
     `template-adr.md` beside this skill, title `Adopted from` (NNNN: `adr` skill numbering). The
     line `Hatchery base: <BASE>` is required and living; the departure table gets its header row and
     one row per replaced section and per base-owned file the project edits (not `policy.json`, which
-    is the project's). Add it to "Decisions so far".
+    is the project's). The Decision records step 3's hooks outcome (chained or declined). Add it
+    to "Decisions so far".
 11. Verify: `git status --short` lists only the paths above; `grep -rn "^<<<<<<<\|^>>>>>>>" .` empty;
     `node .claude/hooks/policy.js --claude-check` prints no `FAIL`; stage the handoff first, since the commit step takes it anyway (`git add docs/HANDOFF.md` and,
     where it exists, `git add docs/handoff/`), so an untracked stream file is checked too; then the
