@@ -9,7 +9,8 @@ Updated: 2026-10-17 by main session (Hatchery coordinator)
 - The history rewrite is done: hatchery, broodforge and dystopo lost the second account's identity,
   session links and names, each audited before its push to a new private repo (old: `<repo>-backup`)
   and switched in place. Record: `docs/findings/2026-10-17-history-rewrite-of-three-repos.md`; kit,
-  maps and procedure: `../history-rewrite` (never committed: it holds identities).
+  maps and procedure: `../history-rewrite` (never committed: it holds identities). Regenesis and
+  droplet-management are not rewritten, the owner's choice; `~/.claude/CLAUDE.md` says ask before any push there.
 
 ## Next
 
@@ -27,11 +28,8 @@ Updated: 2026-10-17 by main session (Hatchery coordinator)
   files carry the real one, which its scan will refuse once it adopts 0018.
 - The subtree move of Hatchery's records (ADR 0016 item 5, migration 3.4): yes, or the architect
   writes the alternative. Nothing else in 0016 depends on it.
-- After the rewrite: delete `../hatchery-fresh`, `../broodforge-fresh`, `../Dystopo-fresh` (clean
-  old-history clones, origin the new repo: the stale-refs hazard); dystopo's Actions off until its
-  secrets are back; optional reflog expire and gc; delete the `<repo>-backup` repos and kit backups.
-- Regenesis and droplet-management were not rewritten (mixed authorship is fine there); both still
-  carry session links in messages and the second account's name in files: rewrite them or not.
+- After the rewrite: dystopo's Actions are on but its four signing secrets are not set (`gh secret set`
+  before its next `v*` tag); delete the `<repo>-backup` repos and the kit's backups when satisfied.
 - ADR 0013 is `proposed`: one word confirms it; `2026-10-16-scheduled-architect-design-pass.md`: yes or no;
   the HOLD deny's pool sentences (ADR 0011) unseen; delete `~/.claude/usage-state.json` once all projects run the new scripts.
 
