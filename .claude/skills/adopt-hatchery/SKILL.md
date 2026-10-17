@@ -33,15 +33,19 @@ Everything below runs in a private clone of the project, on its default branch, 
    where the project's existing rules do not say; `node .claude/hooks/policy.js` must print it.
    Identity (ADR 0018): ask the owner, in these words, "Which name and email go on this project's
    commits?" Recommend a `users.noreply.github.com` address; during a transition list both.
-   Write `privacy.identities` (`[{ "name", "email" }]`, first entry is the repository identity)
-   and `git.hooksPath`, then set `git config user.name` and `user.email` repo-local from the first
-   entry (the global identity is not read). Before the `core.hooksPath` line, look: `git config
-   --get core.hooksPath` printing anything, or a file under `.git/hooks/` not ending `.sample`,
-   means the project has hooks. Stop and ask the owner to chain them (theirs runs
-   `.claude/hooks/git/pre-push`, or ours is listed in theirs) or to decline the pre-push hook
-   (`git.hooksPath` stays `null`, no config line; pusher check 5 is then the only layer). Never
-   overwrite a hook. Without hooks, or once chained: `git config core.hooksPath .claude/hooks/git`.
-   Step 10's ADR records the chain or decline outcome.
+   Write `privacy.identities` (`[{ "name", "email" }]`, first entry is the repository identity),
+   then set `git config user.name` and `user.email` repo-local from the first entry (the global
+   identity is not read). Then look before writing any hooks path: `git config --get
+   core.hooksPath` printing anything, or a file under `.git/hooks/` not ending `.sample`, means
+   the project has hooks. Never overwrite a hook; never change an existing `core.hooksPath`.
+   - No hooks (no `core.hooksPath`, only `.sample` files): set `git.hooksPath` to
+     `.claude/hooks/git` in the policy, then `git config core.hooksPath .claude/hooks/git`.
+   - The owner's hook can call ours (a chain): leave `core.hooksPath` as it is, set `git.hooksPath`
+     in the policy to the project's existing value, and tell the owner the one line their hook
+     adds to run `.claude/hooks/git/pre-push`.
+   - The owner declines the pre-push hook: `git.hooksPath` stays `null`, no config line, both as
+     they were; pusher check 5 is then the only layer.
+   Ask the owner which of the last two applies. Step 10's ADR records the chain or decline outcome.
 4. `.claude/settings.json`: if absent, take Hatchery's. If present, write the union: Hatchery's
    `statusLine`, `permissions` (allow and deny lists appended, no duplicates), and every Hatchery
    hook entry, plus every existing project hook entry under its own event. Nothing of the project's

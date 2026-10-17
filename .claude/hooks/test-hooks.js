@@ -366,6 +366,16 @@ const GQ = [
   ['GQ30', 'ls -la "$R/.claude/hooks/git" "$X"', 'Bash', 'coder', 'allow'],
   ['GQ31', 'sudo /usr/bin/git push -f', 'Bash', null, 1],
   ['GQ32', "& 'C:\\Program Files\\Git\\cmd\\git.exe' reset --hard", 'PowerShell', null, 5],
+  // ...and is git wherever it stands when a subcommand follows (review of 6100ecd).
+  ['GQ33', 'timeout 10 /usr/bin/git push --force origin main', 'Bash', null, 1],
+  ['GQ34', 'nice -n 5 /usr/bin/git push -f', 'Bash', null, 1],
+  ['GQ35', 'sudo -u root /usr/bin/git reset --hard', 'Bash', null, 5],
+  ['GQ36', 'stdbuf -oL /usr/bin/git clean -fdx', 'Bash', null, 6],
+  ['GQ37', 'watch -n 1 /usr/bin/git reset --hard', 'Bash', null, 5],
+  ['GQ38', 'find . -maxdepth 0 -exec /usr/bin/git reset --hard \\;', 'Bash', null, 5],
+  ['GQ39', '"$R/.claude/hooks/git" "$X"', 'Bash', 'coder', 'allow'],
+  // One push handed to a shell is parsed in both dialects but is one git command, not a shared line.
+  ['GQ40', 'bash -c "git push origin main"', 'Bash', null, 'allow'],
 ];
 for (const [id, command, tool, agent, expect, extra] of GQ) guardCase(id, { command, tool, agent }, expect, extra);
 
@@ -738,6 +748,18 @@ for (const [n, command, agent, cwd, want] of GP) {
     // PV33: a \n escape in source text is not an address's user part; the address after one is still read.
     pv('PV33a', PUSH, pvRepo('escape-import', [line('a.js', 'const t = "Write\\n@x.md\\n";')]), 'allow');
     pv('PV33b', PUSH, pvRepo('escape-addr', [line('a.js', `const t = "to:\\n${OTHER}";`)]), 20, { extra: says(`(email: ${OTHER})`) });
+
+    // PV34: more places a path starts (review of 6100ecd): after a backslash, a comma or a >, and the WSL share.
+    pv('PV34a', PUSH, pvRepo('slug-backslash', [line('a.txt', `~\\.claude\\projects\\C--${U}-${SEG}-x`)]), 20, { extra: says('a.txt:1 (home: ') });
+    pv('PV34b', PUSH, pvRepo('wsl', [line('a.txt', `open \\\\wsl$\\Ubuntu\\home\\${SEG}\\x`)]), 20, { extra: says('a.txt:1 (home: ') });
+    pv('PV34c', PUSH, pvRepo('comma', [line('a.txt', `a,/home/${SEG}/x`)]), 20, { extra: says('a.txt:1 (home: ') });
+    pv('PV34d', PUSH, pvRepo('redirect', [line('a.txt', `echo x >/home/${SEG}/x`)]), 20, { extra: says('a.txt:1 (home: ') });
+    // PV35: a path with a space prints without git's trailing tab.
+    pv('PV35', PUSH, pvRepo('spaced', [line('my notes.md', `see C:/${U}/${SEG}/x`)]), 20, { extra: says(' my notes.md:1 (home: ') });
+    // PV36: git push <remote> tag <name> sends refs/tags/<name>.
+    const tagWord = pvRepo('tag-word');
+    must(tagWord.dir, ['tag', '-a', 'v9', '-m', `release, questions to ${OTHER}`]);
+    pv('PV36', 'git push origin tag v9', tagWord, 20, { extra: says('tag v9 message (email: ') });
   }
 }
 

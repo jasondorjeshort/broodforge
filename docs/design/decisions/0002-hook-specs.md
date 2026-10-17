@@ -48,8 +48,10 @@ allow, while `bash -c "git reset --hard"` and `echo "git push -f" | sh` are read
 they run. `Start-Process git -ArgumentList "push --force"` (or `"push","--force"`) is reassembled
 into the git command it starts.
 
-Locating git. In each command every word whose base name is `git` or `git.exe` (any case, any
-path) starts an invocation. Words after it that start with `-` are global options; `-C`, `-c`,
+Locating git. In each command every word whose base name is `git` or `git.exe` (any case) starts an
+invocation; a word that is a path ending in it (`/usr/bin/git`, `<dir>/git`) does so only when the
+word after it is an option or a git subcommand, so `cat <dir>/git` and `<var>/.claude/hooks/git
+<arg>` are file names while `timeout 10 /usr/bin/git push -f` is git. Words after it that start with `-` are global options; `-C`, `-c`,
 `--git-dir`, `--work-tree`, `--namespace`, `--config-env` and `--super-prefix` take the next word,
 and `--opt=value` is split. The next word is the subcommand; a git word with nothing after it is not
 an invocation. Arguments are normalised: a short cluster becomes single flags (`-nm x` is `-n -m`);

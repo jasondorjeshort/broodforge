@@ -90,12 +90,23 @@ const NOTE = ' git-guard reads the command line, not what runs: it counted this 
 const isGit = (w) => /(^|[\/\\])git(\.exe)?$/i.test(w);
 const isEnvAssign = (w) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(w);
 const base = (w) => w.replace(/^.*[\/\\]/, '').replace(/\.exe$/i, '').toLowerCase();
-// A git word that is a path (/usr/bin/git, <dir>/git) runs git only in command position: after
-// nothing but assignments, prefix and wrapper words, runners, options and the call operator. As an
-// argument (cat <dir>/git, ls "$R/.claude/hooks/git") it is a file name. A bare git word keeps
-// counting anywhere, so unquoted text that names it is still read as a command.
-const commandPosition = (w, i) => w.slice(0, i).every((x) => isEnvAssign(x) || PREFIX_WORDS.has(x) || WRAPPERS.has(base(x)) ||
-  isRunner(x) || x === '&' || /^-/.test(x) || /^\/[A-Za-z]$/.test(x));
+// A git word that is a path (/usr/bin/git, <dir>/git) is read as git only when the word after it is
+// an option or a git subcommand; otherwise it is a file name (cat <dir>/git, ls "$R/.claude/hooks/git"
+// "$X"). Where it stands does not matter, so timeout 10 /usr/bin/git push -f is still git. A bare git
+// word keeps counting anywhere, so unquoted text that names it is still read as a command.
+const GIT_SUBCOMMANDS = new Set(('add am annotate apply archive bisect blame branch bugreport bundle cat-file check-attr ' +
+  'check-ignore check-mailmap check-ref-format checkout checkout-index cherry cherry-pick citool clean clone column commit ' +
+  'commit-graph commit-tree config count-objects credential describe diagnose diff diff-files diff-index diff-tree difftool ' +
+  'fast-export fast-import fetch fetch-pack filter-branch filter-repo fmt-merge-msg for-each-ref for-each-repo format-patch ' +
+  'fsck gc get-tar-commit-id grep gui hash-object help hook index-pack init instaweb interpret-trailers lfs log ls-files ' +
+  'ls-remote ls-tree mailinfo mailsplit maintenance merge merge-base merge-file merge-index merge-tree mergetool mktag mktree ' +
+  'multi-pack-index mv name-rev notes p4 pack-objects pack-redundant pack-refs patch-id prune prune-packed pull push ' +
+  'range-diff read-tree rebase receive-pack reflog refs remote repack replace replay request-pull rerere reset restore ' +
+  'rev-list rev-parse revert rm scalar send-email send-pack shortlog show show-branch show-index show-ref sparse-checkout ' +
+  'stash status stripspace submodule svn switch symbolic-ref tag unpack-file unpack-objects update-index update-ref ' +
+  'update-server-info upload-archive upload-pack var verify-commit verify-pack verify-tag version whatchanged worktree ' +
+  'write-tree').split(' '));
+const pathGitRuns = (next) => next !== undefined && (next.startsWith('-') || GIT_SUBCOMMANDS.has(next));
 const isRunner = (w) => RUNNERS.has(base(w)) || /scriptblock\]::create/i.test(w);
 const has = (args, ...flags) => args.some((a) => flags.includes(a));
 const positionals = (args) => args.filter((a) => !a.startsWith('-'));
@@ -183,7 +194,7 @@ function invocations(cmd, dir) {
   const o = cmd.opaque || w.map(() => false);
   const out = [];
   for (let i = 0; i < w.length; i++) {
-    if (!isGit(w[i]) || (/[\/\\]/.test(w[i]) && !commandPosition(w, i))) continue;
+    if (!isGit(w[i]) || (/[\/\\]/.test(w[i]) && !pathGitRuns(w[i + 1]))) continue;
     const globals = [];
     let d = dir;
     let hidden = false; // a -c or --config-env value the reader cannot see
@@ -631,6 +642,8 @@ function opaqueCommand(cmd, mentionsGit) {
   if (k >= cmd.words.length || !(cmd.opaque && cmd.opaque[k])) return false;
   if (cmd.words[k + 1] === '=' || /^\$[A-Za-z_:]+=/.test(cmd.words[k])) return false;
   const last = cmd.words[k].split(/[\/\\]/).pop();
+  // A path ending in git is git only when what follows reads as git ("$R/.claude/hooks/git" "$X" is not).
+  if (cmd.words[k].match(/[\/\\]/) && isGit(last) && !pathGitRuns(cmd.words[k + 1])) return false;
   return !(cmd.words[k].match(/[\/\\]/) && last && !/[$\0{}]/.test(last) && !isGit(last));
 }
 
@@ -734,7 +747,10 @@ function decide(command, dialect, agent, cwd, loaded) {
       if (m) envConfig.push({ name: m[1], value: m[2] !== undefined ? m[2] : (cmd.words[k + 1] === '=' ? cmd.words[k + 2] || '' : '') });
     });
   }
-  const ctx = { agent, policy: loaded.policy, envConfig, gitCount: invs.length };
+  // Quoted text handed to a shell is parsed in both dialects, so the same command can appear twice:
+  // each (text, subcommand) pair counts once.
+  const gitCount = new Set(invs.map((i) => `${i.text}\0${i.sub}`)).size;
+  const ctx = { agent, policy: loaded.policy, envConfig, gitCount };
   for (const rule of RULES) {
     for (const inv of invs) {
       const r = rule.test(inv, ctx);

@@ -118,7 +118,10 @@ function pushSources(g, p) {
     }
   }
   if (!p.del) {
-    for (const s of specs) {
+    for (let i = 0; i < specs.length; i++) {
+      let s = specs[i];
+      // "tag <name>" is the refspec refs/tags/<name>.
+      if (s === 'tag' && specs[i + 1] !== undefined) s = `refs/tags/${specs[++i]}`;
       if (s.includes(SUBST)) throw cannot('see a refspec (its value is an expansion)');
       const spec = s.replace(/^\+/, '');
       const src = spec.includes(':') ? spec.slice(0, spec.indexOf(':')) : spec;
@@ -141,9 +144,11 @@ const URL_SCHEME = /(?:https?|ssh|git):\/\/$/i;
 const USERS = '[Uu][Ss][Ee][Rr][Ss]';
 const HOME_DRIVE = new RegExp(String.raw`[A-Za-z]:[\\/]+${USERS}[\\/]+([A-Za-z0-9._-]+)`, 'g');
 // Root spellings where a path starts; /<d>/Users/ is the Git Bash drive spelling.
-const HOME_ROOT = new RegExp(String.raw`(?:^|(?<=[\s"'\x60(=:[+/]))\/(?:home|Users|(?:cygdrive\/|mnt\/)?[A-Za-z]\/Users)\/([A-Za-z0-9._-]+)`, 'g');
+const HOME_ROOT = new RegExp(String.raw`(?:^|(?<=[\s"'\x60(=:[+/\\,>]))\/(?:home|Users|(?:cygdrive\/|mnt\/)?[A-Za-z]\/Users)\/([A-Za-z0-9._-]+)`, 'g');
+// A WSL distribution's home seen from Windows: \\wsl$\<distro>\home\<seg> (or wsl.localhost, either slash).
+const HOME_WSL = new RegExp(String.raw`[\\/]{2}wsl(?:\$|\.localhost)[\\/]+[^\\/\s"'\x60]+[\\/]+home[\\/]+([A-Za-z0-9._-]+)`, 'gi');
 // The project-folder slug Claude Code writes for a path (every separator a hyphen).
-const HOME_SLUG = new RegExp(String.raw`(?:^|(?<=[\s"'\x60(=:/]))(?:[A-Za-z]--${USERS}|-home|-Users)-([A-Za-z0-9._]+)-`, 'g');
+const HOME_SLUG = new RegExp(String.raw`(?:^|(?<=[\s"'\x60(=:/\\,>]))(?:[A-Za-z]--${USERS}|-home|-Users)-([A-Za-z0-9._]+)-`, 'g');
 const PROFILE = /^(?:public|default user|default|all users|\.\.\.)(?![A-Za-z0-9._])/i;
 const PROFILE_SLUG = /^(?:public|default-user|default|all-users|\.\.\.)-/i;
 const HOST = /(?<=\w)-desktop|desktop-(?=\w)/gi;
@@ -261,7 +266,7 @@ function lineHits(text, where, commit, c, out, opts) {
   const add = (cls, match, key) => push(out, c, cls, where, commit, match, key);
   for (const { addr, before } of addresses(text)) if (!emailOk(addr, before, c, false)) add('email', addr);
   const ends = new Set();
-  for (const re of [HOME_DRIVE, HOME_ROOT]) {
+  for (const re of [HOME_DRIVE, HOME_ROOT, HOME_WSL]) {
     for (const m of text.matchAll(re)) {
       const end = m.index + m[0].length;
       if (ends.has(end)) continue; // a drive spelling read again from its root part
@@ -362,7 +367,7 @@ function parseLog(out) {
     if (file === null) continue;
     if (header) {
       if (l.startsWith('new file mode ')) cur.files.push(file);
-      else if (l.startsWith('+++ ') && l !== '+++ /dev/null') file = unquotePath(l.slice(4)).replace(/^b\//, '');
+      else if (l.startsWith('+++ ') && l !== '+++ /dev/null') file = unquotePath(l.slice(4).replace(/\t$/, '')).replace(/^b\//, ''); // a path with a space ends in a tab
       continue;
     }
     const pre = l.slice(0, cols);
