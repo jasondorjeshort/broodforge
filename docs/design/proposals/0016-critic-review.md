@@ -241,3 +241,285 @@ it removes, rather than handles, every leak this review found, and the cost it a
 history for base files) is one the owner can judge. Confidence: high that the agreement-by-import
 mechanism works and that objections 1 to 3 are real (each reproduced or read in the source); medium
 that E beats a corrected A, because the history cost has not been weighed by anyone yet.
+
+## Second pass: recommendation E
+
+Date: 2026-10-17
+Reviewer: critic (Claude Opus 5.5)
+Scope: the design of E and its parts as revised. Objections 1 to 13 and the three owner decisions
+(merging ends for decanted projects; a 40-line `CLAUDE.md` with `edit.capExempt` as the lift; the
+pool command per project) are not re-argued.
+
+The patch-only mechanism holds up under experiment better than the proposal claims. `git apply
+--3way` handled an already-applied change, a diverged one, CRLF checkouts and a rename of a
+project-edited file. What fails is around it. The helper has no way to tell a decanted tree from an
+adopted one once both carry the base line. Hatchery's ADR range runs out in days. Replacement
+files and mid-line imports get past check 7. Three helper details lose base files without an error.
+Fifteen objections: one blocking, ten serious, four minor.
+
+### Claims checked (second pass)
+
+Experiments ran in `scratchpad/critic16b/` (git 2.56.0.windows.2): `x1.sh`, `x2.sh`, `x3.sh` and
+`guard.js`. Each fixture is a Hatchery repository plus a clone acting as the decanted project,
+with commits made by `commit-tree`. Each case applies `git diff $FROM hatchery/main -- <paths> |
+git apply --3way` on a freshly built fixture, with `FROM` set to `git merge-base HEAD hatchery/main`.
+
+| # | Claim or question | Result |
+|---|---|---|
+| C1 | First update with shared history: `merge-base` is the right `FROM` | Yes in the fixture. In `../broodforge` (read only) the merge-base is 48a43e4, its fetched `hatchery/main`, so its first patch starts exactly where its last merge ended. |
+| C2 | Project file already matches the base change | Clean, exit 0, the file is unchanged (case a). |
+| C3 | Project diverged on the same line / another line | Same line: `UU`, exit 1, markers (b). Another line: merged, both edits kept (c). |
+| C4 | Base adds a file the project also added | Identical content: clean (g). Different content: `AA`, exit 1 (h). |
+| C5 | Base deletes a file the project already deleted | **Whole apply fails**: `does not exist in index`, nothing written, although both sides agree (d). Not in the proposal's list of whole failures. |
+| C6 | Base edits a file the project deleted; dirty base file | Both fail whole: `does not exist in index` (e), `does not match index` (dirty). A conflict and a hard failure both exit 1; only the output text, or an empty `git status --porcelain`, tells them apart. |
+| C7 | Excluding the failing paths | The rest applies, conflicts included (noDE). |
+| C8 | CRLF: `core.autocrlf=true`, no `.gitattributes` (the setup of `../droplet-management`, the one sibling without one) | Same results as LF, CRLF kept in the working tree. A clone checked out CRLF whose `autocrlf` was then turned off gave whole-file conflicts on untouched files. That is a broken setup, not E's problem. |
+| C9 | Open claim: rename of a project-edited base file | Default `git diff` (renames on): one `rename from/to` hunk, applied cleanly, both edits kept (X7a). `--no-renames`: fails whole (X7b). **The per-path fallback strands it**: `--name-only` lists only the new name, which is applied as a new file with exit 0, and the edited old file stays (X15). |
+| C10 | Open claim: `$(node .claude/hooks/ownership.js --paths)` stays allowed | Allowed for the main session, `coder` and `tester`, as are the `FROM=$(grep ...)` form, a `for` loop per path, and `git checkout <ref> -- <path>`. **But unquoted substitution is globbed by the shell**: a printed `docs/design/decisions/00[01]*` expanded to the project's existing 0001 and 0015, and Hatchery's new 0016 was not in the diff, with no error (X8). Quoted, or with a `:(glob)` prefix, it arrived. |
+| C11 | Which map computes the pathspec | The project's map (the old one) omitted a path the same base window added along with its map entry. The incoming map included it. After the line moves, no later diff carries it (X9). |
+| C12 | `git show hatchery/main:<path>` (the migration step, line 294) | **Fails in Git Bash on this machine**: MSYS rewrites the argument to `hatchery\main;.claude\...` and git reports `ambiguous argument`. Quoting does not help. `MSYS_NO_PATHCONV=1` or `<sha>:<path>` works. Same result in `../broodforge`. |
+| C13 | `update.exclude` under a `policy.js` that predates it | A policy holding `{"update": {"exclude": [...]}}` makes the guard deny every git command for the main session, `coder` and `tester`: "policy file is malformed (... unknown key update) ... Every git command is denied until it is fixed; ask the user." |
+| C14 | Imports mid-line and in code | The memory docs: "See @README for project overview and @package.json ..." imports both, and "Import parsing skips Markdown code spans and fenced code blocks". `post-edit.js` matches only `^@` and skips fences; check 7 greps `^@` and skips nothing. |
+| C15 | `merge=ours` under `git merge` (B only) | Not tested; B is not the recommendation. |
+
+### Objections
+
+14. **Blocking. Once every project carries a base line, the helper cannot tell decanted from
+    adopted, so the decanted-only rows stop applying after one update.** `ownership.js --paths`
+    prints "the base-owned pathspecs for the tree's mode (the base line, else `merge-base`, as
+    update step 3)" (line 62). E writes a base line into every decanted project, at its first
+    update or at decant (lines 75, 199 to 200), and under ADR 0010 the line means adopted. So from
+    the second update on, `../broodforge` and every new decant get the adopted set. Hatchery's ADRs,
+    `decisions/README.md`, the Windows reference and the `docs/design/README.md` marker all stop
+    arriving. Nothing fails, because an allowlist fails closed and says nothing. "Hatchery's ADRs
+    keep arriving as additions" (line 216) is then false. `merge-base` cannot be the test either: a
+    joined adopted project passes it (ADR 0010, Context). The numbering amendment ("next free at or
+    above `0020` for every project") is a symptom. It exists only because the line stops meaning
+    adopted. For the four siblings it changes nothing harmful (`../broodforge` 0024 either way,
+    `../dystopo` 0036, `../regenesis` 0019 to 0020, `../droplet-management` 0004 to 0020), and it
+    is pointless for adopted projects, which receive no ADRs under E. Resolution: record the mode
+    as one explicit fact that `ownership.js`, update step 3 and the `adr` skill all read. For
+    example, `Hatchery base: <sha> decanted`: the anchored regex and `cut -f3` still parse it, so
+    it is an addition under ADR 0013. The provenance file name would also work. Or remove the
+    decanted-only rows altogether (objection 15, which removes the need).
+
+15. **Serious. Hatchery has three ADR numbers left, and E builds `0020` into every project.**
+    Hatchery has used 0001, 0002, 0004 and 0006 to 0015. 0003 and 0005 are held by proposals, and
+    0016 is this one. Thirteen ADR files are dated 2026-10-11 to 2026-10-16, so 0017 to 0019 will
+    last days. ADR 0008, Consequences: "When Hatchery's next number would be `0020`, supersede this
+    record with a wider range for the base and a higher start for projects". `../broodforge`
+    already holds 0020 to 0023, and E names `0020-decanted-from-hatchery.md` in every future decant
+    (line 75). While Hatchery's ADRs are patched into decanted projects, widening the range in
+    place gives an `AA` conflict, or two records with one number, in each of them. The proposal
+    amends ADRs 0008 and 0009 on numbering and does not decide this. Resolution: decide it in ADR
+    0016. Strongest option: stop shipping Hatchery's records under `docs/design/decisions/`. Either
+    put them in a base-owned subtree that no project numbers in, the same path in every project (for
+    example `docs/hatchery/decisions/`), or ship them not at all and cite them by
+    `git show <sha>:<path>` as ADR 0009 already does for adopted projects. Then Hatchery numbers
+    freely, the range retires, and 14, 16 and the marker go with it. Weaker option: a disjoint
+    range for Hatchery, named now, with the collisions listed.
+
+16. **Serious. `decisions/README.md` and the Windows reference are mixed in practice, not
+    base-owned.** `git diff 48a43e4 HEAD` in `../broodforge` (read only) shows `decisions/README.md`
+    grown by 21 lines: an index table of Hatchery's ADRs and its own 0020 to 0023. It also shows
+    `claude-code-on-windows.md` +28 lines, `0002-hook-specs.md` 6 lines and `docs/design/README.md`
+    46 lines. `.claude/rules/docs.md` requires every `docs/` README to list every file, so a decanted
+    project must edit a base-owned file for each ADR it writes. That is a departure row whose
+    carry-back can never happen ("once Hatchery has the change" cannot apply to the project's own
+    rows), so the table becomes a list of permanent mixed files. The open warning that Hatchery's
+    `decisions/README.md` lists no ADRs (HANDOFF Next 6) decides this file's class whichever way it
+    is fixed. Factual: the proposal says `../broodforge` made "four edits to base files". Seven
+    base-owned files under `.claude/` differ from its merge-base (`pusher.md`, `git-guard.js`,
+    `shell-parse.js`, `test-hooks.js`, `rules/README.md`, the `adr` and `brief` skills), plus the
+    three `docs/` files above. Resolution: class `decisions/README.md` and the Windows reference as
+    mixed with a marker, or as project-owned. Under 15's strongest option the question goes away.
+    Correct the count, since it sizes the first departure table.
+
+17. **Serious. Replacement files are invisible to the update, and base changes to sections bring
+    back the two-rule case.** "A replacement file is read by the loader every turn and by nothing
+    else" (lines 272 to 273). The departure table covers edited base paths, not replaced sections.
+    So when the base changes `git.md`, a project that replaced it (`../regenesis` will) is never
+    told. Rename (X7a): `model-routing.md` to `routing.md` arrives cleanly. Check 7 then fails with
+    "section routing neither imported nor replaced" while `@.claude/project/model-routing.md`
+    stays. The cheapest edit that passes is adding `@.claude/agreement/routing.md`, which loads two
+    rules, the case objection 6 removed. A split section does the same. A removed section leaves its
+    replacement loading, and nothing checks it. Resolution:
+    - each replacement is a departure row (path, reason, carry-back);
+    - the update report lists base changes to every replaced section and every new section;
+    - check 7 fails on `@.claude/project/<s>.md` with no `.claude/agreement/<s>.md`;
+    - renaming or splitting a section is an incompatible change under the 0013 row, and its
+      migration names the replacement files.
+
+18. **Serious. Check 7's exactly-one count sees line-start imports only; the loader also imports
+    mid-line and inside imported files.** C14. Each replacement file "states what it replaces"
+    (line 108). The natural sentence "Replaces @.claude/agreement/git.md." loads the base section
+    too. Check 7 never reads replacement files, and the post-edit hook does not match mid-line. In
+    the other direction, a fenced example `@.claude/project/git.md` in `CLAUDE.md` satisfies check
+    7's grep while the loader skips it, so the section loads from neither file. Resolution: one Node
+    parser that follows the loader's rules (any `@token` outside code spans and fences, followed to
+    four hops). Check 7 and `post-edit.js` both call it, and the count covers every file
+    `CLAUDE.md` loads. The replacement template names the replaced file in backticks.
+
+19. **Serious. The 40 caps a file, not what loads, and a replacement file is uncapped.** Line 273:
+    "no cap". The memory docs: imports "don't reduce its context cost, because imported files also
+    load at launch". The proposal's trigger (line 311) covers only an import that replaces no
+    section. A `licensing.md` replacement with two lines of licence and sixty lines of project rules
+    passes every check, which leaves the 40 the owner chose with nothing to hold. Resolution, not
+    re-arguing the number: also cap the loaded total, `CLAUDE.md` plus every file it imports except
+    the handoff chain, which has its own 120. Use 40 plus the agreement's 150, resolved by 18's
+    parser, with `edit.capExempt` lifting it as it lifts the 40.
+
+20. **Serious. Which map computes the pathspec is unspecified, and the wrong one loses files for
+    ever.** X9. If the update reads the project's own `ownership.json`, a base window that adds a
+    file and its map entry together never delivers the file. Once the line moves, no later diff
+    contains it. On `../broodforge`'s first update the helper is not in the tree at all.
+    Resolution: the skill reads the map and runs the helper from the incoming base sha (written to
+    a temporary file, or via `git show <sha>:<path>`), and the ADR says so. A harness case adds a
+    path and its map entry in one fixture commit.
+
+21. **Serious. Unquoted `$(...)` globbing drops new base files without an error.** C10. The
+    decanted-only ADR row needs a glob, and so may an `update.exclude` entry. Resolution: the skill
+    runs what `--command` prints, verbatim, never `$(--paths)`. Every pattern the helper prints
+    carries a pathspec magic prefix (`:(glob)`, `:(exclude,glob)`), which the shell leaves alone. A
+    harness case checks that the output is shell-inert.
+
+22. **Serious. `update.exclude` denies every git command in a project whose `policy.js` predates
+    it, and the first update is exactly that case.** C13. ADR 0013 promises that an old file
+    loads under a newer base, not that a new key loads under an older `policy.js`. On the first
+    update after the switch, the agent reads the new skill against an old tree. When the whole
+    apply fails, nothing is written, and E then tells the agent to add paths to `update.exclude`,
+    possibly before the new `policy.js` is in the tree. Lift: anyone who edits `policy.json` with
+    the Edit tool, mid-session (git is not needed). The message says "ask the user", which stops an
+    agent that could fix it itself. Resolution:
+    - the skill writes the key only after the incoming `policy.js` is in the tree and
+      `node .claude/hooks/policy.js` prints the policy;
+    - `ownership.js` on a malformed policy or map prints no command and exits 1 with the fix
+      named; it does not fall back to `DEFAULTS`, which would drop the excludes;
+    - the guard's malformed-policy message names "a key from a newer base" as a likely cause.
+
+23. **Serious. The per-path fallback silently strands a renamed file.** C9, X15. A whole
+    failure caused by an unrelated path (C5, C6) sends every path to the fallback, a renamed
+    one included. The rename then arrives as a second copy without the project's edit, exit 0. For
+    a skill that means two skills with one name. For a section it means the case in 17.
+    Resolution: the fallback iterates `git diff --name-status -M` and gives an `R` entry both of
+    its paths in one pathspec. The helper passes `-M` explicitly, since a user's
+    `diff.renames=false` would otherwise make every rename fail whole.
+
+24. **Serious. A migration command fails on the target platform.** C12. Line 294 tells each
+    sibling to read the skill with `git show hatchery/main:.claude/skills/update-from-hatchery/SKILL.md`.
+    In the Bash tool on Windows that is `fatal: ambiguous argument`. An agent that does not know
+    why may conclude the file is missing. The new skill's step 1 also says that reading it from
+    `hatchery/main` means "stop", which contradicts the migration. The same spelling is in
+    `adopt-hatchery` (twice), its ADR template, and ADRs 0002, 0004, 0006 and 0009. That part
+    predates this proposal. Resolution: write `<sha>:<path>` (`git rev-parse hatchery/main`
+    first) everywhere, and record the MSYS rewrite in `docs/reference/claude-code-on-windows.md`
+    (a `finding` first). Step 1 gains the switch-over exception.
+
+25. **Minor. Bumping the base line after a partial apply silently gives up the failed paths.**
+    "The base line is bumped by hand" (line 229). A path that failed and was neither excluded nor
+    taken drops out of every later diff. Resolution: the bump is the last step and happens only
+    when the report gives every failed path a disposition: excluded, taken with
+    `git checkout <sha> -- <path>`, or already done.
+
+26. **Minor. The whole failures are not the two the proposal names.** C5 and C6: the
+    base deleting a file the project also deleted, and a dirty base-owned file, both fail whole.
+    Exit 1 also covers conflicts. Resolution: the skill says that exit 1 with an empty
+    `git status --porcelain` is a whole failure, so go per path. A per-path `does not exist in
+    index` on a deletion means already done, not an exclude.
+
+27. **Minor. The outside-the-set report is mostly noise, and F7's reach is undefined.** Since ADR
+    0008 (f51a561), 60 paths outside `.claude/` and `LICENSE` changed in Hatchery: 17 ideas, 16
+    decisions, 10 proposals, 9 findings and more. A path that is genuinely meant for projects
+    drowns in that list. F7 classifies a new path only if `projectOwned` names Hatchery's state
+    directories one by one; a `docs/**` entry makes it pass for any docs path. Where F7 runs is not
+    said. In a project, "tracked base paths" has no meaning. Base changes to excluded paths are not
+    reported, so a guard fix to an excluded hook goes unseen. Resolution:
+    - the report lists paths that no list classifies, plus changed excluded paths;
+    - `projectOwned` names directories;
+    - F7 runs only where there is no `hatchery` remote;
+    - `update.exclude` is for files the project removed, and a departure from a hook stays a
+      table row.
+
+28. **Minor. Lifts and messages left unstated.**
+    - Widening `edit.capExempt` from docs to `CLAUDE.md` is compatible, but ADR 0006's key table
+      ("Docs exempt from the 300-line cap") needs the amendment. A project's broad pattern could
+      now exempt `CLAUDE.md` without anyone meaning it.
+    - Neither check 7's `FAIL <path>: <n> lines, cap <cap>` nor the post-edit message names the
+      lift.
+    - "The agreement files 150 together" has no stated home, scope or lift. It is not said whether
+      it runs in projects, where an in-place edit could fail a push on base-owned text.
+    - `.claude/rules/docs.md` loads for `docs/**` and `CLAUDE.md` only. Add
+      `.claude/agreement/**` and `.claude/project/**`.
+
+    Resolution: one line each in the ADR.
+
+### Mechanisms that refuse, deny or fail closed (second pass)
+
+- **Check 7, section line.** The pusher refuses. Lift: edit `CLAUDE.md`, from any session,
+  mid-session, then a fresh pusher. The message names the section. An orphan replacement and a
+  mid-line import pass it (17, 18).
+- **The 40, and the 150 together.** A post-edit warning, then a check 7 `FAIL`. Lift:
+  `edit.capExempt` naming `CLAUDE.md`, written by the coordinator mid-session. Neither message
+  names it (28). The 150's lift is unspecified.
+- **F7 and `ownership.js --check`.** The harness fails in Hatchery. Lift: classify the path in
+  `ownership.json`. Message unspecified.
+- **Malformed `ownership.json`.** Behaviour unspecified. It should refuse to print a command.
+  Lift: take the base's copy with `git checkout <sha> -- .claude/hooks/ownership.json`, allowed
+  for every caller (22).
+- **`git apply --3way` whole failure.** A failure, not a refusal. Lift: per path, then exclude or
+  take the base's. The messages are git's own (26).
+- **`AA` collision.** Lift: rename the project file, or take the base's. The report names it.
+- **Guard on a policy with a key unknown to the tree's `policy.js`.** Every git command is denied
+  for every caller, main session included. Lift: edit `policy.json` (Edit tool) or bring in the
+  new `policy.js`, mid-session. The message says "ask the user" (22).
+- **Guard on E's own commands.** Allowed for every caller tested, `coder` and `tester` included
+  (C10). No runner-only step remains.
+
+### Pre-mortem
+
+It is 2036. Patching worked: three-way handled almost every update. What went wrong was around it.
+
+- From their second update on, the decanted projects quietly stopped receiving Hatchery's
+  records. Their `.claude/` cited ADRs they did not hold, and no report said so, because the
+  allowlist fails closed. The line that should have caught it: "for the tree's mode (the base line,
+  else `merge-base`)".
+- A week after this ADR, Hatchery needed `0020`. The widened range collided with
+  `../broodforge`'s 0020 to 0023 and every `0020-decanted-from-hatchery.md`, and was settled
+  differently in each project. Line: ADR 0008, "The range is finite".
+- Projects escaped both the 40 and the base's evolving rules through replacement files. A replaced
+  `git.md` kept telling agents to do what a later guard denied, and nobody was told the base had
+  changed it. Line: "read by the loader every turn and by nothing else".
+- A per-path fallback once left two copies of a renamed skill. A helper run through `$(...)` never
+  delivered a new reference file. The base line moved past paths that had failed. Each loss was
+  silent.
+
+The prediction "each sibling's next three updates conflict only on paths in its departure table"
+would have passed through all of it, because none of these losses is a conflict. A second
+prediction belongs beside it: after each update, the incoming base's map applied to `FROM..sha`
+equals what the project took plus its excludes.
+
+### The strongest case against E as designed, and the best alternative
+
+Patching from an allowlist is sound for `.claude/` and the licence files: every git behaviour this
+pass tested comes out right or is fixed with one line in the helper. The weak part is the
+"decanted only" half. It needs a mode the tree no longer records (14), a number range about to run
+out (15), files that are mixed in practice (16), a marker, and two numbering amendments. The
+alternative the proposal did not consider: **one base-owned set for every project.** Hatchery's
+records live in a base-owned subtree at the same path in every project, or are not shipped and are
+cited by `<sha>:<path>`. `docs/` is otherwise wholly project-owned. There is no mode, no marker, no
+range, and ADRs 0009 and 0010 have nothing left to decide. Its cost: moving Hatchery's 16 records
+and the citations to them, which is prose ADR 0013 does not promise. In exchange, adopted projects
+get the records too, which closes ADR 0009's "a base ADR number cited in `.claude/` can name a
+different file".
+
+### Recommendation (second pass)
+
+Keep E's patch-only update. The experiments support it: three-way handled already-applied,
+diverged, CRLF and renamed files, and the guard allows every step for every caller. Do not write
+the ADR until 14 is fixed and 15 is decided. I recommend deciding 15 by giving every project one
+base-owned set, which dissolves 14, 16, the marker and the numbering amendments together. Put 20,
+21, 23 and 25 into the helper and skill spec (one line each), 17 to 19 into check 7's spec as one
+loader-faithful parser, and 22 into the skill's order. Confidence: high that 14, 18, 20 to 24 are
+real (each follows from the proposal's text plus an experiment or the loader docs). High that the
+patch mechanics are right. Medium that a base-owned records subtree beats a disjoint range for 15,
+because the citation rewrite has not been costed.
