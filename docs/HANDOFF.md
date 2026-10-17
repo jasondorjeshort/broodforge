@@ -25,12 +25,13 @@ Updated: 2026-10-17 by main session (Hatchery coordinator)
 
 ## Waiting on user
 
-- The two operator entries of 2026-10-17: the rewrite of the 28 root commits carrying a third-party
-  git identity (starts here, reaches both siblings) and the public repository going private first.
 - Whether to switch commits to the GitHub noreply address (ADR 0018 recommends it; the real one is listed now).
 - The subtree move of Hatchery's records (ADR 0016 item 5, migration 3.4): yes, or the architect
   writes the alternative. Nothing else in 0016 depends on it.
-- A push: everything after 48a43e4 is unpushed; the pusher goes with the request quoted.
+- The history rewrite of the 28 commits under the second account's identity, in hatchery, broodforge and
+  dystopo (`docs/operator/2026-10-17-rewrite-root-commit-identity.md`): all repositories are private;
+  everything through 344416e is pushed; mirror backups are in the kit folder; the owner runs the kit,
+  then a tester re-records the cited hashes from the map. The visibility entry is done; delete it.
 - ADR 0013 is `proposed`: one word confirms it; `2026-10-16-scheduled-architect-design-pass.md`: yes or no;
   the HOLD deny's pool sentences (ADR 0011) unseen; delete `~/.claude/usage-state.json` once all projects run the new scripts; delete the merged `task/T94` branch on GitHub.
 
