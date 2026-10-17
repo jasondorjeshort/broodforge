@@ -1,29 +1,41 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Test harness and debug interface for the hooks in this directory.
-// Spec: docs/design/decisions/0002-hook-specs.md. Each case runs a hook as a child
-// process with JSON on stdin, exactly as Claude Code does, and checks exit code and stdout.
+// Spec: docs/design/decisions/0002-hook-specs.md for the hooks; the harness, its seams and the
+// fitness group F: docs/design/decisions/0002-hook-specs-usage.md, with ADR 0013 and ADR 0012's
+// fitness contract. Each case runs a hook as a child process with JSON on stdin, exactly as
+// Claude Code does, and checks exit code and stdout.
 //
 // Usage:
 //   node .claude/hooks/test-hooks.js                  run every case; exit 1 on any failure
 //   node .claude/hooks/test-hooks.js --only G0        run cases whose id starts with G0
 //   node .claude/hooks/test-hooks.js --verbose        also print each hook's raw stdout
 //   node .claude/hooks/test-hooks.js --keep           keep the scratch docs tree (path printed)
-//   node .claude/hooks/test-hooks.js --input <file> <git-guard|post-edit|usage-gate>
-//       run one hook on the raw contents of <file> and print exit code, stdout, stderr.
-//       Use this to reproduce a bug: write the hook input JSON to a file with the Write
-//       tool (a command line containing e.g. a force push would itself trip git-guard).
-//   ... --input <file> usage-gate --home <dir>
-//       the same, with HOME and USERPROFILE set to <dir> for the hook, so it reads
-//       <dir>/.claude/usage-state.json and the grants in <dir>/.claude/usage-gate-overrides/
-//       instead of the real ~/.claude. Put session_id and cwd in <file> to test a grant's scope.
+//   node .claude/hooks/test-hooks.js --input <file> <git-guard|post-edit|usage-gate|statusline>
+//       run one hook (or the status line, ../statusline.js) on the raw contents of <file> and
+//       print exit code, stdout, stderr. Use this to reproduce a bug: write the hook input JSON
+//       to a file with the Write tool (a command line containing e.g. a force push would itself
+//       trip git-guard).
+//   ... --input <file> <usage-gate|statusline> --home <dir> [--config-dir <cdir>]
+//       the same, with HOME and USERPROFILE set to <dir> and CLAUDE_CONFIG_DIR removed (or set
+//       to <cdir>), so the script uses <dir>/.claude/usage-state/<session_id>.json, the grants
+//       in <dir>/.claude/usage-gate-overrides/, and the account label from <dir>/.claude.json
+//       (or <cdir>/.claude.json) instead of the real ones. Put session_id (and cwd, to test a
+//       grant's scope) in <file>; the gate reads the file the status line wrote for that id.
+//   node .claude/hooks/test-hooks.js --only deps [--verbose]
+//       run only the fitness check deps on this repository (case F1; ADR 0013, and ADR 0012's
+//       fitness contract); --verbose lists every file scanned and how each require was classed.
+//       --only F runs F1 and the cases that test the check on scratch trees. An --only that
+//       selects no case is a usage error (exit 2).
 //
 // Isolation: post-edit cases run against a scratch tree in the OS temp dir (deleted at
 // the end); git-guard cases run in two scratch repositories (one on main, one on task/T1);
-// usage-gate and statusline cases point HOME/USERPROFILE at a scratch dir. Every case names
+// usage-gate and statusline cases point HOME/USERPROFILE at a scratch dir and remove
+// CLAUDE_CONFIG_DIR unless the case sets it to a scratch dir. Every case names
 // its policy file through HOOK_POLICY_FILE: the Hatchery fixture, an example, none, or a scratch
-// file. No file of the repository is read except to check that policy.json loads, and ~/.claude is never touched. Exit codes: 0 all pass, 1 any
-// failure, 2 usage error.
+// file. No file of the repository is read except to check that policy.json loads and, in F1, the
+// files .claude/hooks/fitness.json names; ~/.claude is never touched. Exit codes: 0 all pass (a
+// SKIP is not a failure), 1 any failure, 2 usage error.
 'use strict';
 const fs = require('fs');
 const os = require('os');
@@ -35,7 +47,7 @@ const NODE = process.execPath;
 
 // ---------- CLI ----------
 const argv = process.argv.slice(2);
-const opt = { only: null, verbose: false, keep: false, input: null, hook: null, home: null };
+const opt = { only: null, verbose: false, keep: false, input: null, hook: null, home: null, configDir: null };
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--verbose') opt.verbose = true;
@@ -43,22 +55,29 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--only' && argv[i + 1]) opt.only = argv[++i];
   else if (a === '--input' && argv[i + 1] && argv[i + 2]) { opt.input = argv[++i]; opt.hook = argv[++i]; }
   else if (a === '--home' && argv[i + 1]) opt.home = path.resolve(argv[++i]);
+  else if (a === '--config-dir' && argv[i + 1]) opt.configDir = path.resolve(argv[++i]);
   else { process.stderr.write(`test-hooks: unknown or incomplete argument: ${a}\n`); process.exit(2); }
 }
 
 function run(hook, stdin, env) {
-  const r = spawnSync(NODE, [path.join(HOOKS, `${hook}.js`)], {
+  const script = hook === 'statusline' ? path.join(HOOKS, '..', 'statusline.js') : path.join(HOOKS, `${hook}.js`);
+  const r = spawnSync(NODE, [script], {
     input: stdin, encoding: 'utf8', timeout: 30000, env: env || process.env,
   });
   return { code: r.status, stdout: r.stdout || '', stderr: r.stderr || '', error: r.error };
 }
 
 if (opt.input) {
-  if (!['git-guard', 'post-edit', 'usage-gate'].includes(opt.hook)) {
+  if (!['git-guard', 'post-edit', 'usage-gate', 'statusline'].includes(opt.hook)) {
     process.stderr.write(`test-hooks: unknown hook ${opt.hook}\n`);
     process.exit(2);
   }
-  const env = opt.home ? Object.assign({}, process.env, { HOME: opt.home, USERPROFILE: opt.home }) : process.env;
+  let env = process.env;
+  if (opt.home || opt.configDir) {
+    env = Object.assign({}, process.env);
+    if (opt.home) Object.assign(env, { HOME: opt.home, USERPROFILE: opt.home });
+    if (opt.configDir) env.CLAUDE_CONFIG_DIR = opt.configDir; else delete env.CLAUDE_CONFIG_DIR;
+  }
   const r = run(opt.hook, fs.readFileSync(opt.input, 'utf8'), env);
   process.stdout.write(`exit ${r.code}\nstdout: ${r.stdout}\nstderr: ${r.stderr}\n`);
   process.exit(0);
@@ -67,6 +86,7 @@ if (opt.input) {
 // ---------- result bookkeeping ----------
 let pass = 0;
 let fail = 0;
+let skipped = 0;
 function report(id, label, ok, detail, stdout) {
   if (opt.only && !id.startsWith(opt.only)) return;
   if (ok) pass++; else fail++;
@@ -585,9 +605,198 @@ for (const [id, label, filePath, expect, rawOverride, fmt, policy, root] of P) {
   if (ok && !opt.verbose) process.stdout.write(`     exit ${r.code}, stdout: ${r.stdout || '(empty)'}\n`);
 }
 
-// ---------- usage-gate (section 3 text) ----------
+// ---------- post-edit: the handoff paths (ADR 0014) ----------
+// Each case builds its own scratch root (ph-<id>) so the P cases above keep their tree. A case is
+// [id, label, files { relative path: contents }, edited file, expected messages (joined with \n) or null].
+// Messages are checked as a whole, so a stray extra warning fails the case.
+{
+  const mapOf = (...imports) => `# Handoff\n\nCoordinator state.\n${imports.join('\n')}\n`;
+  const PH = [
+    ['PH01', '41-line docs/handoff stream warns with its path and 40',
+      { 'docs/HANDOFF.md': mapOf('@handoff/x.md'), 'docs/handoff/x.md': lines(41) }, 'docs/handoff/x.md',
+      'post-edit: docs/handoff/x.md is 41 lines; cap is 40. Move detail to docs/ideas/ or a finding.'],
+    ['PH02', '40-line stream is silent',
+      { 'docs/HANDOFF.md': mapOf('@handoff/x.md'), 'docs/handoff/x.md': lines(40) }, 'docs/handoff/x.md', null],
+    ['PH03', 'map plus streams totalling 121 warns the total and 120',
+      { 'docs/HANDOFF.md': mapOf('@handoff/a.md', '@handoff/b.md', '@handoff/c.md') + lines(34, 'm'), 'docs/handoff/a.md': lines(40), 'docs/handoff/b.md': lines(40), 'docs/handoff/c.md': lines(1) },
+      'docs/HANDOFF.md',
+      'post-edit: the handoff loads 121 lines in total (docs/HANDOFF.md plus docs/handoff/*.md); cap is 120. Close a stream or trim.'],
+    ['PH04', 'map plus streams totalling 120 is silent',
+      { 'docs/HANDOFF.md': mapOf('@handoff/a.md', '@handoff/b.md') + lines(35, 'm'), 'docs/handoff/a.md': lines(40), 'docs/handoff/b.md': lines(40) },
+      'docs/HANDOFF.md', null],
+    ['PH05', 'editing a stream also checks the total',
+      { 'docs/HANDOFF.md': mapOf('@handoff/a.md', '@handoff/b.md', '@handoff/c.md') + lines(34, 'm'), 'docs/handoff/a.md': lines(40), 'docs/handoff/b.md': lines(40), 'docs/handoff/c.md': lines(1) },
+      'docs/handoff/a.md',
+      'post-edit: the handoff loads 121 lines in total (docs/HANDOFF.md plus docs/handoff/*.md); cap is 120. Close a stream or trim.'],
+    ['PH06', 'a stream the map does not import warns',
+      { 'docs/HANDOFF.md': mapOf('@handoff/y.md'), 'docs/handoff/x.md': lines(3), 'docs/handoff/y.md': lines(3) }, 'docs/handoff/x.md',
+      'post-edit: docs/handoff/x.md is not imported by docs/HANDOFF.md. Add the line @handoff/x.md or delete the file.'],
+    ['PH07', 'a stream the map imports is silent, with no README in the directory',
+      { 'docs/HANDOFF.md': mapOf('@handoff/x.md'), 'docs/handoff/x.md': lines(3) }, 'docs/handoff/x.md', null],
+    ['PH08', 'a map line @docs/handoff/x.md warns with the doubled path',
+      { 'docs/HANDOFF.md': mapOf('@docs/handoff/x.md'), 'docs/handoff/x.md': lines(3) }, 'docs/HANDOFF.md',
+      'post-edit: docs/HANDOFF.md imports @docs/handoff/x.md, which resolves to docs/docs/handoff/x.md and does not exist (an import resolves from the importing file\'s directory).'],
+    ['PH09', 'a map line @handoff/x.md is silent',
+      { 'docs/HANDOFF.md': mapOf('@handoff/x.md'), 'docs/handoff/x.md': lines(3) }, 'docs/HANDOFF.md', null],
+    ['PH10', 'root CLAUDE.md importing an existing @docs/HANDOFF.md is silent',
+      { 'CLAUDE.md': '# C\n\n@docs/HANDOFF.md\n', 'docs/HANDOFF.md': mapOf() }, 'CLAUDE.md', null],
+    ['PH11', 'root CLAUDE.md importing an absent @docs/GONE.md warns',
+      { 'CLAUDE.md': '# C\n\n@docs/GONE.md\n' }, 'CLAUDE.md',
+      'post-edit: CLAUDE.md imports @docs/GONE.md, which resolves to docs/GONE.md and does not exist (an import resolves from the importing file\'s directory).'],
+    ['PH12', 'an @ line inside a fenced block warns nothing',
+      { 'docs/HANDOFF.md': '# Handoff\n\n```\n@docs/GONE.md\n```\n' }, 'docs/HANDOFF.md', null],
+    ['PH13', 'an @ inside a code span warns nothing',
+      { 'docs/HANDOFF.md': '# Handoff\n\nWrite `@docs/GONE.md` as @handoff/x.md in the map.\n' }, 'docs/HANDOFF.md', null],
+    ['PH14', 'a stream line @../x.md resolves from the stream directory',
+      { 'docs/HANDOFF.md': mapOf('@handoff/x.md'), 'docs/handoff/x.md': '# X\n@../HANDOFF.md\n' }, 'docs/handoff/x.md', null],
+    ['PH15', 'a map holding only @handoff/x.md.old does not list x.md',
+      { 'docs/HANDOFF.md': mapOf('@handoff/x.md.old'), 'docs/handoff/x.md': lines(3), 'docs/handoff/x.md.old': lines(3) }, 'docs/handoff/x.md',
+      'post-edit: docs/handoff/x.md is not imported by docs/HANDOFF.md. Add the line @handoff/x.md or delete the file.'],
+    ['PH16', 'a map line @handoff/x.md inside a fence does not list x.md',
+      { 'docs/HANDOFF.md': '# Handoff\n\n```\n@handoff/x.md\n```\n', 'docs/handoff/x.md': lines(3) }, 'docs/handoff/x.md',
+      'post-edit: docs/handoff/x.md is not imported by docs/HANDOFF.md. Add the line @handoff/x.md or delete the file.'],
+  ];
+  for (const [id, label, files, edited, expect] of PH) {
+    if (!selected(id)) continue;
+    const root = path.join(scratch, `ph-${id}`);
+    for (const [rel, text] of Object.entries(files)) {
+      const f = path.join(root, ...rel.split('/'));
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, text);
+    }
+    const stdin = JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'Write', cwd: root, tool_input: { file_path: path.join(root, ...edited.split('/')) } });
+    const r = run('post-edit', stdin, envWith({ HOOK_POLICY_FILE: POLICIES.hatchery }));
+    let ok = false;
+    let detail = '';
+    if (r.code !== 0) detail = `exit ${r.code}, expected 0; stderr: ${r.stderr.trim()}`;
+    else if (expect === null) { ok = r.stdout === ''; detail = 'expected no stdout'; }
+    else {
+      const d = parseDecision(r.stdout);
+      ok = !!d && d.event === 'PostToolUse' && d.context === expect;
+      detail = `expected additionalContext ${JSON.stringify(expect)}`;
+    }
+    report(id, `${label} -> ${expect === null ? 'no output' : 'message'}`, ok, detail, r.stdout);
+  }
+}
+
+// ---------- pusher check 7: policy.js --cap-check (docCap, shared with post-edit) ----------
+// One scratch root (cap/) with a list file per case, run from that root as the pusher runs it from
+// the repository's. A case is [id, label, listed paths, policy file, expected exit, expected stdout
+// (a string, or a function of stdout returning true or a reason)]. Every run ends its stdout with
+// the sentinel "cap-check: <N> files, <M> over cap" (N files checked against a cap, M FAIL lines);
+// check 7 treats a run without it as a FAIL, which is how an older policy.js or a crash shows.
+const PUSHER_CAP_LINE = 'l=$(mktemp); git -c core.quotePath=false ls-files -- \'docs/*.md\' > "$l"; node .claude/hooks/policy.js --cap-check "$l"; rm -f "$l"';
+{
+  const root = path.join(scratch, 'cap');
+  const files = {
+    'docs/reference/big.md': lines(301),
+    'docs/reference/small.md': lines(300),
+    'docs/design/proposals/0001-long.md': lines(320),
+    'docs/HANDOFF.md': lines(41),
+    'docs/handoff/x.md': lines(41),
+    'docs/handoff/huge.md': lines(301),
+  };
+  for (const [rel, text] of Object.entries(files)) {
+    const f = path.join(root, ...rel.split('/'));
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, text);
+  }
+  const BIG = 'FAIL docs/reference/big.md: 301 lines, cap 300\n';
+  const CAP = [
+    ['CAP01', 'exempt doc over 300', ['docs/reference/big.md', 'docs/reference/small.md'],
+      scratchPolicy('cap-exempt', { edit: { capExempt: ['docs/reference/big.md'] } }), 0, 'cap-check: 1 files, 0 over cap\n'],
+    ['CAP02', 'the same doc, not exempt', ['docs/reference/big.md', 'docs/reference/small.md'],
+      POLICIES.hatchery, 1, `${BIG}cap-check: 2 files, 1 over cap\n`],
+    ['CAP03', 'exempt by pattern, handoff files still capped at 40', ['docs/HANDOFF.md', 'docs/handoff/x.md', 'docs/reference/big.md'],
+      scratchPolicy('cap-all', { edit: { capExempt: ['docs/*'] } }), 1,
+      'FAIL docs/HANDOFF.md: 41 lines, cap 40\nFAIL docs/handoff/x.md: 41 lines, cap 40\ncap-check: 2 files, 2 over cap\n'],
+    ['CAP04', 'proposal over 300, absent policy', ['docs/design/proposals/0001-long.md'], POLICIES.none, 0,
+      'cap-check: 0 files, 0 over cap\n'],
+    ['CAP05', 'handoff over 300: one FAIL, the 40', ['docs/handoff/huge.md'], POLICIES.hatchery, 1,
+      'FAIL docs/handoff/huge.md: 301 lines, cap 40\ncap-check: 1 files, 1 over cap\n'],
+    ['CAP06', 'malformed policy fails loudly', ['docs/reference/small.md'], scratchPolicy('cap-bad', '{ nope'), 1,
+      (out) => /^FAIL policy: .+\ncap-check: 0 files, 1 over cap\n$/.test(out) || 'expected one "FAIL policy: ..." line and the sentinel'],
+    ['CAP07', 'unknown policy key fails loudly', ['docs/reference/small.md'],
+      scratchPolicy('cap-key', { edit: { capExemt: ['docs/*'] } }), 1,
+      (out) => /^FAIL policy: .*unknown key edit\.capExemt\ncap-check: 0 files, 1 over cap\n$/.test(out) || 'expected a "FAIL policy: ... unknown key" line and the sentinel'],
+    ['CAP08', 'listed file deleted in the working tree is skipped', ['docs/reference/gone.md', 'docs/reference/big.md'],
+      POLICIES.hatchery, 1, `${BIG}cap-check: 1 files, 1 over cap\n`],
+    ['CAP12', 'listed path unreadable (a directory)', ['docs/reference'], POLICIES.hatchery, 1,
+      (out) => /^FAIL docs\/reference: cannot read \(E[A-Z]+\)\ncap-check: 0 files, 1 over cap\n$/.test(out) || 'expected one "FAIL docs/reference: cannot read" line and the sentinel'],
+  ];
+  for (const [id, label, listed, policy, code, expect] of CAP) {
+    if (!selected(id)) continue;
+    const list = path.join(root, `list-${id}.txt`);
+    fs.writeFileSync(list, listed.map((p) => `${p}\n`).join(''));
+    const r = spawnSync(NODE, [path.join(HOOKS, 'policy.js'), '--cap-check', list],
+      { cwd: root, encoding: 'utf8', timeout: 30000, env: envWith({ HOOK_POLICY_FILE: policy }) });
+    const out = r.stdout || '';
+    let ok = r.status === code;
+    let detail = `exit ${r.status}, expected ${code}; stderr: ${(r.stderr || '').trim()}`;
+    if (ok) {
+      const v = typeof expect === 'function' ? expect(out) : out === expect || `expected stdout ${JSON.stringify(expect)}`;
+      ok = v === true;
+      if (!ok) detail = v;
+    }
+    report(id, `--cap-check: ${label} -> exit ${code}`, ok, detail, out);
+  }
+  if (selected('CAP09')) {
+    const r = spawnSync(NODE, [path.join(HOOKS, 'policy.js'), '--cap-check'], { encoding: 'utf8', env: envWith({ HOOK_POLICY_FILE: POLICIES.hatchery }) });
+    report('CAP09', '--cap-check without a list file -> exit 2, usage line, a FAIL line and the sentinel',
+      r.status === 2 && /^usage: /.test(r.stderr || '') && r.stdout === 'FAIL usage: --cap-check needs a list file\ncap-check: 0 files, 1 over cap\n',
+      `exit ${r.status}, stderr ${JSON.stringify(r.stderr)}`, r.stdout);
+  }
+  // An older policy.js does not know the flag; an unknown flag stands in for it: it prints the
+  // effective policy, exits 0 and never the sentinel, which check 7 must read as a FAIL.
+  if (selected('CAP13')) {
+    const list = path.join(root, 'list-CAP13.txt');
+    fs.writeFileSync(list, 'docs/reference/big.md\n');
+    const r = spawnSync(NODE, [path.join(HOOKS, 'policy.js'), '--cap-chek', list],
+      { cwd: root, encoding: 'utf8', env: envWith({ HOOK_POLICY_FILE: POLICIES.hatchery }) });
+    report('CAP13', 'an unknown flag (an older policy.js) prints no cap-check line', !/^cap-check: /m.test(r.stdout || ''),
+      'the sentinel appeared', r.stdout);
+  }
+  // A non-ASCII file name over the cap, through the pusher's real line on a scratch git repository:
+  // without core.quotePath=false git lists it quoted, as "docs/caf\303\251-big.md", and the file is skipped.
+  if (selected('CAP14')) {
+    const repo = path.join(scratch, 'capgit');
+    fs.mkdirSync(path.join(repo, 'docs'), { recursive: true });
+    git(repo, 'init', '-q');
+    fs.writeFileSync(path.join(repo, 'docs', 'café-big.md'), lines(301));
+    git(repo, 'add', '--', 'docs/café-big.md');
+    const line = PUSHER_CAP_LINE.replace('.claude/hooks/policy.js', `"${path.join(HOOKS, 'policy.js').replace(/\\/g, '/')}"`);
+    const r = spawnSync('bash', ['-c', line], { cwd: repo, encoding: 'utf8', timeout: 30000, env: envWith({ HOOK_POLICY_FILE: POLICIES.hatchery }) });
+    const want = 'FAIL docs/café-big.md: 301 lines, cap 300\ncap-check: 1 files, 1 over cap\n';
+    report('CAP14', 'a non-ASCII doc over 300 FAILs through the pusher line', r.stdout === want,
+      `expected ${JSON.stringify(want)}; stderr ${(r.stderr || '').trim()}`, r.stdout);
+  }
+  // CAP10 and CAP11 run PUSHER_CAP_LINE; this case keeps it equal to the backticked command of
+  // .claude/agents/pusher.md that holds --cap-check, so the copy above cannot drift.
+  if (selected('CAP15')) {
+    const spans = fs.readFileSync(path.join(__dirname, '..', 'agents', 'pusher.md'), 'utf8').match(/`[^`\n]+`/g) || [];
+    const hits = spans.map((x) => x.slice(1, -1)).filter((x) => x.includes('--cap-check'));
+    report('CAP15', 'pusher.md check 7 holds exactly the line the harness tests', hits.length === 1 && hits[0] === PUSHER_CAP_LINE,
+      `found ${JSON.stringify(hits)}`);
+  }
+  // The pusher's line must pass the guard, for the pusher and the main session.
+  guardCase('CAP10', { command: PUSHER_CAP_LINE, agent: 'pusher' }, 'allow');
+  guardCase('CAP11', { command: PUSHER_CAP_LINE }, 'allow');
+}
+
+// ---------- usage-gate (0002-hook-specs-usage.md, section 3) ----------
 const home = path.join(scratch, 'home');
 fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+// One usage file per session (ADR 0011): every U, UX and UO case runs as session SID and writes its
+// state to that session's file; UG cases write it for the session_id in their payload.
+const SID = 'sess-gate';
+const stateDir = path.join(home, '.claude', 'usage-state');
+fs.mkdirSync(stateDir, { recursive: true });
+const stateFileFor = (sid) => path.join(stateDir, `${sid}.json`);
+const stateFile = stateFileFor(SID);
+const gateInput = (extra) => JSON.stringify(Object.assign({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {}, session_id: SID }, extra));
+// The scratch HOME, and no CLAUDE_CONFIG_DIR from the session running the suite, so the account
+// label is read from the scratch home (none there unless a case writes one).
+const gateEnv = (extra) => envWith(Object.assign({ HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: undefined }, extra));
 const HOLD_MSG = 'Usage gate: 5h 55%, 7d 10%. 5h at or above 50%: Do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report. Lifting this early is the user\'s decision (docs/design/decisions/0006-hook-policy-file.md).';
 const STOP_MSG = 'Usage gate: 5h 85%, 7d 10%. 5h at or above 80%: Stop all work, run the handoff skill, commit WIP from the main session, end the turn.';
 const HOLD_85 = HOLD_MSG.replace('5h 55%', '5h 85%');
@@ -616,7 +825,7 @@ const U = [
 ];
 for (const [id, pct, expect, override, policy] of U) {
   if (!selected(id)) continue;
-  fs.writeFileSync(path.join(home, '.claude', 'usage-state.json'), JSON.stringify({
+  fs.writeFileSync(stateFile, JSON.stringify({
     updatedAt: Math.floor(Date.now() / 1000),
     five_hour: { used_percentage: pct },
     seven_day: { used_percentage: 10 },
@@ -624,8 +833,8 @@ for (const [id, pct, expect, override, policy] of U) {
   const ovPath = path.join(home, '.claude', 'usage-gate-override.json');
   if (override === undefined) fs.rmSync(ovPath, { force: true });
   else fs.writeFileSync(ovPath, typeof override === 'string' ? override : JSON.stringify(override));
-  const env = envWith({ HOME: home, USERPROFILE: home, HOOK_POLICY_FILE: policy || POLICIES.hatchery });
-  const r = run('usage-gate', JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {} }), env);
+  const env = gateEnv({ HOOK_POLICY_FILE: policy || POLICIES.hatchery });
+  const r = run('usage-gate', gateInput(), env);
   let ok;
   let detail;
   if (expect === null) { ok = r.code === 0 && r.stdout === ''; detail = 'expected allow (exit 0, no stdout)'; }
@@ -640,7 +849,6 @@ for (const [id, pct, expect, override, policy] of U) {
 
 // Staleness, reset windows and the example policies. state null means no file.
 // [id, label, state, policy file, expected deny-reason prefix or null for allow, stderr must include]
-const stateFile = path.join(home, '.claude', 'usage-state.json');
 const fresh = (five, seven, extra) => Object.assign({ updatedAt: nowSec, five_hour: { used_percentage: five }, seven_day: { used_percentage: seven } }, extra);
 const staleDeny = scratchPolicy('stale-deny', { usage: { whenStale: 'deny' } });
 const UX = [
@@ -671,8 +879,7 @@ fs.rmSync(path.join(home, '.claude', 'usage-gate-override.json'), { force: true 
 for (const [id, label, state, policy, expect, stderrHas] of UX) {
   if (!selected(id)) continue;
   if (state === null) fs.rmSync(stateFile, { force: true }); else fs.writeFileSync(stateFile, JSON.stringify(state));
-  const r = run('usage-gate', JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {} }),
-    envWith({ HOME: home, USERPROFILE: home, HOOK_POLICY_FILE: policy }));
+  const r = run('usage-gate', gateInput(), gateEnv({ HOOK_POLICY_FILE: policy }));
   let ok;
   let detail;
   if (expect === null) { ok = r.code === 0 && r.stdout === ''; detail = 'expected allow (exit 0, no stdout)'; }
@@ -725,8 +932,7 @@ for (const [id, label, state, override, policy, extraEnv, expect, stderrHas] of 
   if (!selected(id)) continue;
   fs.writeFileSync(stateFile, JSON.stringify(state));
   if (override === undefined) fs.rmSync(ovFile, { force: true }); else fs.writeFileSync(ovFile, JSON.stringify(override));
-  const r = run('usage-gate', JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {} }),
-    envWith(Object.assign({ HOME: home, USERPROFILE: home, HOOK_POLICY_FILE: policy }, extraEnv)));
+  const r = run('usage-gate', gateInput(), gateEnv(Object.assign({ HOOK_POLICY_FILE: policy }, extraEnv)));
   let ok;
   let detail;
   if (expect === null) { ok = r.code === 0 && r.stdout === ''; detail = 'expected allow (exit 0, no stdout)'; }
@@ -739,6 +945,77 @@ for (const [id, label, state, override, policy, extraEnv, expect, stderrHas] of 
   report(id, `${label} -> ${expect === null ? 'allow' : 'deny'}`, ok, detail, r.stdout);
 }
 fs.rmSync(ovFile, { force: true });
+
+// The per-session file and the account label (ADR 0011). A file for another session, no usable
+// session_id, and a file labelled with another account than the one logged in are no usage data
+// (the stale path); a matching or unknown label is judged, and the deny names the file's email.
+// [id, label, state for this session or null, files { relative path under the scratch HOME (CFG/
+// for the scratch CLAUDE_CONFIG_DIR): contents }, input overrides, policy or undefined for the
+// Hatchery fixture, expected deny-reason prefix or null for allow, stderr must include, use CFG]
+{
+  const cfgDir = path.join(scratch, 'gate-config');
+  const label = (a) => ({ uuid: a.uuid, organizationUuid: a.org, email: a.email });
+  const login = (a) => JSON.stringify({ oauthAccount: { accountUuid: a.uuid, organizationUuid: a.org, emailAddress: a.email }, numStartups: 3 });
+  const A = { uuid: 'uuid-a', org: 'org-1', email: 'a@example.com' };
+  const B = { uuid: 'uuid-b', org: 'org-1', email: 'b@example.com' };
+  const A2 = { uuid: 'uuid-a', org: 'org-2', email: 'a@example.com' };
+  const withAcct = (a, five) => Object.assign(fresh(five, 10), { account: label(a) });
+  const HOLD_A = HOLD_MSG.replace('Usage gate:', 'Usage gate (a@example.com):');
+  const OTHER = 'no usage data for this account (this session\'s file is for a@example.com, logged in as b@example.com)';
+  const UA = [
+    ['U11', 'a file for another session only: no usage data', null, {}, {}, undefined, null,
+      'no usage data (the status line has not written any for this session); allowing', 'other'],
+    ['U12', 'a file for another session only, whenStale deny', null, {}, {}, staleDeny,
+      'Usage gate: no usage data (the status line has not written any for this session), and the policy denies', undefined, 'other'],
+    ['U13', 'no session_id in the input: no usage data', fresh(95, 10), {}, { session_id: undefined }, undefined, null,
+      'no usage data (no usable session_id in the hook input)'],
+    ['U14', 'a session_id that is not a plain name: no usage data', fresh(95, 10), {}, { session_id: `../${SID}` }, undefined, null,
+      'no usable session_id'],
+    ['U15', 'label matches the login: judged, the deny names the email', withAcct(A, 55), { '.claude.json': login(A) }, {}, undefined, HOLD_A],
+    ['U16', 'label differs from the login: stale, allow, the reason on stderr', withAcct(A, 95), { '.claude.json': login(B) }, {}, undefined, null,
+      `${OTHER}; allowing`],
+    ['U17', 'label differs, whenStale deny: denied as no data', withAcct(A, 10), { '.claude.json': login(B) }, {}, staleDeny,
+      `Usage gate: ${OTHER}, and the policy denies delegation without fresh data.`],
+    ['U18', 'same account uuid, another organization: stale', withAcct(A, 95), { '.claude.json': login(A2) }, {}, undefined, null,
+      'no usage data for this account'],
+    ['U19', 'login unknown (no config file): the file is judged', withAcct(A, 55), {}, {}, undefined, HOLD_A],
+    ['U20', 'file label unknown, login known: judged, no email', fresh(55, 10), { '.claude.json': login(B) }, {}, undefined, HOLD_MSG],
+    ['U21', 'torn .claude.json: login unknown, the file is judged', withAcct(A, 55), { '.claude.json': login(B).slice(0, 30) }, {}, undefined, HOLD_A],
+    ['U22', 'CLAUDE_CONFIG_DIR wins over the home directory for the label', withAcct(A, 95),
+      { '.claude.json': login(A), 'CFG/.claude.json': login(B) }, {}, undefined, null, `${OTHER}; allowing`, undefined, true],
+    ['U23', 'legacy .config.json in the config home wins over .claude.json', withAcct(A, 95),
+      { '.claude.json': login(A), '.config.json': login(B) }, {}, undefined, null, `${OTHER}; allowing`],
+    ['U24', 'a .config.json without oauthAccount falls through to .claude.json', withAcct(A, 55),
+      { '.claude.json': login(A), '.config.json': '{"numStartups":1}' }, {}, undefined, HOLD_A],
+  ];
+  for (const [id, lbl, state, files, input, policy, expect, stderrHas, otherSession, useCfg] of UA) {
+    if (!selected(id)) continue;
+    fs.rmSync(stateDir, { recursive: true, force: true });
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.rmSync(cfgDir, { recursive: true, force: true });
+    fs.mkdirSync(cfgDir, { recursive: true });
+    for (const f of ['.claude.json', '.config.json']) fs.rmSync(path.join(home, f), { force: true });
+    if (state) fs.writeFileSync(stateFile, JSON.stringify(state));
+    if (otherSession) fs.writeFileSync(stateFileFor(otherSession), JSON.stringify(fresh(95, 10)));
+    for (const [rel, contents] of Object.entries(files)) {
+      fs.writeFileSync(rel.startsWith('CFG/') ? path.join(cfgDir, rel.slice(4)) : path.join(home, rel), contents);
+    }
+    const r = run('usage-gate', gateInput(input),
+      gateEnv({ HOOK_POLICY_FILE: policy || POLICIES.hatchery, CLAUDE_CONFIG_DIR: useCfg ? cfgDir : undefined }));
+    let ok;
+    let detail;
+    if (expect === null) { ok = r.code === 0 && r.stdout === ''; detail = 'expected allow (exit 0, no stdout)'; }
+    else {
+      const d = parseDecision(r.stdout);
+      ok = r.code === 0 && !!d && d.decision === 'deny' && d.reason.startsWith(expect);
+      detail = `expected a reason starting ${JSON.stringify(expect)}`;
+    }
+    if (ok && stderrHas && !r.stderr.includes(stderrHas)) { ok = false; detail = `stderr lacks ${JSON.stringify(stderrHas)}: ${r.stderr}`; }
+    report(id, `${lbl} -> ${expect === null ? 'allow' : 'deny'}`, ok, detail, r.stdout);
+  }
+  for (const f of ['.claude.json', '.config.json']) fs.rmSync(path.join(home, f), { force: true });
+  fs.rmSync(cfgDir, { recursive: true, force: true });
+}
 
 // The grant directory (ADR 0006, The HOLD override): scope by session, project or user, matched
 // against session_id and cwd on stdin. All under the scratch HOME; ~/.claude is never read.
@@ -768,15 +1045,15 @@ const UG = [
     { session_id: 'xyz', cwd: PROJ }, withClauses(HOLD_MSG, C.session('abc'))],
   ['UG03', 'project grant, cwd at the path', fresh(55, 10), { 'project-proj.json': g({ project: PROJ }) }, undefined, at, null, `(project ${PROJ})`],
   ['UG04', 'project grant, cwd under the path', fresh(55, 10), { 'project-proj.json': g({ project: PROJ }) }, undefined,
-    { cwd: path.join(PROJ, 'sub', 'deeper') }, null],
+    { session_id: 'pq', cwd: path.join(PROJ, 'sub', 'deeper') }, null],
   ['UG05', 'project grant, cwd beside it with the path as a prefix', fresh(55, 10), { 'project-proj.json': g({ project: PROJ }) }, undefined,
-    { cwd: `${PROJ}-other` }, withClauses(HOLD_MSG, C.project(PROJ))],
+    { session_id: 'pq', cwd: `${PROJ}-other` }, withClauses(HOLD_MSG, C.project(PROJ))],
   ['UG06', 'project written with / and a trailing /, cwd with \\', fresh(55, 10), { 'p.json': g({ project: `${fwd(PROJ)}/` }) }, undefined,
-    { cwd: `${back(PROJ)}\\sub` }, null],
+    { session_id: 'pq', cwd: `${back(PROJ)}\\sub` }, null],
   ['UG07', 'project written with \\, cwd with /', fresh(55, 10), { 'p.json': g({ project: back(PROJ) }) }, undefined,
-    { cwd: `${fwd(PROJ)}/sub` }, null],
+    { session_id: 'pq', cwd: `${fwd(PROJ)}/sub` }, null],
   ['UG08', `project in another case: ${isWin ? 'applies on Windows' : 'out of scope off Windows'}`, fresh(55, 10),
-    { 'p.json': g({ project: PROJ }) }, undefined, { cwd: PROJ.toUpperCase() }, isWin ? null : withClauses(HOLD_MSG, C.project(PROJ))],
+    { 'p.json': g({ project: PROJ }) }, undefined, { session_id: 'pq', cwd: PROJ.toUpperCase() }, isWin ? null : withClauses(HOLD_MSG, C.project(PROJ))],
   ['UG09', 'user grant applies with any session and cwd', fresh(55, 10), { 'user.json': g() }, undefined,
     { session_id: 'xyz', cwd: path.join(scratch, 'elsewhere') }, null, 'by override user.json (user)'],
   ['UG10', 'legacy file beside a directory grant: the legacy user grant lifts', fresh(55, 10), { 'session-other.json': g({ session: 'other' }) }, g(),
@@ -785,7 +1062,7 @@ const UG = [
     { 'zz-session.json': g({ session: 'other' }) }, g({ until: nowSec - 1 }), at, withClauses(HOLD_MSG, C.session('other'), C.expired(LEGACY))],
   ['UG12', 'both scope keys: malformed', fresh(55, 10), { 'both.json': g({ session: 'abc', project: PROJ }) }, undefined, at,
     withClauses(HOLD_MSG, C.malformed('both.json'))],
-  ['UG13', 'a relative project: malformed', fresh(55, 10), { 'rel.json': g({ project: 'rel/proj' }) }, undefined, { cwd: path.join(PROJ, 'rel', 'proj') },
+  ['UG13', 'a relative project: malformed', fresh(55, 10), { 'rel.json': g({ project: 'rel/proj' }) }, undefined, { session_id: 'pq', cwd: path.join(PROJ, 'rel', 'proj') },
     withClauses(HOLD_MSG, C.malformed('rel.json'))],
   ['UG14', 'an empty session and a numeric project: malformed', fresh(55, 10), { 'a.json': g({ session: '' }), 'b.json': g({ project: 5 }) }, undefined, at,
     withClauses(HOLD_MSG, C.malformed('a.json'), C.malformed('b.json'))],
@@ -801,13 +1078,16 @@ const UG = [
   ['UG18', 'each file classified once: malformed before expired, expired before out of scope', fresh(55, 10),
     { 'a.json': g({ until: nowSec - 1, session: 'abc', project: PROJ }), 'b.json': g({ until: nowSec - 1, session: 'other' }) }, undefined, at,
     withClauses(HOLD_MSG, C.malformed('a.json'), C.expired('b.json'))],
-  ['UG19', 'stdin without session_id: no session grant applies', fresh(55, 10), { 'session-abc.json': g({ session: 'abc' }) }, undefined,
-    { cwd: PROJ }, withClauses(HOLD_MSG, C.session('abc'))],
+  // Without a session_id there is no usage file to judge (ADR 0011): the stale path, before any grant.
+  ['UG19', 'stdin without session_id: no usage data, the stale path', fresh(55, 10), { 'session-abc.json': g({ session: 'abc' }) }, undefined,
+    { cwd: PROJ }, null, 'no usage data (no usable session_id in the hook input); allowing'],
   ['UG20', 'stdin without cwd: no project grant applies', fresh(55, 10), { 'project-proj.json': g({ project: PROJ }) }, undefined,
     { session_id: 'abc' }, withClauses(HOLD_MSG, C.project(PROJ))],
-  ['UG21', 'unparseable stdin: a session grant does not apply', fresh(55, 10), { 'session-abc.json': g({ session: 'abc' }) }, undefined,
-    'not json', withClauses(HOLD_MSG, C.session('abc'))],
-  ['UG22', 'unparseable stdin: a user grant still applies', fresh(55, 10), { 'user.json': g() }, undefined, 'not json', null, '(user)'],
+  ['UG21', 'unparseable stdin: no usage data, the stale path', fresh(55, 10), { 'session-abc.json': g({ session: 'abc' }) }, undefined,
+    'not json', null, 'no usage data (no usable session_id in the hook input); allowing'],
+  ['UG22', 'unparseable stdin under whenStale deny: denied, no grant consulted', fresh(55, 10), { 'user.json': g() }, undefined, 'not json',
+    'Usage gate: no usage data (no usable session_id in the hook input), and the policy denies delegation without fresh data. Check usage with /usage in an interactive session; the status line refreshes the data while a session is open.',
+    undefined, staleDeny],
   ['UG23', 'other names and subdirectories in the directory are ignored', fresh(55, 10), { 'notes.txt': 'not json', 'nested.json': DIR }, undefined, at,
     HOLD_MSG],
   ['UG24', 'a session grant does not lift the deny line', fresh(85, 10), { 'session-abc.json': g({ session: 'abc' }) }, undefined, at, STOP_MSG,
@@ -820,7 +1100,10 @@ const UG = [
 ];
 for (const [id, label, state, files, legacy, payload, expect, stderrHas, policy] of UG) {
   if (!selected(id)) continue;
-  fs.writeFileSync(stateFile, JSON.stringify(state));
+  // The state goes to the file of the payload's session; a payload without one has no file.
+  fs.rmSync(stateDir, { recursive: true, force: true });
+  fs.mkdirSync(stateDir, { recursive: true });
+  if (typeof payload === 'object' && payload.session_id) fs.writeFileSync(stateFileFor(payload.session_id), JSON.stringify(state));
   fs.rmSync(grantDir, { recursive: true, force: true });
   fs.mkdirSync(grantDir, { recursive: true });
   for (const [name, contents] of Object.entries(files)) {
@@ -832,7 +1115,7 @@ for (const [id, label, state, files, legacy, payload, expect, stderrHas, policy]
   if (legacy === undefined) fs.rmSync(ovFile, { force: true }); else fs.writeFileSync(ovFile, JSON.stringify(legacy));
   const stdin = typeof payload === 'string' ? payload
     : JSON.stringify(Object.assign({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: {} }, payload));
-  const r = run('usage-gate', stdin, envWith({ HOME: home, USERPROFILE: home, HOOK_POLICY_FILE: policy || POLICIES.hatchery }));
+  const r = run('usage-gate', stdin, gateEnv({ HOOK_POLICY_FILE: policy || POLICIES.hatchery }));
   let ok;
   let detail;
   if (expect === null) { ok = r.code === 0 && r.stdout === ''; detail = 'expected allow (exit 0, no stdout)'; }
@@ -849,21 +1132,167 @@ for (const [id, label, state, files, legacy, payload, expect, stderrHas, policy]
 fs.rmSync(grantDir, { recursive: true, force: true });
 fs.rmSync(ovFile, { force: true });
 
+// The account pool (ADR 0011, usage.pool): asked only when the gate is about to deny at HOLD. The
+// command is [node, stub, fixture, ...flags] with the stub and fixtures in the scratch dir, never a
+// program on PATH; the missing-program case names one that does not exist. The session is a@ (file
+// label and login) unless the case makes the label unknown. A marker file shows whether the stub ran.
+// [id, label, fixture (object, raw string, or null for no stub), stub flags or a whole argv
+// (command), pool extra (timeoutSeconds), state five-hour %, label known, policy extra, expected exact
+// deny reason or null for allow, marker expected (true/false/undefined for not checked)]
+{
+  const stub = path.join(scratch, 'pool-stub.js');
+  fs.writeFileSync(stub, [
+    '// SPDX-License-Identifier: GPL-3.0-or-later',
+    '// Test stub for usage.pool: prints the fixture file; --exit N, --sleep MS, --marker FILE.',
+    'const fs = require("fs");',
+    'const a = process.argv.slice(2);',
+    'const opt = (k) => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : null; };',
+    'if (opt("--marker")) fs.writeFileSync(opt("--marker"), "ran");',
+    'const out = fs.readFileSync(a[0], "utf8");',
+    'const finish = () => { process.stdout.write(out); process.exit(Number(opt("--exit") || 0)); };',
+    'if (opt("--sleep")) setTimeout(finish, Number(opt("--sleep"))); else finish();',
+    '',
+  ].join('\n'));
+  const A_EMAIL = 'a@example.com';
+  const row = (number, email, p5, p7, extra) => Object.assign({ number, email, active: number === 1, alias: null, disabled: false, usageStatus: 'ok',
+    usage: { fiveHour: { pct: p5, resetsAt: '2026-10-16T12:00:00Z' }, sevenDay: { pct: p7, resetsAt: '2026-10-19T06:00:00Z', expectedPct: 40 } },
+    usageFetchedAt: '2026-10-16T10:00:00Z', usageAgeSeconds: 120, loginExpiresAt: null, futureField: { x: 1 } }, extra);
+  const list = (...rows) => ({ schemaVersion: 1, activeAccountNumber: 1, accounts: rows });
+  const HOLD_A = HOLD_MSG.replace('Usage gate:', `Usage gate (${A_EMAIL}):`);
+  const room = (email, n, m, p5, p7, unknown) => ` Report to the owner: account ${email} (slot ${n}) had room ${m} min ago: 5h ${p5}%, 7d ${p7}%` +
+    `${unknown ? ' (this session\'s account not excluded)' : ''}. The next session is the owner's to start there (cswap switch ${n}, or cswap run ${n}).`;
+  const noRoom = (readings, unknown) => ` No other account has room (${readings})${unknown ? ' (this session\'s account not excluded)' : ''}; an override grant is still the lift (ADR 0006).`;
+  const MISSING = 'hatchery-no-such-program-0011';
+  const UP = [
+    ['UP01', 'pool null (the base): the HOLD deny has no pool text', null, [], {}, 55, true, {}, HOLD_A],
+    ['UP02', 'room: the other account with the largest margin is named', list(row(1, A_EMAIL, 5, 5), row(2, 'b@example.com', 20, 30), row(3, 'c@example.com', 10, 45, { usageAgeSeconds: 600 })),
+      [], {}, 55, true, {}, HOLD_A + room('b@example.com', 2, 2, 20, 30), true],
+    ['UP03', 'no room: every other account at or above a hold', list(row(1, A_EMAIL, 5, 5), row(2, 'b@example.com', 60, 10, { usageAgeSeconds: 300 }), row(3, 'c@example.com', 10, 50, { usageAgeSeconds: 600 })),
+      [], {}, 55, true, {}, HOLD_A + noRoom('pool readings up to 10 min old')],
+    ['UP04', 'disabled and non-ok rows never have room', list(row(2, 'b@example.com', 5, 5, { disabled: true }), row(3, 'c@example.com', 5, 5, { usageStatus: 'token_expired' }),
+      row(4, 'd@example.com', 30, 30, { usageAgeSeconds: 60 })), [], {}, 55, true, {}, HOLD_A + room('d@example.com', 4, 1, 30, 30)],
+    ['UP05', 'the session\'s email is excluded, every row with it, in any case', list(row(1, A_EMAIL, 5, 5), row(5, 'A@Example.com', 1, 1, { usageAgeSeconds: 9000 }),
+      row(2, 'b@example.com', 60, 60)), [], {}, 55, true, {}, HOLD_A + noRoom('pool readings up to 2 min old')],
+    ['UP06', 'label unknown: the session\'s account is not excluded, and the text says so', list(row(1, A_EMAIL, 5, 5), row(2, 'b@example.com', 60, 60)),
+      [], {}, 55, false, {}, HOLD_MSG + room(A_EMAIL, 1, 2, 5, 5, true)],
+    ['UP07', 'label unknown, no room', list(row(2, 'b@example.com', 60, 60)), [], {}, 55, false, {}, HOLD_MSG + noRoom('pool readings up to 2 min old', true)],
+    ['UP08', 'only the session\'s rows: no other account, no readings', list(row(1, A_EMAIL, 5, 5)), [], {}, 55, true, {}, HOLD_A + noRoom('no pool readings')],
+    ['UP09', 'per-meter holds judge room (7d 70 is under its own hold of 75)', list(row(2, 'b@example.com', 10, 70)), [], {}, 65, true,
+      { fiveHour: { hold: 60, deny: null }, sevenDay: { hold: 75, deny: null } },
+      HOLD_A.replace('5h 55%, 7d 10%. 5h at or above 50%', '5h 65%, 7d 10%. 5h at or above 60%') + room('b@example.com', 2, 2, 10, 70)],
+    ['UP10', 'a missing program: no pool reading', null, { command: [MISSING] }, {}, 55, true, {}, HOLD_A + ` No pool reading (${MISSING} not found).`],
+    ['UP11', 'a stub that sleeps past the timeout: no pool reading', list(row(2, 'b@example.com', 5, 5)), ['--sleep', '10000'], { timeoutSeconds: 1 }, 55, true, {},
+      HOLD_A + ' No pool reading (no answer within 1 s).'],
+    ['UP12', 'a non-zero exit: no pool reading', list(row(2, 'b@example.com', 5, 5)), ['--exit', '3'], {}, 55, true, {}, HOLD_A + ` No pool reading (${NODE} exited 3).`],
+    ['UP13', 'bad JSON: no pool reading', 'not json {', [], {}, 55, true, {}, HOLD_A + ' No pool reading (output is not the list --json shape).'],
+    ['UP14', 'JSON without accounts[]: no pool reading', { schemaVersion: 1 }, [], {}, 55, true, {}, HOLD_A + ' No pool reading (output is not the list --json shape).'],
+    ['UP21', 'a last-good reading within an hour has room, with its own age', list(row(2, 'b@example.com', null, null, { usageStatus: 'unavailable', usage: null,
+      usageAgeSeconds: undefined, lastGoodUsage: { fiveHour: { pct: 10 }, sevenDay: { pct: 20 } }, lastGoodAgeSeconds: 1800 })), [], {}, 55, true, {},
+      HOLD_A + room('b@example.com', 2, 30, 10, 20)],
+    ['UP22', 'a last-good reading older than an hour has none', list(row(2, 'b@example.com', null, null, { usageStatus: 'unavailable', usage: null,
+      usageAgeSeconds: undefined, lastGoodUsage: { fiveHour: { pct: 10 }, sevenDay: { pct: 20 } }, lastGoodAgeSeconds: 3700 })), [], {}, 55, true, {},
+      HOLD_A + noRoom('no pool readings')],
+    ['UP23', 'same email, another known organization: not the session\'s account', list(row(1, A_EMAIL, 5, 5, { organizationUuid: 'org-1' }),
+      row(6, A_EMAIL, 10, 10, { organizationUuid: 'org-2' })), [], {}, 55, true, {}, HOLD_A + room(A_EMAIL, 6, 2, 10, 10)],
+    ['UP24', 'same email, organization unknown on one side: excluded', list(row(1, A_EMAIL, 5, 5, { organizationUuid: 'org-1' }), row(6, A_EMAIL, 5, 5),
+      row(2, 'b@example.com', 60, 60)), [], {}, 55, true, {}, HOLD_A + noRoom('pool readings up to 2 min old')],
+    ['UP25', 'a room row whose email is not an address is named by its slot alone', list(row(7, 'not an\naddress', 10, 10)), [], {}, 55, true, {},
+      HOLD_A + room('b@example.com', 7, 2, 10, 10).replace('account b@example.com (slot 7)', 'slot 7')],
+    ['UP15', 'an allowed launch spawns nothing', list(row(2, 'b@example.com', 5, 5)), [], {}, 20, true, {}, null, false],
+    ['UP16', 'a HOLD lifted by a grant spawns nothing', list(row(2, 'b@example.com', 5, 5)), [], {}, 55, true, {}, null, false, true],
+    ['UP17', 'a deny line spawns nothing, and its text has no pool part', list(row(2, 'b@example.com', 5, 5)), [], {}, 85, true, { deny: 80 },
+      STOP_MSG.replace('Usage gate:', `Usage gate (${A_EMAIL}):`), false],
+  ];
+  for (const [id, label, fixture, flagsOrCmd, poolExtra, five, known, usageExtra, expect, marker, grant] of UP) {
+    if (!selected(id)) continue;
+    const markerFile = path.join(scratch, `up-marker-${id}`);
+    fs.rmSync(markerFile, { force: true });
+    let usage = Object.assign({}, usageExtra);
+    if (fixture !== null || !Array.isArray(flagsOrCmd)) {
+      let command = flagsOrCmd.command;
+      if (!command) {
+        const fx = path.join(scratch, `up-fixture-${id}.json`);
+        fs.writeFileSync(fx, typeof fixture === 'string' ? fixture : JSON.stringify(fixture));
+        command = [NODE, stub, fx, ...flagsOrCmd, '--marker', markerFile];
+      }
+      usage.pool = Object.assign({ command }, poolExtra);
+    }
+    const policy = scratchPolicy(`up-${id}`, { usage });
+    fs.rmSync(stateDir, { recursive: true, force: true });
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify(Object.assign(fresh(five, 10), known ? { account: { uuid: 'uuid-a', organizationUuid: 'org-1', email: A_EMAIL } } : {})));
+    const loginFile = path.join(home, '.claude.json');
+    if (known) fs.writeFileSync(loginFile, JSON.stringify({ oauthAccount: { accountUuid: 'uuid-a', organizationUuid: 'org-1', emailAddress: A_EMAIL } }));
+    else fs.rmSync(loginFile, { force: true });
+    fs.rmSync(grantDir, { recursive: true, force: true });
+    if (grant) { fs.mkdirSync(grantDir, { recursive: true }); fs.writeFileSync(path.join(grantDir, 'user.json'), JSON.stringify(g())); }
+    const r = run('usage-gate', gateInput(), gateEnv({ HOOK_POLICY_FILE: policy }));
+    let ok;
+    let detail;
+    if (expect === null) { ok = r.code === 0 && r.stdout === ''; detail = `expected allow (exit 0, no stdout); stderr ${r.stderr}`; }
+    else {
+      const d = parseDecision(r.stdout);
+      ok = r.code === 0 && !!d && d.decision === 'deny' && d.reason === expect;
+      detail = `expected reason ${JSON.stringify(expect)}; stderr ${r.stderr}`;
+    }
+    if (ok && marker !== undefined && fs.existsSync(markerFile) !== marker) { ok = false; detail = `the pool stub ${marker ? 'did not run' : 'ran'}`; }
+    report(id, `${label} -> ${expect === null ? 'allow' : 'deny'}`, ok, detail, r.stdout);
+  }
+  fs.rmSync(path.join(home, '.claude.json'), { force: true });
+  fs.rmSync(grantDir, { recursive: true, force: true });
+
+  // The key itself: validated like the others, defaults filled in by the loader.
+  const { load } = require('./policy');
+  const loadUsage = (name, pool) => load(scratchPolicy(`up-load-${name}`, { usage: { pool } }));
+  const KEYS = [
+    ['UP18', 'pool without timeoutSeconds loads with 15', () => {
+      const r = loadUsage('default', { command: ['cswap', 'list', '--json'], $comment: 'x' });
+      return (r.error === null && JSON.stringify(r.policy.usage.pool) === '{"command":["cswap","list","--json"],"timeoutSeconds":15}') || `${r.error} ${JSON.stringify(r.policy.usage.pool)}`;
+    }],
+    ['UP19', 'pool null loads; the base default is null', () => {
+      const r = loadUsage('null', null);
+      return (r.error === null && r.policy.usage.pool === null && load(POLICIES.none).policy.usage.pool === null) || r.error;
+    }],
+    ['UP26', 'timeoutSeconds 1 and 60 load (the integer range ends)', () => {
+      const r = [1, 60].map((t) => loadUsage(`t${t}`, { command: ['x'], timeoutSeconds: t }));
+      return r.every((x) => x.error === null) || r.map((x) => x.error).join('; ');
+    }],
+    ['UP20', 'malformed pools: empty command, a string command, an empty word, timeoutSeconds 0, 0.5, 61, 600 or a string, an unknown key, an array', () => {
+      const bad = [{ command: [] }, { command: 'cswap list' }, { command: ['cswap', ''] }, { command: ['x'], timeoutSeconds: 0 },
+        { command: ['x'], timeoutSeconds: 0.5 }, { command: ['x'], timeoutSeconds: 61 }, { command: ['x'], timeoutSeconds: 600 },
+        { command: ['x'], timeoutSeconds: '15' }, { command: ['x'], shell: true }, ['cswap'], {}];
+      const loaded = bad.map((p, i) => loadUsage(`bad-${i}`, p));
+      const accepted = loaded.map((r, i) => (r.error === null ? JSON.stringify(bad[i]) : null)).filter((x) => x);
+      return accepted.length === 0 || `accepted: ${accepted.join(', ')}`;
+    }],
+  ];
+  for (const [id, label, check] of KEYS) {
+    if (!selected(id)) continue;
+    let res;
+    try { res = check(); } catch (e) { res = e.message; }
+    report(id, label, res === true, res);
+  }
+}
+
 // ---------- statusline ----------
 // Runs .claude/statusline.js with a scratch HOME. The cache must merge per window and never lose
 // numbers to a refresh that carries no rate_limits.
 const slHome = path.join(scratch, 'sl-home');
 fs.mkdirSync(path.join(slHome, '.claude'), { recursive: true });
-const slFile = path.join(slHome, '.claude', 'usage-state.json');
+// One file per session (ADR 0011): the S cases run as session SL_SID unless they say otherwise.
+const SL_SID = 'sess-sl';
+const slDir = path.join(slHome, '.claude', 'usage-state');
+const slFile = path.join(slDir, `${SL_SID}.json`);
 const readSl = () => { try { return fs.readFileSync(slFile, 'utf8'); } catch (_) { return null; } };
 function statusline(stdin, policy, extraEnv) {
   const r = spawnSync(NODE, [path.join(HOOKS, '..', 'statusline.js')], {
     input: stdin, encoding: 'utf8', timeout: 30000,
-    env: envWith(Object.assign({ HOME: slHome, USERPROFILE: slHome, HOOK_POLICY_FILE: policy || POLICIES.hatchery }, extraEnv)),
+    env: envWith(Object.assign({ HOME: slHome, USERPROFILE: slHome, CLAUDE_CONFIG_DIR: undefined, HOOK_POLICY_FILE: policy || POLICIES.hatchery }, extraEnv)),
   });
   return { code: r.status, stdout: r.stdout || '' };
 }
-const rl = (five, seven) => JSON.stringify({ model: { display_name: 'M' }, rate_limits: Object.assign({},
+const bare = (extra) => JSON.stringify(Object.assign({ model: { display_name: 'M' }, session_id: SL_SID }, extra));
+const rl = (five, seven) => JSON.stringify({ model: { display_name: 'M' }, session_id: SL_SID, rate_limits: Object.assign({},
   five === null ? {} : { five_hour: { used_percentage: five, resets_at: nowSec + 3600 } },
   seven === null ? {} : { seven_day: { used_percentage: seven, resets_at: nowSec + 86400 * 3 } }) });
 // [id, label, stdin, policy, check(result, fileBefore, fileAfter) -> true or a failure detail]
@@ -873,7 +1302,7 @@ const S = [
     return (j.five_hour.used_percentage === 55 && j.five_hour.resets_at === nowSec + 3600 && j.seven_day.used_percentage === 20 &&
       typeof j.updatedAt === 'number' && r.stdout.includes('5h 55%') && r.stdout.endsWith(' HOLD')) || `file ${a}, line ${r.stdout}`;
   }],
-  ['S02', 'no rate_limits: file untouched, cached numbers shown', JSON.stringify({ model: { display_name: 'M' } }), null,
+  ['S02', 'no rate_limits: file untouched, cached numbers shown', bare(), null,
     (r, b, a) => (b === a && r.stdout.includes('5h 55%') && r.stdout.includes('7d 20%')) || `before ${b}, after ${a}, line ${r.stdout}`],
   ['S03', 'one window: the other is kept', rl(null, 30), null, (r, b, a) => {
     const j = JSON.parse(a);
@@ -935,6 +1364,8 @@ for (const [id, label, stdin, policy, check] of S) {
       (o) => (o.endsWith(' HOLD') && !o.includes('lifted')) || o],
     ['S25', 'HOLD with usage.overrideEnv set to 1 in the environment reads HOLD lifted', rl(55, 20), envPolicy, {},
       (o) => o.endsWith(' HOLD lifted') || o, { SL_TEST_OVERRIDE: '1' }],
+    ['S42', 'no session_id: a session grant does not lift, the line reads HOLD', JSON.stringify(Object.assign(JSON.parse(rl(55, 20)), { session_id: undefined })), null,
+      { 'sess.json': { until: nowSec + 3600, session: SL_SID } }, (o) => (o.endsWith(' HOLD') && !o.includes('lifted') && o.includes('5h 55%')) || o],
   ];
   for (const [id, label, stdin, policy, grants, check, extraEnv] of SL) {
     if (!selected(id)) continue;
@@ -949,19 +1380,426 @@ for (const [id, label, stdin, policy, check] of S) {
 }
 // A cached window past its reset reads as n/a rather than its old number.
 if (selected('S08')) {
+  fs.mkdirSync(slDir, { recursive: true });
   fs.writeFileSync(slFile, JSON.stringify({ updatedAt: nowSec, five_hour: { used_percentage: 90, resets_at: nowSec - 1 }, seven_day: { used_percentage: 5 } }));
-  const r = statusline(JSON.stringify({ model: { display_name: 'M' } }));
+  const r = statusline(bare());
   report('S08', 'cached window past its reset shows n/a', r.stdout.includes('5h n/a') && !r.stdout.includes('STOP'), r.stdout, r.stdout);
 }
 // A rename that fails (the cache path is a directory here) leaves no temporary file behind.
 if (selected('S09')) {
   fs.rmSync(slFile, { force: true });
-  fs.mkdirSync(slFile);
+  fs.mkdirSync(slFile, { recursive: true });
   const r = statusline(rl(40, 10));
   const left = fs.readdirSync(path.dirname(slFile)).filter((f) => f.endsWith('.tmp'));
   report('S09', 'failed rename: no .tmp left, line still prints', r.code === 0 && left.length === 0 && r.stdout.includes('5h 40%'),
     `exit ${r.code}, leftovers ${left.join(', ')}`, r.stdout);
   fs.rmSync(slFile, { recursive: true, force: true });
+}
+// The per-session file and the account label (ADR 0011). Each case gets its own empty scratch home
+// (and config dir): setup(h, cfg) writes what it needs, the renders run in order through
+// render(stdin, env), and check(ctx) returns true or a failure detail.
+{
+  // org undefined is org-1, null leaves organizationUuid out.
+  const login = (uuid, email, org) => JSON.stringify({ oauthAccount: Object.assign({ accountUuid: uuid },
+    org === null ? {} : { organizationUuid: org || 'org-1' }, email === null ? {} : { emailAddress: email }) });
+  const stFile = (h, sid) => path.join(h, '.claude', 'usage-state', `${sid}.json`);
+  const readJ = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { return null; } };
+  // apiMs given: the payload carries cost.total_api_duration_ms; omitted: no cost at all.
+  const pay = (sid, five, seven, apiMs) => JSON.stringify(Object.assign({ model: { display_name: 'M' } }, sid ? { session_id: sid } : {},
+    apiMs === undefined ? {} : { cost: { total_cost_usd: 0.1, total_api_duration_ms: apiMs } },
+    five === null && seven === null ? {} : { rate_limits: Object.assign({},
+      five === null ? {} : { five_hour: { used_percentage: five, resets_at: nowSec + 3600 } },
+      seven === null ? {} : { seven_day: { used_percentage: seven, resets_at: nowSec + 86400 * 3 } }) }));
+  const ago = (f, days) => { const t = nowSec - days * 86400; fs.utimesSync(f, t, t); };
+  const SN = [
+    ['S26', 'session_id present: writes usage-state/<id>.json, no label, no account segment', () => {}, (c) => {
+      c.render(pay('s1', 55, 20));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j && j.account === null && j.five_hour.used_percentage === 55 && j.seven_day.used_percentage === 20 && typeof j.updatedAt === 'number' &&
+        c.out.startsWith('M | ctx n/a | 5h 55%')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S27', 'session_id absent: writes nothing, shows this payload\'s numbers', () => {}, (c) => {
+      c.render(pay(null, 55, 20));
+      const dir = path.join(c.h, '.claude', 'usage-state');
+      const files = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
+      return (files.length === 0 && c.out.includes('5h 55%') && c.out.endsWith(' HOLD')) || `files ${files}, line ${c.out}`;
+    }],
+    ['S28', 'a session_id that is not a plain name: writes nothing', () => {}, (c) => {
+      c.render(pay('../escape', 55, 20));
+      const leaked = [path.join(c.h, '.claude', 'escape.json'), path.join(c.h, '.claude', 'usage-state')].filter((f) => fs.existsSync(f));
+      return leaked.length === 0 || `written: ${leaked.join(', ')}`;
+    }],
+    ['S29', 'two sessions side by side keep their own numbers', () => {}, (c) => {
+      c.render(pay('s1', 55, 20));
+      c.render(pay('s2', 10, 5));
+      c.render(pay('s1', null, null));
+      const a = readJ(stFile(c.h, 's1'));
+      const b = readJ(stFile(c.h, 's2'));
+      return (a.five_hour.used_percentage === 55 && b.five_hour.used_percentage === 10 && c.out.includes('5h 55%') && c.out.includes('7d 20%')) ||
+        `s1 ${JSON.stringify(a)}, s2 ${JSON.stringify(b)}, line ${c.out}`;
+    }],
+    ['S30', 'label present: written to the file, account segment after ctx', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'jdorje@example.com')), (c) => {
+      c.render(pay('s1', 24, 72));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account && j.account.uuid === 'uuid-a' && j.account.organizationUuid === 'org-1' && j.account.email === 'jdorje@example.com' &&
+        c.out.startsWith('M | ctx n/a | jdorje | 5h 24% (hold 50) ->')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S31', 'label from CLAUDE_CONFIG_DIR, not the home directory', (h, cfg) => {
+      fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com'));
+      fs.writeFileSync(path.join(cfg, '.claude.json'), login('uuid-b', 'b@example.com'));
+    }, (c) => {
+      c.render(pay('s1', 24, 72), { CLAUDE_CONFIG_DIR: c.cfg });
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account.uuid === 'uuid-b' && c.out.includes('| b |')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S32', 'label from the legacy .config.json, which wins over .claude.json', (h) => {
+      fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com'));
+      fs.writeFileSync(path.join(h, '.config.json'), login('uuid-b', 'b@example.com'));
+    }, (c) => {
+      c.render(pay('s1', 24, 72));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account.uuid === 'uuid-b' && c.out.includes('| b |')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S33', 'label torn: the cached label is kept, the windows still update', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
+      c.render(pay('s1', 24, 72));
+      fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-b', 'b@example.com').slice(0, 25));
+      c.render(pay('s1', 30, 73));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account.uuid === 'uuid-a' && j.five_hour.used_percentage === 30 && c.out.includes('| a |') && c.out.includes('5h 30%')) ||
+        `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S34', 'label change with a newer total_api_duration_ms: accepted, every old window dropped', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
+      c.render(pay('s1', 55, 20, 1000));
+      fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-b', 'b@example.com'));
+      c.render(pay('s1', 30, null, 2500));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account.uuid === 'uuid-b' && j.five_hour.used_percentage === 30 && !('seven_day' in j) && j.apiMs === 2500 &&
+        c.out.includes('| b | 5h 30%') && c.out.includes('7d n/a')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S35', 'label change with the same total_api_duration_ms: refused, nothing written, n/a', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
+      c.render(pay('s1', 55, 20, 1000));
+      const before = fs.readFileSync(stFile(c.h, 's1'), 'utf8');
+      fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-b', 'b@example.com'));
+      c.render(pay('s1', 55, 20, 1000));
+      const after = fs.readFileSync(stFile(c.h, 's1'), 'utf8');
+      return (before === after && JSON.parse(after).apiMs === 1000 && c.out.includes('| b | 5h n/a') && c.out.includes('7d n/a') && !c.out.includes('HOLD')) ||
+        `before ${before}, after ${after}, line ${c.out}`;
+    }],
+    ['S40', 'label change with no cost in the payload: accepted', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
+      c.render(pay('s1', 55, 20, 1000));
+      fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-b', 'b@example.com'));
+      c.render(pay('s1', 30, null));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account.uuid === 'uuid-b' && j.five_hour.used_percentage === 30 && !('seven_day' in j) && j.apiMs === 1000) ||
+        `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S43', 'label change with a smaller total_api_duration_ms (a resumed process): accepted, every old window dropped', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
+      c.render(pay('s1', 55, 20, 90000));
+      fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-b', 'b@example.com'));
+      c.render(pay('s1', 30, null, 1200));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account.uuid === 'uuid-b' && j.five_hour.used_percentage === 30 && !('seven_day' in j) && j.apiMs === 1200 &&
+        c.out.includes('| b | 5h 30%')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S44', 'label change against a file without apiMs (written by the stage 1 script): accepted', (h) => {
+      fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-b', 'b@example.com'));
+      fs.mkdirSync(path.join(h, '.claude', 'usage-state'), { recursive: true });
+      fs.writeFileSync(stFile(h, 's1'), JSON.stringify({ account: { uuid: 'uuid-a', organizationUuid: 'org-1', email: 'a@example.com' },
+        five_hour: { used_percentage: 55 }, seven_day: { used_percentage: 20 }, updatedAt: nowSec }));
+    }, (c) => {
+      c.render(pay('s1', 30, null, 1000));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account.uuid === 'uuid-b' && j.five_hour.used_percentage === 30 && !('seven_day' in j) && j.apiMs === 1000) ||
+        `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S41', 'organization unknown on one side does not differ: a plain merge', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
+      c.render(pay('s1', 55, 20, 1000));
+      fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-a', 'a@example.com', null));
+      c.render(pay('s1', 30, null, 1000));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.five_hour.used_percentage === 30 && j.seven_day.used_percentage === 20 && c.out.includes('5h 30%') && c.out.includes('7d 20%')) ||
+        `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S36', 'no-window render after a label change: nothing written, meters n/a', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', 'a@example.com')), (c) => {
+      c.render(pay('s1', 55, 20));
+      const before = fs.readFileSync(stFile(c.h, 's1'), 'utf8');
+      fs.writeFileSync(path.join(c.h, '.claude.json'), login('uuid-b', 'b@example.com'));
+      c.render(pay('s1', null, null));
+      const after = fs.readFileSync(stFile(c.h, 's1'), 'utf8');
+      return (before === after && c.out.includes('| b | 5h n/a') && c.out.includes('7d n/a') && !c.out.includes('HOLD')) ||
+        `before ${before}, after ${after}, line ${c.out}`;
+    }],
+    ['S37', 'label without an email: written, no account segment', (h) => fs.writeFileSync(path.join(h, '.claude.json'), login('uuid-a', null)), (c) => {
+      c.render(pay('s1', 24, 72));
+      const j = readJ(stFile(c.h, 's1'));
+      return (j.account.uuid === 'uuid-a' && j.account.email === null && c.out.startsWith('M | ctx n/a | 5h 24%')) || `file ${JSON.stringify(j)}, line ${c.out}`;
+    }],
+    ['S38', 'prune: a new session\'s file deletes files older than a day, keeps newer ones', (h) => {
+      const dir = path.join(h, '.claude', 'usage-state');
+      fs.mkdirSync(dir, { recursive: true });
+      for (const n of ['old.json', 'old.json.123.tmp', 'recent.json', 'notes.txt']) fs.writeFileSync(path.join(dir, n), '{}');
+      ago(path.join(dir, 'old.json'), 2);
+      ago(path.join(dir, 'old.json.123.tmp'), 2);
+      ago(path.join(dir, 'notes.txt'), 2);
+      ago(path.join(dir, 'recent.json'), 0.5);
+    }, (c) => {
+      c.render(pay('s1', 24, 72));
+      const dir = path.join(c.h, '.claude', 'usage-state');
+      const after = fs.readdirSync(dir).sort().join(',');
+      // A later file older than a day survives a render of an existing session: prune runs on creation only.
+      fs.writeFileSync(path.join(dir, 'later.json'), '{}');
+      ago(path.join(dir, 'later.json'), 2);
+      c.render(pay('s1', 25, 72));
+      const kept = fs.existsSync(path.join(dir, 'later.json'));
+      return (after === 'notes.txt,recent.json,s1.json' && kept) || `after ${after}, later kept ${kept}`;
+    }],
+    ['S39', 'the old single cache file is neither read, written nor deleted', (h) => {
+      fs.writeFileSync(path.join(h, '.claude', 'usage-state.json'), JSON.stringify(fresh(95, 95)));
+    }, (c) => {
+      const old = path.join(c.h, '.claude', 'usage-state.json');
+      const before = fs.readFileSync(old, 'utf8');
+      c.render(pay('s1', null, null));
+      const unread = c.out.includes('5h n/a');
+      c.render(pay('s1', 24, 72));
+      const after = fs.existsSync(old) ? fs.readFileSync(old, 'utf8') : null;
+      return (unread && after === before && c.out.includes('5h 24%')) || `unread ${unread}, old file after ${after}, line ${c.out}`;
+    }],
+  ];
+  for (const [id, label, setup, check] of SN) {
+    if (!selected(id)) continue;
+    const h = path.join(scratch, `sl-${id}`);
+    const cfg = path.join(scratch, `sl-${id}-config`);
+    fs.mkdirSync(path.join(h, '.claude'), { recursive: true });
+    fs.mkdirSync(cfg, { recursive: true });
+    setup(h, cfg);
+    const c = { h, cfg, out: '' };
+    c.render = (stdin, extraEnv) => {
+      const r = spawnSync(NODE, [path.join(HOOKS, '..', 'statusline.js')], {
+        input: stdin, encoding: 'utf8', timeout: 30000,
+        env: envWith(Object.assign({ HOME: h, USERPROFILE: h, CLAUDE_CONFIG_DIR: undefined, HOOK_POLICY_FILE: POLICIES.hatchery }, extraEnv)),
+      });
+      c.out = r.status === 0 ? r.stdout || '' : `exit ${r.status}: ${r.stderr}`;
+      return c.out;
+    };
+    let res;
+    try { res = check(c); } catch (e) { res = `${e.message}; line ${c.out}`; }
+    report(id, label, res === true, res, c.out);
+  }
+}
+
+// ---------- fitness checks (group F; ADR 0013, ADR 0012's fitness contract) ----------
+// One check, deps: in every file deps.paths matches, and in each file of the optional deps.vendored
+// list, each literal require call naming a module that is not relative (. or .., or starting ./ ../
+// .\ ..\) must name a Node built-in (module.isBuiltin). The distinct other packages (the first path
+// segment, or the first two for @scope/name), plus each vendored file (which must exist and carry an
+// SPDX identifier, ADR 0012), may number at most deps.budget. The scan reads raw text: a require call
+// inside a comment or a string counts too, by design (it errs towards a false block, never a false
+// pass). A literal is a quoted or backtick string without an interpolation, after optional spaces,
+// comments and extra parentheses, with an optional trailing comma. A skip entry for the check needs
+// check, reason (no control characters), date (YYYY-MM-DD) and idea (docs/ideas/YYYY-MM-DD-<slug>.md,
+// existing), else the check fails. Lines follow the contract with the case id after the status:
+// PASS F1 deps, SKIP F1 deps: ..., FAIL F1 deps: ... F1 runs on this repository (selected by
+// --only F1, --only F or --only deps); the other F cases run on scratch trees with the same layout
+// and pass when the check gives the line they expect.
+const FIT_CONFIG = '.claude/hooks/fitness.json';
+const FIT_LIFT = 'lift: skip entry (coordinator, one push, named in the commit message) or ADR amendment (architect)';
+const { isBuiltin: fitIsBuiltin } = require('module');
+// Spaces, block comments and line comments, as the regex source of one item.
+const FIT_GAP = String.raw`(?:\s|/\*[\s\S]*?\*/|//[^\n]*\n)`;
+const FIT_REQUIRE = new RegExp(String.raw`\brequire\s*\((?:${FIT_GAP}|\()*` +
+  String.raw`(?:'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|` + '`' + String.raw`((?:[^` + '`' + String.raw`\\$]|\\.|\$(?!\{))*)` + '`' + ')' +
+  String.raw`${FIT_GAP}*,?${FIT_GAP}*\)`, 'g');
+const fitUnescape = (s) => s.replace(/\\(.)/g, '$1');
+const fitRelative = (m) => m === '.' || m === '..' || /^\.\.?[/\\]/.test(m);
+const fitPackage = (m) => m.split('/').slice(0, m.startsWith('@') ? 2 : 1).join('/');
+const FIT_CONTROL = /[\u0000-\u001f\u007f]/;
+const fitEscape = (s) => s.replace(/[.+^$(){}|[\]\\]/g, '\\$&');
+
+// Expands one pattern relative to root: / separates segments, * and ? match within one segment.
+function fitGlob(root, pattern) {
+  let found = [''];
+  for (const seg of pattern.split('/')) {
+    const next = [];
+    for (const rel of found) {
+      if (!/[*?]/.test(seg)) { next.push(rel ? `${rel}/${seg}` : seg); continue; }
+      const re = new RegExp(`^${fitEscape(seg).replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]')}$`);
+      let names = [];
+      try { names = fs.readdirSync(path.join(root, rel)).sort(); } catch (_) { /* no such dir: no match */ }
+      for (const n of names) if (re.test(n)) next.push(rel ? `${rel}/${n}` : n);
+    }
+    found = next;
+  }
+  return found.filter((rel) => { try { return fs.statSync(path.join(root, rel)).isFile(); } catch (_) { return false; } });
+}
+
+// Runs the deps check on the tree at root. Returns { status, rest, log }: the contract line is
+// `${status} ${rest}`, and log holds the --verbose lines (what was scanned and how it was classed).
+function fitnessDeps(root) {
+  const log = [];
+  const done = (status, rest) => ({ status, rest, log });
+  const failed = (detail, key) => done('FAIL', `deps: ${detail}; from ${FIT_CONFIG}${key ? ` ${key}` : ''}; ${FIT_LIFT}`);
+  let cfg;
+  try {
+    cfg = JSON.parse(fs.readFileSync(path.join(root, ...FIT_CONFIG.split('/')), 'utf8').replace(/^﻿/, ''));
+  } catch (e) { return failed(`config unreadable (${e.code || e.message})`); }
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return failed('config malformed (not an object)');
+
+  // Skip entries first: a malformed one fails the check even when the check would pass.
+  const skip = cfg.skip === undefined ? [] : cfg.skip;
+  if (!Array.isArray(skip)) return failed('skip entry malformed', 'skip');
+  let use = null;
+  for (const e of skip) {
+    const ours = !e || typeof e !== 'object' || typeof e.check !== 'string' || e.check === 'deps';
+    if (!ours) continue;
+    let why = null;
+    if (!['check', 'reason', 'date', 'idea'].every((k) => typeof e[k] === 'string' && e[k].trim() !== '')) why = 'a field is missing or empty';
+    else if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date)) why = 'date is not YYYY-MM-DD';
+    else if (FIT_CONTROL.test(e.reason) || FIT_CONTROL.test(e.idea)) why = 'reason or idea holds a control character';
+    else if (!/^docs\/ideas\/\d{4}-\d{2}-\d{2}-[^/]+\.md$/.test(e.idea)) why = 'idea is not docs/ideas/YYYY-MM-DD-<slug>.md';
+    else {
+      let exists = false;
+      try { exists = fs.statSync(path.join(root, e.idea)).isFile(); } catch (_) { /* absent */ }
+      if (!exists) why = 'idea file does not exist';
+    }
+    log.push(`skip entry ${JSON.stringify(e)}: ${why || 'well formed'}`);
+    if (why) return failed('skip entry malformed', 'skip');
+    if (!use) use = e;
+  }
+  if (use) return done('SKIP', `deps: ${use.reason} (${use.idea})`);
+
+  const d = cfg.deps;
+  const strings = (a) => Array.isArray(a) && a.every((s) => typeof s === 'string' && s !== '');
+  if (!d || typeof d !== 'object') return failed('config malformed (deps missing)', 'deps');
+  if (!Number.isInteger(d.budget) || d.budget < 0) return failed('config malformed (budget is not a whole number)', 'deps.budget');
+  if (!strings(d.paths) || d.paths.length === 0 || d.paths.some((p) => p.includes('**'))) {
+    return failed('config malformed (paths is not a list of patterns without **)', 'deps.paths');
+  }
+  if (d.vendored !== undefined && !strings(d.vendored)) return failed('config malformed (vendored is not a list of paths)', 'deps.vendored');
+  const vendored = [...new Set(d.vendored || [])];
+  log.push(`config ${FIT_CONFIG}: budget ${d.budget}; paths ${d.paths.join(', ')}; vendored ${vendored.length ? vendored.join(', ') : 'none'}`);
+
+  const files = [];
+  for (const p of d.paths) {
+    const matched = fitGlob(root, p);
+    if (matched.length === 0) return failed(`${p} matches no file`, 'deps.paths');
+    for (const f of matched) if (!files.includes(f)) files.push(f);
+  }
+  for (const v of vendored) {
+    let text = null;
+    try { text = fs.readFileSync(path.join(root, v), 'utf8'); } catch (_) { /* reported below */ }
+    if (text === null) return failed(`vendored ${v} does not exist`, 'deps.vendored');
+    if (!/SPDX-License-Identifier:\s*\S/.test(text)) return failed(`vendored ${v} has no SPDX-License-Identifier`, 'deps.vendored');
+    log.push(`${v}: vendored, counted`);
+    if (!files.includes(v)) files.push(v);
+  }
+  const others = new Set();
+  const offenders = [];
+  for (const f of files) {
+    const text = fs.readFileSync(path.join(root, f), 'utf8');
+    let n = 0;
+    for (const m of text.matchAll(FIT_REQUIRE)) {
+      n++;
+      const mod = fitUnescape(m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3]);
+      const line = text.slice(0, m.index).split('\n').length;
+      let why;
+      if (fitRelative(mod)) why = 'relative path, not counted';
+      else if (fitIsBuiltin(mod)) why = 'built-in';
+      else { why = `not built-in, counted as ${fitPackage(mod)}`; others.add(fitPackage(mod)); offenders.push(`${f}:${line} requires ${mod}`); }
+      log.push(`${f}:${line} ${mod}: ${why}`);
+    }
+    if (n === 0) log.push(`${f}: no literal require`);
+  }
+  const count = others.size + vendored.length;
+  log.push(`dependencies ${count} (${[...others, ...vendored].join(', ') || 'none'}), budget ${d.budget}`);
+  if (count > d.budget) return failed([...offenders, ...vendored.map((v) => `${v} is vendored`)].join(', '), 'deps.budget');
+  return done('PASS', 'deps');
+}
+
+{
+  if (selected('F1') || opt.only === 'deps') {
+    const r = fitnessDeps(path.resolve(HOOKS, '..', '..'));
+    process.stdout.write(`${r.status} F1 ${r.rest}\n`);
+    if (opt.verbose) for (const l of r.log) process.stdout.write(`     ${l}\n`);
+    if (r.status === 'FAIL') fail++; else if (r.status === 'SKIP') skipped++; else pass++;
+  }
+
+  // Scratch trees. The call name is split so that this file does not itself require the fixtures.
+  const R = 'req' + 'uire';
+  const req = (m) => `${R}('${m}')`;
+  const IDEA = 'docs/ideas/2026-01-01-left-pad.md';
+  const SKIP_LP = { check: 'deps', reason: 'left-pad until its copy lands', date: '2026-01-01', idea: IDEA };
+  const A_JS = `const fs = ${req('fs')};\nconst p = ${req('node:path')};\nconst b = ${req('./b')};\nconst lp = ${req('left-pad')};\n`;
+  const CLEAN_JS = `const fs = ${req('fs')};\n`;
+  const VENDOR = '// SPDX-License-Identifier: MIT\n// Origin: https://example.invalid/pad.js, 1.0.0, 2026-01-01\n';
+  const failLine = (detail, key) => `FAIL deps: ${detail}; from ${FIT_CONFIG} ${key}; ${FIT_LIFT}`;
+  const SHAPES_JS = [
+    `const a = ${R} ('pkg-a');`,
+    `const b = ${R}(\`pkg-b\`);`,
+    `const c = ${R}('pkg-c',);`,
+    `const d = ${R}(('pkg-d'));`,
+    `const e = ${R}(/* why */ 'pkg-e');`,
+    `const f = ${R}(\`pkg-\${x}\`);`,
+    `const g = ${R}(\n  // reason\n  'pkg-g'\n);`,
+  ].join('\n') + '\n';
+  const IDEA_FILE = { [IDEA]: '---\ndate: 2026-01-01\nkind: chore\n---\n# Left-pad\n' };
+  const HOOKS_ONLY = { budget: 0, paths: ['.claude/hooks/*.js'] };
+  // [id, label, deps block, skip list, files { rel: text }, expected line, { bom, logHas: [...] }]
+  const F = [
+    ['F2', 'a scratch file requires left-pad: fails, with the lift', { budget: 0, paths: ['.claude/hooks/*.js'] }, [],
+      { '.claude/hooks/a.js': A_JS }, failLine('.claude/hooks/a.js:4 requires left-pad', 'deps.budget')],
+    ['F3', 'the same with a skip entry whose idea file exists: skips, passes', { budget: 0, paths: ['.claude/hooks/*.js'] }, [SKIP_LP],
+      { '.claude/hooks/a.js': A_JS, [IDEA]: '---\ndate: 2026-01-01\nkind: chore\n---\n# Left-pad\n' },
+      `SKIP deps: ${SKIP_LP.reason} (${IDEA})`],
+    ['F4', 'the same skip entry with its idea file absent: fails, skip entry malformed', { budget: 0, paths: ['.claude/hooks/*.js'] }, [SKIP_LP],
+      { '.claude/hooks/a.js': A_JS }, failLine('skip entry malformed', 'skip')],
+    ['F5', 'a vendored file with its licence counts against a budget of 0: fails', { budget: 0, paths: ['.claude/hooks/*.js'], vendored: ['vendor/pad.js'] }, [],
+      { '.claude/hooks/a.js': CLEAN_JS, 'vendor/pad.js': VENDOR }, failLine('vendor/pad.js is vendored', 'deps.budget')],
+    ['F6', 'a vendored file without an SPDX identifier fails within budget', { budget: 1, paths: ['.claude/hooks/*.js'], vendored: ['vendor/pad.js'] }, [],
+      { '.claude/hooks/a.js': CLEAN_JS, 'vendor/pad.js': '// no licence line\n' }, failLine('vendored vendor/pad.js has no SPDX-License-Identifier', 'deps.vendored')],
+    ['F7', 'require shapes: space before the paren, backtick, trailing comma, extra parens, comments', HOOKS_ONLY, [],
+      { '.claude/hooks/a.js': SHAPES_JS },
+      failLine(['1 requires pkg-a', '2 requires pkg-b', '3 requires pkg-c', '4 requires pkg-d', '5 requires pkg-e', '7 requires pkg-g']
+        .map((s) => `.claude/hooks/a.js:${s}`).join(', '), 'deps.budget'), { logHas: ['dependencies 6 '] }],
+    ['F8', 'node:test and fs/promises are built-in, node:left-pad is not', HOOKS_ONLY, [],
+      { '.claude/hooks/a.js': [req('node:test'), req('fs/promises'), req('node:left-pad')].join(';\n') + ';\n' },
+      failLine('.claude/hooks/a.js:3 requires node:left-pad', 'deps.budget')],
+    ['F9', 'the relative forms . .. .\\ ..\\ are not counted', HOOKS_ONLY, [],
+      { '.claude/hooks/a.js': [req('.'), req('..'), req('.\\\\b'), req('..\\\\c')].join(';\n') + ';\n' }, 'PASS deps',
+      { logHas: ['a.js:3 .\\b: relative path', 'a.js:4 ..\\c: relative path', 'dependencies 0 '] }],
+    ['F10', 'subpaths count once per package, @scope/name as one', { budget: 2, paths: ['.claude/hooks/*.js'] }, [],
+      { '.claude/hooks/a.js': [req('lodash/fp'), req('lodash/get'), req('@scope/pkg/x'), req('@scope/pkg')].join(';\n') + ';\n' }, 'PASS deps',
+      { logHas: ['dependencies 2 (lodash, @scope/pkg), budget 2'] }],
+    ['F11', 'a vendored path listed twice counts once, and its own requires are scanned', { budget: 1, paths: ['.claude/hooks/*.js'], vendored: ['vendor/pad.js', 'vendor/pad.js'] }, [],
+      { '.claude/hooks/a.js': CLEAN_JS, 'vendor/pad.js': `${VENDOR}${req('fs')};\n` }, 'PASS deps',
+      { logHas: ['vendor/pad.js:3 fs: built-in', 'dependencies 1 (vendor/pad.js), budget 1'] }],
+    ['F12', 'a require in a vendored file counts against the budget', { budget: 1, paths: ['.claude/hooks/*.js'], vendored: ['vendor/pad.js'] }, [],
+      { '.claude/hooks/a.js': CLEAN_JS, 'vendor/pad.js': `${VENDOR}${req('left-pad')};\n` },
+      failLine('vendor/pad.js:3 requires left-pad, vendor/pad.js is vendored', 'deps.budget')],
+    ['F13', 'a skip entry whose date is not YYYY-MM-DD is malformed', HOOKS_ONLY, [Object.assign({}, SKIP_LP, { date: '1 Jan 2026' })],
+      Object.assign({ '.claude/hooks/a.js': A_JS }, IDEA_FILE), failLine('skip entry malformed', 'skip')],
+    ['F14', 'a skip entry whose idea is an existing file outside docs/ideas is malformed', HOOKS_ONLY, [Object.assign({}, SKIP_LP, { idea: '.claude/hooks/a.js' })],
+      { '.claude/hooks/a.js': A_JS }, failLine('skip entry malformed', 'skip')],
+    ['F15', 'a skip entry whose reason holds a newline is malformed', HOOKS_ONLY, [Object.assign({}, SKIP_LP, { reason: 'two\nlines' })],
+      Object.assign({ '.claude/hooks/a.js': A_JS }, IDEA_FILE), failLine('skip entry malformed', 'skip')],
+    ['F16', 'a config with a UTF-8 byte order mark is read', HOOKS_ONLY, [], { '.claude/hooks/a.js': CLEAN_JS }, 'PASS deps', { bom: true }],
+  ];
+  for (const [id, label, deps, skip, files, want, extra] of F) {
+    if (!selected(id)) continue;
+    const x = extra || {};
+    const root = path.join(scratch, `fit-${id}`);
+    const all = Object.assign({ [FIT_CONFIG]: `${x.bom ? '﻿' : ''}${JSON.stringify({ deps, skip })}` }, files);
+    for (const [rel, text] of Object.entries(all)) {
+      const f = path.join(root, ...rel.split('/'));
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, text);
+    }
+    const r = fitnessDeps(root);
+    const got = `${r.status} ${r.rest}`;
+    const missing = (x.logHas || []).filter((s) => !r.log.some((l) => l.includes(s)));
+    report(id, label, got === want && missing.length === 0,
+      got !== want ? `expected ${JSON.stringify(want)}; got ${JSON.stringify(got)}` : `verbose log lacks ${JSON.stringify(missing)}`);
+    if (opt.verbose) for (const l of [`check: ${got}`, ...r.log]) process.stdout.write(`     ${l}\n`);
+  }
 }
 
 // ---------- policy files themselves ----------
@@ -985,8 +1823,20 @@ if (selected('S09')) {
   }
 }
 
+// ---------- the harness's own command line ----------
+if (selected('CLI01')) {
+  const r = spawnSync(NODE, [__filename, '--only', 'nosuch'], { encoding: 'utf8', timeout: 60000 });
+  report('CLI01', '--only that selects no case -> exit 2, usage line', r.status === 2 && r.stderr === 'test-hooks: --only nosuch selects no case\n',
+    `exit ${r.status}, stderr ${JSON.stringify(r.stderr)}`, r.stdout);
+}
+
 if (opt.keep) process.stdout.write(`scratch tree kept at ${scratch}\n`);
 else fs.rmSync(scratch, { recursive: true, force: true });
 
-process.stdout.write(`\n${pass} passed, ${fail} failed, ${pass + fail} total\n`);
+if (opt.only && pass + fail + skipped === 0) {
+  process.stderr.write(`test-hooks: --only ${opt.only} selects no case\n`);
+  process.exit(2);
+}
+
+process.stdout.write(`\n${pass} passed, ${fail} failed, ${skipped ? `${skipped} skipped, ` : ''}${pass + fail + skipped} total\n`);
 process.exit(fail > 0 ? 1 : 0);

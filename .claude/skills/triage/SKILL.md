@@ -1,6 +1,6 @@
 ---
 name: triage
-description: Read every untriaged file in docs/ideas/ against the code it names and write one block into each — a Plan: where the work is settled and pass-sized, a Question: with a blank Answer: where a choice is the owner's. Writes no code, deletes only an idea the code already has, pushes nothing.
+description: Read every untriaged file in docs/ideas/ against the code it names and write one block into each — a Plan: where the work is settled and pass-sized, a Question: with a blank Answer: where a choice is the owner's. Also runs the ADR 0012 scan (fired triggers, due predictions, fitness lines). Writes no code, deletes only an idea the code already has, pushes nothing.
 ---
 
 # Triage
@@ -12,12 +12,19 @@ no block. The format of a file and its three blocks is `docs/ideas/README.md`; r
 
 ## Procedure
 
-1. List `docs/ideas/*.md` except `README.md` and keep the files that end in no `Plan:`,
+1. The scan. Read each `Deferred` item in `docs/design/decisions/` against the tree and list
+   those whose trigger has fired; `grep -rn "^- Prediction, check" docs/design/decisions/ | grep -v " Outcome "` and list
+   those past their date or whose trigger is met; run the test command and list `FAIL` and `SKIP`
+   lines from fitness checks. Each hit becomes one idea file (`kind: chore`, no `related:`, named
+   for the ADR and the trigger, an existing one gets a dated line instead) ending in `Plan:` that
+   names the architect and the deliverable (a superseding ADR, an amendment, or, for a prediction,
+   the Outcome recorded on its line and a finding if it failed). The report counts hits.
+2. List `docs/ideas/*.md` except `README.md` and keep the files that end in no `Plan:`,
    `Question:` or `Waits:`. Oldest first.
-2. For each: read the file, then the anchor it names (the file, route, command or screen), then
+3. For each: read the file, then the anchor it names (the file, route, command or screen), then
    enough around it to know what the change would touch. An idea whose anchor no longer exists is
    a `Question:` ("the anchor moved to X; still wanted?"), not a deletion.
-3. Decide which block it earns:
+4. Decide which block it earns:
    - `Plan:` when the work is settled — nothing in it is a choice of the owner's — and fits one
      pass by one agent. Write the brief that pass will be handed: files to change, the shape of
      the change, how to verify, what is out of scope. Three to ten lines.
@@ -28,18 +35,18 @@ no block. The format of a file and its three blocks is `docs/ideas/README.md`; r
      recommendation, never a deletion.
    - Already in the code: say so in the commit message and delete the file. This is the one
      deletion triage makes, and it is a fact about the tree.
-4. Append the block to the end of the file, below `## Open` if present. Keep the file under the
+5. Append the block to the end of the file, below `## Open` if present. Keep the file under the
    doc cap. Do not rewrite the idea above it.
-5. Commit each file alone, through whoever the policy lets commit (`.claude/hooks/policy.json`;
+6. Commit each file alone, through whoever the policy lets commit (`.claude/hooks/policy.json`;
    in the base that is the `runner`, via the `commit` skill), with a one-line subject naming the
    idea and the block written; the body carries the reason a Question is the owner's. Do not push.
-6. Report: how many files read, how many got a Plan, how many a Question, which were deleted as
+7. Report: how many scan hits, how many files read, how many got a Plan, how many a Question, which were deleted as
    already built, and anything you could not anchor.
 
 ## Bounds
 
-- Triage writes blocks and nothing else: no code, no doc edits outside the idea file, no
-  deletion for taste.
+- Triage writes blocks and nothing else: no code, no doc edits outside the idea file (except the
+  scan's idea files and their index rows in `docs/ideas/README.md`), no deletion for taste.
 - A `Waits:` is the owner's to write. If a file already carries a `Waits:` or a `Question:` with
   an `Answer:`, it is not yours; leave it.
 - One block per file. A file that needs both a Plan and a Question gets the Question; once the

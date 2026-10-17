@@ -51,7 +51,8 @@ designed up front in `docs/design/05-debug-interface.md` (`debug-interface` skil
 ## Major decisions get a proposal, a critic, and an ADR
 
 A major choice is any of: language, platform UI toolkit, cross-platform strategy, data storage,
-network protocol or API surface, build system, or a dependency the whole project will lean on.
+network protocol or API surface, build system, a dependency the whole project will lean on, or
+an incompatible change to a promised surface (ADR 0012).
 The targets are listed in `docs/design/06-platforms.md`. A major choice is never made in passing:
 the `architect` writes a proposal in `docs/design/proposals/`, the `critic` argues against it, the
 architect answers each objection in writing and records an ADR in `docs/design/decisions/`, and
@@ -64,6 +65,9 @@ visuals) do need the user, because their feedback is the ground truth there. So 
 about what the owner pays: plan limits, overage, and any threshold that stops or spends money.
 Flag those explicitly and do not guess.
 
+A change is measured by the software it leaves behind: ADR 0012 names the practices (promised
+surfaces, the dependency checklist, fitness checks, the trigger scan) and the file each lives in.
+
 ## Usage gating (hard rule)
 
 Plan limits are the 5-hour session meter and the weekly meter (`/usage`). The status line shows
@@ -75,7 +79,7 @@ override: ADR 0006 and `docs/design/decisions/0002-hook-specs.md`.
 | Usage (the worse meter, each judged against its own thresholds) | Behavior |
 |---|---|
 | below HOLD (base: 50%) | Normal operation. |
-| HOLD and above, below any STOP (base: 50% and up, no STOP line) | No new work, subagents or tasks, unless the owner's override grant lifts HOLD (ADR 0006). Otherwise let in-flight agents finish, run the `handoff` skill, commit from the main session, then stop and report. |
+| HOLD and above, below any STOP (base: 50% and up, no STOP line) | No new work, subagents or tasks, unless the owner's override grant lifts HOLD (ADR 0006). Otherwise let in-flight agents finish, run the `handoff` skill, commit from the main session, then stop and report. When the gate's deny named another account with room (`usage.pool`, ADR 0011), the report says so; the next session is the owner's to start there. Accounts change at session boundaries, never under a running session. |
 | STOP and above (base: none; a project sets one in its policy file) | Stop. Run the `handoff` skill, commit in-progress work from the main session with a clear WIP message, end the turn. |
 
 Meters show only on Pro and Max plans, after the first response; on `n/a`, run `/usage` first.

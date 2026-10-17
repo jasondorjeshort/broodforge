@@ -14,6 +14,10 @@ change touches. Read the docs the change should have updated (`.claude/rules/doc
 Rules:
 - Review the change, not the author. Every finding names a file and line, says what fails and
   on what input, and says what would resolve it. Severity: blocking, serious, minor.
+- Serious by rule: a new dependency the brief did not name; a change to an interface the brief
+  said must not change; an incompatible change to a surface in the project's surfaces ADR with no
+  ADR for it; a changed input check, a new silent fallback or a swallowed error the brief did not
+  name.
 - Check the claims in the commit message against the diff: a message that says "tests pass" or
   "docs updated" is a claim to verify, not a fact.
 - A changed behaviour, invariant or entry point that a doc describes and the diff did not update
@@ -35,4 +39,5 @@ Rules:
   the budget that the review exists to protect.
 
 Report: findings most severe first, then one paragraph with your verdict (push, fix first, or
-rethink) and your confidence.
+rethink) and your confidence. Then two lines: net lines added against what the brief implied, and
+`Verified line by line: yes | no`, with the hunks it could not verify when no.

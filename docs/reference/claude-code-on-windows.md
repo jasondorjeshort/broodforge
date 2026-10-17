@@ -1,6 +1,6 @@
 ---
 verified: 2026-10-16
-source: observed (Go toolchain and mingw-w64 observed 2026-10-16; npm behaviour tested 2026-10-14; twelve waves of parallel agents on a downstream project; Windows 10 and 11, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1); hook and status line code read 2026-10-14, usage-gate grants 2026-10-15; robocopy and Remove-Item behaviour with junctions observed 2026-10-14
+source: observed (Go toolchain and mingw-w64 observed 2026-10-16; npm behaviour tested 2026-10-14; twelve waves of parallel agents on a downstream project; Windows 10 and 11, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1); hook and status line code read 2026-10-14, usage-gate grants 2026-10-15, per-session usage file 2026-10-16; robocopy and Remove-Item behaviour with junctions observed 2026-10-14
 ---
 
 # Claude Code on Windows: what holds
@@ -109,10 +109,11 @@ source: observed (Go toolchain and mingw-w64 observed 2026-10-16; npm behaviour 
 
 ## Usage meters
 
-- The status line (`.claude/statusline.js`) writes the 5-hour and weekly percentages to the cache
-  `~/.claude/usage-state.json`; the `usage-gate` hook (PreToolUse on `Agent|Workflow`) reads the
-  cache and refuses a new launch while either meter is at or above its HOLD line. Bash is never
-  gated.
+- The status line (`.claude/statusline.js`) writes the 5-hour and weekly percentages to one cache
+  file per session, `~/.claude/usage-state/<session_id>.json`, labelled with the logged-in account;
+  the `usage-gate` hook (PreToolUse on `Agent|Workflow`) reads the file of the `session_id` it is
+  given and refuses a new launch while either meter is at or above its HOLD line. A file labelled
+  with another account than the one logged in counts as no data. Bash is never gated. ADR 0011.
 - The lines are policy, not code: `usage.hold` and `usage.deny` in `.claude/hooks/policy.json`.
   `usage.fiveHour` and `usage.sevenDay` override either value for one meter, `hold` and `deny`
   inherited separately (a meter may set its own `hold` and inherit the shared `deny`). Each meter
@@ -127,7 +128,7 @@ source: observed (Go toolchain and mingw-w64 observed 2026-10-16; npm behaviour 
   lifts exist only on the owner's instruction. Format, fail modes and the reasoning:
   ADR 0006 and `../design/decisions/0002-hook-specs.md`.
 - Claude Code sends `rate_limits` to the status line only after the session's first response.
-  Until then the status line writes nothing new and the cache keeps its last reading, which the
-  gate uses until it is older than `usage.staleSeconds` (base 7200), after which `usage.whenStale`
-  decides (base: allow). On a new machine or after a long gap, run `/usage` by hand before the
-  first launch.
+  Until then a new session has no file, so the gate finds no data and `usage.whenStale` decides
+  (base: allow); after that, a session's file keeps its last reading, which the gate uses until it
+  is older than `usage.staleSeconds` (base 7200). On a new machine or after a long gap, run `/usage`
+  by hand before the first launch.

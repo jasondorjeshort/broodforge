@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Loads .claude/hooks/policy.json, the one file that holds a project's choices for the hooks
 // (who commits and pushes, which branches may be deleted, usage thresholds, docs cap exemptions,
-// formatters). The scripts hold mechanism only, so update-from-hatchery can patch them without
+// formatters), and the helpers the usage gate and the status line share (thresholds, grants, the
+// account label). The scripts hold mechanism only, so update-from-hatchery can patch them without
 // touching a project's policy. Schema and fail modes: docs/design/decisions/0006-hook-policy-file.md.
 //
 // load() returns { policy, error, source }:
@@ -14,6 +15,13 @@
 // Keys starting with "$" (for example "$comment") are ignored at any level.
 //
 // Debug: node .claude/hooks/policy.js [file]  prints the effective policy, or the error and exit 1.
+// Cap check: node .claude/hooks/policy.js --cap-check <listfile>  reads a newline list of
+// repo-relative docs paths (relative to the current directory) and prints one
+// "FAIL <path>: <n> lines, cap <cap>" per file over its docCap; exit 1 on any FAIL, a malformed
+// policy or an unreadable file included (a listed file absent from the working tree is skipped),
+// else 0. The last stdout line is always "cap-check: <N> files, <M> over cap" (N files checked
+// against a cap, M FAIL lines), on every exit: a run without it is a failed run (an older policy.js
+// that does not know the flag, a crash). Pusher check 7 runs it; post-edit.js uses docCap.
 // Test seam: HOOK_POLICY_FILE names another file (test-hooks.js sets it; unset in normal use).
 'use strict';
 const fs = require('fs');
@@ -42,6 +50,10 @@ const DEFAULTS = {
     // meters for that whole session (never the deny line); null for none. For a project that
     // relaunches in-flight work past HOLD from a session started for that purpose.
     overrideEnv: null,
+    // The account pool (ADR 0011): null, or { command: argv, timeoutSeconds } run only when the
+    // gate is about to deny at HOLD, its stdout read as the `cswap list --json` contract, to name
+    // another account with room. timeoutSeconds defaults to 15 when the object omits it.
+    pool: null,
     holdAdvice: 'Do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report.',
     denyAdvice: 'Stop all work, run the handoff skill, commit WIP from the main session, end the turn.',
   },
@@ -65,6 +77,13 @@ const TYPES = {
   seconds: (v) => Number.isInteger(v) && v > 0,
   stale: (v) => v === 'allow' || v === 'deny',
   text: (v) => typeof v === 'string' && v !== '',
+  // null, or an object with a non-empty argv "command" and an optional "timeoutSeconds", an integer
+  // from 1 to 60 (under Claude Code's own hook timeout, so a hung command ends in a deny); any
+  // other key (other than "$..." comments) is wrong.
+  pool: (v) => v === null || (typeof v === 'object' && !Array.isArray(v) &&
+    Object.keys(v).every((k) => k.startsWith('$') || k === 'command' || k === 'timeoutSeconds') &&
+    isStrings(v.command) && v.command.length > 0 &&
+    (v.timeoutSeconds === undefined || (TYPES.seconds(v.timeoutSeconds) && v.timeoutSeconds <= 60))),
   formatters: (v) => v !== null && typeof v === 'object' && !Array.isArray(v) &&
     Object.keys(v).every((k) => /^\.[A-Za-z0-9]+$/.test(k) && isStrings(v[k]) && v[k].length > 0),
 };
@@ -79,7 +98,7 @@ const SCHEMA = {
     hold: 'percent', deny: 'percentOrNull',
     fiveHour: { hold: 'percentOrNull', deny: 'percentOrNull' },
     sevenDay: { hold: 'percentOrNull', deny: 'percentOrNull' },
-    staleSeconds: 'seconds', whenStale: 'stale', overrideEnv: 'envNameOrNull', holdAdvice: 'text', denyAdvice: 'text',
+    staleSeconds: 'seconds', whenStale: 'stale', overrideEnv: 'envNameOrNull', pool: 'pool', holdAdvice: 'text', denyAdvice: 'text',
   },
   edit: { capExempt: 'patterns', anchorExempt: 'patterns', formatters: 'formatters' },
 };
@@ -118,6 +137,13 @@ function load(file) {
     const policy = merge(SCHEMA, JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text), DEFAULTS, '');
     for (const [label, t] of meterThresholds(policy.usage)) {
       if (t.deny !== null && t.hold > t.deny) throw new Error(`usage hold is above deny for the ${label} meter`);
+    }
+    // The pool's defaults filled in, "$" keys dropped, so callers see { command, timeoutSeconds }.
+    const pool = policy.usage.pool;
+    if (pool) {
+      policy.usage = Object.assign({}, policy.usage, {
+        pool: { command: pool.command.slice(), timeoutSeconds: pool.timeoutSeconds === undefined ? 15 : pool.timeoutSeconds },
+      });
     }
     return { policy, error: null, source };
   } catch (e) {
@@ -250,14 +276,100 @@ function holdLifted(usage, verdict, ctx, now, env) {
   return holdCovered(judgeGrants(readGrants(), now, ctx).lifted, verdict);
 }
 
+// The logged-in account, as a label for the per-session usage cache (ADR 0011): display and
+// consistency only, never a key. The config home is CLAUDE_CONFIG_DIR when set, else the home
+// directory; .config.json there (legacy), then .claude.json there, the first that parses with an
+// oauthAccount carrying a non-empty accountUuid. Returns { uuid, organizationUuid, email } (the
+// last two a non-empty string or null), or null. Never throws: a torn or absent file is null.
+function readAccount() {
+  try {
+    const dir = typeof process.env.CLAUDE_CONFIG_DIR === 'string' && process.env.CLAUDE_CONFIG_DIR !== ''
+      ? process.env.CLAUDE_CONFIG_DIR : os.homedir();
+    for (const name of ['.config.json', '.claude.json']) {
+      let j = null;
+      try {
+        const text = fs.readFileSync(path.join(dir, name), 'utf8');
+        j = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+      } catch (_) { continue; }
+      const o = j && typeof j === 'object' && j.oauthAccount && typeof j.oauthAccount === 'object' ? j.oauthAccount : null;
+      const a = o ? accountLabel({ uuid: o.accountUuid, organizationUuid: o.organizationUuid, email: o.emailAddress }) : null;
+      if (a) return a;
+    }
+  } catch (_) { /* never throw */ }
+  return null;
+}
+// A label as stored in a usage file, normalised: an object with a non-empty string uuid, else null.
+function accountLabel(a) {
+  if (!a || typeof a !== 'object' || typeof a.uuid !== 'string' || a.uuid === '') return null;
+  const str = (v) => (typeof v === 'string' && v !== '' ? v : null);
+  return { uuid: a.uuid, organizationUuid: str(a.organizationUuid), email: str(a.email) };
+}
+// True when both labels are known and name different accounts: the uuids (known on both sides,
+// since a label has one) differ, or both organizationUuids are known and differ. A field unknown on
+// either side does not differ (ADR 0011).
+function accountsDiffer(a, b) {
+  const x = accountLabel(a);
+  const y = accountLabel(b);
+  if (!x || !y) return false;
+  return x.uuid !== y.uuid || (x.organizationUuid !== null && y.organizationUuid !== null && x.organizationUuid !== y.organizationUuid);
+}
+
 // True when name matches one of the patterns; "*" matches any run of characters, "/" included.
 function matches(patterns, name) {
   return patterns.some((p) => new RegExp(`^${p.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`).test(name));
 }
 
-module.exports = { load, matches, usageVerdict, meterThresholds, classifyGrant, readGrants, judgeGrants, holdCovered, holdLifted, DEFAULTS };
+// Doc size caps (ADR 0002, ADR 0014, .claude/rules/docs.md). docCap(edit, rel) is the cap for one
+// docs/ path, rel from the root with forward slashes: 40 for docs/HANDOFF.md and docs/handoff/*.md
+// whatever edit.capExempt says; null (no cap) under docs/design/proposals/ or matching
+// edit.capExempt; else 300. The post-edit hook and pusher check 7 both read it, so they agree.
+const DOCS_CAP = 300;
+const HANDOFF_CAP = 40;
+function docCap(edit, rel) {
+  if (rel === 'docs/HANDOFF.md' || /^docs\/handoff\/[^/]+\.md$/.test(rel)) return HANDOFF_CAP;
+  if (rel.startsWith('docs/design/proposals/') || matches(edit.capExempt, rel)) return null;
+  return DOCS_CAP;
+}
+const lineCount = (text) => (text.match(/\n/g) || []).length; // same as wc -l
 
-if (require.main === module) {
+// The --cap-check mode: returns { lines, code } so the CLI below only prints. A policy that does not
+// load is a FAIL here, never the defaults: the push must not pass on rules the project did not set.
+// files counts the listed files checked against a cap (exempt and deleted ones are not).
+function capCheck(listFile) {
+  const r = load();
+  if (r.error) return { lines: [`FAIL policy: ${r.error}`], files: 0, code: 1 };
+  let list;
+  try { list = fs.readFileSync(listFile, 'utf8'); } catch (e) {
+    return { lines: [`FAIL ${listFile}: cannot read the list (${e.message})`], files: 0, code: 1 };
+  }
+  const out = [];
+  let files = 0;
+  for (const rel of list.replace(/\r/g, '').split('\n').filter((l) => l !== '')) {
+    const cap = docCap(r.policy.edit, rel);
+    if (cap === null) continue;
+    let n;
+    try { n = lineCount(fs.readFileSync(rel, 'utf8')); } catch (e) {
+      // Listed but deleted in the working tree (a closed stream mid-update): no size to cap. The
+      // pusher's own clean-tree check 1 stops before this matters; other read errors are a FAIL.
+      if (e.code === 'ENOENT') continue;
+      out.push(`FAIL ${rel}: cannot read (${e.code || e.message})`);
+      continue;
+    }
+    files += 1;
+    if (n > cap) out.push(`FAIL ${rel}: ${n} lines, cap ${cap}`);
+  }
+  return { lines: out, files, code: out.length ? 1 : 0 };
+}
+
+module.exports = { load, matches, docCap, lineCount, capCheck, DOCS_CAP, HANDOFF_CAP, usageVerdict, meterThresholds, classifyGrant, readGrants, judgeGrants, holdCovered, holdLifted, readAccount, accountLabel, accountsDiffer, DEFAULTS };
+
+if (require.main === module && process.argv[2] === '--cap-check') {
+  const c = process.argv[3] ? capCheck(process.argv[3])
+    : { lines: ['FAIL usage: --cap-check needs a list file'], files: 0, code: 2 };
+  if (c.code === 2) process.stderr.write('usage: node .claude/hooks/policy.js --cap-check <listfile>\n');
+  process.stdout.write(`${c.lines.map((l) => `${l}\n`).join('')}cap-check: ${c.files} files, ${c.lines.length} over cap\n`);
+  process.exitCode = c.code; // not process.exit: a write to a pipe may still be in flight
+} else if (require.main === module) {
   const r = load(process.argv[2]);
   if (r.error) { process.stderr.write(`policy: ${r.error}\n`); process.exit(1); }
   process.stdout.write(`source: ${r.source || '(none; defaults)'}\n${JSON.stringify(r.policy, null, 2)}\n`);

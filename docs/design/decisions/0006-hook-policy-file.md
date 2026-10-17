@@ -11,7 +11,8 @@ closed record even where a table in it is amended. The rest of the record stays 
 Record: proposal `../proposals/0005-rules-that-bit-downstream.md` (option B, and its two extra
 items: the PowerShell matcher and the base harness as a contract); Dystopo's ADRs 0020 and 0021
 (its alignment with the base and its `git-guard` exceptions); Dystopia's `CLAUDE.md`, section
-Git & Commits. Behaviour of each script: the companion `0002-hook-specs.md`. ADR 0007 is the docs
+Git & Commits. The proposal is in Hatchery's tree; a decanted project reads it with
+`git show hatchery/main:docs/design/proposals/<file>`. Behaviour of each script: the companion `0002-hook-specs.md`. ADR 0007 is the docs
 half of the same sitting.
 
 ## Context
@@ -57,6 +58,7 @@ per model seen downstream (task branches, single branch, per-meter thresholds), 
 | `usage.staleSeconds` | seconds | `7200` | Older usage data is stale. |
 | `usage.whenStale` | `"allow"` or `"deny"` | `"allow"` | What the gate does with stale or missing data. |
 | `usage.overrideEnv` | variable name or `null` | `null` | An environment variable that, set to `1` when the session starts, lifts HOLD on both meters for that session (never the deny line): the launch-time form of a session grant (The HOLD override). |
+| `usage.pool` | `null` or `{ "command": argv, "timeoutSeconds": integer 1 to 60 }` | `null` | A command run once, without a shell, only when the gate is about to deny at HOLD; its stdout is read as the `cswap list --json` contract and the deny names another account with room, or says there is none or no reading (ADR 0011). `timeoutSeconds` defaults to `15`. Hatchery's own file sets `["cswap", "list", "--json"]`. |
 | `usage.holdAdvice` / `usage.denyAdvice` | text | the base's wording | The sentence after the threshold in each deny. |
 | `edit.capExempt` | path patterns | `[]` | Docs exempt from the 300-line cap. |
 | `edit.anchorExempt` | path patterns | proposals, decisions, findings | Docs whose backtick-quoted paths are not checked: closed records that name paths as they were. |
@@ -136,8 +138,8 @@ a grant first deletes every expired grant file in the directory, so leftover fil
 in each deny; the gate never deletes, the coordinator does at write time. The session id
 is `CLAUDE_CODE_SESSION_ID` in the Bash tool's environment, the same id the hook receives as
 `session_id`. `until` is the time the owner gives, else about twelve hours ahead for a session
-grant, and for a project or user grant the weekly meter's `seven_day.resets_at` in
-`~/.claude/usage-state.json`, else twelve hours. `reason` names who asked and the scope they gave.
+grant, and for a project or user grant the weekly meter's `seven_day.resets_at` in this session's
+usage file, `~/.claude/usage-state/<session_id>.json` (ADR 0011), else twelve hours. `reason` names who asked and the scope they gave.
 `usage.overrideEnv` is the launch-time form of a session grant: set in a policy file, and its
 variable set when the session starts, only on the owner's instruction, it lifts HOLD on both meters
 for that session and nothing else.
@@ -163,8 +165,11 @@ project whose root `package.json` declares `"type": "module"` makes Node load th
 
 - Per-rule advice text for git rules 5 to 17 stays in the script, worded for any project. Revive
   when a project needs different wording, as an `advice` map keyed by rule number.
-- The pusher agent's check 7 keeps its own list of cap exemptions in `.claude/agents/pusher.md`.
-  Revive when the first project exempts a file: the check should read `edit.capExempt`.
+- The pusher agent's check 7 kept its own list of cap exemptions in `.claude/agents/pusher.md`.
+  Revived 2026-10-16, when two projects had exempted files: check 7's first line runs
+  `node .claude/hooks/policy.js --cap-check <listfile>`, which reads `edit.capExempt` through
+  `docCap` in `policy.js`, the rule `post-edit.js` also uses; a policy that does not load is a
+  `FAIL` there, not the defaults.
 - The gate still reads the legacy `~/.claude/usage-gate-override.json`. Drop that read, and its
   harness cases, once every project that copied the gate has taken the 2026-10-15 version.
 

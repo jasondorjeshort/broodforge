@@ -27,7 +27,7 @@ Template:
 # NNNN. Title
 
 Date: YYYY-MM-DD
-Status: proposed | accepted | superseded by NNNN
+Status: proposed | accepted | superseded by NNNN | superseded in part by NNNN
 
 ## Context
 ## Decision

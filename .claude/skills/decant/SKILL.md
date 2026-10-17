@@ -21,6 +21,9 @@ and findings. Everything below runs in the new project's clone.
    `git remote rename origin hatchery`, then `git remote add origin <new project remote>`. If
    `origin` is already the project, add `git remote add hatchery https://github.com/jasondorjeshort/hatchery.git`.
    The second remote is always named `hatchery`; the `update-from-hatchery` skill relies on it.
+   After the rename run `git branch --unset-upstream` (step 11 checks it): the rename carries the branch's upstream
+   to `hatchery`, and a bare `git push` would then go to Hatchery. The first push sets `origin`
+   (the pusher's `git push -u origin <branch>`).
 3. `README.md`: replace with the project's README, keeping the License section. Keep nothing about
    decanting; that lives here.
 4. `CLAUDE.md`: set the title line to the project name, keep the sentence saying it comes from
@@ -33,8 +36,45 @@ and findings. Everything below runs in the new project's clone.
    `git.push.mainSession`), and cap exemptions (`edit.capExempt`). Thresholds and overage are the
    owner's money: ask, do not guess. `.claude/hooks/policy.examples/` has worked ones; copy the
    closest and edit. `node .claude/hooks/policy.js` must print the effective policy, not an error.
-6. `docs/HANDOFF.md`: rewrite with the `handoff` skill; Now is "decanting from Hatchery", Next is
-   the design sequence starting at `docs/design/00-vision.md`.
+6. The handoff. Ask the owner one question, in these words: "Will more than one session work this
+   branch at the same time?" (ADR 0015: the shape follows the writer count; the answer goes in the
+   commit body of step 12). Then one of:
+   - No: `docs/HANDOFF.md`, rewritten with the `handoff` skill; Now is "decanting from Hatchery",
+     Next is the design sequence starting at `docs/design/00-vision.md`.
+   - Yes: the split shape (`handoff` skill, `split.md`). Write `docs/HANDOFF.md` as the map, with
+     today's date, exactly:
+
+     ```
+     # Handoff
+
+     Coordinator state. Subagents follow their brief, not this file.
+     Updated: YYYY-MM-DD by main session
+     Split shape (handoff skill, split.md): this file is the map; each @ line below imports one stream.
+     Waiting on user: the Question: blocks in docs/ideas/ and each stream's Waiting line.
+     Open findings: the Status column of docs/findings/README.md.
+
+     @handoff/design.md
+     ```
+
+     and one stream file `docs/handoff/<stream>.md`, named for the first workstream (`design.md`
+     in a decant; rename both the file and the map's line if the project starts elsewhere):
+
+     ```
+     # Design
+
+     Updated: YYYY-MM-DD by main session
+
+     ## Now
+     - Decanting from Hatchery.
+
+     ## Next
+     1. `docs/design/00-vision.md` with the architect, then the sequence in `docs/design/README.md`. [no-check: written next]
+     ```
+
+     No `README.md` in the stream directory: the map is its index, and `@handoff/`, never
+     `@docs/handoff/` (an import resolves from the importing file's directory). Add a `handoff/` row
+     to `docs/README.md`, one line: "one file per open workstream; indexed by the map's `@handoff/`
+     lines".
 7. `docs/ideas/` and `docs/operator/`: delete every file except `README.md`; reset each index
    table to its empty row (`docs/operator/` is normally already at rest).
 8. `docs/findings/`: delete every file except `README.md`; reset its index table to its empty row.
@@ -48,12 +88,17 @@ and findings. Everything below runs in the new project's clone.
    `LICENSE`.
 10. `.claude/settings.json`: keep as is. `.claude/rules/`: keep `docs.md`; add language rules
     later per `.claude/rules/README.md`.
-11. Verify: `git status --short` shows only the intended edits; `wc -l CLAUDE.md docs/HANDOFF.md`
-    are at most 150 and 40; `node .claude/hooks/policy.js` exits 0.
+11. Verify: `git status --short` shows only the intended edits; `wc -l CLAUDE.md` is at most 150;
+    stage the handoff first, since the commit step takes it anyway (`git add docs/HANDOFF.md` and,
+    where it exists, `git add docs/handoff/`), so an untracked stream file is checked too; then the
+    three command lines of pusher check 7 (`.claude/agents/pusher.md`) print no `FAIL` (they
+    hold in both handoff shapes: the caps and every `@` line); `node .claude/hooks/policy.js` exits 0;
+    `git config --get branch.<branch>.remote` prints nothing or `origin`, never `hatchery`.
 12. Commit via the runner (`commit` skill): subject `Decant <project> from Hatchery`, body listing
-    what was removed and kept. Do not push; the user decides when.
-13. Report: remotes, files changed, the policy choices made, and the first design step for the
-    architect.
+    what was removed and kept, and the handoff answer of step 6 with the shape it gave. Do not
+    push; the user decides when.
+13. Report: remotes, files changed, the policy choices made, the handoff shape, and the first
+    design step for the architect.
 
 ## Rules
 

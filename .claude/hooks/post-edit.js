@@ -11,7 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 const childProcess = require('child_process');
-const { load, matches } = require('./policy');
+const { load, matches, docCap, lineCount, DOCS_CAP, HANDOFF_CAP } = require('./policy');
 
 // Project choices from .claude/hooks/policy.json (edit block); a malformed policy means the base
 // defaults here, since this hook only advises.
@@ -27,12 +27,11 @@ if (process.env.POST_EDIT_FORMATTERS_JSON) {
   try { Object.assign(FORMATTERS, JSON.parse(process.env.POST_EDIT_FORMATTERS_JSON)); } catch (_) { /* ignore */ }
 }
 
-const DOCS_CAP = 300;
-const HANDOFF_CAP = 40;
+// The per-file caps (DOCS_CAP 300, HANDOFF_CAP 40) and which applies are docCap in policy.js, the
+// one rule this hook and pusher check 7 share.
+const HANDOFF_TOTAL_CAP = 120; // docs/HANDOFF.md plus every docs/handoff/*.md
 const CLAUDE_MD_CAP = 150; // .claude/rules/docs.md; loaded every turn, so the tightest cap
 const INDEX_EXEMPT = new Set(['README.md', 'HANDOFF.md']);
-
-const lineCount = (text) => (text.match(/\n/g) || []).length; // same as wc -l
 
 // True when the file starts with ---, closes with --- within the first 20 lines,
 // and every key appears at line start between the two markers.
@@ -59,11 +58,28 @@ function checkDocs(root, rel, abs) {
   const parts = rel.split('/');
   const base = parts[parts.length - 1];
 
-  if (n > DOCS_CAP && !rel.startsWith('docs/design/proposals/') && !matches(edit.capExempt, rel)) {
-    msgs.push(`post-edit: ${rel} is ${n} lines; cap is ${DOCS_CAP} (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.`);
+  const cap = docCap(edit, rel);
+  if (cap === DOCS_CAP && n > cap) {
+    msgs.push(`post-edit: ${rel} is ${n} lines; cap is ${cap} (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.`);
   }
-  if (rel === 'docs/HANDOFF.md' && n > HANDOFF_CAP) {
-    msgs.push(`post-edit: docs/HANDOFF.md is ${n} lines; cap is ${HANDOFF_CAP}. Move detail to docs/ideas/ or a finding.`);
+  if (cap === HANDOFF_CAP && n > cap) {
+    msgs.push(`post-edit: ${rel} is ${n} lines; cap is ${cap}. Move detail to docs/ideas/ or a finding.`);
+  }
+  const isStream = parts.length === 3 && parts[1] === 'handoff';
+  const isHandoff = rel === 'docs/HANDOFF.md' || isStream;
+  if (isHandoff) {
+    let total = n;
+    const others = [];
+    if (rel !== 'docs/HANDOFF.md') others.push(path.join(root, 'docs', 'HANDOFF.md'));
+    try {
+      for (const f of fs.readdirSync(path.join(root, 'docs', 'handoff'))) {
+        if (f.endsWith('.md') && !(isStream && f === base)) others.push(path.join(root, 'docs', 'handoff', f));
+      }
+    } catch (_) { /* no split directory */ }
+    for (const f of others) total += lineCount(readOr(f, ''));
+    if (total > HANDOFF_TOTAL_CAP) {
+      msgs.push(`post-edit: the handoff loads ${total} lines in total (docs/HANDOFF.md plus docs/handoff/*.md); cap is ${HANDOFF_TOTAL_CAP}. Close a stream or trim.`);
+    }
   }
   if (parts.length === 3 && parts[1] === 'findings' && base !== 'README.md' &&
       !hasFrontmatter(text, ['date', 'status', 'area'])) {
@@ -76,7 +92,13 @@ function checkDocs(root, rel, abs) {
   // Index check: a file under docs/<dir>/... must be named in a README.md, looking in its
   // own directory first and then in each parent up to docs/<dir>/ (ADRs, for example,
   // are listed in docs/design/README.md).
-  if (parts.length >= 3 && !INDEX_EXEMPT.has(base)) {
+  if (isStream) {
+    // docs/handoff/ has no README: a stream is listed when the map imports it.
+    const map = importTargets(readOr(path.join(root, 'docs', 'HANDOFF.md'), ''));
+    if (!map.includes(`handoff/${base}`)) {
+      msgs.push(`post-edit: ${rel} is not imported by docs/HANDOFF.md. Add the line @handoff/${base} or delete the file.`);
+    }
+  } else if (parts.length >= 3 && !INDEX_EXEMPT.has(base)) {
     let listed = false;
     for (let depth = parts.length - 1; depth >= 2 && !listed; depth--) {
       const readme = path.join(root, ...parts.slice(0, depth), 'README.md');
@@ -120,6 +142,36 @@ function missingPaths(root, text) {
   return missing;
 }
 
+// Import check: each line starting with @<target>, outside fenced blocks, resolves from the
+// importing file's directory (Claude Code's rule); an absent target loads nothing and says nothing.
+function importTargets(text) {
+  const targets = [];
+  let fence = null;
+  for (const line of text.replace(/\r/g, '').split('\n')) {
+    const f = line.match(/^[ \t]*(```|~~~)/);
+    if (f) {
+      if (fence === null) fence = f[1]; else if (fence === f[1]) fence = null;
+      continue;
+    }
+    if (fence !== null) continue;
+    const m = line.match(/^@(\S+)/);
+    if (m) targets.push(m[1]);
+  }
+  return targets;
+}
+
+function missingImports(root, rel, text) {
+  const msgs = [];
+  const dir = path.posix.dirname(rel);
+  for (const target of importTargets(text)) {
+    const resolved = path.posix.normalize(path.posix.join(dir, target));
+    if (!fs.existsSync(path.join(root, ...resolved.split('/')))) {
+      msgs.push(`post-edit: ${rel} imports @${target}, which resolves to ${resolved} and does not exist (an import resolves from the importing file's directory).`);
+    }
+  }
+  return msgs;
+}
+
 function runFormatter(argv, abs, rel) {
   const r = childProcess.spawnSync(argv[0], [...argv.slice(1), abs], { timeout: 20000, encoding: 'utf8' });
   if (!r.error && r.status === 0) return [];
@@ -141,6 +193,9 @@ function main(raw) {
 
   const msgs = [];
   if (inside && rel.startsWith('docs/') && rel.endsWith('.md')) msgs.push(...checkDocs(root, rel, abs));
+  if (inside && (rel === 'CLAUDE.md' || rel === 'docs/HANDOFF.md' || /^docs\/handoff\/[^/]+\.md$/.test(rel))) {
+    msgs.push(...missingImports(root, rel, fs.readFileSync(abs, 'utf8')));
+  }
   if (inside && rel === 'CLAUDE.md') {
     const n = lineCount(fs.readFileSync(abs, 'utf8'));
     if (n > CLAUDE_MD_CAP) msgs.push(`post-edit: CLAUDE.md is ${n} lines; cap is ${CLAUDE_MD_CAP} (.claude/rules/docs.md). Move facts to docs/reference/ and path-scoped rules to .claude/rules/.`);

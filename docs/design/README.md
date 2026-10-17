@@ -32,8 +32,9 @@ Decisions so far:
 
 - [0001 Licensing](decisions/0001-licensing.md): GPL-3.0-or-later by default, LGPL for linkable components.
 - [0002 Repository layout](decisions/0002-repository-layout.md): where knowledge, state, procedures,
-  rules, and hooks live; skills, permissions, and continuity by `@docs/HANDOFF.md` import. Companion
-  [hook specifications](decisions/0002-hook-specs.md) for the hooks and the status line.
+  rules, and hooks live; skills, permissions, and continuity by `@docs/HANDOFF.md` import, superseded
+  in part by 0014 (handoff). Companion [hook specifications](decisions/0002-hook-specs.md) for the
+  hooks, and [section 3, the usage gate and status line](decisions/0002-hook-specs-usage.md).
 - [0004 Adopting the Hatchery practice](decisions/0004-adopt-hatchery.md): an existing project takes
   the practice as files from `hatchery/main`, records the base commit in its own ADR, and updates by
   three-way patch; merging stays the path for decanted projects. (0003 and 0005 are proposals in
@@ -51,6 +52,35 @@ Decisions so far:
 - [0009 ADR numbers when both tests pass](decisions/0009-adr-numbers-when-both-tests-pass.md): a
   tree that is both joined to the base and holds a `Hatchery base: <sha>` line numbers as adopted; the
   line wins. Amends 0008, Numbers.
+- [0010 Update mode when both tests pass](decisions/0010-update-mode-when-both-tests-pass.md): the
+  anchored `Hatchery base: <sha>` line means patch mode from that sha whatever `merge-base` says;
+  a join merge is a project's recorded departure, not base procedure. Amends 0009 and 0004.
+- [0011 Usage cache per session, pool advice at HOLD](decisions/0011-usage-cache-per-session-and-pool-advice.md):
+  the status line caches the meters per `session_id` with the account as a label, the gate treats a
+  changed login as stale, and at HOLD it reports the pool account with room through `usage.pool`;
+  rotation happens at session boundaries. Amends 0006 and the hook specs, section 3
+  ([usage companion](decisions/0002-hook-specs-usage.md)).
+- [0012 Decision practices for long-lived software](decisions/0012-decision-practices-for-long-lived-software.md):
+  each project names its promised surfaces (additions free, an incompatible change a major
+  choice); dependencies by checklist, a copy under a page keeps its licence; fitness checks with a
+  skip entry as the lift; ADR triggers, dated predictions and fitness lines scanned by `triage`,
+  the architect called on a hit; four lines in `CLAUDE.md`, the rest in the file that applies.
+  Amends the living table of ADR 0001.
+- [0013 Hatchery's promised surfaces](decisions/0013-hatchery-promised-surfaces.md): the policy
+  file, grant files, the idea grammar, the base line, the usage cache and the hook seams, with
+  what is not promised; the reference fitness check (hooks require only Node built-ins) in the
+  harness, group `F`. Proposed until the owner confirms the list.
+- [0014 Handoff layout](decisions/0014-handoff-layout.md): one
+  `docs/HANDOFF.md` by default, no hash, the edit rides in the work commit; a per-stream split
+  (`@handoff/<file>.md` lines, 40 each, 120 together, no README, no fixed files) the tooling
+  accepts and a project switches to at a stated trigger; every `@` line resolved by the hook
+  and the pusher. Skill text in [the sibling](decisions/0014-handoff-skill.md). Supersedes in
+  part 0002; adds a row to 0013. Superseded in part by 0015 (switch trigger).
+- [0015 Handoff shape at decant](decisions/0015-handoff-shape-at-decant.md): the shape is chosen
+  by writer count, one question to the owner at decant or adoption (yes: the map plus one stream
+  from the first commit; no: the single file); a single-file project switches the day a second
+  parallel session opens, not at a conflict count; the map stays the index and the stream
+  directory has no README; Hatchery stays single-file; the caps do not move. Supersedes in part 0014.
 - [0020 Harness, language, library, toolchain](decisions/0020-harness-language-library-toolchain.md):
   the Claude Code CLI the owner installs, run as one `-p` stream-json process per turn and
   resumed by session id, behind an adapter interface with a recorded-transcript fake; TypeScript

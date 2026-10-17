@@ -13,14 +13,20 @@ These load automatically when a file under `docs/` or `CLAUDE.md` is read or edi
 
 - Any `docs/**/*.md`: at most 300 lines. Split by topic, never by date, and never by "part 2".
   Exempt: `docs/design/proposals/`, because a proposal carries its options, the critic's objections,
-  and the responses in one closed record that nothing loads on demand. Aim under 300 anyway.
-- `docs/HANDOFF.md`: at most 40 lines. Detail goes to an idea or a finding; the handoff links.
+  and the responses in one closed record that nothing loads on demand. A project's legacy docs may
+  be exempted by path in `.claude/hooks/policy.json` `edit.capExempt`, which the post-edit hook and
+  the pusher both read; the patterns' `*` crosses `/`, so name files when a folder's subfolders
+  must stay capped. Aim under 300 anyway.
+- `docs/HANDOFF.md`, and each `docs/handoff/*.md` where that directory exists: at most 40 lines, at most 120 together. Detail
+  goes to an idea or a finding; the handoff links.
 - `CLAUDE.md`: at most 150 lines. A new paragraph of facts goes to `docs/reference/` with a pointer.
 
 ## Indexes
 
 - Every directory under `docs/` has a `README.md` with one line per file. Adding, renaming, resolving,
   or deleting a file updates that index in the same edit. The post-edit hook warns about an unlisted file.
+  Exception: `docs/handoff/` has no README; its index is the `@handoff/<file>.md` lines of
+  `docs/HANDOFF.md` (`handoff` skill, `split.md`).
 - `docs/design/README.md` lists every ADR; `docs/findings/README.md` shows status per file.
 - An index is the one list a doc may carry. Prose never inventories files, fields, routes or
   counts ("the twelve commands", "a 400-line file"): every ordinary commit moves the figure, and a
@@ -53,8 +59,12 @@ These load automatically when a file under `docs/` or `CLAUDE.md` is read or edi
 
 ## Content rules
 
-- `HANDOFF.md` has exactly the sections Now, Next, Waiting on user, Open findings, and the first line
-  after the title says it is coordinator state. It never contains procedure or rationale; it links.
+- `HANDOFF.md` in the single-file shape has exactly the sections Now, Next, Waiting on user, Open
+  findings; in the split shape it is the map `split.md` describes. In both, the first line after
+  the title says it is coordinator state, and it never contains procedure or rationale; it links.
+- An `@` import line in `CLAUDE.md`, `docs/HANDOFF.md` or `docs/handoff/*.md` resolves from the
+  importing file's directory, so the map writes `@handoff/<file>.md`; a target that does not exist
+  loads nothing and says nothing. The post-edit hook and pusher check 7 resolve every such line.
 - Reference files state facts and working commands. Findings state evidence and status. Design docs
   state decisions. Do not mix: a provisional result in a design doc reads as truth later.
 - Living docs (`CLAUDE.md`, skills, agents, hooks and their examples, rules, READMEs, ideas,

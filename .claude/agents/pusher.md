@@ -12,7 +12,7 @@ Skills relevant to you: none; your checks are below and your brief is one line. 
 Checks:
 1. `git status --porcelain` is empty. Uncommitted changes mean stop.
 2. `git rev-parse --abbrev-ref HEAD` is a named branch (not detached) and matches the branch in the brief.
-3. `git fetch` succeeds. `git status -sb` shows the branch is not behind the remote. If behind or diverged, stop; do not rebase or merge on your own.
+3. `git fetch` succeeds. `git status -sb` shows the branch is not behind the remote. If behind or diverged, stop; do not rebase or merge on your own. If an upstream is set, its remote (`git config branch.<branch>.remote`) must be `origin`; any other remote, `hatchery` above all, means stop and report it.
 4. List the commits to be pushed with `git log --oneline @{u}..HEAD` (if no upstream yet, `git log --oneline`). Each message has a subject line and a `Co-Authored-By:` trailer.
 5. Secrets scan over the outgoing diff (`git diff @{u}..HEAD`, or the full tree if no upstream). Stop on any of these:
    - a line containing `-----BEGIN` (private key or certificate)
@@ -28,13 +28,16 @@ Checks:
    - a phone number, a street address, or an account or subscription identifier
    Mechanical part (emails, home paths with a username, host names): ``git diff @{u}..HEAD | grep -n -i -P '^\+.*([\w.+-]+@[\w-]+(\.[\w-]+)+|[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s<$%~]|(^|[\s"\x27\x60=(+])/(?-i:home|Users)/[^/\s<$%~]|-Desktop|DESKTOP-)'`` ; with no upstream, run ``git grep -n -i -P '[\w.+-]+@[\w-]+(\.[\w-]+)+|[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s<$%~]|(^|[\s"\x27\x60=(+])/(?-i:home|Users)/[^/\s<$%~]|-Desktop|DESKTOP-'`` over the full tree, and apply it to the commit messages and added file names too. The `/home/<name>` and `/Users/<name>` branches match only a path that starts there (line start, whitespace, quote, backtick, `=` or `(` before it), so `<sess>/home/hook.log` is not a hit. The project's own service-account names are not a person: a path such as `C:/Users/broodforge/...` (the droplet's service account, named after the project) is allowed; the stop is for a person's username. Names of people, phone numbers, addresses and identifiers are a read of the diff, not a grep. Report each hit with file and line. The fix is an edit to roles and placeholders, never a change to this list; a hit the owner approved in writing in your brief is not a stop.
 6. No single added file larger than 5 MB. Check new files from `git diff --name-only --diff-filter=A @{u}..HEAD` with `wc -c`.
-7. Doc size caps (ADR 0002, `.claude/rules/docs.md`): every tracked Markdown file under `docs/` is at most 300 lines, and `docs/HANDOFF.md` is at most 40; `docs/design/proposals/` is exempt (closed records). Run:
-   `git ls-files -- 'docs/*.md' | while read -r f; do case "$f" in docs/design/proposals/*) continue;; esac; n=$(wc -l < "$f"); cap=300; [ "$f" = docs/HANDOFF.md ] && cap=40; [ "$n" -gt "$cap" ] && echo "FAIL $f: $n lines, cap $cap"; done`
-   Any `FAIL` line means stop and report it; the fix is a split or a trim, not a cap change.
-8. If the repo defines a test command (look in `CLAUDE.md`, `README.md`, or the package manifest), run it. It must pass. If there is no test command yet, say so and continue.
+7. Doc size caps and the handoff chain (ADR 0002, ADR 0014, `.claude/rules/docs.md`): every tracked Markdown file under `docs/` is at most 300 lines; `docs/HANDOFF.md` and each `docs/handoff/*.md` at most 40 and 120 together; every `@` line in `CLAUDE.md`, `docs/HANDOFF.md` and `docs/handoff/*.md` resolves from its file's directory. Exempt from the 300: `docs/design/proposals/` (closed records) and the paths matching `edit.capExempt` in `.claude/hooks/policy.json`; the first line applies the post-edit hook's own rule (`docCap` in `.claude/hooks/policy.js`), so the 40 holds for the handoff files whatever the policy exempts, and a policy that does not load is a `FAIL`. Run:
+   `l=$(mktemp); git -c core.quotePath=false ls-files -- 'docs/*.md' > "$l"; node .claude/hooks/policy.js --cap-check "$l"; rm -f "$l"`
+   A run of the first command that does not end in a `cap-check:` line is a FAIL (an older `policy.js`, a crash, a usage error); `-c core.quotePath=false` keeps a non-ASCII file name from being skipped.
+   `l=$(mktemp); git ls-files -- docs/HANDOFF.md 'docs/handoff/*.md' > "$l"; t=0; while read -r f; do n=$(wc -l < "$f"); t=$((t+n)); done < "$l"; rm -f "$l"; [ "$t" -gt 120 ] && echo "FAIL handoff total: $t lines, cap 120"`
+   `l=$(mktemp); git ls-files -- 'docs/handoff/*.md' > "$l"; echo CLAUDE.md >> "$l"; echo docs/HANDOFF.md >> "$l"; while read -r f; do d=$(dirname "$f"); grep -oE '^@[^[:space:]]+' "$f" | cut -c2- | while read -r p; do [ -e "$d/$p" ] || echo "FAIL $f: @$p resolves to $d/$p, which does not exist"; done; done < "$l"; rm -f "$l"`
+   Any `FAIL` line means stop and report it; the fix is a trim, a closed stream or a corrected line, not a cap change.
+8. If the repo defines a test command (look in `CLAUDE.md`, `README.md`, or the package manifest), run it. It must pass. If there is no test command yet, say so and continue. A `FAIL` line from a fitness check is reported verbatim as design work for the architect; do not retry or edit anything.
 9. If the repo defines a lint command, run it. It must pass.
 
-Then push the current branch only: `git push` (or `git push -u origin <branch>` on first push). Never `--force`, never `--force-with-lease`, never push tags unless the brief says so.
+Then push the current branch only: `git push origin <branch>` (`git push -u origin <branch>` on first push). Never `--force`, never `--force-with-lease`, never push tags unless the brief says so.
 
 After the push: `git fetch` and compare `git rev-parse HEAD` with `git rev-parse @{u}`. They must be equal; print both. A push whose output said it succeeded but whose fetch shows a different remote head is a failed push: report it as such with both SHAs.
 

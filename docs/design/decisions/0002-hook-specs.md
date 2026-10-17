@@ -141,16 +141,31 @@ malformed and absent policy files; GP one command set under the Hatchery policy,
 the two examples, in scratch repositories on `main` and on `task/T1`, which shows the absent file
 behaving as the
 Hatchery one. LIVE01 to LIVE04 check that the repository's own `policy.json` and the examples
-load and that the harness's Hatchery fixture equals the loader's defaults.
+load and that the harness's Hatchery fixture equals the loader's defaults. Group F is the reference
+fitness check of ADR 0013 (the dependency budget): F1 runs it on this repository and F2 to F6 run it
+on scratch trees (a forbidden require, a skip entry present and absent, a vendored file with and
+without its licence line). It counts a `require('<m>')` literal wherever it appears in a scanned
+file, comments and strings included, by design.
 
-The harness reads no file of the repository it runs in: the Hatchery policy is a fixture inside
-it, written to the scratch tree, and the docs it checks (a 41-line handoff included) are synthetic.
-So a project that copies `.claude/hooks/` and sets its own policy runs it unchanged.
+Apart from F1, every case runs in a scratch tree: the Hatchery policy is a fixture inside the
+harness, written there, and the docs it checks (a 41-line handoff included) are synthetic. F1
+reads `.claude/hooks/fitness.json` and the files it names, and the harness needs
+`.claude/statusline.js` beside the hooks. A project that copies `.claude/hooks/` and sets its own
+policy and fitness config runs it unchanged.
 
-Debug interface: `node .claude/hooks/test-hooks.js` runs every case for all hooks, PASS/FAIL per
-case plus a summary; exit 1 on any failure, 2 on a usage error. Flags: `--only <id-prefix>`,
-`--verbose`, `--keep`, `--input <file> <hook>` (reproduce one input from a file).
-`node .claude/hooks/policy.js [file]` prints the effective policy or the error.
+Debug interface: `node .claude/hooks/test-hooks.js` runs every case for all hooks, printing a
+`PASS`, `FAIL` or `SKIP` line per case plus a summary (a skip is not a failure); exit 1 on any
+failure, 2 on a usage error. Flags: `--only <id-prefix>` (`--only deps` runs the reference check
+alone, F1),
+`--verbose`, `--keep`, `--input <file> <hook>` (reproduce one input from a file; `statusline` is
+accepted as a hook name), and with `usage-gate` or `statusline` `--home <dir>` (HOME and
+USERPROFILE set to it, `CLAUDE_CONFIG_DIR` removed) and `--config-dir <dir>` (`CLAUDE_CONFIG_DIR`
+set to it).
+`node .claude/hooks/policy.js [file]` prints the effective policy or the error;
+`node .claude/hooks/policy.js --cap-check <listfile>` is pusher check 7's per-file cap line (one
+`FAIL <path>: N lines, cap C` per file over its cap, a `FAIL policy:` line for a policy that does
+not load, exit 1 on any `FAIL`; stdout always ends with `cap-check: <N> files, <M> over cap`, and a run without that line is a FAIL). Group CAP runs it on a scratch tree and the pusher's line through
+the guard.
 
 ## 2. `post-edit.js` (PostToolUse, matcher `Write|Edit`, no `onFailure`)
 
@@ -166,16 +181,20 @@ base defaults here, since the hook only advises.
 
 `CLAUDE.md` at the root over 150 lines: `post-edit: CLAUDE.md is N lines; cap is 150
 (.claude/rules/docs.md). Move facts to docs/reference/ and path-scoped rules to .claude/rules/.`
+An `@` line of the root `CLAUDE.md` whose target is absent: the import message below.
 
 Checks on `docs/**/*.md` (`<path>` from the root with forward slashes; line count as `wc -l`):
 
 | Check | Message (one line each, joined with newlines) |
 |---|---|
-| over 300 lines, except under `docs/design/proposals/` and paths matching `edit.capExempt` | `post-edit: <path> is N lines; cap is 300 (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.` |
-| `docs/HANDOFF.md` over 40 lines | `post-edit: docs/HANDOFF.md is N lines; cap is 40. Move detail to docs/ideas/ or a finding.` |
+| over 300 lines, except under `docs/design/proposals/`, paths matching `edit.capExempt`, and the two handoff paths of the next row (`docCap` in `policy.js`, shared with pusher check 7) | `post-edit: <path> is N lines; cap is 300 (.claude/rules/docs.md). Split by topic; the pusher will refuse to push.` |
+| `docs/HANDOFF.md` or `docs/handoff/*.md` over 40 lines, `edit.capExempt` notwithstanding | `post-edit: <path> is N lines; cap is 40. Move detail to docs/ideas/ or a finding.` |
+| when the edited file is either, `docs/HANDOFF.md` plus every `docs/handoff/*.md` on disk (`.md` only) over 120 lines in total | `post-edit: the handoff loads N lines in total (docs/HANDOFF.md plus docs/handoff/*.md); cap is 120. Close a stream or trim.` |
+| a `docs/handoff/*.md` with no line `@handoff/<name>` in `docs/HANDOFF.md` (this replaces the README row for that directory, which has no README) | `post-edit: <path> is not imported by docs/HANDOFF.md. Add the line @handoff/<name> or delete the file.` |
+| a line starting `@<target>`, outside fenced blocks, in `CLAUDE.md`, `docs/HANDOFF.md` or `docs/handoff/*.md`, whose target does not exist when resolved from the file's directory | `post-edit: <path> imports @<target>, which resolves to <resolved> and does not exist (an import resolves from the importing file's directory).` |
 | `docs/findings/*.md` (not README) missing frontmatter `date:`, `status:` or `area:` | `post-edit: <path> lacks finding frontmatter (date, status, area). See the finding skill.` |
 | `docs/reference/*.md` (not README) missing `verified:` | `post-edit: <path> lacks verified: frontmatter. See .claude/rules/docs.md.` |
-| a file at least one directory below `docs/`, basename not `README.md` or `HANDOFF.md`, named in no `README.md` from its own folder up to `docs/<top>/README.md` | `post-edit: <path> is not listed in <folder>/README.md. Add one line.` |
+| a file at least one directory below `docs/` (not `docs/handoff/*.md`, see the import row above), basename not `README.md` or `HANDOFF.md`, named in no `README.md` from its own folder up to `docs/<top>/README.md` | `post-edit: <path> is not listed in <folder>/README.md. Add one line.` |
 | a backtick-quoted token holding `/` whose first segment is a top-level directory of the root (not `.git`), that does not exist | `post-edit: <path> names paths that do not exist: <list>. Fix them, or mark the paragraph [no-check: <reason>] (.claude/rules/docs.md).` |
 
 Path anchors skip files matching `edit.anchorExempt` (by default the closed records under
@@ -199,66 +218,13 @@ Output with at least one message, exit 0:
 `{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"<messages>"}}`; none:
 exit 0, no stdout. Harness cases P01 to P04 and PX01 to PX14 cover the checks above, the
 formatter and the `CLAUDE.md` cap; PA the path anchors, closed records and list-item scope; PC cap
-exemptions and formatters from a policy file, a malformed policy, and the task-branches example.
+exemptions and formatters from a policy file, a malformed policy, and the task-branches example;
+PH the handoff paths (ADR 0014): the stream and total caps, the map import, and the `@` line
+resolution, each case in its own scratch root (`ph-<id>`) so P02 keeps its tree.
 
-## 3. `usage-gate.js` (PreToolUse, matcher `Agent|Workflow`, no `onFailure`) and the status line
+## 3. `usage-gate.js` and the status line
 
-Cache: `~/.claude/usage-state.json`, `{ "five_hour": { "used_percentage", "resets_at" },
-"seven_day": {...}, "updatedAt" }`, epoch seconds. `.claude/statusline.js` writes it: a window
-present on stdin replaces the cached one, an absent window keeps it, and when neither is present
-nothing is written, so a refresh without `rate_limits` never replaces numbers with nulls. The write
-goes to a temporary file and is renamed; a failed rename removes the temporary file.
-`settings.json` sets `"refreshInterval": 60`, so the cache stays fresh while the user is idle and
-agents run. Line 1 is the working directory exactly as received
-(`workspace.current_dir`, else the older `cwd`; no shortening); when neither is a non-empty string the
-output is the meters line alone, with no blank first line. The meters line, after line 1's newline
-when there is one, shows model, context, both windows with their reset times, and ` HOLD` or ` STOP` by the same per-meter judgement as the gate (the
-helper in `policy.js`; ` STOP` only on a meter with a deny line); a cached window past its
-`resets_at` shows `n/a`. Each window carries its thresholds from `meterThresholds`, `(hold 50)` or
-`(hold 50 stop 90)`, also when it reads `n/a`, so a line reads
-`Opus 5.5 | ctx n/a | 5h 24% (hold 50) ->12:20 | 7d 72% (hold 50) ->Mon 06:00 HOLD`; a missing or malformed `policy.json`
-falls back to the base values, as the gate does (ADR 0006), and only a `policy.js` that cannot be required drops
-the parentheses and the flag. At HOLD the flag reads ` HOLD lifted` when the gate's grant rules would let a launch
-through, judged on the readings the line shows; the status line does not judge staleness, the gate does, so on stale
-data under `whenStale` `deny` the line can read ` HOLD lifted` while the gate denies (`usage.overrideEnv` set to `1`, or the grants that apply to the `session_id` and
-`workspace.current_dir` (else `cwd`) on stdin lift every tripped meter; the grant logic is `policy.js`'s,
-shared with the gate); a partial lift stays ` HOLD`, ` STOP` is never lifted, and a failure reading the
-grants means not lifted.
-
-Gate. Each window is judged against its own thresholds (`usage.fiveHour`, `usage.sevenDay`, else the shared `usage.hold` and `usage.deny`) and the worse verdict wins; a window past its `resets_at` has reset and does not
-count. No file, no `updatedAt`, or data older than `usage.staleSeconds` is stale: with `whenStale`
-`allow` the gate allows with a note on stderr; with `deny` it denies with `Usage gate: <what>, and
-the policy denies delegation without fresh data. Check usage with /usage in an interactive session;
-the status line refreshes the data while a session is open.` The hook never runs `claude -p`.
-
-At or above a deny line, where one is set: `Usage gate: 5h X%, 7d Y%. <meter> at or above <deny>%: <denyAdvice>`.
-`usage.deny` `null`, the base, sets none, so a meter at 100% is a HOLD like any other. At or above
-`usage.hold`: `Usage gate: 5h X%, 7d Y%. <meter> at or above <hold>%: <holdAdvice>[ The override in force
-lifts only <meters>.][ An override exists for session <id>, not this one.| An override exists for
-project <path>, not this one.| Expired override files: <name>[, <name>]*.| An override file
-exists but is malformed (<name>; see ADR 0006, The HOLD override).]* Lifting this early is the
-user's decision (docs/design/decisions/0006-hook-policy-file.md).` Grants are every `*.json` in
-`~/.claude/usage-gate-overrides/` plus the legacy `~/.claude/usage-gate-override.json`, matched
-against `session_id` and `cwd` from the PreToolUse payload on stdin by the rules in ADR 0006, The
-HOLD override. The first bracket appears when the grants that apply lift some meters but not every
-one that tripped; the starred group holds one clause per malformed or out-of-scope grant file, in
-file-name order with the legacy file last, each file classified once as malformed, else expired,
-else out of scope, `<id>` and `<path>` as written in the grant and `<name>` the file's basename;
-every expired file shares one `Expired override files:` clause, its names in the same order, placed
-where the first expired file falls. A lift notes each grant used on stderr with its `reason`, or
-`no reason given` when `reason` is not a non-empty string.
-There is no HOLD deny when the grants that apply together lift every meter that tripped, or
-`usage.overrideEnv` names a variable set to exactly `1` (ADR 0006). A crash exits 1, which does not
-block: the gate fails open.
-
-Harness cases U (thresholds and the legacy override file, with and without a deny line), UO (the
-override per meter, no deny line on one meter or both, `usage.overrideEnv`), UG (the grant
-directory: a session grant for this session and for another; a project grant with `cwd` at the
-path, under it, and beside it with the path as a prefix, with either separator and, on Windows,
-differing case; a user grant; the legacy file beside a directory grant; both scope keys; a relative
-`project`; two files lifting one meter each; the clause order across a malformed, an expired and an
-out-of-scope file; several expired files in one clause; a `reason` that is not a string; stdin
-without `session_id`, without `cwd`, and unparseable), UX (staleness both
-ways, a reset window, the example policies, per-meter thresholds, a malformed policy including a
-string `deny`, a pre-merge cache file), and S (the status line's merge, the untouched file without
-`rate_limits`, malformed stdin, the directory line from `current_dir`, from `cwd` alone, and absent, policy flags, no STOP without a deny line, the thresholds beside each meter, `HOLD lifted` for a grant for this session and `HOLD` for another session's, a partial lift or STOP, a failed rename).
+Moved on 2026-10-16 to `0002-hook-specs-usage.md`, still section 3: the per-session cache, the
+account label, the status line's text and flags, the gate's thresholds, staleness, grants and pool
+advice, and the harness cases U, UO, UG, UX, UP and S. Other records that cite "section 3" of the
+hook specs mean that file.

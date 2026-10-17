@@ -20,11 +20,15 @@ project's own `NNNN-adopt-hatchery.md` records the base commit).
    in the project's `CLAUDE.md` Git section, or the one the user named; never assume `main`).
 2. Remote: `git remote -v`. If `hatchery` is missing,
    `git remote add hatchery https://github.com/jasondorjeshort/hatchery.git`. `git fetch hatchery`.
-3. Mode. `git merge-base HEAD hatchery/main` succeeds: merge mode, `FROM=$(git merge-base HEAD
-   hatchery/main)`. It fails: `FROM=$(grep -rho "Hatchery base: [0-9a-f]\{7,40\}" docs/
-   | head -1 | cut -d' ' -f3)`; non-empty means patch mode. Both empty: stop, the project has no
-   relation to Hatchery; name the adoption prompt. Record `git log --oneline $FROM..hatchery/main` as
-   the incoming base commits; if empty, report "already up to date" and stop.
+3. Mode (ADR 0010). First the anchored base line, the same test as the `adr` skill's step 1:
+   `FROM=$(grep -rhE "^Hatchery base: [0-9a-f]{7,40}" docs/design/decisions/ | head -1 | cut -d' ' -f3)`;
+   non-empty means patch mode, even when `git merge-base HEAD hatchery/main` succeeds (a project
+   that joined histories by its own recorded decision has a merge-base too, and merge mode would
+   bring the base's docs into it; the line wins, ADR 0010). Else, if `git merge-base HEAD
+   hatchery/main` succeeds: merge mode, `FROM=$(git merge-base HEAD hatchery/main)`. Neither:
+   stop, the project has no relation to Hatchery; name the adoption prompt. Record
+   `git log --oneline $FROM..hatchery/main` as the incoming base commits; if empty, report
+   "already up to date" and stop.
 4. Bring the changes in.
    - Merge mode: `git merge --no-ff hatchery/main -m "Merge hatchery/main into <project>"`.
      `git merge` counts as a commit under `git.commit.subagents` (ADR 0006), so under the base
@@ -35,7 +39,8 @@ project's own `NNNN-adopt-hatchery.md` records the base commit).
    - Patch mode: `git diff $FROM hatchery/main -- .claude CLAUDE.md LICENSES | git apply --3way`
      (drop `LICENSES` if the project has none). Needs a clean tree; conflicts are reported by
      `git apply` as "with conflicts" and show up in step 5 the same way.
-   If no conflicts, go to step 6.
+   If no conflicts, go to step 6, but in merge mode first apply step 5's bullet on clean adds
+   (the merge is already staged under `--no-commit`).
 5. Conflicts. `git diff --name-only --diff-filter=U`. Resolve each file by this rule, then
    `git add` it:
    - Base wins: anything under `.claude/` (agents, skills, hooks, rules, `settings.json`) and
@@ -47,13 +52,18 @@ project's own `NNNN-adopt-hatchery.md` records the base commit).
      must then print the policy, not an error.
    - Project wins: `README.md`; the title and project-specific sections of `CLAUDE.md`
      (phase, platforms, routing, branch name, `## Project rules`, anything the project
-     added); `docs/HANDOFF.md`; the files under `docs/ideas/` and `docs/operator/` (their `README.md`s are the base's, since the block grammar must stay identical across projects, ADR 0007); everything under `docs/design/`, `docs/findings/`,
+     added); `docs/HANDOFF.md` and `docs/handoff/`; the files under `docs/ideas/` and `docs/operator/` (their `README.md`s are the base's, since the block grammar must stay identical across projects, ADR 0007); everything under `docs/design/`, `docs/findings/`,
      `docs/reference/`. Exception, merge mode (ADR 0008): ADRs `0001` to `0019` under
      `docs/design/decisions/` are Hatchery's records and the base wins there, except the project's
      own lines, which are merged by hand as a mixed file: a `Status: superseded by NNNN` line and
      its pointer, and rows the project added to a table the ADR calls living (ADR 0001's
      components table). The "Decisions so far" list in `docs/design/README.md` takes both sides'
      lines, Hatchery's new rows and the project's.
+   - Merge mode, clean adds too (they never reach this step, so look for them): files the base
+     added under `docs/ideas/`, `docs/operator/`, `docs/findings/`, `docs/design/proposals/` and
+     `docs/reference/` (except `claude-code-on-windows.md`) are Hatchery's own state. `git rm`
+     them and drop their index rows, the same set decant steps 7 to 9 delete: `git diff
+     --name-only --diff-filter=A HEAD...MERGE_HEAD -- <those directories>` lists them. Base ADRs stay (ADR 0008).
    - `CLAUDE.md` rule sections (This agreement, Where things live, Delegation, Debug interface,
      Major decisions, Usage gating, Git, Licensing): base wins unless the project has an ADR for
      the difference.
@@ -64,7 +74,8 @@ project's own `NNNN-adopt-hatchery.md` records the base commit).
    via the runner (`commit` skill), subject `Update from Hatchery <old short sha>..<new short sha>`.
 6. Post-merge checks, each must pass or be reported as a failure:
    - `node --version`; `node .claude/hooks/usage-gate.js < /dev/null` exits 0.
-   - `wc -l CLAUDE.md docs/HANDOFF.md`: at most 150 and 40.
+   - `wc -l CLAUDE.md` at most 150; the three command lines of pusher check 7
+     (`.claude/agents/pusher.md`) print no `FAIL`.
    - Every `.claude/skills/*/SKILL.md` and `.claude/agents/*.md` starts with frontmatter.
    - `.claude/settings.json` parses, and (adopted projects) still contains every project hook entry
      the adoption ADR lists.

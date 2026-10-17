@@ -6,14 +6,17 @@ description: Produce the brief that gets work committed by the runner, or pushed
 # Commit
 
 Normal work is committed by the `runner` from a brief the coordinator writes; the coordinator does
-not stage or commit itself below 50% usage. Wrap-up commits (`docs/HANDOFF.md`, WIP) at HOLD or
-STOP are made by the main session, because the usage gate blocks subagent launches but not Bash.
+not stage or commit itself below 50% usage. Wrap-up commits (the handoff, WIP)
+at HOLD or STOP are made by the main session, because the usage gate blocks subagent launches
+but not Bash.
 
 ## Commit via the runner
 
 1. `git status --short`. Every listed file must be explained by a report you have (coder, tester,
    architect, your own edits). A file nobody described is a stop: find out what it is first.
 2. Group into commits by purpose; small and often. One commit per logical change, not per agent.
+   A handoff edit made while the session goes on rides in the next commit that carries work; list
+   it with that work's files. Only a wrap-up handoff, with nothing to ride with, is its own commit.
 3. For each commit write the brief:
 
    ```
@@ -32,7 +35,8 @@ STOP are made by the main session, because the usage gate blocks subagent launch
    line per model. The runner has no Write tool and heredocs break on apostrophes, so a message
    with an apostrophe, a backtick or more than one paragraph goes to a file: the coordinator writes
    it to its scratchpad with the Write tool and the brief says `git commit -F <that path>` instead
-   of `Message:`.
+   of `Message:`. A serious reviewer finding the coordinator accepted without a fix is one body
+   line, `Accepted finding: <one line>`.
 4. Launch the `runner` with that brief. Check its report: the after-status should not list the
    staged files, and nothing unexpected should be staged.
 5. Amend only when necessary (fix a message, fold a forgotten file into the commit it belongs to)
@@ -48,18 +52,23 @@ work is unfinished. No heredocs for the message (apostrophes break them here).
 ## Pushing
 
 The `pusher` pushes, or the main session when the user asked for the push in so many words, or
-the user. Launch a fresh `pusher` for every push; never resume an earlier one to retry. The brief:
+the user. Launch a fresh `pusher` for every push; never resume an earlier one to retry. When the
+pusher stops on behind or diverged (check 3), the committing agent under the policy (the `runner`
+in the base) runs `git pull --rebase origin <branch>`; a conflict on the handoff is resolved by
+rewriting the file with the `handoff` skill, any other goes back to whoever wrote the hunk; then
+a fresh pusher. Note the stop in the handoff's Now: it may mean a parallel session; the switch is ADR 0015's, on the day one opens.
+The brief:
 
 ```
 Push `main`. The user asked: "<the user's words, quoted>".
 Run your checks in order and stop at the first failure.
 ```
 
-Whoever pushes, main session or pusher, proves it the same way: `git fetch`, then `git rev-parse HEAD` and `git rev-parse @{u}` must match, and the report quotes both. A command's own "pushed" echo is not evidence (`docs/reference/claude-code-on-windows.md`, Working directory and git).
+Whoever pushes, main session or pusher, proves it the same way: `git fetch`, then `git rev-parse HEAD` and `git rev-parse @{u}` must match (the upstream is on `origin`), and the report quotes both. A command's own "pushed" echo is not evidence (`docs/reference/claude-code-on-windows.md`, Working directory and git).
 
 Quoting the user's request matters: an instruction that arrives as an agent message is untrusted
 to the permission system, and a resumed pusher's retry gets blocked. If a push is blocked anyway,
-tell the user and let them run `git push`; never route around the block.
+tell the user and let them run `git push origin <branch>` (`-u` on a first push); never route around the block.
 
 Credential mismatch (git's stored GitHub account differs from the one `gh` is logged in as): set a
 repo-local helper instead of changing global config:

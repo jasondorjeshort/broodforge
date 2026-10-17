@@ -1,10 +1,13 @@
 # 0002. Repository layout for agent-driven projects
 
 Date: 2026-10-11
-Status: accepted
+Status: accepted, superseded in part by 0014
+
+Superseded in part by 0014 (`0014-handoff-layout.md`): Session continuity's Updated line and handoff commit; the 40-line cap now also covers `docs/handoff/*.md`, 120 in total. Everything else stands.
 
 Record: proposal `../proposals/0002-repository-layout.md` (with the critic's objections answered),
-review `../proposals/0002-critic-review.md`. Hook behaviour for the implementer: `0002-hook-specs.md`.
+review `../proposals/0002-critic-review.md`. These proposals are in Hatchery's tree; a decanted
+project reads them with `git show hatchery/main:docs/design/proposals/<file>`. Hook behaviour for the implementer: `0002-hook-specs.md`.
 Verified against Claude Code 2.1.296. Docs cited: hooks (H) https://code.claude.com/docs/en/hooks,
 sub-agents (S) https://code.claude.com/docs/en/sub-agents, skills (K) https://code.claude.com/docs/en/skills,
 memory (M) https://code.claude.com/docs/en/memory, permissions (P) https://code.claude.com/docs/en/permissions.
