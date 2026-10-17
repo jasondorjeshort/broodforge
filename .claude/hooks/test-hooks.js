@@ -39,8 +39,10 @@
 // policy.js and imports.js, copied into the O cases' scratch repositories; ~/.claude is never touched.
 // Groups IM (imports.js), CL (policy.js --claude-check) and O (ownership.js) cover ADR 0016's code;
 // group Q covers queue-list.js and post-edit's marker switch (ADR 0017), on scratch trees, with a
-// scratch copy of the hooks whose queue-list.js throws (Q13); the line above the totals lists the
-// groups that ran. Exit codes: 0 all pass (a
+// scratch copy of the hooks whose queue-list.js throws (Q13); group PV covers privacy-scan.js, rule
+// 20 and the pre-push hook (ADR 0018) on scratch repositories with bare remotes, every guard run
+// with HOME at an empty scratch dir (or the case's own, for the never and allow files); the line
+// above the totals lists the groups that ran. Exit codes: 0 all pass (a
 // SKIP is not a failure), 1 any failure, 2 usage error.
 'use strict';
 const fs = require('fs');
@@ -131,6 +133,7 @@ const HATCHERY_POLICY = {
   },
   usage: { hold: 50, deny: null, staleSeconds: 7200, whenStale: 'allow' },
   edit: { capExempt: [], anchorExempt: ['docs/design/proposals/*', 'docs/design/decisions/*', 'docs/findings/*', 'docs/hatchery/*'], formatters: {} },
+  privacy: { allow: ['user'], identities: [] },
 };
 fs.writeFileSync(path.join(scratch, 'policy-hatchery.json'), JSON.stringify(HATCHERY_POLICY));
 const POLICIES = {
@@ -164,7 +167,12 @@ for (const [dir, branch] of [[repoMain, 'main'], [repoTask, 'task/T1']]) {
   git(dir, 'init', '-q');
   git(dir, 'checkout', '-q', '-b', branch);
   git(dir, 'commit', '-q', '--allow-empty', '-m', 'init');
+  git(dir, 'tag', 'v1.0'); // GP16 pushes it; rule 20 reads what a push sends, so it must exist
+  git(dir, 'remote', 'add', 'origin', `${dir}-origin.git`); // rule 20 denies a push to a remote that is not configured
 }
+// HOME for every guard run: empty, so rule 20 reads no never or allow file of the machine.
+const guardHome = path.join(scratch, 'guard-home');
+fs.mkdirSync(guardHome, { recursive: true });
 
 // ---------- git-guard ----------
 const PREFIX = {
@@ -187,21 +195,24 @@ const PREFIX = {
   17: 'forced worktree removal',
   18: 'forced branch reset',
   19: 'unexpanded argument',
+  20: 'personal data in the outgoing commits',
   policy: 'policy file is malformed (',
 };
 const NOTE_MARK = 'git-guard reads the command line, not what runs';
 const withNote = (d) => d.reason.includes(NOTE_MARK) || 'reason lacks the note about command text';
 const noNote = (d) => !d.reason.includes(NOTE_MARK) || 'reason carries the note, but git is the command here';
 
-// Runs git-guard once. o: { command, agent, tool, cwd, policy, raw, merged }. expect: 'allow',
-// 'internal' (exit 2, reason on stderr), a rule number, or 'policy' (malformed policy deny).
+// Runs git-guard once. o: { command, agent, tool, cwd, policy, raw, merged, home }. expect: 'allow',
+// 'internal' (exit 2, reason on stderr), a rule number, or 'policy' (malformed policy deny). HOME
+// is o.home (a PV case's never and allow files) or the empty guardHome.
 function guardCase(id, o, expect, extra) {
   if (!selected(id)) return;
   const input = { hook_event_name: 'PreToolUse', tool_name: o.tool || 'Bash', cwd: o.cwd || repoMain, tool_input: { command: o.command } };
   if (o.agent !== null && o.agent !== undefined) input.agent_type = o.agent;
   const stdin = o.raw !== undefined && o.raw !== null ? o.raw : JSON.stringify(input);
   // task/T1 has a merged pull request, task/T2 does not (git-guard's GIT_GUARD_MERGED seam).
-  const r = run('git-guard', stdin, envWith({ HOOK_POLICY_FILE: o.policy || POLICIES.hatchery, GIT_GUARD_MERGED: 'task/T1' }));
+  const home = o.home || guardHome;
+  const r = run('git-guard', stdin, envWith({ HOOK_POLICY_FILE: o.policy || POLICIES.hatchery, GIT_GUARD_MERGED: 'task/T1', HOME: home, USERPROFILE: home }));
   const shown = JSON.stringify(String(o.command).split(fwd(scratch)).join('<scratch>'));
   const where = `${o.tool === 'PowerShell' ? ' ps' : ''}${o.cwd === repoTask ? ' on task/T1' : ''}${o.policyName ? ` (${o.policyName})` : ''}`;
   const label = `${shown} [${o.agent == null ? '-' : JSON.stringify(o.agent)}]${where} -> ${typeof expect === 'number' ? `deny rule ${expect}` : expect}`;
@@ -350,6 +361,11 @@ const GQ = [
   ['GQ26', 'git status; git push --force 2>&1', 'PowerShell', null, 1],
   ['GQ27', 'Write-Output "git push --force"', 'PowerShell', null, 'allow'],
   ['GQ28', 'git commit -m "$(git rev-parse HEAD) fix"', 'PowerShell', 'coder', 4],
+  // A path ending in /git is git only in command position; as an argument it is a file (ADR 0018 review).
+  ['GQ29', 'cat some/dir/git', 'Bash', 'coder', 'allow'],
+  ['GQ30', 'ls -la "$R/.claude/hooks/git" "$X"', 'Bash', 'coder', 'allow'],
+  ['GQ31', 'sudo /usr/bin/git push -f', 'Bash', null, 1],
+  ['GQ32', "& 'C:\\Program Files\\Git\\cmd\\git.exe' reset --hard", 'PowerShell', null, 5],
 ];
 for (const [id, command, tool, agent, expect, extra] of GQ) guardCase(id, { command, tool, agent }, expect, extra);
 
@@ -476,6 +492,252 @@ for (const [n, command, agent, cwd, want] of GP) {
   for (const p of [H, 'none', 'taskBranches', 'singleBranch']) {
     const tag = { hatchery: 'H', none: 'N', taskBranches: 'T', singleBranch: 'S' }[p];
     guardCase(`GP${n}${tag}`, { command, agent, cwd, policy: POLICIES[p], policyName: p }, want[p === 'none' ? H : p]);
+  }
+}
+
+// ---------- the privacy scan: rule 20, the CLI, the pre-push hook (group PV; ADR 0018) ----------
+// Sample values are built from pieces so no line of this file matches the scan that reads it when
+// it is pushed. Each case: a scratch repository with a bare origin and one pushed base commit, then
+// outgoing commits; a scratch policy listing the scratch identity; HOME a scratch dir.
+{
+  const AT = '@';
+  const U = 'Us' + 'ers';
+  const SEG = 'some' + 'one';
+  const PV_ID = { name: 'hooks-test', email: `hooks-test${AT}example.invalid` };
+  const OTHER = `${SEG}${AT}corp.internal`; // not a placeholder domain
+  const NOREPLY = `12345+hooks-test${AT}users.noreply.github` + '.com';
+  const PV_DIR = Symbol('directory');
+  const pvGit = (dir, args, who, env) => {
+    const id = who || PV_ID;
+    const ident = ['-c', `user.name=${id.name}`, ...(id.email === null ? [] : ['-c', `user.email=${id.email}`])];
+    const r = spawnSync('git', ['-C', dir, ...ident, '-c', 'commit.gpgsign=false', '-c', 'tag.gpgsign=false', ...args],
+      { encoding: 'utf8', env: env || process.env });
+    return r;
+  };
+  const must = (dir, args, who) => {
+    const r = pvGit(dir, args, who);
+    if (r.status !== 0) { process.stderr.write(`test-hooks: git ${args.join(' ')} failed: ${r.stderr}\n`); process.exit(2); }
+    return (r.stdout || '').trim();
+  };
+  const pvCommit = (dir, c) => {
+    for (const [rel, text] of Object.entries(c.files || {})) {
+      const f = path.join(dir, ...rel.split('/'));
+      if (text === null) fs.rmSync(f);
+      else { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, text); }
+    }
+    must(dir, ['add', '-A']);
+    must(dir, ['commit', '-q', '--allow-empty', '-m', c.msg || 'change'], c.who);
+    return must(dir, ['rev-parse', 'HEAD']);
+  };
+  const pvRepo = (name, commits) => {
+    const dir = path.join(scratch, `pv-${name}`);
+    fs.mkdirSync(dir, { recursive: true });
+    must(scratch, ['init', '-q', '--bare', `${dir}-origin.git`]);
+    must(dir, ['init', '-q']);
+    must(dir, ['checkout', '-q', '-b', 'main']);
+    fs.writeFileSync(path.join(dir, 'base.txt'), 'base\n');
+    must(dir, ['add', '-A']);
+    must(dir, ['commit', '-q', '-m', 'base']);
+    must(dir, ['remote', 'add', 'origin', `${dir}-origin.git`]);
+    must(dir, ['push', '-q', 'origin', 'main']);
+    const shas = (commits || []).map((c) => pvCommit(dir, c));
+    return { dir, shas };
+  };
+  const line = (rel, text) => ({ files: { [rel]: `${text}\n` } });
+  const pvHome = (name, files) => {
+    const h = path.join(scratch, `pv-home-${name}`);
+    fs.mkdirSync(path.join(h, '.claude'), { recursive: true });
+    for (const [f, t] of Object.entries(files || {})) {
+      const p = path.join(h, '.claude', f);
+      if (t === PV_DIR) fs.mkdirSync(p, { recursive: true }); else fs.writeFileSync(p, t);
+    }
+    return h;
+  };
+  const pvPolicy = (name, privacy) => scratchPolicy(`pv-${name}`,
+    Object.assign({}, HATCHERY_POLICY, { privacy: Object.assign({ allow: [], identities: [PV_ID] }, privacy) }));
+  const POL = pvPolicy('base');
+  const says = (...parts) => (d) => parts.every((p) => d.reason.includes(p)) || `reason lacks one of ${JSON.stringify(parts)}: ${d.reason}`;
+  const lacks = (...parts) => (d) => parts.every((p) => !d.reason.includes(p)) || `reason carries one of ${JSON.stringify(parts)}`;
+  const pv = (id, command, repo, expect, o) => {
+    const x = o || {};
+    guardCase(id, { command, agent: x.agent === undefined ? 'pusher' : x.agent, cwd: repo.dir, policy: x.policy || POL,
+      home: x.home, policyName: x.label }, expect, x.extra);
+  };
+  const cli = (repo, args, o) => {
+    const x = o || {};
+    const home = x.home || guardHome;
+    const r = spawnSync(NODE, [path.join(HOOKS, 'privacy-scan.js'), ...args], {
+      cwd: repo.dir || repo, input: x.input || '', encoding: 'utf8', timeout: 60000,
+      env: envWith({ HOOK_POLICY_FILE: x.policy || POL, HOME: home, USERPROFILE: home }),
+    });
+    return { code: r.status, out: r.stdout || '', err: r.stderr || '' };
+  };
+  const cliCase = (id, label, check) => { if (selected(id)) { const p = check(); report(id, label, p === true, p); } };
+  const json = (r) => { try { return JSON.parse(r.out); } catch (_) { return null; } };
+  const PUSH = 'git push origin main';
+
+  if (!opt.only || opt.only.startsWith('PV') || 'PV'.startsWith(opt.only)) {
+    // PV01-PV04: home paths, slugs, placeholders, addresses.
+    const homeBack = pvRepo('home-back', [line('docs/a.md', `see C:\\${U}\\${SEG}\\proj for it`)]);
+    const homeFwd = pvRepo('home-fwd', [line('docs/a.md', `see C:/${U}/${SEG}/proj`)]);
+    const homeBash = pvRepo('home-bash', [line('docs/a.md', `cd /c/${U}/${SEG}/proj`)]);
+    pv('PV01a', PUSH, homeBack, 20, { extra: says('docs/a.md:1 (home: ') });
+    pv('PV01b', PUSH, homeFwd, 20, { extra: says('docs/a.md:1 (home: ') });
+    pv('PV01c', PUSH, homeBash, 20, { extra: says('docs/a.md:1 (home: ') });
+    const slugDrive = pvRepo('slug-drive', [line('notes.txt', `path "C--${U}-${SEG}-proj"`)]);
+    pv('PV02', PUSH, slugDrive, 20, { extra: says('notes.txt:1 (home: ') });
+    const holders = pvRepo('holders', [{ files: { 'docs/h.md': [`C:\\${U}\\<name>\\x`, `C:/${U}/$USER/x`, `C:/${U}/~/x`,
+      `C:\\${U}\\Public\\x`, `C:\\${U}\\Default User\\x`, `/home/<name>/x`].join('\n') + '\n' } }]);
+    pv('PV03', PUSH, holders, 'allow');
+    const mailOk = pvRepo('mail-ok', [line('a.txt', `write to ${SEG}${AT}example.invalid or ${SEG}${AT}example.org`)]);
+    const mailBad = pvRepo('mail-bad', [line('a.txt', `write to ${OTHER}`)]);
+    pv('PV04a', PUSH, mailOk, 'allow');
+    pv('PV04b', PUSH, mailBad, 20, { extra: says('a.txt:1 (email: ') });
+
+    // PV05-PV06: the repository identity is never an exemption; an empty list switches identity off.
+    const stranger = pvRepo('stranger');
+    must(stranger.dir, ['config', 'user.email', OTHER]);
+    pvCommit(stranger.dir, { msg: 'change', who: { name: 'hooks-test', email: null } });
+    pv('PV05', PUSH, stranger, 20, { extra: says('4 hits', 'author (email: ', 'author (identity: ', 'committer (email: ') });
+    const empty = pvPolicy('no-ids', { identities: [] });
+    cliCase('PV06a', 'CLI, identities empty, PV05 repository: no identity hit, the notice, the email hits stay', () => {
+      const r = cli(stranger, ['--json'], { policy: empty });
+      const o = json(r);
+      if (!o) return `stdout not JSON: ${r.out}`;
+      if (o.hits.some((h) => h.class === 'identity')) return 'an identity hit with the class off';
+      if (!r.err.includes('privacy-scan: privacy.identities is empty')) return `no notice: ${r.err}`;
+      return (r.code === 1 && o.hits.filter((h) => h.class === 'email').length === 2) || `exit ${r.code}, ${JSON.stringify(o.hits)}`;
+    });
+    const placeholderId = pvRepo('placeholder-id', [{ msg: 'change', who: { name: 'someone-else', email: `x${AT}example.invalid` } }]);
+    pv('PV06b', PUSH, placeholderId, 20, { extra: says('(identity: ') });
+    pv('PV06c', PUSH, placeholderId, 'allow', { policy: empty, label: 'identities empty' });
+
+    // PV07-PV08, PV26: commit by commit; only the target remote and hatchery count as published.
+    const netDiff = pvRepo('net-diff', [line('docs/n.md', 'clean'), line('docs/n.md', `see C:/${U}/${SEG}/x`), line('docs/n.md', 'clean again')]);
+    pv('PV07', PUSH, netDiff, 20, { extra: says('1 hit: ', `${netDiff.shas[1].slice(0, 7)} docs/n.md:1 (home: `) });
+    const onBase = pvRepo('on-base', [line('docs/b.md', `see C:/${U}/${SEG}/x`)]);
+    must(scratch, ['init', '-q', '--bare', `${onBase.dir}-hatchery.git`]);
+    must(onBase.dir, ['remote', 'add', 'hatchery', `${onBase.dir}-hatchery.git`]);
+    must(onBase.dir, ['push', '-q', 'hatchery', 'main']);
+    pvCommit(onBase.dir, line('docs/c.md', 'clean'));
+    pv('PV08', PUSH, onBase, 'allow');
+    const onBackup = pvRepo('on-backup', [line('docs/b.md', `see C:/${U}/${SEG}/x`)]);
+    must(scratch, ['init', '-q', '--bare', `${onBackup.dir}-backup.git`]);
+    must(onBackup.dir, ['remote', 'add', 'backup', `${onBackup.dir}-backup.git`]);
+    must(onBackup.dir, ['push', '-q', 'backup', 'main']);
+    pv('PV26', PUSH, onBackup, 20, { extra: says('docs/b.md:1 (home: ') });
+
+    // PV09-PV16: the other classes.
+    pv('PV09', PUSH, pvRepo('trailer', [{ msg: `change\n\n${'Claude-'}Session: https://example.invalid/x` }]), 20, { extra: says('message (session: ') });
+    pv('PV10a', PUSH, pvRepo('claude-url', [line('a.txt', `link ${'https://'}${'claude'}.ai/code/x`)]), 20, { extra: says('a.txt:1 (session: ') });
+    pv('PV10b', PUSH, pvRepo('claude-host', [line('a.txt', `plans on ${'https://'}${'claude'}.ai and claude.ai.`)]), 'allow');
+    const never = pvHome('never', { 'privacy-never.txt': '# a comment\nzorblax\n' });
+    pv('PV11a', PUSH, pvRepo('never-word', [line('a.txt', 'met Zorblax today')]), 20, { home: never, extra: says('a.txt:1 (word: Zorblax)') });
+    pv('PV11b', PUSH, pvRepo('never-part', [line('a.txt', 'the zorblaxian way')]), 'allow', { home: never });
+    let osUser = '';
+    try { osUser = os.userInfo().username; } catch (_) { /* no user name: PV12 skips */ }
+    if (osUser.length >= 3) {
+      const own = pvRepo('os-user', [{ msg: `change by ${osUser} today` }]);
+      pv('PV12a', PUSH, own, 20, { extra: says('message (word: ') });
+      pv('PV12b', PUSH, own, 'allow', { home: pvHome('user-allow', { 'privacy-allow.txt': `${osUser}\n` }), label: 'user allow file' });
+    } else if (selected('PV12')) { skipped++; noteGroup('PV12'); process.stdout.write('SKIP PV12 the OS user name is unreadable or shorter than 3 characters\n'); }
+    pv('PV13', PUSH, pvRepo('host', [line('a.txt', `built on ${'DESK'}TOP-AB12 last week`)]), 20, { extra: says('a.txt:1 (host: ') });
+    const tagged = pvRepo('tag');
+    must(tagged.dir, ['tag', '-a', 'v1', '-m', `release, questions to ${OTHER}`]);
+    pv('PV14', 'git push origin v1', tagged, 20, { extra: says('tag v1 message (email: ') });
+    pv('PV15', PUSH, pvRepo('dotenv', [{ files: { '.env': 'X=1\n' } }]), 20, { extra: says('file .env (secret: ') });
+    const tline = JSON.stringify({ parentUuid: null, sessionId: 'x', type: 'user' });
+    pv('PV16', PUSH, pvRepo('transcript', [line('log.jsonl', tline)]), 20, { extra: says('log.jsonl:1 (transcript: ') });
+
+    // PV17-PV19, PV27: every push form and every caller.
+    pv('PV17', 'git push --dry-run origin main', homeFwd, 20);
+    pv('PV18', PUSH, homeFwd, 20, { agent: null, extra: noNote });
+    pv('PV19', 'git push nosuch main', homeFwd, 20, { extra: says('could not read what this push sends', 'nosuch (not a configured remote)') });
+    const clean = pvRepo('clean', [line('a.txt', 'nothing personal')]);
+    pv('PV27a', 'git add -A && git commit -m x && git push', clean, 20, { agent: null, extra: says('shares its line with another git command') });
+    pv('PV27b', 'git push', clean, 'allow', { agent: null });
+
+    // PV20-PV22, PV32: the CLI and the pre-push hook.
+    cliCase('PV20', 'CLI --json on PV07: exit 1, commits 3, one hit with its commit', () => {
+      const r = cli(netDiff, ['--json']);
+      const o = json(r);
+      if (!o) return `stdout not JSON: ${r.out}`;
+      return (r.code === 1 && o.commits === 3 && o.error === null && o.hits.length === 1 && o.hits[0].commit === netDiff.shas[1] &&
+        o.hits[0].class === 'home') || `exit ${r.code}, ${r.out}`;
+    });
+    cliCase('PV21', 'CLI --text, two classes: exit 1, two HIT lines with <file>:<n>', () => {
+      const f = path.join(scratch, 'pv-text.txt');
+      fs.writeFileSync(f, `plain\nmail ${OTHER}\npath C:/${U}/${SEG}/x\n`);
+      const r = cli(scratch, ['--text', f]);
+      const ls = r.out.trim().split('\n');
+      return (r.code === 1 && ls.length === 3 && ls[0] === `HIT email ${f}:2: ${OTHER}` && ls[1] === `HIT home ${f}:3: C:/${U}/${SEG}` &&
+        ls[2] === 'privacy-scan: 2 hits in 3 lines') || `exit ${r.code}, ${JSON.stringify(r.out)}`;
+    });
+    cliCase('PV22', 'pre-push hook through git push: refused on PV01, the remote unchanged; a clean push goes', () => {
+      const p = [];
+      for (const [repo, want] of [[pvRepo('hook-hit', [line('docs/a.md', `see C:/${U}/${SEG}/proj`)]), 'refused'], [pvRepo('hook-clean', [line('a.txt', 'ok')]), 'pushed']]) {
+        const hooks = path.join(repo.dir, '.claude', 'hooks');
+        fs.mkdirSync(path.join(hooks, 'git'), { recursive: true });
+        for (const f of ['privacy-scan.js', 'policy.js']) fs.copyFileSync(path.join(HOOKS, f), path.join(hooks, f));
+        fs.copyFileSync(path.join(HOOKS, 'git', 'pre-push'), path.join(hooks, 'git', 'pre-push'));
+        fs.chmodSync(path.join(hooks, 'git', 'pre-push'), 0o755);
+        must(repo.dir, ['config', 'core.hooksPath', '.claude/hooks/git']);
+        const before = must(scratch, ['--git-dir', `${repo.dir}-origin.git`, 'rev-parse', 'main']);
+        const r = pvGit(repo.dir, ['push', 'origin', 'main'], null, envWith({ HOOK_POLICY_FILE: POL, HOME: guardHome, USERPROFILE: guardHome }));
+        const after = must(scratch, ['--git-dir', `${repo.dir}-origin.git`, 'rev-parse', 'main']);
+        if (want === 'refused' && !(r.status !== 0 && after === before && r.stderr.includes('HIT home'))) p.push(`hit: exit ${r.status}, ${JSON.stringify(r.stderr)}`);
+        if (want === 'pushed' && !(r.status === 0 && after === repo.shas[0])) p.push(`clean: exit ${r.status}, ${r.stderr.trim()}`);
+      }
+      return p.length === 0 || p.join('; ');
+    });
+    cliCase('PV32', 'CLI --pre-push: a remote sha bounds the range (a hit at it passes, one after it is denied)', () => {
+      const two = pvRepo('pre-push-range', [line('docs/a.md', `see C:/${U}/${SEG}/a`), line('docs/b.md', `see C:/${U}/${SEG}/b`)]);
+      const [a, b] = two.shas;
+      const zero = '0'.repeat(40);
+      const r1 = cli(two, ['--pre-push', 'origin', 'x'], { input: `refs/heads/main ${b} refs/heads/main ${a}\n` });
+      const o1 = r1.out.trim().split('\n');
+      const r2 = cli(two, ['--pre-push', 'origin', 'x'], { input: `refs/heads/main ${b} refs/heads/main ${b}\n` });
+      const r3 = cli(two, ['--pre-push', 'origin', 'x'], { input: `(delete) ${zero} refs/heads/old ${a}\n` });
+      if (!(r1.code === 1 && o1.length === 2 && o1[0].startsWith(`HIT home ${b.slice(0, 7)} docs/b.md:1`) && o1[1] === 'privacy-scan: 1 hits in 1 commits')) return `after a: exit ${r1.code}, ${r1.out}`;
+      if (!(r2.code === 0 && r2.out === 'privacy-scan: clean, 0 commits\n')) return `at b: exit ${r2.code}, ${r2.out}`;
+      return (r3.code === 0 && r3.out === 'privacy-scan: clean, 0 commits\n') || `deletion: exit ${r3.code}, ${r3.out}`;
+    });
+
+    // PV23: malformed privacy keys deny every git command, as any malformed policy does.
+    guardCase('PV23a', { command: 'git status', policy: scratchPolicy('pv-glob', { privacy: { allow: ['a*'] } }), policyName: 'allow glob' }, 'policy');
+    guardCase('PV23b', { command: 'git status', policy: scratchPolicy('pv-noemail', { privacy: { identities: [{ name: 'x' }] } }), policyName: 'identity without email' }, 'policy');
+
+    // PV24-PV25: the slug spellings, and what is not one.
+    pv('PV24a', PUSH, pvRepo('slug-home', [line('a.txt', `under -home-${SEG}-proj now`)]), 20, { extra: says('a.txt:1 (home: ') });
+    pv('PV24b', PUSH, pvRepo('slug-mac', [line('a.txt', `-${U}-${SEG}-proj`)]), 20, { extra: says('a.txt:1 (home: ') });
+    pv('PV25', PUSH, pvRepo('slug-not', [{ files: { 'a.txt': [`run --home-dir=${SEG}-x`, `xC--${U}-${SEG}-y`,
+      `the slug is written C--${U}-<seg>- or -home-<seg>-`].join('\n') + '\n' } }]), 'allow');
+
+    // PV28-PV29: identity addresses in content, and what each allow list lifts.
+    const ids = pvPolicy('ids', { identities: [PV_ID, { name: 'hooks-test', email: OTHER }, { name: 'hooks-test', email: NOREPLY }] });
+    pv('PV28a', PUSH, pvRepo('id-content', [line('a.txt', `mail ${OTHER}`)]), 20, { policy: ids, extra: says('a.txt:1 (email: ') });
+    pv('PV28b', PUSH, pvRepo('id-committer', [{ msg: 'change', who: { name: 'hooks-test', email: OTHER } }]), 'allow', { policy: ids });
+    pv('PV28c', PUSH, pvRepo('id-noreply', [line('a.txt', `mail ${NOREPLY}`)]), 'allow', { policy: ids });
+    const mailHome = pvHome('mail-allow', { 'privacy-allow.txt': `${OTHER}\n` });
+    cliCase('PV29a', 'user allow file holding an email: no lift, and a notice', () => {
+      const r = cli(mailBad, [], { home: mailHome });
+      return (r.code === 1 && r.out.startsWith('HIT email ') && r.err.includes('privacy-allow.txt lifts only word, host and home hits')) ||
+        `exit ${r.code}, ${r.out} ${r.err}`;
+    });
+    pv('PV29b', PUSH, mailBad, 'allow', { policy: pvPolicy('mail-allow', { allow: [OTHER] }), label: 'privacy.allow' });
+
+    // PV30: an unreadable never file denies the push, never other git commands.
+    const brokenHome = pvHome('never-dir', { 'privacy-never.txt': PV_DIR });
+    pv('PV30a', PUSH, clean, 20, { home: brokenHome, extra: says('could not read what this push sends', 'privacy-never.txt') });
+    pv('PV30b', 'git status', clean, 'allow', { home: brokenHome });
+
+    // PV31: secrets only in their full shapes.
+    pv('PV31a', PUSH, pvRepo('akia', [line('a.txt', `key ${'AK'}IA${'ABCDEFGH'}IJKLMNOP end`)]), 20, { extra: (d) => (says('a.txt:1 (secret: ')(d) === true ? lacks('IJKLMNOP')(d) : says('a.txt:1 (secret: ')(d)) });
+    pv('PV31b', PUSH, pvRepo('akia-prose', [line('a.txt', `the ${'AK'}IA prefix, and ${'tok'}en = "some text here"`)]), 'allow');
+
+    // PV33: a \n escape in source text is not an address's user part; the address after one is still read.
+    pv('PV33a', PUSH, pvRepo('escape-import', [line('a.js', 'const t = "Write\\n@x.md\\n";')]), 'allow');
+    pv('PV33b', PUSH, pvRepo('escape-addr', [line('a.js', `const t = "to:\\n${OTHER}";`)]), 20, { extra: says(`(email: ${OTHER})`) });
   }
 }
 

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Loads .claude/hooks/policy.json, the one file that holds a project's choices for the hooks
 // (who commits and pushes, which branches may be deleted, usage thresholds, docs cap exemptions,
-// formatters, update excludes), and the helpers the usage gate and the status line share (thresholds, grants, the
+// formatters, update excludes, the privacy scan's lifts and identities), and the helpers the usage
+// gate and the status line share (thresholds, grants, the
 // account label). The scripts hold mechanism only, so update-from-hatchery can patch them without
 // touching a project's policy. Schema and fail modes: docs/design/decisions/0006-hook-policy-file.md.
 //
@@ -76,6 +77,10 @@ const DEFAULTS = {
   // Base-owned paths an update from Hatchery never brings (ADR 0016): files the project removed or
   // replaced for good. ownership.js turns each into an exclude pathspec.
   update: { exclude: [] },
+  // The privacy scan (ADR 0018): allow holds literals (case-insensitive, never patterns) that lift
+  // a hit of any class; identities the { name, email } pairs commits may carry, the first being
+  // the repository identity. An empty list switches the identity class off.
+  privacy: { allow: ['user'], identities: [] },
 };
 
 const isStrings = (v) => Array.isArray(v) && v.every((s) => typeof s === 'string' && s !== '');
@@ -98,6 +103,12 @@ const TYPES = {
     Object.keys(v).every((k) => k.startsWith('$') || k === 'command' || k === 'timeoutSeconds') &&
     isStrings(v.command) && v.command.length > 0 &&
     (v.timeoutSeconds === undefined || (TYPES.seconds(v.timeoutSeconds) && v.timeoutSeconds <= 60))),
+  // Literal strings for privacy.allow: a "*" or "/" means a pattern or a path, which it never is.
+  literals: (v) => isStrings(v) && v.every((s) => !s.includes('*') && !s.includes('/')),
+  // privacy.identities: a list of { name: non-empty string, email: a string with one "@" }.
+  identities: (v) => Array.isArray(v) && v.every((i) => i !== null && typeof i === 'object' && !Array.isArray(i) &&
+    Object.keys(i).every((k) => k.startsWith('$') || k === 'name' || k === 'email') &&
+    typeof i.name === 'string' && i.name.trim() !== '' && typeof i.email === 'string' && i.email.split('@').length === 2),
   formatters: (v) => v !== null && typeof v === 'object' && !Array.isArray(v) &&
     Object.keys(v).every((k) => /^\.[A-Za-z0-9]+$/.test(k) && isStrings(v[k]) && v[k].length > 0),
 };
@@ -116,6 +127,7 @@ const SCHEMA = {
   },
   edit: { capExempt: 'patterns', anchorExempt: 'patterns', formatters: 'formatters' },
   update: { exclude: 'patterns' },
+  privacy: { allow: 'literals', identities: 'identities' },
 };
 
 // Walks value against schema, merging over defaults. Throws on the first problem.
