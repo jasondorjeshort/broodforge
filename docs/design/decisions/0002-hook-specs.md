@@ -144,11 +144,16 @@ load and that the harness's Hatchery fixture equals the loader's defaults. Group
 fitness check of ADR 0013 (the dependency budget): F1 runs it on this repository and F2 to F6 run it
 on scratch trees (a forbidden require, a skip entry present and absent, a vendored file with and
 without its licence line). It counts a `require('<m>')` literal wherever it appears in a scanned
-file, comments and strings included, by design.
+file, comments and strings included, by design. Group CB is the carry-back fitness check of ADR 0019:
+CB1 checks that every author and committer on `main` is in `privacy.identities` or lifted by a
+`privacy.allow` entry, and SKIPs where a `hatchery` remote exists; its FAIL line gives the count and
+the first bad sha on a separate `first:` line.
 
-Apart from F1, every case runs in a scratch tree: the Hatchery policy is a fixture inside the
-harness, written there, and the docs it checks (a 41-line handoff included) are synthetic. F1
-reads `.claude/hooks/fitness.json` and the files it names, and the harness needs
+Four cases read this repository instead of a scratch tree: F1 (`.claude/hooks/fitness.json` and the
+files it names), O1 (the tracked paths against `ownership.json`), A1 (the line count of
+`.claude/agreement/`) and CB1 (the history of `main`). Every other case runs in a scratch tree: the
+Hatchery policy is a fixture inside the harness, written there, and the docs it checks (a 41-line
+handoff included) are synthetic. The harness needs
 `.claude/statusline.js` beside the hooks. A project that copies `.claude/hooks/` and sets its own
 policy and fitness config runs it unchanged.
 

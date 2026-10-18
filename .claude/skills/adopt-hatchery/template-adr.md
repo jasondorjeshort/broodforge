@@ -31,7 +31,9 @@ and why the practice was adopted rather than the project decanted anew. A decant
 
 A living table: one row per base-owned path the project edits and per agreement section it
 replaces. The project wins on a rowed path until Hatchery has the change; then base wins and the
-row goes. Carry-back is an idea file, the Hatchery commit that took the change, or `none` and why.
+row goes. Carry-back is `carry-back/<slug> at <sha7>` once sent (`carry-back` skill), the Hatchery
+commit that took the change, `none: <reason>`, or an idea file in this project for a request with
+no diff (ADR 0019).
 
 | Path | Reason | Carry-back |
 |---|---|---|

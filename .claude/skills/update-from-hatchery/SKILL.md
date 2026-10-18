@@ -48,7 +48,13 @@ Run every printed command in the Bash tool, never PowerShell: its pipe re-encode
 4. Conflicts: `git diff --name-only --diff-filter=U`. Per path, by class:
    - base-owned, no departure row: `git checkout <sha> -- <path>`. With a row in the project's
      departure table (its provenance ADR): `git checkout HEAD -- <path>`, row stays; if the base
-     took the project's change, take the base's and delete the row.
+     took the project's change, take the base's and delete the row. A row whose `Carry-back` cell
+     is `carry-back/<slug> at <sha7>` is settled by the incoming commits, conflict or not
+     (`git log <FROM>..<sha> --format='%h %s' --grep='carry-back/<slug> at <sha7>'`; the line is in
+     the body, so the oneline list does not show it): a commit with subject `Carry-back: ...` and body line `Carry-back: <repo> carry-back/<slug> at <sha40>`
+     is the base taking it (take the base's, delete the row); one with subject `Carry-back
+     declined: <repo> carry-back/<slug> at <sha40>: <reason>` keeps the row and sets the cell to
+     `none: <reason>` (`carry-back` skill, ADR 0019).
    - a base rename the project edited (`D <old>` with `UU <new>`): with a row,
      `git show HEAD:<old> > <new>` then `git add <new>`; without, `git checkout <sha> -- <new>`.
    - mixed (`settings.json`, `fitness.json`): hand-merge keeping both sides' entries, `git add`.

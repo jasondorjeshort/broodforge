@@ -88,7 +88,7 @@ no application code. What it does contain:
 - `.claude/agents/`: six subagents with models matched to their job (architect and critic on
   Fable, coder on Opus, tester and pusher on Sonnet, runner on Haiku).
 - `.claude/skills/`: the procedures (proposal, ADR, handoff, debug interface, finding, commit,
-  brief, decant, update-from-hatchery, adopt-hatchery), loaded on demand.
+  brief, decant, update-from-hatchery, adopt-hatchery, carry-back, triage), loaded on demand.
 - `.claude/hooks/` and `.claude/statusline.js`: a status line showing the 5-hour and weekly plan
   meters, a gate that refuses new subagents at 50%, a guard against destructive git, and a
   post-edit check on documentation conventions.

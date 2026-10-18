@@ -35,7 +35,8 @@
 // its policy file through HOOK_POLICY_FILE: the Hatchery fixture, an example, none, or a scratch
 // file. No file of the repository is read except to check that policy.json loads, in F1 the
 // files .claude/hooks/fitness.json names, in O1 the tracked paths against ownership.json and in A1
-// the files under .claude/agreement/ (both skipped where a hatchery remote exists, ADR 0016), and
+// the files under .claude/agreement/ (both skipped where a hatchery remote exists, ADR 0016), in
+// CB1 the authors and committers of main against policy.json (skipped likewise, ADR 0019), and
 // policy.js and imports.js, copied into the O cases' scratch repositories; ~/.claude is never touched.
 // Groups IM (imports.js), CL (policy.js --claude-check) and O (ownership.js) cover ADR 0016's code;
 // group Q covers queue-list.js and post-edit's marker switch (ADR 0017), on scratch trees, with a
@@ -2807,6 +2808,45 @@ function AG0(s) { return `## ${s}\n\nRule text.\n`; }
     const r = ql(root, ['ideas']);
     qcase('Q17', 'ideas: Answer: text on the Question: line is no answer, and a Question: with no Answer: line, both read question',
       expectRun(r, { code: 0, out: '2026-02-01-same-line.md\tquestion\tquestion\tSame line\n2026-02-02-no-answer.md\tquestion\tquestion\tNo answer\n', err: '' }), r.out);
+  }
+}
+
+// ---------- the carry-back fitness check (group CB; ADR 0019, item 8) ----------
+// CB1 reads this repository, like F1, O1 and A1, in the ADR 0013 line form: every author and
+// committer of `git log main` is in privacy.identities of this repository's policy.json (name and
+// address compared as the privacy scan's identity class does) or lifted by privacy.allow (the
+// scan's lift key of "name <email>"). Hatchery only: skipped where a hatchery remote exists, since
+// a project's history carries its own identities. A failure names the first such commit, never
+// the identity, so the line can be quoted in a report.
+if (selected('CB1')) {
+  const ROOT = path.resolve(HOOKS, '..', '..');
+  const contract = (id, status, rest) => {
+    noteGroup(id);
+    process.stdout.write(`${status} ${id} ${rest}\n`);
+    if (status === 'FAIL') fail++; else if (status === 'SKIP') skipped++; else pass++;
+  };
+  const remotes = spawnSync('git', ['-C', ROOT, 'remote'], { encoding: 'utf8' });
+  if ((remotes.stdout || '').split(/\r?\n/).includes('hatchery')) contract('CB1', 'SKIP', 'identities: hatchery remote');
+  else {
+    const loaded = require('./policy').load(path.join(HOOKS, 'policy.json'));
+    const log = spawnSync('git', ['-C', ROOT, 'log', 'main', '--format=%H%x00%an%x00%ae%x00%cn%x00%ce'],
+      { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+    if (loaded.error) contract('CB1', 'FAIL', `identities: .claude/hooks/policy.json does not load (${loaded.error}); lift: fix the policy`);
+    else if (log.status !== 0) contract('CB1', 'FAIL', `identities: git log main failed (${(log.stderr || '').trim().split(/\r?\n/)[0] || `exit ${log.status}`})`);
+    else {
+      const privacy = loaded.policy.privacy || {};
+      const key = (s) => s.replace(/\.+$/, '').toLowerCase(); // privacy-scan.js liftKey
+      const ids = (privacy.identities || []).map((i) => `${i.name.trim()}\u0000${i.email.trim().toLowerCase()}`);
+      const allow = new Set((privacy.allow || []).map(key));
+      const ok = (name, email) => ids.includes(`${name.trim()}\u0000${email.trim().toLowerCase()}`) || allow.has(key(`${name} <${email}>`));
+      const bad = log.stdout.split('\n').filter(Boolean).map((l) => l.split('\u0000'))
+        .filter(([, an, ae, cn, ce]) => !ok(an, ae) || !ok(cn, ce));
+      if (bad.length === 0) contract('CB1', 'PASS', 'identities');
+      else {
+        contract('CB1', 'FAIL', `identities: ${bad.length} commits with an identity outside privacy.identities; lift: privacy.identities (owner) or ADR amendment (architect)`);
+        process.stdout.write(`     first: ${bad[0][0]}\n`);
+      }
+    }
   }
 }
 

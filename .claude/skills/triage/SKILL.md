@@ -19,13 +19,38 @@ no block. The format of a file and its three blocks is `docs/ideas/README.md`; r
    for the ADR and the trigger, an existing one gets a dated line instead) ending in `Plan:` that
    names the architect and the deliverable (a superseding ADR, an amendment, or, for a prediction,
    the Outcome recorded on its line and a finding if it failed). The report counts hits.
-2. Run `node .claude/hooks/queue-list.js ideas --untriaged --json` and parse it: the files that
+2. The carry-back queue (ADR 0019), in Hatchery only: where `git remote` lists `hatchery`, print
+   `carry-back: skipped, a hatchery remote exists` and go on. Otherwise, in Bash from the root,
+   read every `Carry-back` cell of the form `carry-back/<slug> at <sha7>` in the sibling checkouts
+   beside this one (a directory whose `docs/design/decisions/` holds a base line; no sibling list
+   is kept anywhere) and classify it by Hatchery's `main`:
+
+   ```
+   out=$(for f in $(grep -rlE "^Hatchery base: [0-9a-f]{7,40}" ../*/docs/design/decisions/); do
+     d=$(echo "$f" | cut -d/ -f2)
+     grep -E "^\|" "$f" | grep -oE "carry-back/[a-z0-9-]+ at [0-9a-f]{7,40}" | while read -r cell; do
+       hit=$(git log main --format="%H %s" --grep="$cell" | grep -E "^[0-9a-f]{40} Carry-back( declined)?:" | head -1)
+       case "$hit" in
+         *" Carry-back declined:"*) s=declined ;;
+         *" Carry-back:"*) s="landed ${hit:0:7}" ;;
+         *) s=pending ;;
+       esac
+       echo "carry-back: $d $cell: $s"
+     done
+   done)
+   [ -n "$out" ] && echo "$out"; echo "carry-back: $(printf '%s\n' "$out" | grep -c ': pending$') pending"
+   ```
+
+   The report carries every line and the count; the coordinator puts each pending one in the
+   handoff's Next as a landing brief (`carry-back` skill, Land). A sibling not checked out beside
+   Hatchery is not seen.
+3. Run `node .claude/hooks/queue-list.js ideas --untriaged --json` and parse it: the files that
    end in no `Plan:`, `Question:` or `Waits:`, oldest first. Files the stderr names with a `?` were
    not read as untriaged; the report lists each with its field and value.
-3. For each: read the file, then the anchor it names (the file, route, command or screen), then
+4. For each: read the file, then the anchor it names (the file, route, command or screen), then
    enough around it to know what the change would touch. An idea whose anchor no longer exists is
    a `Question:` ("the anchor moved to X; still wanted?"), not a deletion.
-4. Decide which block it earns:
+5. Decide which block it earns:
    - `Plan:` when the work is settled — nothing in it is a choice of the owner's — and fits one
      pass by one agent. Write the brief that pass will be handed: files to change, the shape of
      the change, how to verify, what is out of scope. Three to ten lines.
@@ -36,12 +61,12 @@ no block. The format of a file and its three blocks is `docs/ideas/README.md`; r
      recommendation, never a deletion.
    - Already in the code: say so in the commit message and delete the file. This is the one
      deletion triage makes, and it is a fact about the tree.
-5. Append the block to the end of the file, below `## Open` if present. Keep the file under the
+6. Append the block to the end of the file, below `## Open` if present. Keep the file under the
    doc cap. Do not rewrite the idea above it.
-6. Commit each file alone, through whoever the policy lets commit (`.claude/hooks/policy.json`;
+7. Commit each file alone, through whoever the policy lets commit (`.claude/hooks/policy.json`;
    in the base that is the `runner`, via the `commit` skill), with a one-line subject naming the
    idea and the block written; the body carries the reason a Question is the owner's. Do not push.
-7. Report: how many scan hits, how many files read, how many got a Plan, how many a Question, which were deleted as
+8. Report: how many scan hits, step 2's lines and its pending count, how many files read, how many got a Plan, how many a Question, which were deleted as
    already built, and anything you could not anchor.
 
 ## Bounds
