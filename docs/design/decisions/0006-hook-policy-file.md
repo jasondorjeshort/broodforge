@@ -55,6 +55,8 @@ per model seen downstream (task branches, single branch, per-meter thresholds), 
 |---|---|---|---|
 | `git.commit.subagents` | `"any"`, `"none"` or agent names | `["runner"]` | Subagents that may commit. The main session always may. |
 | `git.commit.protectedBranches` | branch patterns | `[]` | No subagent commits while the current branch matches. |
+| `git.integrate.subagents` | as `git.commit.subagents`, or `null` | `null` | Subagents that may `pull`, `merge` or `rebase`, which integrate a branch rather than write a commit of their own; `null` takes `git.commit.subagents` (Dystopo, its ADR 0036: a subagent integrates `main` and resolves the conflicts, a plain commit there stays refused). |
+| `git.integrate.protectedBranches` | branch patterns, or `null` | `null` | No subagent pulls, merges or rebases while the current branch matches; `null` takes `git.commit.protectedBranches`, so a project that sets neither key judges the three as commits, as before the key. |
 | `git.push.subagents` | as above | `["pusher"]` | Subagents that may push. |
 | `git.push.branches` | branch patterns | `["*"]` | Every branch a subagent's push updates must match. |
 | `git.push.mainSession` | boolean | `true` | Whether the main session pushes. |

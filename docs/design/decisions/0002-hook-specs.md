@@ -84,7 +84,7 @@ unreadable branch match no pattern list but `*`.
 | 1 | `push` or `send-pack` with `--force`, `--force=...`, `-f` or `+<refspec>`; or `--force-with-lease`/`--force-if-includes` unless `git.push.forceWithLease` lists patterns matching every target of a `push` | `force push` |
 | 2 | `push` or `send-pack` with `--mirror` or `--prune`; or `--delete`, `-d` or `:<ref>`, unless every deleted branch matches `git.branchDelete.branches` and, when `requireMergedPr`, GitHub shows a merged PR from it | `remote branch deletion` |
 | 3 | `push` or `send-pack` from the main session when `git.push.mainSession` is false; from a subagent not allowed by `git.push.subagents`; from an allowed subagent when `git.push.branches` is not `["*"]` and some target matches none of them | `push not permitted for this caller` |
-| 4 | `commit`, `merge`, `pull`, `cherry-pick`, `revert`, `am` or `rebase` (not with `--abort` or `--quit`) from a subagent not allowed by `git.commit.subagents`, or on a current branch matching `git.commit.protectedBranches` | `commit not permitted for this caller` |
+| 4 | `commit`, `cherry-pick`, `revert` or `am` from a subagent not allowed by `git.commit.subagents`, or on a current branch matching `git.commit.protectedBranches`; `pull`, `merge` or `rebase` the same under `git.integrate`, each of whose keys left `null` (the default) takes `git.commit`'s value, so by default all seven are judged alike; none with `--abort` or `--quit`. The advice is the base's until a project sets the deciding `git.integrate` key apart; a commit refused on a branch the caller may integrate adds that a merge or rebase in progress there ends with `git merge --continue` or `git rebase --continue` | `commit not permitted for this caller` |
 | 5 | `reset` with `--hard` or `--merge` | `destructive reset` |
 | 6 | `clean` without `-n` or `--dry-run` | `git clean deletes untracked files` |
 | 7 | `checkout` whose pathspec (words after `--`, else the last argument) covers the whole tree: `.`, `./.`, `*`, `:/`, `:(top)`, or a path that `..` walks back to the start (`src/..`, `..`) | `whole-tree checkout discards edits` |
@@ -136,12 +136,22 @@ data); GN covers rules 12 to 17 and lease-as-force; GQ the parser in both shells
 independent review reproduced as bypasses on 2026-10-13 (abbreviated options, opaque arguments,
 PowerShell launchers, commit-making subcommands, config by environment and include, forced branch
 resets, `send-pack`, whole-tree spellings), with the false positives they must not cause; GF
-malformed and absent policy files; GP one command set under the Hatchery policy, no policy, and
+malformed and absent policy files (GF07 and GF08 a malformed `git.integrate`); GI the
+`git.integrate` entry (a subagent's `pull`, `merge --ff-only`, `merge`, `rebase` and their
+`--continue` allowed on `main` under the task-branches example while `commit`, `cherry-pick`,
+`revert` and `am` stay denied there; the default's behaviour and wording with no key set; each key
+set apart); GP one command set under the Hatchery policy, no policy, and
 the two examples, in scratch repositories on `main` and on `task/T1`, which shows the absent file
 behaving as the
 Hatchery one. LIVE01 to LIVE04 check that the repository's own `policy.json` and the examples
-load and that the harness's Hatchery fixture equals the loader's defaults. Group F is the reference
-fitness check of ADR 0013 (the dependency budget): F1 runs it on this repository and F2 to F6 run it
+load and that the harness's Hatchery fixture equals the loader's defaults; LIVE05 and LIVE06 that
+`policy.js` prints `git.integrate`. H, HS and SL run every command hook of the repository's own
+`.claude/settings.json` and its status line from a subfolder with no `.claude/`, as Claude Code runs
+them (exec form without a shell, the placeholder substituted; shell form through Git Bash, PowerShell
+when it is absent or the hook asks for it, or `sh -c`), in this checkout and in a copy under a path
+with a space; each must name its script through `${CLAUDE_PROJECT_DIR}`, and H00 and SL00 are the
+relative-path controls that fail there; H99 checks that the three hooks are named. Group F is the
+reference fitness check of ADR 0013 (the dependency budget): F1 runs it on this repository and F2 to F6 run it
 on scratch trees (a forbidden require, a skip entry present and absent, a vendored file with and
 without its licence line). It counts a `require('<m>')` literal wherever it appears in a scanned
 file, comments and strings included, by design. Group CB is the carry-back fitness check of ADR 0019:
@@ -151,7 +161,8 @@ the first bad sha on a separate `first:` line.
 
 Four cases read this repository instead of a scratch tree: F1 (`.claude/hooks/fitness.json` and the
 files it names), O1 (the tracked paths against `ownership.json`), A1 (the line count of
-`.claude/agreement/`) and CB1 (the history of `main`). Every other case runs in a scratch tree: the
+`.claude/agreement/`) and CB1 (the history of `main`); groups H, HS and SL read its
+`.claude/settings.json` (an absent one skips them). Every other case runs in a scratch tree: the
 Hatchery policy is a fixture inside the harness, written there, and the docs it checks (a 41-line
 handoff included) are synthetic. The harness needs
 `.claude/statusline.js` beside the hooks. A project that copies `.claude/hooks/` and sets its own
@@ -208,7 +219,8 @@ Path anchors skip files matching `edit.anchorExempt` (by default the closed reco
 `docs/design/proposals/`, `docs/design/decisions/` and `docs/findings/`, which name paths as they
 were), fenced code blocks (indented ones too), any paragraph (blank-line separated) or list item
 containing `[no-check:` (a list item scopes it even without blank lines between items), and tokens
-with `*`, `<`, `>`, `{`, `}`, `$`, `NNNN` or `YYYY`; a `#anchor` or `:line` suffix is dropped
+with `*`, `<`, `>`, `{`, `}`, `$`, `NNNN` or `YYYY`, and elided paths, a token with a segment that is
+exactly `...` (`src/.../X.kt`, a task board's shorthand); a `#anchor` or `:line` suffix is dropped
 before the lookup. Each missing path is listed once.
 
 Frontmatter means the file starts with `---`, closes with `---` within 20 lines, and each named key
@@ -224,8 +236,8 @@ first 5 non-empty stderr lines, else the spawn error, else `killed by <signal> (
 Output with at least one message, exit 0:
 `{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"<messages>"}}`; none:
 exit 0, no stdout. Harness cases P01 to P04 and PX01 to PX14 cover the checks above, the
-formatter and the `CLAUDE.md` cap; PA the path anchors, closed records and list-item scope; PC cap
-exemptions and formatters from a policy file, a malformed policy, and the task-branches example;
+formatter and the `CLAUDE.md` cap; PA the path anchors, closed records, list-item scope and elided
+paths (PA09); PC cap exemptions and formatters from a policy file, a malformed policy, and the task-branches example;
 PH the handoff paths (ADR 0014): the stream and total caps, the map import, and the `@` line
 resolution, each case in its own scratch root (`ph-<id>`) so P02 keeps its tree; Q the queue
 listing and the marker switch (ADR 0017): `queue-list.js` run from scratch roots (Q01 to Q09) and
