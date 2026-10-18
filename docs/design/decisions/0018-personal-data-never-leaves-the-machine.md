@@ -127,6 +127,13 @@ people the never list does not hold (the pusher's read and the reviewer's item).
 write-time warning from `post-edit.js` using `--text` (no new contract: the CLI accepts `--text
 <file>` already); trigger: the first hit the scan reports in this tree after it ships.
 
+Amended 2026-10-18 by ADR 0019: the PR trigger fired (PR 1 in Hatchery's repository, from a
+sibling) and the decision is that the base has no PR flow: a carry-back is a branch in the
+sibling's own repository, landed as a fresh Hatchery commit the scan reads on Hatchery's push.
+Text that leaves the machine through `gh` (a PR closing comment; an issue or comment if the owner
+later allows issues) is written to a file and passed through `--text` before the `gh` call, a
+skill step and no hook, since `gh` is outside the guard.
+
 ## Consequences
 
 - Every push from every caller is read commit by commit before it leaves, and the three readers

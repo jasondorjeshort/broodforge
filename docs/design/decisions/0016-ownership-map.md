@@ -123,8 +123,10 @@ In the project's provenance ADR, a living table the ADR says is living:
 ```
 
 One row per base-owned path the project edits and per agreement section it replaces. Carry-back
-is an idea file in the project, the Hatchery commit that took the change, or `none` with the reason
-the base will not want it. The helper does not read the table; the agent resolving a conflict does:
+is `carry-back/<slug> at <sha7>` once the change is sent (ADR 0019, which amended this sentence on
+2026-10-18), the Hatchery commit that took the change, `none` with the reason the base will not
+want it, or an idea file in the project for a request with no diff. The helper does not read the
+table; the agent resolving a conflict does:
 `git checkout HEAD -- <path>` for a rowed path, `git checkout <sha> -- <path>` otherwise. A base
 rename the project edited leaves `D <old>` and `UU <new>`, where `git checkout HEAD -- <new>`
 exits 1 (HEAD has no such path); the rowed form there is `git show HEAD:<old> > <new>` then

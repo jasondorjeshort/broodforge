@@ -93,7 +93,8 @@ Decisions so far:
   `--claude-check`); Hatchery's records in the base-owned subtree `docs/hatchery/`, Hatchery
   numbering from 0016 up, projects from 0001; `update.exclude`. Siblings: [the map](decisions/0016-ownership-map.md),
   [the procedure](decisions/0016-update-procedure.md), [the migration](decisions/0016-migration.md).
-  Supersedes 0008; supersedes in part 0002, 0004, 0006, 0007, 0009, 0010, 0013.
+  Supersedes 0008; supersedes in part 0002, 0004, 0006, 0007, 0009, 0010, 0013. Amended by 0019
+  (item 6 and the map sibling: the `Carry-back` column values).
   [no-check: the map and the subtree exist once the ADR is implemented]
 - [0017 Queue directories list on demand](decisions/0017-queue-directories-list-on-demand.md):
   `docs/ideas/`, `docs/operator/` and `docs/findings/` keep no per-file index; `node
@@ -114,6 +115,16 @@ Decisions so far:
   the policy; roles and `~` in committed text; the `Claude-Session:` trailer dropped; the history
   rewrite and the repository's visibility are the owner's separate steps. Contract, harness group,
   briefs and migration in [the sibling](decisions/0018-privacy-scan.md). Amends 0006 (key table);
-  adds rows to 0013. [no-check: the script exists once the ADR is implemented]
+  adds rows to 0013. Amended by 0019 (the PR trigger fired). [no-check: the script exists once the ADR is implemented]
+- [0019 The carry-back channel](decisions/0019-carry-back-channel.md): a sibling sends a base
+  change as a `carry-back/<slug>` branch cut from a named `hatchery/main` sha and pushed to its
+  own repository under its own scan; Hatchery fetches it by URL, applies `-M --binary` with
+  `--3way`, reviews the staged result, commits under its own identity and pushes through its own
+  scan, so nothing foreign enters Hatchery's repository and no sibling pushes into it; requests
+  without a diff and rule changes go by idea file; a `triage` step lists pending rows across the
+  sibling checkouts by their base line; landed and declined states are commits on `main` found by
+  `git log --grep`; a `carry-back` skill (send and land), fitness check `CB1`; the issue flow
+  deferred to the owner's `Waits:`. Amends 0016 (item 6, the column values) and 0018 ("Not
+  covered").
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).
