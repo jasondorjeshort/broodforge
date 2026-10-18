@@ -12,8 +12,8 @@ no block. The format of a file and its three blocks is `docs/ideas/README.md`; r
 
 ## Procedure
 
-1. The scan. Read each `Deferred` item in `docs/design/decisions/` against the tree and list
-   those whose trigger has fired; `grep -rn "^- Prediction, check" docs/design/decisions/ | grep -v " Outcome "` and list
+1. The scan. Set `D=docs/hatchery/decisions` where `git remote | grep -qx hatchery` fails, else `D=docs/design/decisions` (the `adr` skill's test). Read each `Deferred` item in `$D/` against the tree and list
+   those whose trigger has fired; `grep -rn "^- Prediction, check" $D/ | grep -v " Outcome "` and list
    those past their date or whose trigger is met; run the test command and list `FAIL` and `SKIP`
    lines from fitness checks. Each hit becomes one idea file (`kind: chore`, no `related:`, named
    for the ADR and the trigger, an existing one gets a dated line instead) ending in `Plan:` that

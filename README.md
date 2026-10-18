@@ -27,8 +27,8 @@ Create a new project from the Hatchery base. Preconditions, stop and tell me if 
 `origin` to `hatchery`, add `origin` pointing at <new project remote URL>, and confirm both with
 `git remote -v`. Load the `decant` skill and follow it to the end: replace the README, write
 CLAUDE.md from the skill's template (the agreement imports), set .claude/hooks/policy.json (ask me about thresholds), reset docs/HANDOFF.md and
-docs/ideas/, clear docs/findings/ and docs/reference/ except the Windows reference, keep every
-Hatchery ADR and delete the proposals (my own ADRs start at 0020), and commit through the runner.
+docs/ideas/, clear docs/findings/, docs/reference/ and docs/design/decisions/ to their READMEs
+(Hatchery's records stay in docs/hatchery/), delete the proposals (my own ADRs start at 0001), and commit through the runner.
 Do not push. Report the remotes, the files you changed, the policy choices, and the first design step.
 ```
 
@@ -98,7 +98,7 @@ no application code. What it does contain:
   investigation results. `docs/README.md` is the map.
 - `LICENSE` and `LICENSES/`: GPL-3.0-or-later by default, LGPL-3.0-or-later text for linkable components.
 
-Layout and reasoning: [`docs/design/decisions/0002-repository-layout.md`](docs/design/decisions/0002-repository-layout.md).
+Layout and reasoning: [`docs/hatchery/decisions/0002-repository-layout.md`](docs/hatchery/decisions/0002-repository-layout.md).
 
 ## Starting a new project by hand
 
@@ -125,10 +125,10 @@ The third prompt does this. It copies the practice from `hatchery/main` and reco
 came from in an ADR in your project; your history, README, docs layout, and existing hooks stay.
 Decisions a model must not make alone (a license, a rule of yours that contradicts one of
 Hatchery's) are put to you with both texts. Reasoning and the exact list of what is copied, merged,
-or added only where absent: [`docs/design/decisions/0004-adopt-hatchery.md`](docs/design/decisions/0004-adopt-hatchery.md).
+or added only where absent: [`docs/hatchery/decisions/0004-adopt-hatchery.md`](docs/hatchery/decisions/0004-adopt-hatchery.md).
 
 ## License
 
 GPL-3.0-or-later. See [`LICENSE`](LICENSE). Some components may be LGPL-3.0-or-later; each such
 component has its own `LICENSE` file, and the list is in
-[`docs/design/decisions/0001-licensing.md`](docs/design/decisions/0001-licensing.md).
+[`docs/hatchery/decisions/0001-licensing.md`](docs/hatchery/decisions/0001-licensing.md).

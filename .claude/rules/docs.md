@@ -35,7 +35,9 @@ These load automatically when a file matching one of the `paths:` above (`docs/*
   instead of checking an index. Only `docs/ideas/`, `docs/operator/` and `docs/findings/` may carry it
   (ADR 0017). Exception: `docs/handoff/` has no README; its index is the `@handoff/<file>.md` lines
   of `docs/HANDOFF.md` (`handoff` skill, `split.md`).
-- `docs/design/README.md` lists every ADR.
+- `docs/design/README.md` lists every ADR of the tree's own `decisions/`. `docs/hatchery/` has its own
+  three READMEs (`README.md`, `decisions/README.md`, `reference/README.md`), base-owned; a project
+  never edits them.
 - An index is the one list a doc may carry. Prose never inventories files, fields, routes or
   counts ("the twelve commands", "a 400-line file"): every ordinary commit moves the figure, and a
   later session then "corrects" it. Write the rule that generates the list instead.
@@ -62,7 +64,7 @@ These load automatically when a file matching one of the `paths:` above (`docs/*
 - `docs/operator/YYYY-MM-DD-<slug>.md`: no frontmatter; its README says what the body carries.
 - `docs/reference/<topic>.md`: required `verified: YYYY-MM-DD`, `source: <url or "observed">`. When a
   fact changes, fix it in place and bump `verified:`; do not append history.
-- `docs/design/decisions/NNNN-*.md` and `docs/design/proposals/NNNN-*.md`: no frontmatter; the
+- `docs/hatchery/decisions/NNNN-*.md`, `docs/design/decisions/NNNN-*.md` and `docs/design/proposals/NNNN-*.md`: no frontmatter; the
   `Date:` and `Status:` lines under the title are the record. Templates are in the `adr` and
   `proposal` skills; status values are in the directory READMEs.
 
@@ -103,6 +105,6 @@ These load automatically when a file matching one of the `paths:` above (`docs/*
   `[no-check: <reason>]`; closed records (proposals, decisions, findings) are exempt by policy.
   A moved paragraph leaves a pointer behind.
 - Write files that contain apostrophes or backticks with the Write or Edit tool, not a Bash heredoc
-  (`docs/reference/claude-code-on-windows.md`, Shells). The `git-guard` hook reads
+  (`docs/hatchery/reference/claude-code-on-windows.md`, Shells). The `git-guard` hook reads
   quoted text and heredoc bodies as data, so text that only mentions a git command is not denied
   unless the command line hands it to a shell.

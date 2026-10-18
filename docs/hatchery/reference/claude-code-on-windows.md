@@ -115,7 +115,7 @@ source: observed (machine user name in paths, ADR 0018 evidence 2026-10-17; Powe
   lifts HOLD on both meters for that session. The legacy single file
   `~/.claude/usage-gate-override.json` is still read, as a user grant when it names no scope. Both
   lifts exist only on the owner's instruction. Format, fail modes and the reasoning:
-  ADR 0006 and `../design/decisions/0002-hook-specs.md`.
+  ADR 0006 and `../decisions/0002-hook-specs.md`.
 - Claude Code sends `rate_limits` to the status line only after the session's first response.
   Until then a new session has no file, so the gate finds no data and `usage.whenStale` decides
   (base: allow); after that, a session's file keeps its last reading, which the gate uses until it

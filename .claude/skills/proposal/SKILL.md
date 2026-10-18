@@ -12,7 +12,7 @@ The architect writes; the coordinator briefs; the critic argues.
 ## Steps
 
 1. Allocate `NNNN`: the highest number used across `docs/design/proposals/` and
-   `docs/design/decisions/` plus one. Proposals and their ADRs share a number.
+   the tree's decisions directory (`adr` skill, step 1) plus one. Proposals and their ADRs share a number.
 2. Write `docs/design/proposals/NNNN-<short-title>.md` from `template.md` in this directory (use
    the Write tool). Status: `draft`. Every option gets the same depth of treatment; the
    recommendation names what would reverse it. Claims about tools, licenses, platforms, or APIs

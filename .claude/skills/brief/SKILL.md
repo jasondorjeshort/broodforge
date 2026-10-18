@@ -54,7 +54,7 @@ the brief supplies what only this task knows.
   someone else.
 - Paths in a brief use forward slashes (`C:/Users/...`) even on Windows: the Bash tool is Git Bash
   and strips the backslashes from an unquoted path. A command meant for another repository says
-  `git -C <path>`, never `cd` (`docs/reference/claude-code-on-windows.md`, Working directory and git).
+  `git -C <path>`, never `cd` (`docs/hatchery/reference/claude-code-on-windows.md`, Working directory and git).
 - Briefs are not committed, so they keep absolute paths; a tracked file an agent writes follows
   `.claude/rules/docs.md`, "Personal data" (`~`, `<repo>`, roles, no emails or names), and the
   brief says so when the task writes one.

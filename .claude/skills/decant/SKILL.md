@@ -6,9 +6,9 @@ description: Turn a fresh clone of the Hatchery base repository into a new proje
 # Decant
 
 Hatchery is the base; a project is decanted from it. The result keeps the working agreement, the
-agents, the skills, the hooks, every Hatchery ADR (the record of the practice it inherits; its own
-ADRs start at 0020, ADR 0008) and the Windows reference, and starts its own design, handoff, ideas
-and findings. Everything below runs in the new project's clone.
+agents, the skills, the hooks and Hatchery's records in `docs/hatchery/` (the practice it
+inherits, never edited; its own ADRs start at 0001, ADR 0016), and starts its own design, handoff,
+ideas, findings and reference. Everything below runs in the new project's clone.
 
 ## Steps
 
@@ -117,19 +117,17 @@ and findings. Everything below runs in the new project's clone.
      to `docs/README.md`: "one file per open workstream; indexed by the map's `@handoff/` lines".
 7. `docs/ideas/`, `docs/operator/` and `docs/findings/` (Hatchery's findings are about Hatchery):
    delete every file except `README.md`; no table to reset (ADR 0017).
-8. `docs/reference/`: keep `README.md`,
-   `agreement-loading.md` (a hook cites it) and `claude-code-on-windows.md`, each with its README
-   row (they describe the tool and the machine, not Hatchery); delete every other reference file
-   and its row.
-9. `docs/design/`: keep `README.md`, every file under `decisions/`, and the `proposals/` README;
-   delete every proposal and reset the proposals index table to its header. The "Decisions so
-   far" list stays as it is: the project's own decisions are added below it from 0020 up. Then
-   write `docs/design/decisions/NNNN-decanted-from-hatchery.md` (NNNN by the `adr` skill's rule,
-   0020 in a fresh decant) from `.claude/skills/adopt-hatchery/template-adr.md`, title `Decanted
-   from`: the base line `Hatchery base: ` plus `git rev-parse hatchery/main`, the licence
-   decision, and the departure table with its header row and no rows. Add it to "Decisions so
-   far". If the project wants a different license, supersede 0001 with the `adr` skill (as the
-   next number) and replace `LICENSE`.
+8. `docs/reference/`: keep `README.md` with its table reset to the header row; delete every other
+   reference file and its row (Hatchery's entries ship in `docs/hatchery/reference/`).
+9. `docs/design/`: keep `README.md` and `proposals/README.md`; delete every proposal and reset the
+   proposals index table to its header; delete every file under `decisions/` except `README.md`
+   (`docs/hatchery/` stays as shipped). Then write
+   `docs/design/decisions/0001-decanted-from-hatchery.md` (`adr` skill, step 1) from
+   `.claude/skills/adopt-hatchery/template-adr.md`, title `Decanted from`: the base line
+   `Hatchery base: ` plus `git rev-parse hatchery/main`, the licence decision, the departure table
+   with its header row and no rows. Add it to 'Decisions so far' in `docs/design/README.md`. A
+   different licence: the next ADR supersedes `docs/hatchery/decisions/0001-licensing.md` by
+   citation and replaces `LICENSE`.
 10. `.claude/settings.json`: keep as is. `.claude/rules/`: keep `docs.md`; add language rules
     later per `.claude/rules/README.md`.
 11. Verify: `git status --short` shows only the intended edits; `node .claude/hooks/policy.js

@@ -8,7 +8,7 @@ description: Bring the Hatchery practice (working agreement, agents, skills, hoo
 A project that already exists keeps its history and takes the practice as files. The files come
 from Hatchery's main branch; what was copied and from which commit is recorded in the project's own ADR, so
 `update-from-hatchery` can patch forward later (the one procedure, ADR 0016). Reasoning and the full table of what is
-copied, merged, or added: Hatchery ADR 0004 (after `S=$(git rev-parse hatchery/main)`, `git show $S:docs/design/decisions/0004-adopt-hatchery.md`).
+copied, merged, or added: Hatchery ADR 0004 (after `S=$(git rev-parse hatchery/main)`, `git show $S:docs/hatchery/decisions/0004-adopt-hatchery.md`).
 Everything below runs in a private clone of the project, on its default branch, as the main session.
 
 ## Steps
@@ -24,7 +24,7 @@ Everything below runs in a private clone of the project, on its default branch, 
 3. Verbatim files (base wins): the base-owned set of `.claude/hooks/ownership.json` without
    `LICENSE` and `LICENSES` (step 8 decides those): `git checkout hatchery/main -- .claude/agents
    .claude/skills .claude/hooks .claude/agreement .claude/statusline.js .claude/package.json
-   .claude/rules/README.md .claude/rules/docs.md` (`.claude/package.json` keeps the scripts
+   .claude/rules/README.md .claude/rules/docs.md docs/hatchery` (`.claude/package.json` keeps the scripts
    CommonJS when the project's root `package.json` says `"type": "module"`; without it every hook
    crashes). Then `.claude/hooks/policy.json` becomes the project's: who commits and pushes,
    deletable branches, usage thresholds, `usage.pool` (`null` unless this machine has the
@@ -70,15 +70,13 @@ Everything below runs in a private clone of the project, on its default branch, 
    its row) or the owner's `edit.capExempt` lift for `CLAUDE.md`, never to `## Project rules`.
 7. Docs skeleton, only where the project lacks the file: `git checkout hatchery/main -- docs/HANDOFF.md
    docs/ideas/README.md docs/operator/README.md docs/findings/README.md docs/reference/README.md docs/design/proposals/README.md
-   docs/design/decisions/README.md docs/design/decisions/0001-licensing.md
-   docs/design/decisions/0002-repository-layout.md docs/design/decisions/0002-hook-specs.md
-   docs/design/decisions/0002-hook-specs-usage.md`, then
+   docs/design/decisions/README.md`, then
    reset the `reference/` index table to its empty row and leave `docs/ideas/` with only its README.
    The three queue READMEs carry no table (ADR 0017); an adopted project keeps its own tables and
    warnings where it already has the file.
    `docs/design/README.md`: absent, write one that lists the existing design files one line each plus
    "Decisions so far"; present, add the list. `docs/README.md`: add one row per added path to the
-   project's own map; move nothing. The handoff: ask the owner, in these words, "Will more than one
+   project's own map, `hatchery/` included; move nothing. The handoff: ask the owner, in these words, "Will more than one
    session work this branch at the same time?" (ADR 0015). Yes: the split shape as the `decant`
    skill's handoff step writes it, the stream named for the project's current work.
    No: `docs/HANDOFF.md` with the `handoff` skill. Either way Now is "adopting Hatchery" and Next links the project's current

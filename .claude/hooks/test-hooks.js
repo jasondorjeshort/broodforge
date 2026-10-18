@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Test harness and debug interface for the hooks in this directory.
-// Spec: docs/design/decisions/0002-hook-specs.md for the hooks; the harness, its seams and the
-// fitness group F: docs/design/decisions/0002-hook-specs-usage.md, with ADR 0013 and ADR 0012's
+// Spec: docs/hatchery/decisions/0002-hook-specs.md for the hooks; the harness, its seams and the
+// fitness group F: docs/hatchery/decisions/0002-hook-specs-usage.md, with ADR 0013 and ADR 0012's
 // fitness contract. Each case runs a hook as a child process with JSON on stdin, exactly as
 // Claude Code does, and checks exit code and stdout.
 //
@@ -1148,7 +1148,7 @@ const gateInput = (extra) => JSON.stringify(Object.assign({ hook_event_name: 'Pr
 // The scratch HOME, and no CLAUDE_CONFIG_DIR from the session running the suite, so the account
 // label is read from the scratch home (none there unless a case writes one).
 const gateEnv = (extra) => envWith(Object.assign({ HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: undefined }, extra));
-const HOLD_MSG = 'Usage gate: 5h 55%, 7d 10%. 5h at or above 50%: Do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report. Lifting this early is the user\'s decision (docs/design/decisions/0006-hook-policy-file.md).';
+const HOLD_MSG = 'Usage gate: 5h 55%, 7d 10%. 5h at or above 50%: Do not start new subagents. Let in-flight agents finish, run the handoff skill, commit from the main session, then report. Lifting this early is the user\'s decision (docs/hatchery/decisions/0006-hook-policy-file.md).';
 const STOP_MSG = 'Usage gate: 5h 85%, 7d 10%. 5h at or above 80%: Stop all work, run the handoff skill, commit WIP from the main session, end the turn.';
 const HOLD_85 = HOLD_MSG.replace('5h 55%', '5h 85%');
 // A HOLD deny names each grant that does not apply, one clause each, before "Lifting". The U and UO

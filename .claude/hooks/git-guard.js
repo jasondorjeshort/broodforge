@@ -5,7 +5,7 @@
 // pushes and deletes branches by the project's policy (.claude/hooks/policy.json, read through
 // policy.js). The main session (no agent_type) is limited only where the policy says so. Rule 20
 // reads what every push sends through privacy-scan.js (ADR 0018), required inside that rule only.
-// Spec: docs/design/decisions/0002-hook-specs.md section 1; policy: ADR 0006.
+// Spec: docs/hatchery/decisions/0002-hook-specs.md section 1; policy: ADR 0006.
 // Test harness: node .claude/hooks/test-hooks.js
 //
 // Allow: exit 0, no stdout. Deny: exit 0 with permissionDecision "deny" JSON.

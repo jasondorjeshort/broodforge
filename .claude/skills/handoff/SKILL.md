@@ -16,7 +16,8 @@ shape: `split.md` beside this file replaces steps 2 and 4 and the first rule bel
    `git log -1 --format='%h %cs' -- docs/HANDOFF.md docs/handoff/` (the last handoff change; its
    distance from `HEAD` and from today is the staleness), the open findings
    (`node .claude/hooks/queue-list.js findings --status open --json`), and what this session knows that is not yet in a file.
-   `grep -rh "^- Prediction, check by" docs/design/decisions/ | grep -v " Outcome " | grep -oE "[0-9]{4}-[0-9]{2}-[0-9]{2}" | sort | head -1`;
+   With `D=docs/hatchery/decisions` where `git remote | grep -qx hatchery` fails, else `D=docs/design/decisions` (the `adr` skill's test):
+   `grep -rh "^- Prediction, check by" $D/ | grep -v " Outcome " | grep -oE "[0-9]{4}-[0-9]{2}-[0-9]{2}" | sort | head -1`;
    a date on or before today, or a `FAIL` or `SKIP` fitness line in the last test run, puts
    "triage (the scan)" in Next. A claim about the state of another repository or checkout (for
    example "<sha> in `../<dir>` is held, not pushed") is re-checked against that repository in the

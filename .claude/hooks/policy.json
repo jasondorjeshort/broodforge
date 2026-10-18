@@ -1,5 +1,5 @@
 {
-  "$comment": "Project policy for the hooks in this directory. Schema, defaults and fail modes: docs/design/decisions/0006-hook-policy-file.md. Check with: node .claude/hooks/policy.js",
+  "$comment": "Project policy for the hooks in this directory. Schema, defaults and fail modes: docs/hatchery/decisions/0006-hook-policy-file.md. Check with: node .claude/hooks/policy.js",
   "git": {
     "commit": { "subagents": ["runner"], "protectedBranches": [] },
     "push": { "subagents": ["pusher"], "branches": ["*"], "mainSession": true, "forceWithLease": [] },
@@ -12,7 +12,7 @@
   },
   "edit": {
     "capExempt": [],
-    "anchorExempt": ["docs/design/proposals/*", "docs/design/decisions/*", "docs/findings/*"],
+    "anchorExempt": ["docs/design/proposals/*", "docs/design/decisions/*", "docs/findings/*", "docs/hatchery/*"],
     "formatters": {}
   },
   "privacy": {

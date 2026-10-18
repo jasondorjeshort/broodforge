@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The privacy scan (ADR 0018; contract: docs/design/decisions/0018-privacy-scan.md, sections 1 to 3).
+// The privacy scan (ADR 0018; contract: docs/hatchery/decisions/0018-privacy-scan.md, sections 1 to 3).
 // One reader for everything a push sends, with three callers: git-guard's rule 20 requires this
 // module, pusher check 5 runs the CLI, and .claude/hooks/git/pre-push runs it for every push made
 // outside Claude Code. It reads every commit in `git rev-list <refs> --not --remotes=<target>

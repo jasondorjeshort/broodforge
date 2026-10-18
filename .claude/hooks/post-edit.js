@@ -8,7 +8,7 @@
 // queue directory listed on demand, would list as ? in queue-list.js), or names a repository path
 // that does not exist, and it runs the formatter for the file's extension if one is set. Every @
 // import is read by imports.js, the one parser; every queue file by queue-list.js's read().
-// Spec: docs/design/decisions/0002-hook-specs.md section 2; policy: ADR 0006; CLAUDE.md: ADR 0016;
+// Spec: docs/hatchery/decisions/0002-hook-specs.md section 2; policy: ADR 0006; CLAUDE.md: ADR 0016;
 // queue directories: ADR 0017.
 // Test harness: node .claude/hooks/test-hooks.js
 'use strict';

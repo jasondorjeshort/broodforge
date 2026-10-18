@@ -84,7 +84,7 @@ Run every printed command in the Bash tool, never PowerShell: its pipe re-encode
    (steps 3 to 5) brings `policy.js`, `ownership.js`, `imports.js` and `.claude/agreement/`;
    `node .claude/hooks/policy.js` must print the policy (else fix it with the Edit tool before
    anything); then in the same commit the migration edits in
-   `git show $S:docs/design/decisions/0016-migration.md` section 4 (`CLAUDE.md` to the project
+   `git show $S:docs/hatchery/decisions/0016-migration.md` section 4 (`CLAUDE.md` to the project
    shape, the provenance ADR with its departure table); `update.exclude` only now, never earlier.
    Later updates skip this step.
 8. Every update: set the `Hatchery base:` line in the provenance ADR to `<sha>`, only when every

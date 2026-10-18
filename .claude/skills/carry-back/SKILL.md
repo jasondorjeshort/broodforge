@@ -45,8 +45,9 @@ pusher runs step 6.
    - The path check, on every entry of `git diff --name-status -M <B> carry-back/<slug>` against
      the map `ownership.json` at `<B>`. An entry passes as (a), a base change, when its path is in
      `baseOwned` or `mixed` (an `R` entry: both paths); or as (b), a record, when it is an `M`
-     entry under `docs/design/decisions/` or `docs/reference/` (Hatchery's records until migration
-     3.4 of ADR 0016 moves them under the base-owned `docs/hatchery/`; then (b) matches nothing).
+     entry under `docs/design/decisions/` or `docs/reference/` (a branch cut from a base older than
+     the move of Hatchery's records to `docs/hatchery/`, ADR 0016 migration 3.4; from a newer base the
+     records are base-owned, so an edit to one is (a)).
      At least one entry must be (a). An entry that is neither, which includes any `A`, `D` or `R`
      under the record directories (a sibling never adds, removes or renames a Hatchery record):
      `carry-back: <path> is project-owned; a base change touches only the base-owned set and the record it updates`.
@@ -114,7 +115,8 @@ pusher runs step 6.
    assumptions in fixtures and thresholds, the docs rule (a sibling's name in living text), the
    claims in the message; a change under `.claude/agreement/` or `.claude/rules/` is a rule
    change, refused at review (the path check passes it as base-owned) and filed as an idea in
-   `docs/ideas/` instead; blocking by rule as the agent file says. Fixes go to the coder's
+   `docs/ideas/` instead; so is a branch whose only entries are records under `docs/hatchery/` (ADR 0019
+   item 1: a record moves only with the base change it describes); blocking by rule as the agent file says. Fixes go to the coder's
    working tree. Nobody pushes to or force-pushes a sibling's branch.
 5. Runner: `node .claude/hooks/test-hooks.js` passes; delete the `docs/ideas/` files the brief
    names; one commit from a message file (`git commit -F <file>`):
