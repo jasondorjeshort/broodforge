@@ -7,7 +7,7 @@ is not living, so the rows are added by that record, item 7): the ownership map,
 files with their import lines, the `Branch:` line, the departure table, the record paths under
 `docs/hatchery/`; the idea-grammar row's record becomes ADR 0007 and `.claude/rules/docs.md`, its
 `docs/ideas/README.md` being the project's copy; `update.exclude` is an addition under the policy
-row. Every row below stands; the owner's question stands.
+row. Every row below stands; the owner declined to confirm the list (2026-10-18).
 Superseded in part by [0017](0017-queue-directories-list-on-demand.md), 2026-10-17 (rows added by
 its item 5): the listing CLI `.claude/hooks/queue-list.js` (modes, flags, `--json` fields, exit
 codes, the first word of a finding `status:`) and the README marker line; a finding's `status:`
@@ -114,6 +114,9 @@ requires.
 - A compatibility check for the surfaces above (a fingerprint of the policy schema and the idea
   grammar), trigger: the first incompatible change proposed to either, which then lands with it.
 - A migration note format for sibling repositories, trigger: the first incompatible change.
+- Re-raising the owner's question about the list (see the amendment of 2026-10-18), triggers: a
+  sibling update that breaks a hand-edited file; a best-practices revisit that changes the list.
+  Neither is visible to the `triage` scan, so whoever sees one raises it.
 
 ## Consequences
 

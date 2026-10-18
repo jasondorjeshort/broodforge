@@ -114,7 +114,7 @@ function checkDocs(root, rel, abs) {
       !hasFrontmatter(text, ['date', 'status', 'area'])) {
     msgs.push(`post-edit: ${rel} lacks finding frontmatter (date, status, area). See the finding skill.`);
   }
-  if (parts.length === 3 && parts[1] === 'reference' && base !== 'README.md' &&
+  if (/^docs\/(hatchery\/)?reference\/[^/]+\.md$/.test(rel) && base !== 'README.md' &&
       !hasFrontmatter(text, ['verified'])) {
     msgs.push(`post-edit: ${rel} lacks verified: frontmatter. See .claude/rules/docs.md.`);
   }

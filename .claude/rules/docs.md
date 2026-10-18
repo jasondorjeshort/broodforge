@@ -62,7 +62,7 @@ These load automatically when a file matching one of the `paths:` above (`docs/*
   optional `related: [<file>, ...]`. Search for an existing idea before adding one (its README,
   "Before adding").
 - `docs/operator/YYYY-MM-DD-<slug>.md`: no frontmatter; its README says what the body carries.
-- `docs/reference/<topic>.md`: required `verified: YYYY-MM-DD`, `source: <url or "observed">`. When a
+- `docs/reference/<topic>.md` and `docs/hatchery/reference/<topic>.md`: required `verified: YYYY-MM-DD`, `source: <url or "observed">`. When a
   fact changes, fix it in place and bump `verified:`; do not append history.
 - `docs/hatchery/decisions/NNNN-*.md`, `docs/design/decisions/NNNN-*.md` and `docs/design/proposals/NNNN-*.md`: no frontmatter; the
   `Date:` and `Status:` lines under the title are the record. Templates are in the `adr` and

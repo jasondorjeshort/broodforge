@@ -90,6 +90,18 @@ READMEs and `docs/design/README.md` are project-owned. The rest of each stands.
    0001's living table). In base-owned files a bare `ADR NNNN` is Hatchery's record; across the
    boundary a citation carries the path. Each tree adds `docs/hatchery/*` to `edit.anchorExempt`
    in its own `policy.json` (the `policy.js` default is moot: every policy file sets the key).
+
+   Amended 2026-10-18: the one test misfired. `git clone` copies only `origin`, and the `hatchery`
+   remote is added by the update skill the first time it runs, so a sibling freshly cloned on a
+   second machine had no `hatchery` remote, passed as Hatchery, and would have had `adr` write in
+   `docs/hatchery/decisions/` and `triage` and `handoff` scan Hatchery's records (the reviewer
+   verified it on the real checkouts). The test is two-part, one line shared by the three skills;
+   a tree is Hatchery when it succeeds, every other tree writes in `docs/design/decisions/`:
+   `! git remote | grep -qx hatchery && ! grep -rqE "^Hatchery base: [0-9a-f]{7,40}" docs/design/decisions/`.
+   The base line is tracked and travels with every clone (ADRs 0004, 0009, 0010; the ADR 0013
+   row), so a clone that has never updated is caught by the second half; a project that has the
+   remote but no base line yet (one adopted sibling today) is caught by the first. Hatchery has
+   neither, by construction: its `docs/design/decisions/` holds no provenance ADR.
 6. The departure table is a living table (path, reason, carry-back) in the project's provenance
    ADR (`NNNN-adopt-hatchery.md` or `NNNN-decanted-from-hatchery.md`, one template); the project
    wins on a rowed path until Hatchery has the change, then base wins and the row goes. The policy

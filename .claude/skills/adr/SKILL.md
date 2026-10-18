@@ -13,7 +13,9 @@ proposal; major choices arrive here through the `proposal` skill.
 
 1. Number: if promoting a proposal, reuse its `NNNN`; otherwise the highest number across the
    decisions directory and `docs/design/proposals/` plus one. One test names the directory
-   (ADR 0016): Hatchery itself, where `git remote | grep -qx hatchery` fails, writes in
+   (ADR 0016): a tree is Hatchery itself only when both `git remote | grep -qx hatchery` fails and
+   `grep -rqE "^Hatchery base: [0-9a-f]{7,40}" docs/design/decisions/` fails (the base line travels
+   with every clone; a fresh sibling clone has no `hatchery` remote). Hatchery writes in
    `docs/hatchery/decisions/`, from `0016` up with no ceiling; every other tree writes in
    `docs/design/decisions/`, from `0001` or the next free number, proposals included, and never
    writes in `docs/hatchery/`: it supersedes a Hatchery record by citation from its own ADR

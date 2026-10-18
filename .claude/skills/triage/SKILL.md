@@ -12,7 +12,7 @@ no block. The format of a file and its three blocks is `docs/ideas/README.md`; r
 
 ## Procedure
 
-1. The scan. Set `D=docs/hatchery/decisions` where `git remote | grep -qx hatchery` fails, else `D=docs/design/decisions` (the `adr` skill's test). Read each `Deferred` item in `$D/` against the tree and list
+1. The scan. Set `D=docs/hatchery/decisions` where `! git remote | grep -qx hatchery && ! grep -rqE "^Hatchery base: [0-9a-f]{7,40}" docs/design/decisions/`, else `D=docs/design/decisions` (the `adr` skill's test). Read each `Deferred` item in `$D/` against the tree and list
    those whose trigger has fired; `grep -rn "^- Prediction, check" $D/ | grep -v " Outcome "` and list
    those past their date or whose trigger is met; run the test command and list `FAIL` and `SKIP`
    lines from fitness checks. Each hit becomes one idea file (`kind: chore`, no `related:`, named

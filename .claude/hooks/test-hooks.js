@@ -835,6 +835,8 @@ write('docs/reference/big.md', `---\nverified: 2026-10-11\nsource: observed\n---
 write('docs/reference/clean.md', '---\nverified: 2026-10-11\nsource: observed\n---\n\n# Clean\n');
 write('docs/reference/noverified.md', '---\nsource: observed\n---\n# No verified\n');
 write('docs/reference/unlisted.md', '---\nverified: 2026-10-11\n---\n# Unlisted\n');
+write('docs/hatchery/reference/README.md', '# Reference\n\n| `hnoverified.md` |\n');
+write('docs/hatchery/reference/hnoverified.md', '---\nsource: observed\n---\n# No verified\n');
 // 41 lines, synthetic: the suite reads no file of the repository it runs in.
 write('docs/HANDOFF.md', `# Handoff\n\n${lines(39)}`);
 write('docs/findings/README.md', '# Findings\n\n`2026-01-01-nofm.md` `2026-01-02-ok.md` `2026-01-03-gone.md`\n');
@@ -871,6 +873,8 @@ const P = [
     'post-edit: docs/reference/noverified.md lacks verified: frontmatter. See .claude/rules/docs.md.'],
   ['PX02', 'reference file missing from its index', absOf('docs/reference/unlisted.md'),
     'post-edit: docs/reference/unlisted.md is not listed in reference/README.md. Add one line.'],
+  ['PX02H', 'docs/hatchery/reference file without verified:', absOf('docs/hatchery/reference/hnoverified.md'),
+    'post-edit: docs/hatchery/reference/hnoverified.md lacks verified: frontmatter. See .claude/rules/docs.md.'],
   ['PX03', 'finding with full frontmatter', absOf('docs/findings/2026-01-02-ok.md'), null],
   ['PX04', 'ADR listed only in docs/design/README.md', absOf('docs/design/decisions/0009-something.md'), null],
   ['PX05', '320-line proposal (exempt from cap)', absOf('docs/design/proposals/0009-long.md'), null],

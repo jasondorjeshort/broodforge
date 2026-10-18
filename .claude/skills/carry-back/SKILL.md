@@ -47,7 +47,10 @@ pusher runs step 6.
      `baseOwned` or `mixed` (an `R` entry: both paths); or as (b), a record, when it is an `M`
      entry under `docs/design/decisions/` or `docs/reference/` (a branch cut from a base older than
      the move of Hatchery's records to `docs/hatchery/`, ADR 0016 migration 3.4; from a newer base the
-     records are base-owned, so an edit to one is (a)).
+     records are base-owned, so an edit to one is (a)). From a newer base (b) still lets through an
+     `M` on `docs/reference/claude-swap.md`, `docs/reference/README.md` and
+     `docs/design/decisions/README.md`, which exist at that base and are project-owned; Land step 4
+     (the review) refuses them.
      At least one entry must be (a). An entry that is neither, which includes any `A`, `D` or `R`
      under the record directories (a sibling never adds, removes or renames a Hatchery record):
      `carry-back: <path> is project-owned; a base change touches only the base-owned set and the record it updates`.
