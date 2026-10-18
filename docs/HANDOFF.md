@@ -25,7 +25,6 @@ Updated: 2026-10-18 by main session (Hatchery coordinator)
 
 ## Waiting on user
 
-- Best-practices revisit cadence (`docs/ideas/2026-10-18-revisit-claude-code-best-practices.md`).
 - Whether to switch commits to the GitHub noreply address (ADR 0018 recommends it); broodforge's
   files carry the real one, which its scan will refuse once it adopts 0018.
 - The subtree move of Hatchery's records (ADR 0016 item 5, migration 3.4): yes, or the architect
