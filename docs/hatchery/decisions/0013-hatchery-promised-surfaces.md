@@ -1,7 +1,7 @@
 # 0013. Hatchery's promised surfaces and its reference fitness check
 
 Date: 2026-10-16
-Status: proposed, superseded in part by 0016, 0017 and 0018
+Status: proposed (the owner declined to confirm, 2026-10-18), superseded in part by 0016, 0017 and 0018
 Superseded in part by [0016](0016-base-owned-and-project-owned-files.md), 2026-10-17 (this table
 is not living, so the rows are added by that record, item 7): the ownership map, the agreement
 files with their import lines, the `Branch:` line, the departure table, the record paths under
@@ -25,6 +25,11 @@ policy file, grant files, idea blocks), which ADR 0012 says the owner confirms; 
 to "is this the list, and is anything missing that you edit and expect to keep working" turns the
 status to `accepted` with no other edit. The reference check (below) is technical and does not
 wait for the answer.
+Amended 2026-10-18: the owner was asked whether the list is complete and declined to confirm it,
+because best practices are changing too fast to say whether it will hold. The status stays
+`proposed` and the promise is observed as if accepted. The question is not re-asked; it is
+re-raised only when a trigger fires: a sibling update that breaks a hand-edited file, or a
+best-practices revisit (`triage` skill) that changes the list.
 
 ## Context
 

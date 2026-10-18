@@ -64,7 +64,7 @@ Decisions so far:
 - [0013 Hatchery's promised surfaces](0013-hatchery-promised-surfaces.md): the policy
   file, grant files, the idea grammar, the base line, the usage cache and the hook seams, with
   what is not promised; the reference fitness check (hooks require only Node built-ins) in the
-  harness, group `F`. Proposed until the owner confirms the list. Superseded in part by 0016 (five
+  harness, group `F`. Proposed: the owner declined to confirm the list (2026-10-18); observed as if accepted. Superseded in part by 0016 (five
   rows added by its item 7; the idea-grammar row's record), 0017 (the listing CLI and the
   marker line rows) and 0018 (the privacy keys, the never and user allow lists, the scan CLI and
   the pre-push hook path).
