@@ -5,11 +5,11 @@ Updated: 2026-10-18 by main session (Hatchery coordinator)
 
 ## Now
 
-- Four commits ahead of origin, reviewed, unpushed, waiting on the owner's word to push: ADR 0019
-  (carry-back channel), its build (`carry-back` skill, triage step, group CB), the best-practices
-  review, and the first landing (PR 1 of this repository, `ae161c7`). The push closes PR 1 with
-  the scanned comment at `<scratchpad>/pr1-close-comment.md`; the branch delete is the owner's.
-  The session's account was not read from the status line; the gate named none.
+- The pusher is pushing `main` (the owner's word, 2026-10-18): ADR 0019 (carry-back channel), its
+  build (`carry-back` skill, triage step, group CB), the best-practices review, the first landing
+  (PR 1 of this repository, `ae161c7`) and the revisit cadence; then it closes PR 1 with the
+  scanned comment. The branch delete is the owner's. The architect is reviewing migration 3.4
+  (owner's yes) into a tester brief. The session's account was not read from the status line.
 
 ## Next
 
@@ -25,14 +25,11 @@ Updated: 2026-10-18 by main session (Hatchery coordinator)
 
 ## Waiting on user
 
-- Whether to switch commits to the GitHub noreply address (ADR 0018 recommends it); broodforge's
-  files carry the real one, which its scan will refuse once it adopts 0018.
-- The subtree move of Hatchery's records (ADR 0016 item 5, migration 3.4): yes, or the architect
-  writes the alternative. Until then a carry-back may edit a record only beside a base change (ADR 0019).
-- After the rewrite: dystopo's Actions are on but its four signing secrets are not set (`gh secret set`
-  before its next `v*` tag); delete the `<repo>-backup` repos and the kit's backups when satisfied.
-- ADR 0013 is `proposed`: one word confirms it; `2026-10-16-scheduled-architect-design-pass.md`: yes or no;
-  the HOLD deny's pool sentences (ADR 0011) unseen; delete `~/.claude/usage-state.json` once all projects run the new scripts.
+- Decided 2026-10-18: commits stay under the owner's real identity (no noreply switch; broodforge's
+  files carrying it are that sibling's to settle under 0018); dystopo's secrets and backups are its own.
+- ADR 0013 stays `proposed`: the owner will not confirm the hand-edited list while practice moves
+  this fast (2026-10-18); record that in the ADR (tester) and stop asking. `2026-10-16-scheduled-architect-design-pass.md`:
+  yes or no; the HOLD deny's pool sentences (ADR 0011) unseen; delete `~/.claude/usage-state.json` once all projects run the new scripts.
 
 ## Open findings
 
