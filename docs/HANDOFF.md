@@ -5,16 +5,15 @@ Updated: 2026-10-18 by main session (Hatchery coordinator)
 
 ## Now
 
-- Pushed through `4c52742`: ADR 0019 (carry-back channel), its build, the best-practices review,
-  the first landing (PR 1, `ae161c7`, closed, branch deleted), the revisit cadence. Unpushed:
-  migration 3.4 to 3.6 (`f61e193`, records under `docs/hatchery/`, decant dry run green) and the
-  ADR 0013 note; the reviewer reads both, then the pusher. The session's account was not read
+- Pushed through `7fca8e5`: ADR 0019 (carry-back channel), its build, the best-practices review,
+  the first landing (PR 1, `ae161c7`, closed, branch deleted), the revisit cadence, migration 3.4
+  to 3.6 (records under `docs/hatchery/`, decant dry run green), the ADR 0013 note, the review
+  fixes (ADR 0016 amended: the Hatchery test is two-part). The session's account was not read
   from the status line; the gate named none.
 
 ## Next
 
-1. Reviewer on `f61e193` and the ADR 0013 commit; fixes amend; pusher pushes `main`.
-2. Triage `docs/ideas/` (`triage` skill): the three 2026-10-18 ideas first; the sibling-sync idea
+1. Triage `docs/ideas/` (`triage` skill): the three 2026-10-18 ideas first; the sibling-sync idea
    of 2026-10-13 is stale (that sibling now holds the base's hooks); the ADR 0012 scan.
 3. In `../dystopo`: its handoff and departure row for T117 record the landing `ae161c7`; its next
    `update-from-hatchery` takes the base's version (ADR 0019 item 7) and the moved records

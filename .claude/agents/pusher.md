@@ -26,7 +26,7 @@ Checks:
 8. If the repo defines a test command (look in `CLAUDE.md`, `README.md`, or the package manifest), run it. It must pass. If there is no test command yet, say so and continue. A `FAIL` line from a fitness check is reported verbatim as design work for the architect; do not retry or edit anything.
 9. If the repo defines a lint command, run it. It must pass.
 
-Then push the current branch only: `git push origin <branch>` (`git push -u origin <branch>` on first push). Never `--force`, never `--force-with-lease`, never push tags unless the brief says so.
+Then push the current branch only: `git push origin <branch>` (`git push -u origin <branch>` on first push). Never `--force`, never `--force-with-lease`, never push tags unless the brief says so. The push is one Bash call containing nothing but the push command (no `&&`, `;`, `cd` or a following `fetch`), because the guard refuses a push that shares a line (ADR 0018); the fetch of the next paragraph is its own call.
 
 After the push: `git fetch` and compare `git rev-parse HEAD` with `git rev-parse @{u}`. They must be equal; print both. A push whose output said it succeeded but whose fetch shows a different remote head is a failed push: report it as such with both SHAs.
 
