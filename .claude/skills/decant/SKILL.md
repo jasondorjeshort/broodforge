@@ -31,6 +31,7 @@ and findings. Everything below runs in the new project's clone.
    `<NNNN>` is the provenance ADR of step 9; `Phase` is one or two lines; the branch is this
    project's. Nothing else goes in: a rule the project adds goes under `## Project rules`, a rule
    that contradicts a section is a replacement file later (the departure table of step 9).
+   Decant fills `Test command:`, or leaves it for the first coder brief when there is no command yet.
 
    ```
    # <Project> working agreement
@@ -59,7 +60,7 @@ and findings. Everything below runs in the new project's clone.
 
    ## Project rules
 
-   <none yet>
+   Test command: <the project's test command>
    ```
 5. `.claude/hooks/policy.json`: the project's choices for the hooks, never edits to the scripts
    (ADR 0006): usage thresholds (`usage.hold`, `usage.deny`, per meter under `usage.fiveHour` and
@@ -75,7 +76,10 @@ and findings. Everything below runs in the new project's clone.
    identity) and run `git config core.hooksPath .claude/hooks/git`, in that order.
 6. The handoff. Ask the owner one question, in these words: "Will more than one session work this
    branch at the same time?" (ADR 0015: the shape follows the writer count; the answer goes in the
-   commit body of step 12). Then one of:
+   commit body of step 12). Before the architect's brief for `docs/design/00-vision.md`, either
+   branch, interview the owner with AskUserQuestion on implementation, UX, edge cases and
+   tradeoffs; the brief carries the answers, and since a later session writes that brief, they go on
+   the handoff's Next line for `00-vision.md`. Then one of:
    - No: `docs/HANDOFF.md`, rewritten with the `handoff` skill; Now is "decanting from Hatchery",
      Next is the design sequence starting at `docs/design/00-vision.md`.
    - Yes: the split shape (`handoff` skill, `split.md`). Write `docs/HANDOFF.md` as the map, with

@@ -23,3 +23,5 @@ Branch: main
 @.claude/agreement/licensing.md
 
 ## Project rules
+
+Test command: `node .claude/hooks/test-hooks.js`
