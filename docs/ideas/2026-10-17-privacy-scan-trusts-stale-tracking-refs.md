@@ -22,3 +22,5 @@ from the old clone; the scan reports an empty range.
 Suggested fix: in `--pre-push`, use the remote shas git passes on stdin and exclude only those; in
 the guard, ask the remote for its real heads (`git ls-remote <target>`) and exclude only those. A
 remote that cannot be reached denies, as a range that cannot be computed already does.
+
+Plan: `coder`, in `.claude/hooks/privacy-scan.js` (the range, lines 385-393) and `docs/hatchery/decisions/0018-privacy-scan.md`. `--pre-push` excludes only the non-zero remote shas git sends on stdin, never `--remotes=<target>` or `--remotes=hatchery`. The guard and CLI paths ask the remote (`git ls-remote <target>`) for its heads and exclude only those present locally; an unreachable remote is `cannot` (exit 2, deny), as an uncomputable range already is. PV harness cases: this file's repro (old clone, empty remote, stale `origin/main`) scans every commit; an ordinary up-to-date push still scans only the new ones. Verify: `node .claude/hooks/test-hooks.js`. Out of scope: the never list and the classes.
