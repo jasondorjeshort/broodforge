@@ -14,3 +14,5 @@ title of an operator entry is (the first bold line, unbolded) and the script and
 ## Open
 
 - Whether the same fallback misreads an idea or finding whose `#` title is not the first body line.
+
+Plan: `tester`. In `docs/hatchery/decisions/0017-queue-list.md`, state the operator title: the first bold line of the body, unbolded. In `.claude/hooks/queue-list.js` `titleOf` (line 63), operator mode takes the first line matching `^\*\*(.+?)\*\*`; the other modes keep the `#` heading first. `Q` cases: an operator entry with a bold opening line and a later numbered list lists its bold line; an idea whose `#` title follows a blank line still lists the heading (the Open question). Verify: `node .claude/hooks/test-hooks.js`. Out of scope: the other columns.
