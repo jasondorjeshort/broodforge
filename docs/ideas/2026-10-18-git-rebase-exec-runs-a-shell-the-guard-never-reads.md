@@ -19,3 +19,5 @@ Fix: the guard reads the argument of `--exec`, `-x` and `--exec=<cmd>` as a comm
 own (the parser already splits shell text for `sh -c` and heredocs; the hook specs, rule 11 and
 the "quoted text is data" note, say where) and applies every rule to it with the same caller and
 branch; a harness case per shell. Rule number and wording: the architect, in the hook specs.
+
+Plan: `coder`. In `.claude/hooks/git-guard.js`, for `git rebase`, collect every `--exec <cmd>`, `--exec=<cmd>`, `-x <cmd>` and `-x<cmd>` and judge each as a command line of its own (the `sh -c` path in `.claude/hooks/shell-parse.js`), with the same caller and branch; a deny names the inner rule. Add the rule and its wording to `docs/hatchery/decisions/0002-hook-specs.md` beside rule 11. Harness cases in Bash and PowerShell: `git rebase -x "git push --force origin main" origin/main` denied; `git rebase -x "npm test" origin/main` allowed for a caller who may rebase. Verify: `node .claude/hooks/test-hooks.js`. Out of scope: the `--exec` of `push` and `send-pack` (a remote program, a separate reading).
