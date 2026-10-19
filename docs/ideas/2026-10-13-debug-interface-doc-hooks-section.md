@@ -11,3 +11,6 @@ The doc does not exist yet, so the section waits on the doc being written. [no-c
 
 2026-10-16: the dependency check's debug interface is `--only deps --verbose` (ADR 0013); it
 belongs in that section when the doc is written.
+
+Question: hold this until `docs/design/05-debug-interface.md` exists? The anchor is still unwritten in the base, so no pass can add the section; I recommend you write `Waits: 05-debug-interface.md is written` so triage stops re-reading it.
+Answer:
