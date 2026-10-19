@@ -20,4 +20,15 @@ Suggested: allow `git replace` with `-l`/`--list`; decide whether `update-ref -d
 repository whose path is under the scratchpad; make the unexpanded-argument rule skip quoted and
 heredoc text, as the other rules do (`docs/reference/claude-code-on-windows.md`, Shells).
 
-Plan: `coder`, in `.claude/hooks/git-guard.js` and `docs/hatchery/decisions/0002-hook-specs.md`. (1) The rewrite rule (line 526: `filter-branch`, `filter-repo`, `replace`, `update-ref`) allows `git replace` with only `-l` or `--list` and an optional pattern. (2) The unexpanded-argument rule (n 19, line 589) skips heredoc bodies and quoted data as the other rules do (the "quoted text is data" note). Harness cases for each, allowed and still denied (`git replace <a> <b>`, `git push origin $B`). Verify: `node .claude/hooks/test-hooks.js`. Out of scope: `update-ref -d` in a scratch repository stays denied; an exemption there needs the guard to know the scratchpad, a separate decision.
+2026-10-19: `git replace -l`/`--list` is allowed now (the rebase --exec change). The rule-19
+fix was built and withdrawn: the false positive fires only when a runner (`| xargs`, `bash -n`,
+`Invoke-Command`) is in the same line, and an "inert text" exemption keyed on pipelines let real
+bypasses through (`for ...; do echo '<git cmd>'; done | sh`, `tee >(sh)`, `| & iex`, write then
+`sh x.sh` on one line). Those shapes are now denied cases in the harness.
+
+Question: leave the rule-19 false positive as it is (agents split the data and the runner into two
+calls), or fund a design pass on data-flow-aware parsing? Any exemption has to beat the denied cases
+above, which takes tracking of compound commands, process substitution and files written then run.
+I recommend leaving it: the workaround costs one extra call, and a wrong exemption lets a destructive
+command through. `update-ref -d` in a scratch repository stays denied either way.
+Answer:
