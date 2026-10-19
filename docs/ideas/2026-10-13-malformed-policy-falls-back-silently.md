@@ -18,3 +18,6 @@ reverse silently looser. `git-guard.js` fails closed and loud on the same error;
 - Whether the status line should show a flag (for example `POLICY?`) while the policy is malformed.
 - Whether `update-from-hatchery` should run `node .claude/hooks/policy.js` as a post-merge check
   that fails the update, so policy and loader always move together.
+
+Question: which shape from Open do you want: a `POLICY?` flag on the status line while `policy.json` fails validation, a failing `policy.js` check in `update-from-hatchery`, or both? Still true in `.claude/hooks/usage-gate.js` (header, lines 14-18): the gate falls back to the defaults with a stderr note. The flag is something you see and the fallback decides whether launches spend money, so it is yours. I recommend both: the flag catches a typo the day it happens, the update check catches loader and policy drifting apart.
+Answer:
