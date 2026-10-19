@@ -7,15 +7,15 @@ placeholder with `<seg>`, `<login>` or `<name>`.
 
 ## 1. What the scan reads
 
-Inputs: a repository directory, a list of local refs or shas, a remote name or none, an extra
-`--not` list, the policy. The refs and remote come from the caller: rule 20 and `--pre-push`
-compute them, the CLI takes them.
+Inputs: a repository directory, a list of local refs or shas, a remote name or none, for
+`--pre-push` git's remote shas and URL, the policy. The refs and remote come from the caller:
+rule 20 and `--pre-push` compute them, the CLI takes them.
 
 Refs a push sends (ported from the downstream guard's `pushSources`, unchanged in meaning): each
 refspec's source (`HEAD` as itself; a glob such as `refs/tags/*` as every ref it matches, a bare
 glob under `refs/heads/`; a deletion sends nothing); with no refspec, every ref when
 `remote.<r>.mirror` is true, else `remote.<r>.push`, else `push.default` (`matching`: each local
-branch the remote has; `nothing`: none; `current`, `simple`, `upstream` or unset: `HEAD`); every
+branch the remote has, by `ls-remote` at its push URLs; `nothing`: none; `current`, `simple`, `upstream` or unset: `HEAD`); every
 local branch for `--all` or `--branches`; every tag for `--tags` or `--follow-tags`. The remote as
 git picks it: the command line's, `--repo`, `branch.<b>.pushRemote`, `remote.pushDefault`,
 `branch.<b>.remote`, `origin`; a URL or path is "no remote"; a name that is not a configured remote
@@ -23,20 +23,33 @@ is an error. The repository and config an invocation acts on (`-C`, `--git-dir`,
 `-c`, `--config-env`, `GIT_DIR`, `GIT_WORK_TREE`, `GIT_CONFIG_COUNT`/`_KEY_n`/`_VALUE_n`, prefixed
 or exported earlier in the line) are honoured; a value the shell reader cannot see is an error.
 
-Range: `git rev-list <refs> --not --remotes=<target> [--remotes=hatchery] [<extra>]`. Only the
-target remote's refs count as published, plus every ref of a remote named `hatchery` when one is
-configured (the base's history), plus the caller's extra list (`--pre-push` adds each remote sha
-that is not all zeros). No other remote is trusted: a commit on a private backup remote is not
-published. With "no remote" the target term is dropped and a notice says the range is bounded only
-by the rest. A commit is scanned once per run however many refs reach it.
+Range: `git rev-list <refs> --not <held>`, where `<held>` is only what a remote itself confirms
+it holds, never a local remote-tracking ref (amended 2026-10-19: a remote replaced by an empty
+repository leaves its old `origin/main` behind, and trusting it let a whole old history out
+unscanned). The target: for `--pre-push`, each remote sha git sends that is not all zeros plus
+every sha `git ls-remote <remote-url>` lists (git's URL; without it a new branch would rescan the
+whole history); otherwise every sha `git ls-remote` lists at each of the target's push URLs
+(`git remote get-url --push --all`), only those all of them hold when there are several. The
+base: every sha `git ls-remote hatchery` lists, when a remote named `hatchery` is configured and
+is not the target (the base's history). A target that cannot be asked is an error for the guard
+and the CLI; for `--pre-push` its `ls-remote` term is dropped with a notice and git's remote shas
+alone bound it (an owner whose push asked for a typed credential is not blocked); a `hatchery`
+that cannot be asked bounds nothing, with a notice. Each fallback only widens the scan. `ls-remote`
+runs with `GIT_TERMINAL_PROMPT=0` and `GCM_INTERACTIVE=never`, once per URL per run. Only shas the
+repository has bound the range; when a remote's branch or tag tips are missing here, a notice
+says `<n> tips of <remote> are not here; fetch it to bound the range`. An annotated tag whose
+object a remote holds is not scanned. No other remote is trusted: a commit on a private backup
+remote is not published. With "no remote" outside `--pre-push` the target term is dropped and a
+notice says the range is bounded only by the base. A commit is scanned once per run however many
+refs reach it. A URL in a notice or reason shows no userinfo (up to the last `@` before the host).
 
 Per commit, one `git log -p -U0 --cc --no-renames --format=<sentinel>%n%H%n%an%n%ae%n%cn%n%ce%n%B`
 over the range (the coder picks a sentinel no message can contain, such as a NUL-prefixed line),
 never one `git show` per commit. From it, in this order: author name and email, committer name and
 email, the message, added lines (the `+` lines of each hunk; for a merge, `--cc` gives the lines
 added against every parent), added file names (the path after `--- /dev/null`). Per annotated tag
-among the refs and not reachable from the `--not` list: `git for-each-ref` for its message, tagger
-name and email. Each git call has a timeout of 20 s and a 512 MiB buffer; a failure is an error,
+among the refs whose tag object no remote confirmed holding (`<held>` above): `git for-each-ref`
+for its message, tagger name and email. Each git call has a timeout of 20 s and a 512 MiB buffer; a failure is an error,
 never a pass.
 
 ## 2. Classes, patterns, exemptions
@@ -71,7 +84,7 @@ reported under both `email` and `identity`. Harness fixtures use addresses at `e
 ## 3. The CLI (promised)
 
 ```
-node .claude/hooks/privacy-scan.js [--remote <name> | --no-remote] [--json] [<ref> ...]
+node .claude/hooks/privacy-scan.js [--remote <name> | --no-remote] [--json | --list] [<ref> ...]
 node .claude/hooks/privacy-scan.js --pre-push <remote-name> <remote-url>     # stdin: git's lines
 node .claude/hooks/privacy-scan.js --text <file> [--json]
 ```
@@ -79,8 +92,13 @@ node .claude/hooks/privacy-scan.js --text <file> [--json]
 Defaults: refs `HEAD`; remote as git picks it (section 1). `--pre-push` reads git's
 `<local ref> <local sha> <remote ref> <remote sha>` lines; for each line whose local sha is not all
 zeros it scans the local sha (not the ref name, which may move) and adds the remote sha to the
-`--not` list when that is not all zeros; the remote name is `<remote-name>`, "no remote" when it is
-a URL; `--pre-push` with `--json` is a usage error (exit 2). `--text` scans a file's lines as added lines under `<file>:<n>` (classes `email`, `home`,
+`--not` list when that is not all zeros, with what `git ls-remote <remote-url>` lists (section 1);
+the remote name is `<remote-name>`, "no remote" when it is a URL; `--pre-push` with `--json` is a
+usage error (exit 2). `--list` scans nothing: it prints the commits of section 1's range, one
+40-character sha per line, oldest first (built by the same range code, so it is exactly what the
+scan reads; pusher check 6 takes its commits from it), notices on stderr, no last line; exit 0, or
+2 with the `cannot` line; no policy is read; with `--json`, `--pre-push` or `--text` it is a usage
+error. `--text` scans a file's lines as added lines under `<file>:<n>` (classes `email`, `home`,
 `host`, `word`, `session`, `transcript`, `secret`). Policy through `HOOK_POLICY_FILE` as the hooks
 do; a policy that does not load is an error.
 
@@ -192,8 +210,20 @@ literal: allowed; PV30 the never file replaced by a directory: `git push` denied
 sentence naming the file, `git status` on the same repository allowed (the lazy require and the
 try); PV31 a full `AKIA` shape: denied; a bare `AKIA` prefix in prose and a `token = "<text>"`
 phrase: allowed; PV32 `--pre-push` with a remote sha that is not all zeros: a hit at that commit
-passes, a hit in the commit after it is denied. One case in the guard's parse group: a line whose
-only `git` is an argument path ending `/git` (`cat <dir>/git`) is not a git invocation.
+passes, a hit in the commit after it is denied. Added 2026-10-19 (the range asks the remote):
+PV38 origin pointed at a fresh empty bare repository with the old `origin/main` kept: the guard,
+the CLI and `--pre-push` each scan every commit; PV39 an up-to-date remote holding a hit: only the
+new commit is scanned, by the guard, the CLI, and `--pre-push` for an update and for a new branch;
+PV40 an unreachable remote: the guard denies with the error sentence, the CLI exits 2,
+`--pre-push` scans every commit (exit 0 on a clean repository) with the notice; PV41a `hatchery`
+replaced by an empty repository: its stale `hatchery/main` bounds nothing, the guard denies;
+PV41b the CLI with `hatchery` unreachable: exit 1 on the hit, the notice on stderr; PV42 `--list`
+prints PV38's every commit and PV39's new commit only, matching the scan's count; PV43
+`push.default=matching` and a branch the remote has but no local tracking ref names: that
+branch is sent and its hit denied; PV44 a remote tip not fetched here: the notice; PV45 a URL
+whose password holds an `@` loses its userinfo. One case in the guard's parse group:
+a line whose only `git` is an argument path ending `/git` (`cat <dir>/git`) is not a git
+invocation.
 Group `F` runs unchanged: F1 covers the new script's own requires; the guard's lazy require is
 exercised by every PV case.
 

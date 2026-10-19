@@ -172,6 +172,7 @@ for (const [dir, branch] of [[repoMain, 'main'], [repoTask, 'task/T1']]) {
   git(dir, 'commit', '-q', '--allow-empty', '-m', 'init');
   git(dir, 'tag', 'v1.0'); // GP16 pushes it; rule 20 reads what a push sends, so it must exist
   git(dir, 'remote', 'add', 'origin', `${dir}-origin.git`); // rule 20 denies a push to a remote that is not configured
+  git(scratch, 'init', '-q', '--bare', `${dir}-origin.git`); // ... or one it cannot ask for its refs (ls-remote)
 }
 // HOME for every guard run: empty, so rule 20 reads no never or allow file of the machine.
 const guardHome = path.join(scratch, 'guard-home');
@@ -830,10 +831,11 @@ for (const [n, command, agent, cwd, want] of GP) {
       const two = pvRepo('pre-push-range', [line('docs/a.md', `see C:/${U}/${SEG}/a`), line('docs/b.md', `see C:/${U}/${SEG}/b`)]);
       const [a, b] = two.shas;
       const zero = '0'.repeat(40);
-      const r1 = cli(two, ['--pre-push', 'origin', 'x'], { input: `refs/heads/main ${b} refs/heads/main ${a}\n` });
+      const url = `${two.dir}-origin.git`;
+      const r1 = cli(two, ['--pre-push', 'origin', url], { input: `refs/heads/main ${b} refs/heads/main ${a}\n` });
       const o1 = r1.out.trim().split('\n');
-      const r2 = cli(two, ['--pre-push', 'origin', 'x'], { input: `refs/heads/main ${b} refs/heads/main ${b}\n` });
-      const r3 = cli(two, ['--pre-push', 'origin', 'x'], { input: `(delete) ${zero} refs/heads/old ${a}\n` });
+      const r2 = cli(two, ['--pre-push', 'origin', url], { input: `refs/heads/main ${b} refs/heads/main ${b}\n` });
+      const r3 = cli(two, ['--pre-push', 'origin', url], { input: `(delete) ${zero} refs/heads/old ${a}\n` });
       if (!(r1.code === 1 && o1.length === 2 && o1[0].startsWith(`HIT home ${b.slice(0, 7)} docs/b.md:1`) && o1[1] === 'privacy-scan: 1 hits in 1 commits')) return `after a: exit ${r1.code}, ${r1.out}`;
       if (!(r2.code === 0 && r2.out === 'privacy-scan: clean, 0 commits\n')) return `at b: exit ${r2.code}, ${r2.out}`;
       return (r3.code === 0 && r3.out === 'privacy-scan: clean, 0 commits\n') || `deletion: exit ${r3.code}, ${r3.out}`;
@@ -892,6 +894,113 @@ for (const [n, command, agent, cwd, want] of GP) {
     pv('PV37a', PUSH, pvRepo('id-policy', [line('.claude/hooks/policy.json', idLine)]), 'allow', { policy: ids });
     pv('PV37b', PUSH, pvRepo('id-policy-other', [line('.claude/policy.json', idLine)]), 20,
       { policy: ids, extra: says('.claude/policy.json:1 (email: ') });
+
+    // PV38-PV41: only what a remote confirms it holds bounds the range (ls-remote, or git's
+    // pre-push lines), never a local remote-tracking ref.
+    const zero = '0'.repeat(40);
+    const lastLine = (r) => r.out.trim().split('\n').pop();
+    // PV38, the reproduction: origin pointed at a fresh empty repository, its old origin/main kept.
+    const stale = pvRepo('stale', [line('docs/a.md', `see C:/${U}/${SEG}/a`)]);
+    must(stale.dir, ['push', '-q', 'origin', 'main']);
+    must(scratch, ['init', '-q', '--bare', `${stale.dir}-empty.git`]);
+    must(stale.dir, ['remote', 'set-url', 'origin', `${stale.dir}-empty.git`]);
+    const staleKept = pvGit(stale.dir, ['rev-parse', 'refs/remotes/origin/main']).stdout.trim() === stale.shas[0];
+    pv('PV38a', PUSH, stale, 20, { extra: says('docs/a.md:1 (home: ') });
+    cliCase('PV38b', 'CLI, origin replaced by an empty repository, stale origin/main kept: every commit scanned', () => {
+      const o = json(cli(stale, ['--json']));
+      return (staleKept && o && o.commits === 2 && o.hits.length === 1) || `stale ref kept ${staleKept}, ${JSON.stringify(o)}`;
+    });
+    cliCase('PV38c', 'CLI --pre-push to the empty repository: every commit scanned', () => {
+      const r = cli(stale, ['--pre-push', 'origin', `${stale.dir}-empty.git`], { input: `refs/heads/main ${stale.shas[0]} refs/heads/main ${zero}\n` });
+      return (r.code === 1 && lastLine(r) === 'privacy-scan: 1 hits in 2 commits') || `exit ${r.code}, ${r.out} ${r.err}`;
+    });
+    // PV39: an up-to-date remote: a hit it already holds is not scanned again, in every form,
+    // including a new branch (git's remote sha all zeros) whose history the remote holds elsewhere.
+    const current = pvRepo('current', [line('docs/a.md', `see C:/${U}/${SEG}/a`)]);
+    must(current.dir, ['push', '-q', 'origin', 'main']);
+    const next = pvCommit(current.dir, line('docs/b.md', 'clean'));
+    const curUrl = `${current.dir}-origin.git`;
+    pv('PV39a', PUSH, current, 'allow');
+    cliCase('PV39b', 'CLI on an up-to-date remote: only the new commit', () => {
+      const r = cli(current, ['--json']);
+      const o = json(r);
+      return (r.code === 0 && o && o.commits === 1) || `exit ${r.code}, ${r.out}`;
+    });
+    cliCase('PV39c', 'CLI --pre-push, an update and a new branch: only the new commit', () => {
+      const r1 = cli(current, ['--pre-push', 'origin', curUrl], { input: `refs/heads/main ${next} refs/heads/main ${current.shas[0]}\n` });
+      const r2 = cli(current, ['--pre-push', 'origin', curUrl], { input: `refs/heads/feat ${next} refs/heads/feat ${zero}\n` });
+      if (!(r1.code === 0 && lastLine(r1) === 'privacy-scan: clean, 1 commits')) return `update: exit ${r1.code}, ${r1.out} ${r1.err}`;
+      return (r2.code === 0 && lastLine(r2) === 'privacy-scan: clean, 1 commits') || `new branch: exit ${r2.code}, ${r2.out} ${r2.err}`;
+    });
+    // PV40: a remote that cannot be asked is "cannot compute" for the guard and the CLI, never a
+    // pass; --pre-push falls back to git's remote shas alone (only wider), with a notice, so a
+    // push whose credential git asked for at a terminal is not blocked.
+    const gone = pvRepo('gone', [line('a.txt', 'nothing personal')]);
+    must(gone.dir, ['remote', 'set-url', 'origin', `${gone.dir}-missing.git`]);
+    pv('PV40a', PUSH, gone, 20, { extra: says('could not read what this push sends', 'for its refs') });
+    cliCase('PV40b', 'CLI, unreachable remote: exit 2 with the cannot line', () => {
+      const r = cli(gone, []);
+      return (r.code === 2 && r.out === '' && r.err.includes('privacy-scan: cannot ask ')) || `exit ${r.code}, ${r.out} ${r.err}`;
+    });
+    cliCase('PV40c', '--pre-push, unreachable URL: bounded by git\'s shas alone, every commit scanned, a notice', () => {
+      const r = cli(gone, ['--pre-push', 'origin', `${gone.dir}-missing.git`], { input: `refs/heads/main ${gone.shas[0]} refs/heads/main ${zero}\n` });
+      return (r.code === 0 && lastLine(r) === 'privacy-scan: clean, 2 commits' &&
+        r.err.includes('privacy-scan: origin is bounded only by git\'s remote shas this time: cannot ask ')) || `exit ${r.code}, ${r.out} ${r.err}`;
+    });
+    // PV41: hatchery is confirmed the same way: replaced by an empty repository, its stale
+    // hatchery/main bounds nothing; one that cannot be asked bounds nothing, with a notice.
+    const staleBase = pvRepo('stale-base', [line('docs/b.md', `see C:/${U}/${SEG}/x`)]);
+    must(scratch, ['init', '-q', '--bare', `${staleBase.dir}-hatchery.git`]);
+    must(staleBase.dir, ['remote', 'add', 'hatchery', `${staleBase.dir}-hatchery.git`]);
+    must(staleBase.dir, ['push', '-q', 'hatchery', 'main']);
+    must(scratch, ['init', '-q', '--bare', `${staleBase.dir}-hatchery-empty.git`]);
+    must(staleBase.dir, ['remote', 'set-url', 'hatchery', `${staleBase.dir}-hatchery-empty.git`]);
+    pv('PV41a', PUSH, staleBase, 20, { extra: says('docs/b.md:1 (home: ') });
+    cliCase('PV41b', 'CLI, hatchery unreachable: the hit is scanned, and a notice', () => {
+      must(staleBase.dir, ['remote', 'set-url', 'hatchery', `${staleBase.dir}-hatchery-missing.git`]);
+      const r = cli(staleBase, []);
+      return (r.code === 1 && r.out.includes('docs/b.md:1') && r.err.includes('privacy-scan: the hatchery remote bounds nothing this time: cannot ask ')) ||
+        `exit ${r.code}, ${r.out} ${r.err}`;
+    });
+    // PV42: --list prints the range the scan reads (pusher check 6 takes it from there).
+    cliCase('PV42', 'CLI --list: PV38\'s every commit, PV39\'s new commit only, one sha per line', () => {
+      const all = pvGit(stale.dir, ['rev-list', '--reverse', 'HEAD']).stdout;
+      const r1 = cli(stale, ['--list']);
+      const o = json(cli(stale, ['--json']));
+      if (!(r1.code === 0 && r1.out === all && o && o.commits === all.trim().split('\n').length)) return `PV38: exit ${r1.code}, ${JSON.stringify(r1.out)} vs ${JSON.stringify(all)}`;
+      const r2 = cli(current, ['--list']);
+      return (r2.code === 0 && r2.out === `${next}\n`) || `PV39: exit ${r2.code}, ${JSON.stringify(r2.out)} ${r2.err}`;
+    });
+    // PV43: push.default=matching sends each local branch the remote has, by ls-remote, not by a
+    // local tracking ref (here deleted, as a clone that never fetched the branch has none).
+    const matching = pvRepo('matching');
+    must(matching.dir, ['checkout', '-q', '-b', 'side']);
+    pvCommit(matching.dir, line('docs/s.md', 'clean'));
+    must(matching.dir, ['push', '-q', 'origin', 'side']);
+    pvCommit(matching.dir, line('docs/s.md', `see C:/${U}/${SEG}/s`));
+    must(matching.dir, ['checkout', '-q', 'main']);
+    must(matching.dir, ['update-ref', '-d', 'refs/remotes/origin/side']);
+    must(matching.dir, ['config', 'push.default', 'matching']);
+    pv('PV43', 'git push', matching, 20, { extra: says('docs/s.md:1 (home: ') });
+    // PV44: a remote whose tips this clone lacks gets a notice (a fetch would bound the range).
+    const behind = pvRepo('behind');
+    const other = path.join(scratch, 'pv-behind-other');
+    must(scratch, ['clone', '-q', '-b', 'main', `${behind.dir}-origin.git`, other]);
+    pvCommit(other, line('x.txt', 'elsewhere'));
+    must(other, ['push', '-q', 'origin', 'main']);
+    pvCommit(behind.dir, line('a.txt', 'here'));
+    cliCase('PV44', 'CLI, the remote holds a tip not fetched here: the notice', () => {
+      const r = cli(behind, []);
+      return (r.code === 0 && r.err.includes('privacy-scan: 1 tips of origin are not here; fetch it to bound the range')) || `exit ${r.code}, ${r.out} ${r.err}`;
+    });
+    // PV45: a URL in a message loses its userinfo up to the last @ before the host.
+    cliCase('PV45', 'shown() strips userinfo whose password holds an @', () => {
+      const { shown } = require(path.join(HOOKS, 'privacy-scan.js'));
+      const pw = 'p' + AT + 'ss';
+      const got = [shown(`https://alice:${pw}${AT}h/x`), shown(`https://tok${AT}h/x`), shown('https://h/x'), shown(`git${AT}h:x`)];
+      const want = ['https://h/x', 'https://h/x', 'https://h/x', `git${AT}h:x`];
+      return JSON.stringify(got) === JSON.stringify(want) || JSON.stringify(got);
+    });
   }
 }
 
