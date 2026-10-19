@@ -13,5 +13,4 @@ release and sweep skills, if those are built (see `2026-10-13-release-skill-tag-
 
 Recorded 2026-10-11 from a downstream build-phase project; a candidate once proposal 0003 (`docs/design/proposals/0003-wave-workflow.md`) is decided.
 
-Question: hold this until proposal 0003 (wave workflow, still `under review`) is decided? It has nowhere to land until a release or sweep skill exists; I recommend `Waits: proposal 0003 decided`, the trigger the file already names.
-Answer:
+Waits: proposal 0003 (wave workflow) decided (owner, 2026-10-19).

@@ -23,4 +23,4 @@ unseen:
 Each is cheap to close when the first real need appears; none blocks anything while the budget is 0.
 
 Question: close these gaps now, or when the first direct dependency is admitted? All four still stand in `.claude/hooks/fitness.json` and group F, and none matters while the budget is 0. I recommend one cheap pass now for unknown keys under `deps` alone (a misspelt limit silently ignored is the gap that hides a mistake), and `Waits: the deps budget rises above 0` for the rest.
-Answer:
+Answer: 2026-10-19, close the unknown-keys gap now; the other three wait until the deps budget rises above 0.

@@ -19,4 +19,4 @@ so with the base `whenStale: "allow"` its launches are never gated.
 - Whether a headless session should read the meters another way or stay ungated on purpose.
 
 Question: should the override lift the stale-data deny too, and should a headless session (no status line) stay ungated on purpose? Still true: `.claude/hooks/usage-gate.js` takes the `whenStale === "deny"` branch (line 157) before it reads the override variable and files (line 180 on). Both decide when launches spend money, so they are yours. I recommend that the override lifts the stale deny (one lift for every deny, as the deny-line finding concluded), and that headless stays ungated but says so in ADR 0006 and on the gate's stderr, since it has no meter to read.
-Answer:
+Answer: 2026-10-19, as recommended: the override lifts the stale deny too; headless stays ungated on purpose, stated in ADR 0006 and on the gate stderr.
