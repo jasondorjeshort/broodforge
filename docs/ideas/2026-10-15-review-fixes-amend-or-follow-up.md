@@ -28,3 +28,5 @@ research is in.
 - Whether `--fixup` plus `--autosquash` works under git-guard and the installed git version, and
   whether the `commit` skill should describe it for the case where the commit is not HEAD.
 - Output: a finding in `docs/findings/`, then a rule edit if one follows.
+
+Plan: a research pass, then a finding. The coordinator first fetches the sources through `web-fetch` into the scratchpad (git.git SubmittingPatches on rerolls, Gerrit's amend per change, GitHub squash merging, the Git 2.44 notes on non-interactive `--autosquash`). The `architect` reads them and the anchors above, tests `git commit --fixup` plus `git rebase --autosquash` in a scratch repository under the installed git and against `.claude/hooks/git-guard.js` (`node .claude/hooks/test-hooks.js --input <file> git-guard`), and writes `docs/findings/<date>-review-fixes-amend-fixup-or-follow-up.md` answering the three Open questions with a recommended rule. Out of scope: editing `git.md`, `one-review.md` or the `commit` skill; a rule change is its own brief once the finding is read.
