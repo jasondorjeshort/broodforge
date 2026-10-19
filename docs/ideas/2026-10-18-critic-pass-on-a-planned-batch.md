@@ -21,3 +21,6 @@ task would have made in passing), all taken into the plan.
 The base has no batch skill, so the step would sit in the delegation agreement or the `brief`
 skill. A protocol change is a proposal here, never landed from a branch (ADR 0019, item 1); the
 cost is one Fable or Opus pass per batch, which is the owner's call under `usage-gating.md`.
+
+Question: do you want a critic pass before each batch of briefs, at one Fable or Opus pass per batch? It is a protocol change and a recurring cost, both yours; the sibling's evidence (seven serious objections taken on its latest batch) is strong. I recommend yes, through a proposal (`proposal` skill) for an Opus critic on batches of three or more briefs, with the step in the `brief` skill, so single launches stay cheap.
+Answer:
