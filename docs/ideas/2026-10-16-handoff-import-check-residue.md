@@ -25,3 +25,5 @@ for the architect to settle.
 
 - Does the ADR keep the join-everything rule and say so, or resolve `~` and absolute targets?
 - One fence rule for hook and pusher: which, and does the pusher gain one?
+
+Plan: `architect`, an amendment of ADR 0014 (`adr` skill, "Amend without superseding"). The code has settled all three: `.claude/hooks/imports.js` serves both the post-edit hook and pusher check 7 (`policy.js --claude-check`), treats `~/`, absolute and climbing targets as outside the root (an info line, not a warning), and has one fence rule (three or more backticks or tildes, any indent); pusher check 7 carries the `mktemp` form of lines 2 and 3. The amendment rewrites items 4 and 6 of `docs/hatchery/decisions/0014-handoff-layout.md` to say what the code does, from the `imports.js` header and `.claude/agents/pusher.md` check 7, and deletes this file. Verify: `node .claude/hooks/test-hooks.js`; the ADR stays under 300 lines. Out of scope: any code change.
