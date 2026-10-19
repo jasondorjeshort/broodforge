@@ -37,7 +37,6 @@ inside `$(...)`, backticks and `<(...)`, and in an unquoted heredoc's `$(...)`, 
 commands, because they run; their value in the enclosing word is unknown. A word is *opaque* when
 it holds something the reader cannot see: a substitution, a variable (`$X`, `${F:-...}`, a `$name`
 inside double quotes), a Bash brace expansion (`{-f,}`, `{1..3}`), or a PowerShell splat (`@a`).
-
 Data becomes commands only when a runner runs in the line: `sh`, `bash`, `zsh`, `dash`, `ksh`,
 `fish`, `pwsh`, `powershell`, `cmd`, `wsl`, `eval`, `iex`, `Invoke-Expression`, `Invoke-Command`,
 `Start-Process`, `xargs`, `source`, `.` or `[scriptblock]::Create`, as a command word or after a
@@ -47,6 +46,26 @@ deep. So `git commit -m "fix git push -n"`, a heredoc commit message and `echo "
 allow, while `bash -c "git reset --hard"` and `echo "git push -f" | sh` are read as the git commands
 they run. `Start-Process git -ArgumentList "push --force"` (or `"push","--force"`) is reassembled
 into the git command it starts.
+
+Data is all or nothing: once a runner appears, every quoted string and heredoc body in the line is
+read as commands, even one that only `echo` or `cat` holds, because which text reaches the runner
+(a pipe, a loop or function body, `tee >(sh)`, a file written and then run) cannot be told from the
+line. So `cat <<'EOF'` with a `git push origin $B` body, beside a `| xargs ...` pipeline, is rule 19's;
+split such a call in two.
+
+Commands git runs. The command of every `git rebase --exec <cmd>`, `--exec=<cmd>`, `-x <cmd>` or
+`-x<cmd>` (each repeat, and `--exec` abbreviated) is a command line of its own, read whether or not
+a runner appears: parsed as Bash, because git hands it to `sh`, its own data and runners read as
+above, and every rule applied with the line's caller. A deny quotes the inner command and carries the
+note. A substitution of the outer line inside it (`-x "git push $(...)"`) makes the word holding it
+opaque. A reassembled `Start-Process` command is read the same way; its `-ArgumentList` string splits
+at whitespace and commas, with double quotes grouping. The `--exec` of `push` and `send-pack` names a
+program on the remote and is not read.
+
+Depth. Data and rebase commands are read three levels deep. Text still unread past the third level
+fails closed: it becomes one invocation with an unknown subcommand, which rule 19 denies with advice
+that the shells nest deeper than the guard reads. Known limit: commands read from data or a rebase
+command are judged in the directory the line ends in; a `git -C <dir>` around them is not followed.
 
 Locating git. In each command every word whose base name is `git` or `git.exe` (any case) starts an
 invocation; a word that is a path ending in it (`/usr/bin/git`, `<dir>/git`) does so only when the
@@ -92,14 +111,14 @@ unreadable branch match no pattern list but `*`.
 | 9 | `branch` with `-D`, or a delete flag and a force flag, unless the branches pass the rule-2 test | `forced branch delete` |
 | 10 | `rebase` with `-i`, `--interactive` or `--interactive=...` | `interactive rebase is unsupported here` |
 | 11 | `stash` whose first positional is `drop` or `clear` | `stash drop/clear is unrecoverable` |
-| 12 | `filter-branch`, `filter-repo`, `replace`, `update-ref`, or `reflog expire`/`delete` | `history rewrite` |
+| 12 | `filter-branch`, `filter-repo`, `update-ref`, `replace` unless it is `-l` or `--list` with at most one pattern and no opaque argument (a listing), or `reflog expire`/`delete` | `history rewrite` |
 | 13 | `--no-verify` on `commit`, `push`, `merge`, `pull`, `rebase`, `am`, `cherry-pick` or `revert`; `commit -n` (`push -n` is `--dry-run` and allowed) | `hooks bypass` |
 | 14 | any `GIT_CONFIG`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM` or `GIT_CONFIG_PARAMETERS` assignment in the line (prefix, `export` or `$env:`); `core.hooksPath`, `include.*` or `includeIf.*.path` set by `-c`, `--config-env` or `GIT_CONFIG_KEY_n`; `git config` writing `include.path`/`includeIf.*.path`, or unsetting `core.hooksPath` or setting it to anything but `git.hooksPath` (null: any value). A read allows. | `hooks path override` |
 | 15 | `alias.*` set by `-c`, `--config-env` or `GIT_CONFIG_KEY_n`, or `git config alias.<x> <value>` | `git alias definition` |
 | 16 | `checkout` with `-f`/`--force`; `switch` with `-f`, `--force` or `--discard-changes` | `forced checkout discards edits` |
 | 17 | `worktree remove` with `-f` or `--force` | `forced worktree removal` |
 | 18 | `checkout -B <b>`, `switch -C`/`--force-create <b>`, or `branch -f <b>` (not deleting, moving or copying) when `<b>` is the current branch or matches `git.commit.protectedBranches` | `forced branch reset` |
-| 19 | an invocation with an unknown subcommand; or an opaque invocation of `push`, `send-pack`, `reset`, `checkout`, `switch`, `restore`, `clean`, `branch`, `worktree`, `stash`, `config`, `reflog` or a rule-4 subcommand. Other subcommands (`log`, `diff`, `add`, ...) stay allowed. | `unexpanded argument` |
+| 19 | an invocation with an unknown subcommand; or an opaque invocation of `push`, `send-pack`, `reset`, `checkout`, `switch`, `restore`, `clean`, `branch`, `worktree`, `stash`, `config`, `reflog` or a rule-4 subcommand. Other subcommands (`log`, `diff`, `add`, ...) stay allowed. Text past the depth limit counts as an unknown subcommand. | `unexpanded argument` |
 | 20 | tried right after rule 3: `push` or `send-pack` from any caller, the main session and `--dry-run` included, when the push shares its line with another git invocation, or when `privacy-scan.js` reports a hit or an error for the commits the push sends (an opaque push is left to rule 19). The require and the scan sit in one try: any throw is this rule's deny, and no other rule is affected. Advice: shared line, run the push on a line of its own; hits, fix the text and fold the edit into the unpushed commit, a false positive is the owner's via `privacy.allow` or the user allow file; error, run the scan by hand and read its `cannot` line. | `personal data in the outgoing commits` |
 
 The merged-PR check runs `gh pr list --head <branch> --state merged --json number --limit 1` in the
@@ -135,7 +154,13 @@ Test groups: G01 to G25 and GX01 to GX25 are the original table (G24 now allows:
 data); GN covers rules 12 to 17 and lease-as-force; GQ the parser in both shells; GR the shapes an
 independent review reproduced as bypasses on 2026-10-13 (abbreviated options, opaque arguments,
 PowerShell launchers, commit-making subcommands, config by environment and include, forced branch
-resets, `send-pack`, whole-tree spellings), with the false positives they must not cause; GF
+resets, `send-pack`, whole-tree spellings), with the false positives they must not cause; GE
+`git rebase --exec` and `-x` in both shells (repeats, `--exec=`, `-x<cmd>`, a shell or a
+substitution inside, the depth limit at three and four levels, `Start-Process` with one argument
+string); GA `git replace --list` (an audit false positive of 2026-10-17) and the shapes rule 19 keeps
+denying, text held by `echo`, `cat` or a message while a runner can reach it (pipes, loop and
+function bodies, groups, `tee >(sh)`, `| & iex`, a file written then run), which any exemption for
+held text must still deny; GF
 malformed and absent policy files (GF07 and GF08 a malformed `git.integrate`); GI the
 `git.integrate` entry (a subagent's `pull`, `merge --ff-only`, `merge`, `rebase` and their
 `--continue` allowed on `main` under the task-branches example while `commit`, `cherry-pick`,

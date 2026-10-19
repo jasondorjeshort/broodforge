@@ -464,6 +464,79 @@ for (const [id, command, tool, agent, expect, cwd, policy] of GR) {
 // A reassembled Start-Process command carries the note: git ran from text, not as the command word.
 guardCase('GR65', { command: 'Start-Process git -ArgumentList "push --force"', tool: 'PowerShell' }, 1, withNote);
 
+// git rebase --exec / -x: each command is a command line of its own, judged by every rule with the
+// same caller and branch; the deny names the inner rule. [id, command, tool, agent, expect, extra]
+const innerText = (t) => (d) => d.reason.includes(`: \`${t}\`.`) || `reason should quote the inner command ${JSON.stringify(t)}`;
+const reasonHas = (t) => (d) => d.reason.includes(t) || `reason should contain ${JSON.stringify(t)}`;
+// Bash double quotes whose data is exactly s, and text wrapped n times (sh -c "...", git rebase -x "...").
+const dq = (s) => `"${s.replace(/[\\"$`]/g, '\\$&')}"`;
+const shC = (s) => `sh -c ${dq(s)}`;
+const rebaseX = (s) => `git rebase -x ${dq(s)} main`;
+const nestText = (s, n, wrap) => (n === 0 ? s : nestText(wrap(s), n - 1, wrap));
+const GE = [
+  ['GE01', 'git rebase -x "git push --force origin main" origin/main', 'Bash', 'runner', 1, innerText('git push --force origin main')],
+  ['GE02', 'git rebase -x "git push --force origin main" origin/main', 'PowerShell', 'runner', 1, innerText('git push --force origin main')],
+  ['GE03', 'git rebase -x "npm test" origin/main', 'Bash', 'runner', 'allow'],
+  ['GE04', 'git rebase -x "npm test" origin/main', 'PowerShell', 'runner', 'allow'],
+  ['GE05', 'git rebase --exec "git reset --hard HEAD~1" main', 'Bash', null, 5, withNote],
+  ['GE06', 'git rebase --exec="git clean -fdx" main', 'Bash', null, 6],
+  ['GE07', 'git rebase -x"git stash drop" main', 'Bash', null, 11],
+  ['GE08', 'git rebase -x "npm test" -x "git push -f" main', 'Bash', null, 1], // every repeat is read
+  ['GE09', 'git rebase --exe "git checkout -- ." main', 'Bash', null, 7], // an abbreviated --exec
+  ['GE10', "git rebase -x 'bash -c \"git push -f\"' main", 'Bash', null, 1], // a shell inside the command
+  ['GE11', 'git rebase -x "$CMD" main', 'Bash', null, 19],
+  ['GE12', 'git rebase -x "git push $(echo -f)" main', 'Bash', null, 19], // the outer line expands it
+  ['GE13', 'git rebase -x "npm test" origin/main', 'Bash', 'coder', 4], // the rebase itself is still rule 4's
+  ['GE14', 'echo "git rebase -x \'git push -f\' main"', 'Bash', null, 'allow'], // quoted text is data
+  ['GE15', "git rebase -x 'git push --force origin main' origin/main", 'PowerShell', null, 1],
+  // The depth limit fails closed: three levels are read, a fourth is rule 19's.
+  ['GE16', nestText('git reset --hard', 4, shC), 'Bash', null, 19, reasonHas('deeper here')],
+  ['GE17', nestText('git reset --hard', 3, shC), 'Bash', null, 5],
+  ['GE18', `git rebase -x ${dq(nestText('git reset --hard', 3, shC))} main`, 'Bash', null, 19, reasonHas('deeper here')],
+  ['GE19', nestText('git reset --hard', 4, rebaseX), 'Bash', null, 19, reasonHas('deeper here')],
+  ['GE20', nestText('git reset --hard', 3, rebaseX), 'Bash', null, 5],
+  // Start-Process with one -ArgumentList string: double quotes group, and the rebase command is read.
+  ['GE21', 'Start-Process git -ArgumentList \'rebase -x "git push -f" main\'', 'PowerShell', null, 1],
+];
+for (const [id, command, tool, agent, expect, extra] of GE) guardCase(id, { command, tool, agent }, expect, extra);
+
+// git replace --list (an audit false positive, 2026-10-17), and the shapes rule 19 keeps denying:
+// text echoed, held in a loop, function or group, or written to a file, while a runner in the line
+// can run it. Any future exemption for held text has to pass these. [id, command, tool, agent, expect]
+const R = 'git reset $(echo --hard)';
+const GA = [
+  ['GA01', 'git replace -l', 'Bash', 'coder', 'allow'],
+  ['GA02', "git replace --list 'refs/*'", 'Bash', 'coder', 'allow'],
+  ['GA03', 'git replace aaa bbb', 'Bash', null, 12],
+  ['GA04', 'git replace -d aaa', 'Bash', null, 12],
+  ['GA05', 'git replace -l -f aaa bbb', 'Bash', null, 12],
+  ['GA06', "cat <<'EOF'\ngit push origin $B\nEOF", 'Bash', null, 'allow'], // no runner: data
+  ['GA07', 'git push origin $B', 'Bash', null, 19],
+  ['GA08', 'bash -c "git push origin $B"', 'Bash', null, 19],
+  ['GA09', 'echo "git push origin $B" | sh', 'Bash', null, 19],
+  ['GA10', "cat <<'EOF' | bash\ngit push origin $B\nEOF", 'Bash', null, 19],
+  ['GA11', '(echo "git push origin $B"; true) | sh', 'Bash', null, 19],
+  ['GA12', '{ echo "git push origin $B"; } | bash', 'Bash', null, 19],
+  ['GA13', 'Write-Output "git push origin $B" | iex', 'PowerShell', null, 19],
+  ['GA14', 'git log | % { iex "git push origin $_" }', 'PowerShell', null, 19],
+  ['GA15', "bash -c \"$(echo 'git push origin $B')\"", 'Bash', null, 19],
+  ['GA16', `for r in a; do echo '${R}'; done | sh`, 'Bash', null, 19],
+  ['GA17', `if true; then echo '${R}'; fi | sh`, 'Bash', null, 19],
+  ['GA18', `while true; do echo '${R}'; break; done | sh`, 'Bash', null, 19],
+  ['GA19', `case x in x) echo '${R}';; esac | sh`, 'Bash', null, 19],
+  ['GA20', `f() { echo '${R}'; }; f | sh`, 'Bash', null, 19],
+  ['GA21', `echo '${R}' | tee >(sh)`, 'Bash', null, 19],
+  ['GA22', `echo '${R}' > >(sh)`, 'Bash', null, 19],
+  ['GA23', `Write-Output '${R}' | & iex`, 'PowerShell', null, 19],
+  ['GA24', `Write-Output '${R}' | & Invoke-Expression`, 'PowerShell', null, 19],
+  ['GA25', `echo '${R}' > x.sh; sh x.sh`, 'Bash', null, 19],
+  ['GA26', `git commit -m '${R}' && git log -1 --format=%B | sh`, 'Bash', null, 19],
+  // The audit false positive stays: a runner anywhere makes held text commands. Split the call.
+  ['GA27', "cat <<'EOF' > s.txt\ngit push origin $B\nEOF\ngit rev-list --all | xargs -n1 git cat-file -t", 'Bash', null, 19],
+  ['GA28', 'echo "git push -f"; bash -n x.sh', 'Bash', null, 1],
+];
+for (const [id, command, tool, agent, expect] of GA) guardCase(id, { command, tool, agent }, expect);
+
 // Policy file: malformed denies every git command (and nothing else); absent means the defaults.
 const badJson = scratchPolicy('badjson', '{ "git": ');
 const badKey = scratchPolicy('badkey', { git: { push: { subagent: 'any' } } });

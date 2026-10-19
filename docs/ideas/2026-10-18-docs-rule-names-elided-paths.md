@@ -1,7 +1,6 @@
 ---
 date: 2026-10-18
 kind: chore
-related: [2026-10-18-git-rebase-exec-runs-a-shell-the-guard-never-reads.md]
 ---
 
 # The docs rule should say an elided path is not read as a path
