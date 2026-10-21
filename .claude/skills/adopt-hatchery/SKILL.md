@@ -31,8 +31,11 @@ Everything below runs in a private clone of the project, on its default branch, 
    switcher), and `update.exclude` (step 8 writes it on a licence decline) (ADR 0006;
    `.claude/hooks/policy.examples/` has two worked ones). Ask the user
    where the project's existing rules do not say; `node .claude/hooks/policy.js` must print it.
-   Identity (ADR 0018): ask the owner, in these words, "Which name and email go on this project's
-   commits?" Recommend a `users.noreply.github.com` address; during a transition list both.
+   Identity (ADR 0018, ADR 0020): ask the owner, in these words, "Which name and email go on this
+   project's commits?" The answer is the owner's real git identity unless the owner names another
+   (a `users.noreply.github.com` address is an option; during a transition list both). An agent
+   never invents one: no placeholder, `.invalid` address or role, and none recorded as the owner's
+   choice.
    Write `privacy.identities` (`[{ "name", "email" }]`, first entry is the repository identity),
    then set `git config user.name` and `user.email` repo-local from the first entry (the global
    identity is not read). Then look before writing any hooks path: `git config --get

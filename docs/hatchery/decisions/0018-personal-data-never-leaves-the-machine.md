@@ -1,7 +1,9 @@
 # 0018. Personal data never leaves the machine: one scan, three callers, roles in committed text
 
 Date: 2026-10-17
-Status: accepted
+Status: superseded in part by 0020
+
+Item 10, item 6's trailer sentence, item 4's noreply recommendation: [ADR 0020](0020-attribution-trailers-and-the-web-committer.md).
 
 Record: no proposal (not a listed major choice); reviewed independently on 2026-10-17 with
 scratch-repository experiments, the nine findings and the identity claim folded in. Evidence:

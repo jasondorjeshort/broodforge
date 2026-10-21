@@ -110,7 +110,8 @@ Decisions so far:
   the policy; roles and `~` in committed text; the `Claude-Session:` trailer dropped; the history
   rewrite and the repository's visibility are the owner's separate steps. Contract, harness group,
   briefs and migration in [the sibling](0018-privacy-scan.md). Amends 0006 (key table);
-  adds rows to 0013. Amended by 0019 (the PR trigger fired). [no-check: the script exists once the ADR is implemented]
+  adds rows to 0013. Amended by 0019 (the PR trigger fired); superseded in part by 0020
+  (the trailer, the noreply recommendation). [no-check: the script exists once the ADR is implemented]
 - [0019 The carry-back channel](0019-carry-back-channel.md): a sibling sends a base
   change as a `carry-back/<slug>` branch cut from a named `hatchery/main` sha and pushed to its
   own repository under its own scan; Hatchery fetches it by URL, applies `-M --binary` with
@@ -121,3 +122,10 @@ Decisions so far:
   `git log --grep`; a `carry-back` skill (send and land), fitness check `CB1`; the issue flow
   deferred to the owner's `Waits:`. Amends 0016 (item 6, the column values) and 0018 ("Not
   covered").
+- [0020 Attribution trailers and the web committer](0020-attribution-trailers-and-the-web-committer.md):
+  the owner allows attribution trailers; a `Claude-Session:` line passes the scan only in a
+  message's trailer block with one `claude.ai` link as its value, and stays a hit everywhere else;
+  GitHub's web-flow identity passes as committer only and its noreply address in text; decant and
+  adopt take the owner's real identity unless the owner says otherwise and never invent a
+  placeholder; rule 20 judging with the main checkout's scan is a stated limit. Supersedes 0018 in
+  part (item 10, item 6's trailer sentence, item 4's recommendation).

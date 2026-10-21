@@ -69,8 +69,10 @@ ideas, findings and reference. Everything below runs in the new project's clone.
    owner's money: ask, do not guess. `usage.pool` is `null` unless this machine has the account
    switcher (ADR 0011). `.claude/hooks/policy.examples/` has worked ones; copy the closest and
    edit. `node .claude/hooks/policy.js` must print the effective policy, not an error.
-   Identity (ADR 0018): ask, in these words, "Which name and email go on this project's commits?"
-   Recommend a `users.noreply.github.com` address; list both during a transition. Write
+   Identity (ADR 0018, ADR 0020): ask, in these words, "Which name and email go on this project's
+   commits?" The answer is the owner's real git identity unless the owner names another (a
+   `users.noreply.github.com` address is an option; list both during a transition). An agent never
+   invents one: no placeholder, `.invalid` address or role, and none recorded as the owner's choice. Write
    `privacy.identities` (`[{ "name", "email" }]`) and `git.hooksPath` `.claude/hooks/git`, then
    set repo-local `git config user.name` and `user.email` from the first entry (never the global
    identity) and run `git config core.hooksPath .claude/hooks/git`, in that order.

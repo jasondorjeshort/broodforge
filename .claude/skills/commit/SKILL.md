@@ -27,6 +27,7 @@ but not Bash.
    <body: what and why, 1-5 lines; reference the ADR or finding when there is one>
 
    Co-Authored-By: Claude <Model> <noreply@anthropic.com>
+   Claude-Session: <the claude.ai link, only when the harness asks for it>
    Run git status --short before and after and include both. Do not push.
    ```
 
@@ -36,9 +37,11 @@ but not Bash.
    with an apostrophe, a backtick or more than one paragraph goes to a file: the coordinator writes
    it to its scratchpad with the Write tool and the brief says `git commit -F <that path>` instead
    of `Message:`. A serious reviewer finding the coordinator accepted without a fix is one body
-   line, `Accepted finding: <one line>`. The message ends at the `Co-Authored-By` lines: no
-   `Claude-Session:` trailer, and no session link, email or name in the body (the scan denies
-   them, ADR 0018).
+   line, `Accepted finding: <one line>`. The message ends with its trailer block, one paragraph
+   of trailer lines and nothing else: the `Co-Authored-By` lines, then a `Claude-Session:` line
+   when the session's harness asks for one, its value one `claude.ai` link and nothing more on the
+   line. A session link anywhere else, and any email or name in the subject or body, is denied by
+   the scan (ADR 0018, ADR 0020).
 4. Launch the `runner` with that brief. Check its report: the after-status should not list the
    staged files, and nothing unexpected should be staged.
 5. Amend only when necessary (fix a message, fold a forgotten file into the commit it belongs to)
@@ -48,7 +51,8 @@ but not Bash.
 ## Wrap-up commit by the main session (HOLD or STOP, or no runner available)
 
 `git add docs/HANDOFF.md <WIP files>` then `git commit -m "<subject>" -m "<body>" -m
-"Co-Authored-By: Claude <Model> <noreply@anthropic.com>"`. Subject starts with `WIP:` when the
+"Co-Authored-By: Claude <Model> <noreply@anthropic.com>"` (the trailer paragraph also holds the
+`Claude-Session:` line when the harness asks for it). Subject starts with `WIP:` when the
 work is unfinished. No heredocs for the message (apostrophes break them here).
 
 ## Pushing
