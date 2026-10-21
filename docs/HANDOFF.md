@@ -9,11 +9,10 @@ Updated: 2026-10-21 by main session (written from the Dystopo coordinator sessio
   and ADR 0021 "guardrails bound damage, not who may act" (proposal, critic review, decision; PR 3,
   `e62c7f0`). Both came out of Dystopo's 2026-10-21 identity rewrite; Dystopo already runs the 0020
   scan and has adopted the base at `f7f41af` (its ADR 0038). None of 0021's tasks T-a to T-g is started.
-- Two ideas filed today by a regenesis session (`2026-10-21-git-guard-uses-the-policy-of-the-repo-it-runs-in.md`):
-  the guard applies the session project's policy to a `git -C <sibling>` command (this is why every
-  Hatchery commit and push from the Dystopo session was refused and the owner typed them); the push
-  rule ignores the remote (a downstream clone could fast-forward this public `main` to a private
-  history); the pusher may not `pull --rebase --autostash`. Untriaged; T-b is the natural home.
+- Filed today by a regenesis session, untriaged, T-b's to take
+  (`2026-10-21-git-guard-uses-the-policy-of-the-repo-it-runs-in.md`): the guard applies the session
+  project's policy to a `git -C <sibling>` command (why every Hatchery commit and push from the Dystopo
+  session was refused); the push rule ignores the remote; the pusher may not `pull --rebase --autostash`.
 - Leftovers for a chore: worktrees `../hatchery-wt/T120`, `T121` (merged, branches local),
   `usage-gate` (prunable), `.claude/worktrees/agent-*` (untracked).
 
