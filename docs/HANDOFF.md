@@ -14,9 +14,8 @@ Updated: 2026-10-21 by main session (written from the Dystopo coordinator sessio
   Hatchery commit and push from the Dystopo session was refused and the owner typed them); the push
   rule ignores the remote (a downstream clone could fast-forward this public `main` to a private
   history); the pusher may not `pull --rebase --autostash`. Untriaged; T-b is the natural home.
-- Leftovers: worktrees `../hatchery-wt/T120` and `T121` (merged; their `task/*` branches local),
-  `../hatchery-wt/usage-gate` (prunable), `.claude/worktrees/agent-*` (untracked, some session's
-  isolated agent); a cleanup chore from a Hatchery-rooted session.
+- Leftovers for a chore: worktrees `../hatchery-wt/T120`, `T121` (merged, branches local),
+  `usage-gate` (prunable), `.claude/worktrees/agent-*` (untracked).
 
 ## Next
 
@@ -28,8 +27,8 @@ Updated: 2026-10-21 by main session (written from the Dystopo coordinator sessio
 3. T-g's migration row for Dystopo (`usage.mode: "block"`, `carry-back/*` in the push branches, the
    rulesets step, the deny lines) runs in Dystopo's session as its second base update, after T-a to T-f.
 4. Each sibling in its own session, regenesis and droplet-management too: ADR 0018 back
-   (`0018-privacy-scan.md` 9); its 0016 migration; then 0020 and 0021.
-5. Architect answers the critic reviews of proposals 0003 and 0005; critic review of ADR 0006 as a whole.
+   (`0018-privacy-scan.md` 9); its 0016 migration; then 0020 and 0021. Then the architect answers
+   the critic reviews of proposals 0003 and 0005; critic review of ADR 0006 as a whole.
 
 ## Waiting on user
 
