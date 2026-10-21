@@ -1,11 +1,11 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-21, at commit df6ddd1, by main session (a session rooted in `../`, no hooks loaded)
+Updated: 2026-10-21, at commit a022bd8, by main session (a session rooted in `../`, no hooks loaded)
 
 ## Now
 
-- The history rewrite is done on `origin`; three commits are unpushed, waiting on the identity line.
+- The history rewrite is done on `origin`; everything through the allowlist commit is pushed.
 - Base updated to Hatchery `dc896c3`, ADR 0016 migration done (ADR 0024: template `CLAUDE.md`,
   `docs/hatchery/`, two departure rows, five carry-back ideas); Opus review's fixes are in.
 - Best-practices pass for a build-phase Go project (finding of 2026-10-21): `gofmt -w` on every Go
@@ -13,8 +13,8 @@ Updated: 2026-10-21, at commit df6ddd1, by main session (a session rooted in `..
 
 ## Next
 
-1. Owner: the operator entry of 2026-10-21 (identity, permissions allowlist, `gopls-lsp` plugin);
-   then start Claude Code inside this repo so the hooks load, and push through the `pusher`.
+1. Owner: the operator entry of 2026-10-21 (the `gopls-lsp` plugin; identity and allowlist are in);
+   then start Claude Code inside this repo so the hooks load.
 2. Carry-backs to Hatchery (`carry-back` skill), the `Plan:` ideas of 2026-10-21: the quoted-git
    guard fix, the main-session push read, the adr amendments section, the brief escape classes.
 3. Tester: resolve the net-diff finding (rewrite done); `session end` runs the closing turn from
