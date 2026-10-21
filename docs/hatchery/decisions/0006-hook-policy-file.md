@@ -1,7 +1,7 @@
 # 0006. Hook policy lives in one file beside the hooks
 
 Date: 2026-10-13
-Status: accepted, superseded in part by 0016 and 0017
+Status: accepted, superseded in part by 0016, 0017 and 0021
 Superseded in part by [0016](0016-base-owned-and-project-owned-files.md), 2026-10-17: the sentence
 under the key table that keeps the 150-line `CLAUDE.md` cap a constant in `post-edit.js` (the
 project file's caps are 40 and 190, in `policy.js`, lifted by `edit.capExempt` naming `CLAUDE.md`),
@@ -11,6 +11,9 @@ Superseded in part by [0017](0017-queue-directories-list-on-demand.md), 2026-10-
 exemptions are policy" gains one exemption that is not: the index check for a queue directory is
 switched off by a marker line in that directory's own README, never by a key, so the key table
 gains nothing. Everything else stands.
+Superseded in part by [0021](0021-guardrails-bound-damage.md), 2026-10-21: the base values of
+`git.commit.subagents` and `git.push.subagents` become `"any"`, and under `usage.mode: "warn"` the
+coordinator may write a session grant with its reason; the key table takes both in place. Everything else stands.
 
 The key table and "The HOLD override" section are living: they are amended in place as keys and
 formats change, and keep the provenance notes a decision record carries (the projects a key came

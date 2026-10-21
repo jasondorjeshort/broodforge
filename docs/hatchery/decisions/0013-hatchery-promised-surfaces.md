@@ -1,7 +1,7 @@
 # 0013. Hatchery's promised surfaces and its reference fitness check
 
 Date: 2026-10-16
-Status: proposed (the owner declined to confirm, 2026-10-18), superseded in part by 0016, 0017 and 0018
+Status: proposed (the owner declined to confirm, 2026-10-18), superseded in part by 0016, 0017, 0018 and 0021
 Superseded in part by [0016](0016-base-owned-and-project-owned-files.md), 2026-10-17 (this table
 is not living, so the rows are added by that record, item 7): the ownership map, the agreement
 files with their import lines, the `Branch:` line, the departure table, the record paths under
@@ -18,6 +18,9 @@ the never list `~/.claude/privacy-never.txt` and the user allow list `~/.claude/
 the scan CLI `.claude/hooks/privacy-scan.js` (flags, `HIT` lines, last line, exit codes, `--json`);
 the pre-push hook path `.claude/hooks/git/pre-push` and the `core.hooksPath` value. Every row
 below stands.
+Superseded in part by [0021](0021-guardrails-bound-damage.md), 2026-10-21: an incompatible change
+to the policy row (role defaults, `privacy.identities` as extras that never switch the class off;
+the keys `git.localHistory` and `usage.mode` added), with its migration. Every row below stands.
 
 Record: no proposal; this ADR applies ADR 0012 to the base itself, as its critic review asked
 (objection 6). `proposed` because three of the surfaces are files the owner writes by hand (the

@@ -32,12 +32,13 @@ Decisions so far:
   (who commits and pushes, deletable branches, usage lines, cap exemptions) live in
   `.claude/hooks/policy.json`, not in the scripts; the guard fails closed, the usage gate open.
   Superseded in part by 0016 (the `CLAUDE.md` cap constant; `update.exclude` in the living table)
-  and 0017 (the queue index switch is a README line, not a key).
+  and 0017 (the queue index switch is a README line, not a key), and 0021 (the role keys' base
+  values; who writes a HOLD grant).
 - [0007 Queues, triage and one review](0007-queues-triage-and-one-review.md): `docs/ideas/`
   and `docs/operator/` as delete-when-done queues with triage blocks; a `reviewer` agent and one
   independent review per change; amends ADR 0002 where it names `backlog.md`. Superseded in part
-  by 0016 (the queue READMEs and `docs/design/README.md` are project-owned) and 0017 (no index
-  line per idea).
+  by 0016 (the queue READMEs and `docs/design/README.md` are project-owned), 0017 (no index
+  line per idea) and 0021 (one review per change for the full lane only).
 - [0008 ADR numbers, and what a decant keeps](0008-adr-numbers-and-what-decant-keeps.md):
   Hatchery uses `0001` to `0019` and a decanted project starts at `0020`; a decant keeps every
   Hatchery ADR and the Windows reference, deletes proposals, findings, ideas and operator entries;
@@ -54,7 +55,7 @@ Decisions so far:
   the status line caches the meters per `session_id` with the account as a label, the gate treats a
   changed login as stale, and at HOLD it reports the pool account with room through `usage.pool`;
   rotation happens at session boundaries. Amends 0006 and the hook specs, section 3
-  ([usage companion](0002-hook-specs-usage.md)).
+  ([usage companion](0002-hook-specs-usage.md)). Superseded in part by 0021 (who lifts the HOLD deny).
 - [0012 Decision practices for long-lived software](0012-decision-practices-for-long-lived-software.md):
   each project names its promised surfaces (additions free, an incompatible change a major
   choice); dependencies by checklist, a copy under a page keeps its licence; fitness checks with a
@@ -67,7 +68,7 @@ Decisions so far:
   harness, group `F`. Proposed: the owner declined to confirm the list (2026-10-18); observed as if accepted. Superseded in part by 0016 (five
   rows added by its item 7; the idea-grammar row's record), 0017 (the listing CLI and the
   marker line rows) and 0018 (the privacy keys, the never and user allow lists, the scan CLI and
-  the pre-push hook path).
+  the pre-push hook path), and 0021 (role defaults, `privacy.identities` as extras, two keys).
 - [0014 Handoff layout](0014-handoff-layout.md): one
   `docs/HANDOFF.md` by default, no hash, the edit rides in the work commit; a per-stream split
   (`@handoff/<file>.md` lines, 40 each, 120 together, no README, no fixed files) the tooling
@@ -111,7 +112,8 @@ Decisions so far:
   rewrite and the repository's visibility are the owner's separate steps. Contract, harness group,
   briefs and migration in [the sibling](0018-privacy-scan.md). Amends 0006 (key table);
   adds rows to 0013. Amended by 0019 (the PR trigger fired); superseded in part by 0020
-  (the trailer, the noreply recommendation). [no-check: the script exists once the ADR is implemented]
+  (the trailer, the noreply recommendation) and by 0021 (item 4's identity rules; item 6's pusher).
+  [no-check: the script exists once the ADR is implemented]
 - [0019 The carry-back channel](0019-carry-back-channel.md): a sibling sends a base
   change as a `carry-back/<slug>` branch cut from a named `hatchery/main` sha and pushed to its
   own repository under its own scan; Hatchery fetches it by URL, applies `-M --binary` with
@@ -129,3 +131,13 @@ Decisions so far:
   adopt take the owner's real identity unless the owner says otherwise and never invent a
   placeholder; rule 20 judging with the main checkout's scan is a stated limit. Supersedes 0018 in
   part (item 10, item 6's trailer sentence, item 4's recommendation).
+- [0021 Guardrails bound damage, not who may act](0021-guardrails-bound-damage.md): rulesets
+  on `main` and `v*` tags (an owner step); any session or agent commits and pushes work branches,
+  the role split opt-in; stateless guard rules by damage (non-fast-forward pushes, rewriting pushed
+  commits, deleting unmerged remote branches or tags, repointing remotes, `--no-verify`; a
+  discarding command only over a dirty tree; a `gh` tripwire); the scan accepts the repository's
+  own identity, `privacy.identities` lists extras; light (`.md` under `docs/` and `.claude/skills/`)
+  and full lanes by `lane.js`, a post-hoc audit by a reviewer; `usage.mode: "warn"` lets the
+  coordinator write its own HOLD grant with a reason; narrow allow lines and deny lines on the live
+  hooks. Migration per sibling. Supersedes in part 0006, 0007, 0011, 0013, 0018.
+  [no-check: the script exists once the ADR is implemented]
