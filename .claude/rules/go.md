@@ -10,13 +10,16 @@ paths:
 - First line of every `.go` file: `// SPDX-License-Identifier: GPL-3.0-or-later`.
 - Format with `gofmt`. Clean under the check line, run from the repository root:
   `go vet ./... && go tool staticcheck ./... && go tool exhaustive ./...`.
-- Build before test: `go build ./...`, the check line, then `CGO_ENABLED=1 go test -race ./...` on
+- Build before test: `CGO_ENABLED=0 go build ./...`, the check line, then `CGO_ENABLED=1 go test -race ./...` on
   Linux and on the PC (there with `PATH="/c/msys64/ucrt64/bin:$PATH"` for gcc).
 - The binary is `CGO_ENABLED=0 go build -o bin/ ./cmd/broodforge`: the trailing slash makes Go
   add `.exe` on Windows, where `-o bin/broodforge` writes a file PowerShell will not run.
   `CGO_ENABLED` is set on the command line, never in `go.mod`. Nothing goes on `PATH`; never
   `go install`. Exit codes are proven against `bin/`, never `go run`, which always exits 1 on a
   non-zero child.
+- Before editing `internal/control`, `internal/spawn` or `internal/hook`, read
+  `docs/reference/go-on-windows.md` and `docs/reference/go-dependencies.md` (named pipes,
+  junctions, gcc on `PATH`, antivirus quarantine of `bin/`).
 - No `interface{}` or `any` outside `internal/engine`'s raw stream layer.
 - Sum types are a struct with a `Kind` enum field and a pointer payload per kind, switched on
   `Kind` so `exhaustive` checks every switch. Never a type switch for them.

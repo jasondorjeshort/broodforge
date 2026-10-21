@@ -85,3 +85,5 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-21-carry-back-brief-boundary-escape-classes.md` | chore | Departure row: a reviewer brief for a path or name boundary lists the escape classes; carry it back |
 | `2026-10-21-carry-back-windows-reference-go-and-junction-facts.md` | question | Whether the base's Windows reference wants the scanner-quarantine and junction facts this project's copy carried |
 | `2026-10-17-importfixture-refuses-the-git-bash-home-form.md` | feature | The rewrite knows the Windows spellings and the slug but not `/c/Users/<user>`, so a recording whose Bash names the home cannot be imported; the first closing recording hit it |
+| `2026-10-21-go-rules-become-a-lint-test.md` | chore | The mechanical rules of `go.md` (SPDX, host branching, `any`, imports) become one test under `tests/lint/`; the import exceptions move to 03's `cli` row |
+| `2026-10-21-coder-stop-hook-for-build-and-vet.md` | question | A SubagentStop hook in the coder frontmatter running build and vet; a carry-back; wait for the trigger or build now |
