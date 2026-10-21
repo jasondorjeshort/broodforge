@@ -18,10 +18,9 @@ Updated: 2026-10-21 by main session (written from the Dystopo coordinator sessio
 
 ## Next
 
-1. The ADR 0021 wave, from a Hatchery-rooted session, in the ADR's order T-a to T-g (the proposal's
-   Recommendation lists each task's files); fold today's three guard gaps and
-   `2026-10-19-guard-gaps-where-git-runs-shell-text.md` into T-b. Agents may commit and push the
-   wave's branches under the new rule; `main` stays the coordinator's until T-a's rulesets hold.
+1. The ADR 0021 wave, from a Hatchery-rooted session, in order T-a to T-g (the proposal's
+   Recommendation lists each task's files); fold today's guard gaps and the 2026-10-19 guard idea into
+   T-b. Agents commit and push the wave's branches; `main` stays the coordinator's until T-a holds.
 2. Triage `docs/ideas/` (`triage` skill): the two untriaged guard ideas; the ADR 0012 scan.
 3. T-g's migration row for Dystopo (`usage.mode: "block"`, `carry-back/*` in the push branches, the
    rulesets step, the deny lines) runs in Dystopo's session as its second base update, after T-a to T-f.
