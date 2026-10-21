@@ -43,4 +43,3 @@ rather than trusting a status line, and drop a step already done.
 | `2026-10-14-pc-broodforge-account-and-task.md` | Create the PC `broodforge` account, log in once, install Claude Code, register the Task Scheduler task. |
 | `2026-10-14-credential-store-key-per-host.md` | Run `credential init` per host and store the key in the password manager. |
 | `2026-10-17-rewrite-history-to-fix-authorship-and-remove-the-pc-user-name.md` | Back up both repositories, rewrite their history with filter-repo (the owner's identity on the 28 root commits; the PC user name and the machine owner's names out of every commit and message), force-push both, re-clone, purge. |
-| `2026-10-21-owner-steps-for-the-best-practices-update.md` | Install `gopls` and the `gopls-lsp` plugin at project scope; the identity and allowlist steps are done. |

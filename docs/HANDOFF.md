@@ -13,8 +13,8 @@ Updated: 2026-10-21, at commit a022bd8, by main session (a session rooted in `..
 
 ## Next
 
-1. Owner: the operator entry of 2026-10-21 (the `gopls-lsp` plugin; identity and allowlist are in);
-   then start Claude Code inside this repo so the hooks load.
+1. Owner: start Claude Code inside this repo from a new shell (`gopls` on PATH) so the hooks load;
+   the first coder pass records in the handoff whether subagents get the `LSP` tool.
 2. Carry-backs to Hatchery (`carry-back` skill), the `Plan:` ideas of 2026-10-21: the quoted-git
    guard fix, the main-session push read, the adr amendments section, the brief escape classes.
 3. Tester: resolve the net-diff finding (rewrite done); `session end` runs the closing turn from

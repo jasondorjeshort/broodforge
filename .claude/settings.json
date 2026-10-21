@@ -1,9 +1,4 @@
 {
-  "statusLine": {
-    "type": "command",
-    "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/statusline.js\"",
-    "refreshInterval": 60
-  },
   "permissions": {
     "allow": [
       "Bash(git status *)",
@@ -87,5 +82,13 @@
         ]
       }
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/statusline.js\"",
+    "refreshInterval": 60
+  },
+  "enabledPlugins": {
+    "gopls-lsp@claude-plugins-official": true
   }
 }
