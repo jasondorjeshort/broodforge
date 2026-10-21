@@ -28,3 +28,11 @@ the session project's policy (or the defaults). Usage thresholds stay the sessio
 - Cache the load per directory so a long pipeline does not reread the file for every invocation.
 - A target with no policy file at all: Hatchery defaults (`branches: ["*"]`) would be looser than the
   session's; the session's policy may be the safer fallback.
+- The push rule matches the destination branch name, never the remote. With the `main` workaround a pusher
+  in a downstream clone may run `git push hatchery HEAD:main` and fast-forward this public repo's `main` to a
+  private project's history (a `master`-only rule already let `git push hatchery master` through as a new
+  branch). The policy should also decide pushes to a remote other than the repository's own origin; until
+  then a clone can set `git remote set-url --push hatchery DISABLED`.
+- `pull` counts as a commit (only the runner), yet a downstream push procedure has the pusher run
+  `git pull --rebase --autostash` first; on 2026-10-21 the guard denied it (harmless: not behind). Either
+  let the pusher pull with `--rebase --autostash`, or have the push procedure hand the rebase back.
