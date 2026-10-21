@@ -23,6 +23,6 @@
   "update": { "exclude": [] },
   "privacy": {
     "allow": ["user", "alice", "bob", "broodforge", "broodforge-engine"],
-    "identities": []
+    "identities": [{ "name": "Jason Dorje Short", "email": "jdorje@gmail.com" }]
   }
 }

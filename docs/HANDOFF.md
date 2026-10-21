@@ -1,38 +1,38 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-17, at commit 5742573, by main session
+Updated: 2026-10-21, at commit df6ddd1, by main session (a session rooted in `../`, no hooks loaded)
 
 ## Now
 
-- Privacy check promoted: git-guard rule 20 scans every commit a push sends, from every caller
-  (Opus; three review passes, 613 hook cases). Pushed at `5742573` on the owner's words, with
-  `CLAUDE.md`, the commit skill, the finding and the operator entry; rule 20 allowed its own push.
-- Public history carries the PC user name in five commits and the machine's git identity on the 28
-  Hatchery root commits (finding below); both repos are private; the owner rewrites after this lands.
-- P7's owner turns are done (`d00bb95`): credential `cred-p5o7jb1n3` on `~/bf-owner`, fixtures
-  `closing` and `recorded-read`. Session on the PC's account.
+- The history rewrite is done on `origin`; three commits are unpushed, waiting on the identity line.
+- Base updated to Hatchery `dc896c3`, ADR 0016 migration done (ADR 0024: template `CLAUDE.md`,
+  `docs/hatchery/`, two departure rows, five carry-back ideas); Opus review's fixes are in.
+- Best-practices pass for a build-phase Go project (finding of 2026-10-21): `gofmt -w` on every Go
+  edit (proven), `git.hooksPath` set and `core.hooksPath` configured in this clone, `go.md` aligned.
 
 ## Next
 
-1. Owner: the history rewrite, per the operator entry of 2026-10-17; then re-clone, a tester pass
-   on the docs that cite hashes, resolve the finding.
-2. Architect, then coder: the earlier privacy layers, a PreToolUse scan of Write and Edit content
-   and a commit-time scan (the owner: a plain staged grep "could be better"; shape it first).
-3. Tester: `session end` runs the closing turn from the `closing` fixture per the P10 remainder
-   idea's 2026-10-17 decision line; then its other `Plan:` items.
-4. Triage the ideas dated 2026-10-17. P12 needs the bot token and a test guild. Architect: the
-   surfaces ADR (ADR 0012). Owner: the droplet and PC account entries; then P14, `spike/`.
+1. Owner: the operator entry of 2026-10-21 (identity, permissions allowlist, `gopls-lsp` plugin);
+   then start Claude Code inside this repo so the hooks load, and push through the `pusher`.
+2. Carry-backs to Hatchery (`carry-back` skill), the `Plan:` ideas of 2026-10-21: the quoted-git
+   guard fix, the main-session push read, the adr amendments section, the brief escape classes.
+3. Tester: resolve the net-diff finding (rewrite done); `session end` runs the closing turn from
+   the `closing` fixture per the P10 remainder idea's 2026-10-17 line; then its other `Plan:` items.
+4. Architect, then coder: the earlier privacy layers (a PreToolUse scan of Write and Edit content,
+   a commit-time scan), now against the base's ADR 0018 pieces.
+5. Triage the ideas of 2026-10-17 and the two Questions of 2026-10-21. P12 needs the bot token and
+   a test guild. Architect: the surfaces ADR. Owner: the droplet and PC account entries; P14, `spike/`.
 
 ## Waiting on user
 
-- The rewrite: when, and the two backups first (operator entry).
-- Wording: the hook no-answer phrase (one for both, recommended); first vs full names in Discord;
-  "acts freely" short or long.
+- Which name and email go on this project's commits? (`privacy.identities`, as in Hatchery's policy.)
+- The two `Question:` ideas of 2026-10-21 (coder Stop hook now or on trigger; Windows facts carry-back).
+- Wording: the hook no-answer phrase; first vs full names in Discord; "acts freely" short or long.
 
 ## Open findings
 
-- `docs/findings/2026-10-17-net-diff-privacy-scan-let-named-commits-go-public.md` (rewrite pending)
+- `docs/findings/2026-10-17-net-diff-privacy-scan-let-named-commits-go-public.md` (rewrite done; resolve)
 - `docs/findings/2026-10-15-spike-login-claims-for-adr-0020.md`,
   `docs/findings/2026-10-15-spike-stream-and-process-claims-for-adr-0020.md`,
   `docs/findings/2026-10-15-spike-hook-flow-claims-for-adr-0020.md` (PC rows hold, droplet open)

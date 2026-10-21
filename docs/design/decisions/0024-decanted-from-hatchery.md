@@ -63,7 +63,8 @@ Given up to base at this update, with what the base's version does not carry:
   (`docs/ideas/2026-10-21-carry-back-quoted-git-does-not-name-git.md`).
 - `.claude/skills/commit/SKILL.md`: a main-session push ran pusher check 5a first; the guard's
   rule 20 now scans every push from every caller, so only the human read of a main-session push
-  is gone.
+  is gone. Kept as a `CLAUDE.md` project rule, to be carried back
+  (`docs/ideas/2026-10-21-carry-back-main-session-push-runs-check-5-read.md`).
 - `.claude/rules/README.md`: the count of rules this tree ships; `CLAUDE.md`, `## Project rules`,
   names them instead.
 

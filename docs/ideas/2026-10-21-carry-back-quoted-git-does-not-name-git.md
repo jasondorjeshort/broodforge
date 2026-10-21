@@ -24,8 +24,14 @@ The update to Hatchery `dc896c3` (ADR 0024) took the base's guard, parser and ha
 rewrote rule 20 around `privacy-scan.js`; the fix did not survive the three-way apply and was
 dropped rather than re-grafted by hand into a fail-closed hook. The false denies are back.
 
+The harness cases are `GR24a` to `GR24k` in those commits. The pair that states the boundary: in
+Bash, `grep -r '\.git' . | $filter` is allowed (the base guard at `dc896c3` denies it under rule 19);
+in PowerShell, `$g='C:\Program Files\Git\cmd\git.exe'; & $g push -f` stays denied under rule 19.
+Those commits' edits to `.claude/rules/README.md` and `.claude/rules/hooks.md` are not part of the
+carry-back.
+
 Plan: in a carry-back worktree cut from the current `hatchery/main` (`carry-back` skill, Send),
 port `namesGit` and the two parser fields from `5288955` onto the base guard, with the harness
-cases and the 0002-hook-specs sentence from `14304c6` and `5288955`; `node
+cases `GR24a` to `GR24k` and the 0002-hook-specs sentence from `14304c6` and `5288955`; `node
 .claude/hooks/test-hooks.js` green; one commit `Carry-back: git-guard: a quoted string that
 contains git does not name git`.
