@@ -1,8 +1,8 @@
 {
-  "$comment": "Project policy for the hooks in this directory. Schema, defaults and fail modes: docs/design/decisions/0006-hook-policy-file.md. Usage is per meter (5-hour holds at 60, weekly at 75, no deny line). The push privacy scan (git-guard rule 20) lets through the placeholder user names user, alice and bob and the service accounts broodforge (the droplet's) and broodforge-engine, both named after the project. Check with: node .claude/hooks/policy.js",
+  "$comment": "Project policy for the hooks in this directory. Schema, defaults and fail modes: docs/hatchery/decisions/0006-hook-policy-file.md. Usage is per meter (5-hour holds at 60, weekly at 75, no deny line). The privacy scan (git-guard rule 20, privacy-scan.js, ADR 0018) lets through the placeholder user names user, alice and bob and the service accounts broodforge (the droplet's) and broodforge-engine, both named after the project. Check with: node .claude/hooks/policy.js",
   "git": {
     "commit": { "subagents": ["runner"], "protectedBranches": [] },
-    "push": { "subagents": ["pusher"], "branches": ["*"], "mainSession": true, "forceWithLease": [], "privacyAllow": ["user", "alice", "bob", "broodforge", "broodforge-engine"] },
+    "push": { "subagents": ["pusher"], "branches": ["*"], "mainSession": true, "forceWithLease": [] },
     "branchDelete": { "branches": [], "requireMergedPr": false },
     "hooksPath": null
   },
@@ -12,11 +12,17 @@
     "fiveHour": { "hold": 60, "deny": null },
     "sevenDay": { "hold": 75, "deny": null },
     "staleSeconds": 7200,
-    "whenStale": "allow"
+    "whenStale": "allow",
+    "pool": null
   },
   "edit": {
     "capExempt": [],
-    "anchorExempt": ["docs/design/proposals/*", "docs/design/decisions/*", "docs/findings/*"],
+    "anchorExempt": ["docs/design/proposals/*", "docs/design/decisions/*", "docs/findings/*", "docs/hatchery/*"],
     "formatters": {}
+  },
+  "update": { "exclude": [] },
+  "privacy": {
+    "allow": ["user", "alice", "bob", "broodforge", "broodforge-engine"],
+    "identities": []
   }
 }

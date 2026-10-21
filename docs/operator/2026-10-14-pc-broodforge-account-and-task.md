@@ -10,7 +10,7 @@ New-LocalUser -Name broodforge -Password $pw -PasswordNeverExpires -UserMayNotCh
 Add-LocalGroupMember -Group Users -Member broodforge
 ```
 
-One interactive login, once: sign out, sign in as `broodforge`, let the profile be created, then in a PowerShell as `broodforge` install Claude Code by the official Windows installer (`docs/reference/claude-code-on-windows.md`) and confirm:
+One interactive login, once: sign out, sign in as `broodforge`, let the profile be created, then in a PowerShell as `broodforge` install Claude Code by the official Windows installer (`docs/hatchery/reference/claude-code-on-windows.md`) and confirm:
 
 ```
 claude --version

@@ -1,7 +1,13 @@
 # 0004. Adopting the Hatchery practice into an existing project
 
 Date: 2026-10-12
-Status: accepted
+Status: accepted, superseded in part by 0016
+Superseded in part by 0016 (`0016-base-owned-and-project-owned-files.md`), 2026-10-17: the owner's
+2026-10-12 sentence below, "merging stays the path for projects that are based on Hatchery", is
+superseded (one patch-only update for every project); so are the practice-set table (the ownership
+map replaces its classes and the skeleton copies no record by name), the `CLAUDE.md` fold (the
+agreement is imported from base-owned files) and step 1's two modes. Adoption as a recorded copy,
+the adoption ADR with its base line, the licence choice and the preconditions stand.
 
 Record: no proposal; the decision was taken against a real case (ReGenesis: 718 commits, Python,
 branch `master`, its own 227-line `CLAUDE.md`, `docs/README.md` with four folders, `SessionStart`
@@ -29,8 +35,8 @@ Three ways to bring the practice into such a project were considered:
    applying the patch between that commit and the new `hatchery/main` three-way onto the project's
    tree. Chosen.
 
-Verified 2026-10-12 in a scratch worktree of this repository at commit `5a10ed8` with a locally
-edited `CLAUDE.md` (new title, added `## Project rules` section), staged: `git diff 5a10ed8 main --
+Verified 2026-10-12 in a scratch worktree of this repository at commit `16304e3` with a locally
+edited `CLAUDE.md` (new title, added `## Project rules` section), staged: `git diff 16304e3 main --
 .claude CLAUDE.md | git apply --3way` applied 29 files, left `CLAUDE.md` with the project's edits and
 Hatchery's changes, and `git diff main -- .claude` was empty. With an edit on a line Hatchery also
 changed, `git apply` reported "with conflicts", `git diff --name-only --diff-filter=U` listed the

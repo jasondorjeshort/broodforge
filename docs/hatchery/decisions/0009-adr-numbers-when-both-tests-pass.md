@@ -1,7 +1,12 @@
 # 0009. ADR numbers when both tests pass
 
 Date: 2026-10-15
-Status: accepted
+Status: accepted, superseded in part by 0016
+Superseded in part by 0016 (`0016-base-owned-and-project-owned-files.md`), 2026-10-17: the
+numbering tie-break is moot (no range, no `0020` start; every tree numbers its own directory), and
+the `git show hatchery/main:` read of a record a project does not carry is replaced (every project
+carries `docs/hatchery/`). The line winning over `merge-base`, and the join as a project's own
+departure, stand.
 
 Record: no proposal; a downstream project met the case and settled it for itself; this carries the
 rule into the base. Amends ADR 0008, Numbers, for the case below; the rest of 0008 stands.

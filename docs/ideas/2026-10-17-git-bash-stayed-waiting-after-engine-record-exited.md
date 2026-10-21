@@ -24,7 +24,7 @@ command at a time, in Git Bash, and note whether `engine record` alone returns.
 
 Anchors: `internal/spawn/` (`same-account` on Windows: the job object per engine, the handles the
 engine's process inherits), `internal/engine/record.go` (what record holds open until exit),
-`docs/reference/claude-code-on-windows.md` (where the standing rule goes once the cause is known).
+`docs/hatchery/reference/claude-code-on-windows.md` (where the standing rule goes once the cause is known).
 
 ## Open
 

@@ -1,6 +1,6 @@
 ---
-verified: 2026-10-16
-source: observed (Go toolchain and mingw-w64 observed 2026-10-16; npm behaviour tested 2026-10-14; twelve waves of parallel agents on a downstream project; Windows 10 and 11, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1); hook and status line code read 2026-10-14, usage-gate grants 2026-10-15, per-session usage file 2026-10-16; robocopy and Remove-Item behaviour with junctions observed 2026-10-14
+verified: 2026-10-17
+source: observed (machine user name in paths, ADR 0018 evidence 2026-10-17; PowerShell pipe and MSYS git show rewrite 2026-10-17; npm behaviour tested 2026-10-14; twelve waves of parallel agents on a downstream project; Windows 10 and 11, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1); hook and status line code read 2026-10-14, usage-gate grants 2026-10-15, per-session usage file 2026-10-16; robocopy and Remove-Item behaviour with junctions observed 2026-10-14
 ---
 
 # Claude Code on Windows: what holds
@@ -52,6 +52,12 @@ source: observed (Go toolchain and mingw-w64 observed 2026-10-16; npm behaviour 
 - Windows PowerShell 5.1: quote arguments containing dots or dashes whole when calling
   `powershell -File`; it drops empty-string arguments; `&&` and `||` do not exist; `2>&1` on a
   native command wraps stderr in error records.
+- The PowerShell 5.1 pipe re-encodes a patch: `git diff ... | git apply --3way` fails every file with
+  `patch does not apply` and leaves `git status` empty; in Bash it applies. The update command
+  (`.claude/hooks/ownership.js --command`) is run in the Bash tool only.
+- Git Bash (MSYS) rewrites the argument of `git show hatchery/main:<path>`, quoted or not, and it
+  fails. `S=$(git rev-parse hatchery/main)` then `git show <sha>:<path>` works, as does
+  `MSYS_NO_PATHCONV=1`. Name the sha in a skill. Evidence: finding 2026-10-17-msys-rewrites-git-show-paths.
 - `gh ... --jq` with a backtick inside the expression breaks in PowerShell; run `gh` from bash.
 
 ## Working directory and git
@@ -64,6 +70,14 @@ source: observed (Go toolchain and mingw-w64 observed 2026-10-16; npm behaviour 
   report both SHAs. A command's own success output is not evidence of what reached the remote.
 - Never truncate a status check to its first line; `git status --short` in full.
 
+## The machine user name is in every path
+
+- Every absolute path on a Windows PC carries the machine user name: the profile folder, the
+  session scratchpad, the project-folder slug under `~/.claude/projects/` (the drive and profile
+  path with separators turned into hyphens), and a grant file's `project` scope. None of these
+  belongs in committed text; write `~`, `<repo>` or `<scratchpad>`. The push scan reads every
+  spelling (ADR 0018, `.claude/rules/docs.md`, "Personal data").
+
 ## npm on this PC
 
 - The owner's `~/.npmrc` has `location=global`, so a plain `npm install` is a global install and
@@ -71,31 +85,7 @@ source: observed (Go toolchain and mingw-w64 observed 2026-10-16; npm behaviour 
   `npm install --no-global`; `--location=project` and `npm_config_location` do not override it.
 - Working form, tested: `npm_config_userconfig=<path to an empty file> npm --prefix <dir> install`.
   The empty user config hides the setting; the global folder was unchanged and `node_modules`
-  appeared in `<dir>`. Evidence: `../findings/2026-10-14-npmrc-location-global-makes-a-plain-npm-install-destructive.md`.
-
-## Go on this PC
-
-- The C compiler for the race detector is MSYS2 UCRT64 gcc, `C:\msys64\ucrt64\bin\gcc.exe`, with
-  `C:\msys64\ucrt64\bin` on the owner's user `PATH` (installed 2026-10-16).
-- With a compiler present cgo defaults on (`go env CGO_ENABLED` prints `1`), so the build line
-  forces `CGO_ENABLED=0 go build ./...` and the test line sets `CGO_ENABLED=1 go test -race ./...`
-  (ADR 0023).
-- `CGO_ENABLED=1 go test -race ./...` is the check that the compiler still works.
-- A process started before the `PATH` change does not see gcc: `go env CGO_ENABLED` prints `0` and
-  `go test -race` fails with `cgo: C compiler "gcc" not found`. Restart Claude Code, or put the
-  directory first on `PATH` for the one command. PowerShell:
-  `$env:Path = "C:\msys64\ucrt64\bin;" + $env:Path; $env:CGO_ENABLED = "1"; go test -race ./...`.
-  Git Bash: `PATH="/c/msys64/ucrt64/bin:$PATH" CGO_ENABLED=1 go test -race ./...`.
-- Reinstall: `winget install --id MSYS2.MSYS2 -e` (elevated PowerShell); in the "MSYS2 UCRT64" shell
-  `pacman -S --needed --noconfirm mingw-w64-ucrt-x86_64-gcc`; then, in PowerShell as the owner, the
-  user-scope append (no other entry is touched):
-  `[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\msys64\ucrt64\bin", "User")`.
-  Check in a new shell: `gcc --version`; `go env CGO_ENABLED` prints `1`.
-- `filepath.EvalSymlinks` does not follow directory junctions (Go 1.27) while `os.Readlink` reads both junctions and symlinks; resolve links by hand where a junction matters (`docs/findings/2026-10-16-go-evalsymlinks-does-not-follow-windows-junctions.md`).
-- A behavioural scanner on this PC took a fresh unsigned build and the Git tools its process tree
-  ran; BullGuard was removed 2026-10-16. If tools vanish at the instant a run ends, check the
-  scanner's quarantine first (`docs/findings/2026-10-16-bullguard-sentry-quarantined-the-binary-and-its-process-tree.md`).
-- The `broodforge` instance account never runs tests and needs none of this.
+  appeared in `<dir>`. Evidence: observed 2026-10-14 in a downstream project.
 
 ## Shared state
 
@@ -125,7 +115,7 @@ source: observed (Go toolchain and mingw-w64 observed 2026-10-16; npm behaviour 
   lifts HOLD on both meters for that session. The legacy single file
   `~/.claude/usage-gate-override.json` is still read, as a user grant when it names no scope. Both
   lifts exist only on the owner's instruction. Format, fail modes and the reasoning:
-  ADR 0006 and `../design/decisions/0002-hook-specs.md`.
+  ADR 0006 and `../decisions/0002-hook-specs.md`.
 - Claude Code sends `rate_limits` to the status line only after the session's first response.
   Until then a new session has no file, so the gate finds no data and `usage.whenStale` decides
   (base: allow); after that, a session's file keeps its last reading, which the gate uses until it

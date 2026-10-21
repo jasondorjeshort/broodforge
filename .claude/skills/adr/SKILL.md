@@ -5,23 +5,21 @@ description: Write an architecture decision record or supersede an existing one,
 
 # ADR
 
-One file per decision in `docs/design/decisions/NNNN-short-title.md`, under 150 lines, written so
+One file per decision in the directory step 1 names, `NNNN-short-title.md`, under 150 lines, written so
 someone can implement from it without asking. Non-obvious decisions get an ADR even without a
 proposal; major choices arrive here through the `proposal` skill.
 
 ## Write a new ADR
 
-1. Number: if promoting a proposal, reuse its `NNNN`; otherwise the highest number across
-   `decisions/` and `proposals/` plus one, within the range the tree is allowed (ADR 0008):
-   Hatchery itself uses `0001` to `0019`; a project decanted from Hatchery starts at `0020`, so its
-   first ADR is `0020` or the next free number above it, never one in Hatchery's range even when
-   that is free; a project that adopted Hatchery keeps its own numbering. A proposal takes the
-   number of the ADR it will become. Which case this tree is: Hatchery itself has no `hatchery`
-   remote; decanted means `git merge-base HEAD hatchery/main` succeeds; adopted means a real
-   base line exists, not the phrase in prose (a decant keeps ADRs that quote it):
-   `grep -rhE "^Hatchery base: [0-9a-f]{7,40}" docs/design/decisions/` matches. If both tests pass
-   (an adopted project whose history was later joined to the base), that line wins and the tree
-   numbers as adopted (ADR 0009).
+1. Number: if promoting a proposal, reuse its `NNNN`; otherwise the highest number across the
+   decisions directory and `docs/design/proposals/` plus one. One test names the directory
+   (ADR 0016): a tree is Hatchery itself only when both `git remote | grep -qx hatchery` fails and
+   `grep -rqE "^Hatchery base: [0-9a-f]{7,40}" docs/design/decisions/` fails (the base line travels
+   with every clone; a fresh sibling clone has no `hatchery` remote). Hatchery writes in
+   `docs/hatchery/decisions/`, from `0016` up with no ceiling; every other tree writes in
+   `docs/design/decisions/`, from `0001` or the next free number, proposals included, and never
+   writes in `docs/hatchery/`: it supersedes a Hatchery record by citation from its own ADR
+   (`supersedes docs/hatchery/decisions/NNNN-... for this project`).
 2. Write from `template.md` in this directory with the Write tool. Status `accepted` (the
    coordinator settles technical decisions after the critic step; `proposed` only when the user
    must decide, which is anything humans see or touch).
@@ -30,8 +28,8 @@ proposal; major choices arrive here through the `proposal` skill.
    that revives it. Consequences include the costs, not only the benefits.
 4. If anything exceeds 150 lines (specs, tables), put it in a sibling file
    `NNNN-<topic>.md` and link it from the ADR.
-5. Index: add a line to the "Decisions so far" list in `docs/design/README.md`. If
-   `decisions/README.md` lists files, add it there too.
+5. Index: add a line to the 'Decisions so far' list of the directory's index:
+   `docs/hatchery/decisions/README.md` in Hatchery, `docs/design/README.md` elsewhere.
 6. If promoted from a proposal, set the proposal Status to `promoted to ADR NNNN`.
 
 ## Supersede an ADR
@@ -41,7 +39,7 @@ proposal; major choices arrive here through the `proposal` skill.
    and what changed.
 2. In the old ADR set `Status: superseded by NNNN` and add one line under the status pointing at
    the new file. Do not edit the old body beyond those outcome lines; it is the record.
-3. Update `docs/design/README.md` so the old entry reads "superseded by NNNN".
+3. Update the directory's index (step 5 of the main procedure) so the old entry reads "superseded by NNNN".
 4. Partial supersession (one section of a long ADR) is still a whole new ADR; say which sections of
    the old one still stand.
 

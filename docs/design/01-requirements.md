@@ -132,7 +132,7 @@ How to read this doc:
 | N-01 | Broodforge runs from one code base on the owner's Windows 11 PC and on a Linux VM, with no feature available on only one of them. | v1 |
 | N-02 | Everything Broodforge needs runs on a host the owner controls: the bot, the checkouts, the database, the credential store and any web site; nothing depends on a service this project would run for others. | v1 |
 | N-03 | Nothing in the repository names the owner's Discord server, channels, users, paths or secrets; all of that is configuration outside the repository. | v1 |
-| N-04 | Windows-specific behaviour that matters (processes, worktrees, shells, shared state) follows `../reference/claude-code-on-windows.md`. | v1 |
+| N-04 | Windows-specific behaviour that matters (processes, worktrees, shells, shared state) follows `../hatchery/reference/claude-code-on-windows.md`. | v1 |
 
 ### Agent-debuggable, as the `debug-interface` skill demands
 
@@ -176,7 +176,7 @@ How to read this doc:
 
 | Id | Requirement | When |
 |---|---|---|
-| N-23 | Broodforge is licensed GPL-3.0-or-later under `decisions/0001-licensing.md`, every source file carries an SPDX header, and a linkable component may be LGPL-3.0-or-later. | v1 |
+| N-23 | Broodforge is licensed GPL-3.0-or-later under `../hatchery/decisions/0001-licensing.md`, every source file carries an SPDX header, and a linkable component may be LGPL-3.0-or-later. | v1 |
 | N-24 | Every dependency is GPL-compatible, and the proposal that picks a dependency names its license. | v1 |
 
 ### Behaviour under load and failure

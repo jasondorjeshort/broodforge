@@ -3,9 +3,9 @@
 // PreToolUse hook for the Bash and PowerShell tools ("onFailure": "block" in .claude/settings.json).
 // Denies destructive git commands and hook bypasses for every caller, and limits who commits,
 // pushes and deletes branches by the project's policy (.claude/hooks/policy.json, read through
-// policy.js). The main session (no agent_type) is limited only where the policy says so. Every
-// push, from every caller, is scanned for personal data first (rule 20, pusher check 5a's grep).
-// Spec: docs/design/decisions/0002-hook-specs.md section 1; policy: ADR 0006.
+// policy.js). The main session (no agent_type) is limited only where the policy says so. Rule 20
+// reads what every push sends through privacy-scan.js (ADR 0018), required inside that rule only.
+// Spec: docs/hatchery/decisions/0002-hook-specs.md section 1; policy: ADR 0006.
 // Test harness: node .claude/hooks/test-hooks.js
 //
 // Allow: exit 0, no stdout. Deny: exit 0 with permissionDecision "deny" JSON.
@@ -23,7 +23,7 @@ process.on('uncaughtException', fail);
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { parse, SUBST } = require('./shell-parse');
-const { load, matches } = require('./policy');
+const { load, matches, integrateLimits } = require('./policy');
 
 // git options that come before the subcommand and take a separate value.
 const GLOBAL_OPTS_WITH_VALUE = new Set([
@@ -71,7 +71,9 @@ const GUARDED_LONG = {
   config: ['--unset', '--unset-all', '--remove-section', '--get', '--get-all', '--list'],
 };
 // Subcommands that create commits (rule 4), and those whose arguments must be visible (rule 19).
+// Of them, the three that integrate another branch are judged by git.integrate (integrateLimits).
 const COMMIT_SUBS = new Set(['commit', 'merge', 'pull', 'cherry-pick', 'revert', 'am', 'rebase']);
+const INTEGRATE_SUBS = new Set(['pull', 'merge', 'rebase']);
 const DESTRUCTIVE = new Set(['push', 'send-pack', 'reset', 'checkout', 'switch', 'restore', 'clean', 'branch',
   'worktree', 'stash', 'config', 'reflog', ...COMMIT_SUBS]);
 // Words that run their arguments (or stdin) as a script. When one appears, quoted text in the same
@@ -90,6 +92,23 @@ const NOTE = ' git-guard reads the command line, not what runs: it counted this 
 const isGit = (w) => /(^|[\/\\])git(\.exe)?$/i.test(w);
 const isEnvAssign = (w) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(w);
 const base = (w) => w.replace(/^.*[\/\\]/, '').replace(/\.exe$/i, '').toLowerCase();
+// A git word that is a path (/usr/bin/git, <dir>/git) is read as git only when the word after it is
+// an option or a git subcommand; otherwise it is a file name (cat <dir>/git, ls "$R/.claude/hooks/git"
+// "$X"). Where it stands does not matter, so timeout 10 /usr/bin/git push -f is still git. A bare git
+// word keeps counting anywhere, so unquoted text that names it is still read as a command.
+const GIT_SUBCOMMANDS = new Set(('add am annotate apply archive bisect blame branch bugreport bundle cat-file check-attr ' +
+  'check-ignore check-mailmap check-ref-format checkout checkout-index cherry cherry-pick citool clean clone column commit ' +
+  'commit-graph commit-tree config count-objects credential describe diagnose diff diff-files diff-index diff-tree difftool ' +
+  'fast-export fast-import fetch fetch-pack filter-branch filter-repo fmt-merge-msg for-each-ref for-each-repo format-patch ' +
+  'fsck gc get-tar-commit-id grep gui hash-object help hook index-pack init instaweb interpret-trailers lfs log ls-files ' +
+  'ls-remote ls-tree mailinfo mailsplit maintenance merge merge-base merge-file merge-index merge-tree mergetool mktag mktree ' +
+  'multi-pack-index mv name-rev notes p4 pack-objects pack-redundant pack-refs patch-id prune prune-packed pull push ' +
+  'range-diff read-tree rebase receive-pack reflog refs remote repack replace replay request-pull rerere reset restore ' +
+  'rev-list rev-parse revert rm scalar send-email send-pack shortlog show show-branch show-index show-ref sparse-checkout ' +
+  'stash status stripspace submodule svn switch symbolic-ref tag unpack-file unpack-objects update-index update-ref ' +
+  'update-server-info upload-archive upload-pack var verify-commit verify-pack verify-tag version whatchanged worktree ' +
+  'write-tree').split(' '));
+const pathGitRuns = (next) => next !== undefined && (next.startsWith('-') || GIT_SUBCOMMANDS.has(next));
 const isRunner = (w) => RUNNERS.has(base(w)) || /scriptblock\]::create/i.test(w);
 const has = (args, ...flags) => args.some((a) => flags.includes(a));
 const positionals = (args) => args.filter((a) => !a.startsWith('-'));
@@ -104,12 +123,15 @@ function deny(reason) {
 
 // Normalises a subcommand's arguments: short clusters become single flags (-nm x is -n -m),
 // abbreviated long options become the options they start, and option values are dropped (kept
-// in values, keyed by option). opaque is true when a kept argument holds an expansion.
+// in values, keyed by option, the last one; every lists them all, so -x a -x b keeps both). opaque
+// is true when a kept argument holds an expansion.
 function normalize(sub, rest, opq) {
   const [shortV, longV] = VALUE_OPTS[sub] || ['', []];
   const known = (GUARDED_LONG[sub] || []).concat(longV);
   const args = [];
   const values = {};
+  const every = {};
+  const keep = (o, v) => { values[o] = v; (every[o] = every[o] || []).push(v); };
   let opaque = false;
   for (let k = 0; k < rest.length; k++) {
     const a = rest[k];
@@ -124,7 +146,7 @@ function normalize(sub, rest, opq) {
       for (; c < a.length && /[A-Za-z0-9]/.test(a[c]); c++) {
         args.push(`-${a[c]}`);
         if (shortV.includes(a[c])) {
-          if (c === a.length - 1) { values[`-${a[c]}`] = rest[k + 1]; k++; } else values[`-${a[c]}`] = a.slice(c + 1);
+          if (c === a.length - 1) { keep(`-${a[c]}`, rest[k + 1]); k++; } else keep(`-${a[c]}`, a.slice(c + 1));
           c = a.length + 1;
           break;
         }
@@ -142,7 +164,7 @@ function normalize(sub, rest, opq) {
       const names = full.length > 0 ? full : [name];
       for (const f of names) args.push(f + tail);
       const takesValue = names.some((f) => longV.includes(f));
-      if (takesValue) { values[names[0]] = eq < 0 ? rest[k + 1] : tail.slice(1); if (eq < 0) k++; }
+      if (takesValue) { keep(names[0], eq < 0 ? rest[k + 1] : tail.slice(1)); if (eq < 0) k++; }
       // An expansion in --name=value counts only when the option itself is hidden.
       if (opq[at] && !(eq > 0 && /^--[A-Za-z0-9-]+$/.test(name))) opaque = true;
       continue;
@@ -150,7 +172,7 @@ function normalize(sub, rest, opq) {
     args.push(a);
     opaque = opaque || opq[k];
   }
-  return { args, values, opaque };
+  return { args, values, every, opaque };
 }
 
 // Resolves a cd or -C target against dir; Git Bash /c/... becomes C:/... on Windows.
@@ -171,13 +193,14 @@ function isWholeTree(p) {
   return stack.length === 0 || (stack.length === 1 && stack[0] === '*');
 }
 
-// The git invocations in one simple command: { sub, args, values, opaque, globals, dir, first, text }.
+// The git invocations in one simple command: { sub, args, values, every, opaque, globals, dir, first,
+// text }.
 function invocations(cmd, dir) {
   const w = cmd.words;
   const o = cmd.opaque || w.map(() => false);
   const out = [];
   for (let i = 0; i < w.length; i++) {
-    if (!isGit(w[i])) continue;
+    if (!isGit(w[i]) || (/[\/\\]/.test(w[i]) && !pathGitRuns(w[i + 1]))) continue;
     const globals = [];
     let d = dir;
     let hidden = false; // a -c or --config-env value the reader cannot see
@@ -198,7 +221,7 @@ function invocations(cmd, dir) {
     const lead = w.slice(0, i);
     const viaXargs = lead.some((x) => base(x) === 'xargs'); // xargs appends arguments the reader never sees
     if (j >= w.length) {
-      if (viaXargs) out.push({ sub: SUBST, args: [], values: {}, opaque: true, globals, dir: d, text: cmd.text, first: false });
+      if (viaXargs) out.push({ sub: SUBST, args: [], values: {}, every: {}, opaque: true, globals, dir: d, text: cmd.text, first: false });
       continue;
     }
     const n = normalize(w[j], w.slice(j + 1), o.slice(j + 1));
@@ -206,7 +229,7 @@ function invocations(cmd, dir) {
     const leadEnv = {};
     lead.forEach((x, k) => { const m = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s.exec(x); if (m) leadEnv[m[1].toUpperCase()] = o[k] ? SUBST : m[2]; });
     out.push({
-      sub: o[j] ? SUBST : w[j], args: n.args, values: n.values, opaque: n.opaque || hidden || viaXargs,
+      sub: o[j] ? SUBST : w[j], args: n.args, values: n.values, every: n.every, opaque: n.opaque || hidden || viaXargs,
       globals, dir: d, text: cmd.text, leadEnv,
       first: !cmd.fromData && lead.every((x) => isEnvAssign(x) || PREFIX_WORDS.has(x)),
     });
@@ -286,268 +309,54 @@ function deletable(names, dir, { policy }) {
     `${d.requireMergedPr ? ', and only after GitHub shows their pull request merged; a failed or pending merge keeps the branch' : ''}.`;
 }
 
-// Rule 20: the mechanical half of the pusher's check 5a (.claude/agents/pusher.md), run on every
-// push from every caller, on each outgoing commit. PRIVACY is that check's grep expression in JS:
-// PCRE's (?-i:home|Users) has no JS spelling, so the expression is case-sensitive and spells its
-// case-insensitive parts out. Groups: 1 an email; 2 the segment after a drive's Users directory;
-// 3 the segment after a home or Users directory at the root, or a drive's Users directory under
-// the root, cygdrive or mnt, where a path starts (line start, whitespace, a quote, a backtick, =,
-// (, +, :, [ or a slash before it);
-// 4 a host-name marker (the word desktop with a hyphen on either side, any case), which needs a
-// word character on the hyphen's far side, so prose placeholders around it are not a host. A
-// segment starting with <, $, % or ~ (<name>, $USER, %USERNAME%, ~) never matches, nor one starting
-// with a character no user name starts with (a quote, a bracket or brace, : ; , | = + * ? >).
-const PRIVACY = /([\w.+-]+@[\w-]+(?:\.[\w-]+)+)|[A-Za-z]:[\\/]+[Uu][Ss][Ee][Rr][Ss][\\/]+([^\\/\s<$%~"'`()[\]{}:;,|=+*?>][^\\/\s"'`<>()[\]{}:;,|*?]*)|(?:^|[\s"'`=(+:[\/])\/(?:home|Users|(?:cygdrive\/|mnt\/)?[A-Za-z]\/[Uu][Ss][Ee][Rr][Ss])\/([^/\s<$%~"'`()[\]{}:;,|=+*?>][^\\/\s"'`<>()[\]{}:;,|*?]*)|((?<=\w)-[Dd][Ee][Ss][Kk][Tt][Oo][Pp]|[Dd][Ee][Ss][Kk][Tt][Oo][Pp]-(?=\w))/g;
-const ANCHOR = /^[\s"'`=(+:[\/]/;
-// RFC 2606 reserved names: an email there is sample data, never a person's address.
-const RESERVED_DOMAIN = /(^|\.)example\.(com|net|org)$|\.(test|example|invalid|localhost)$/;
-// Not a person: the user parts of git hosting URLs; URL userinfo after one of these schemes; the
-// Windows system profiles and an exact "..." as a whole home segment.
-const URL_USERS = new Set(['git', 'x-access-token', 'oauth2']);
-const URL_SCHEME = /(?:https?|ssh|git):\/\/$/i;
-const PLACEHOLDER_SEGMENT = /^(?:public|default user|default|all users|\.\.\.)(?=[\\/\s"'`<>|]|$)/i;
-const SCAN_TIMEOUT = 20000;
-
-// Runs one read-only git command in g = { dir, pre, env }: pre holds the invocation's --git-dir
-// and --work-tree, env its GIT_DIR and GIT_WORK_TREE. { ok, status, out, err }.
-function gitRead(g, args) {
-  const r = spawnSync('git', ['-C', g.dir, ...g.pre, ...args],
-    { encoding: 'utf8', timeout: SCAN_TIMEOUT, maxBuffer: 512 * 1024 * 1024, windowsHide: true, env: g.env });
-  const err = r.error ? r.error.message : (r.stderr || '').trim().split('\n')[0];
-  return { ok: !r.error && r.status === 0, status: r.error ? null : r.status, out: r.stdout || '', err: err || `exit ${r.status}` };
-}
-
-// Environment variables a push's own repository and config come from, passed to rule 20's git.
+// Rule 20 (ADR 0018). Environment variables a push's own repository and config come from, passed
+// to the scan's git.
 const REPO_ENV = /^(GIT_DIR|GIT_WORK_TREE|GIT_CONFIG_COUNT|GIT_CONFIG_KEY_\d+|GIT_CONFIG_VALUE_\d+)$/;
 
-// The repository and config a push invocation acts on: { dir, pre, env, key } or { error }. pre
-// carries its --git-dir, --work-tree, -c and --config-env; env the REPO_ENV variables (and those a
-// --config-env names) exported earlier in the line (shellEnv) or prefixed to it (inv.leadEnv).
-function gitContext(inv, shellEnv) {
-  if (inv.envUnresolved) return { error: 'the line sets GIT_DIR or GIT_WORK_TREE in a way the guard cannot follow' };
+// The repository and config a push invocation acts on, as the scan's context { dir, pre, env, key },
+// or { error } (a reason that reads after "cannot "). pre carries its --git-dir, --work-tree, -c and
+// --config-env; env the REPO_ENV variables (and those a --config-env names) exported earlier in the
+// line (inv.shellEnv) or prefixed to it (inv.leadEnv).
+function gitContext(inv) {
+  if (inv.envUnresolved) return { error: 'follow how the line sets GIT_DIR or GIT_WORK_TREE' };
   const pre = [];
   const named = new Set();
   for (const [o, v] of inv.globals) {
     if (!['--git-dir', '--work-tree', '-c', '--config-env'].includes(o)) continue;
-    if (!v || v.includes(SUBST)) return { error: `${o} has a value the guard cannot see` };
+    if (!v || v.includes(SUBST)) return { error: `see the value of ${o}` };
     if (o === '-c') pre.push('-c', v); else pre.push(`${o}=${v}`);
     if (o === '--config-env' && v.includes('=')) named.add(v.slice(v.indexOf('=') + 1).toUpperCase());
   }
   const extra = {};
-  for (const [k, v] of Object.entries(Object.assign({}, shellEnv, inv.leadEnv))) {
+  for (const [k, v] of Object.entries(Object.assign({}, inv.shellEnv || {}, inv.leadEnv || {}))) {
     if (!REPO_ENV.test(k) && !named.has(k)) continue;
-    if (v.includes(SUBST)) return { error: `${k} has a value the guard cannot see` };
+    if (v.includes(SUBST)) return { error: `see the value of ${k}` };
     extra[k] = v;
   }
   const env = Object.keys(extra).length ? Object.assign({}, process.env, extra) : undefined;
   return { dir: inv.dir, pre, env, key: JSON.stringify([inv.dir, pre, extra]) };
 }
 
-// A path as git writes it in a diff header: C-quoted when it holds a quote, a backslash or a
-// control character (core.quotePath=false leaves other bytes alone).
-function unquotePath(p) {
-  if (!p.startsWith('"')) return p;
-  const esc = { n: '\n', t: '\t', '"': '"', '\\': '\\' };
-  return p.slice(1, -1).replace(/\\(.)/g, (_, c) => esc[c] || c);
-}
-// The path of a `diff --git a/P b/P` (no renames, so both sides are P) or `diff --cc P` line.
-function diffPath(l) {
-  if (!l.startsWith('diff --git ')) return unquotePath(l.replace(/^diff --(?:cc|combined) /, ''));
-  const rest = l.slice('diff --git '.length);
-  const q = /^"a\/((?:[^"\\]|\\.)*)" "b\/((?:[^"\\]|\\.)*)"$/.exec(rest);
-  if (q) return unquotePath(`"${q[2]}"`);
-  return rest.slice(rest.length - (rest.length - 5) / 2);
-}
-
-// The lines `git log -p --cc -U0 --format=%x01%h` prints, as [{ where, text }]: each commit's added
-// lines ("<sha> file:line") and added file names ("<sha> file name <path>"). Header lines (---,
-// +++, new file mode) are read only between a diff line and its first hunk, so an added line that
-// begins "++ " is content. In a merge's combined diff a line counts when every parent column is +,
-// i.e. the merge itself added it; lines from one side are scanned in that side's own commits.
-function patchItems(out) {
-  const items = [];
-  let sha = '';
-  let file = null;
-  let header = false;
-  let cols = 1;
-  let n = 0;
-  for (const raw of out.split('\n')) {
-    const l = raw.replace(/\r$/, '');
-    if (l.startsWith('\x01')) { sha = l.slice(1); file = null; header = false; continue; }
-    if (/^diff --(git|cc|combined) /.test(l)) { file = diffPath(l); header = true; continue; }
-    const h = /^(@@+) (?:-\S+ )+\+(\d+)(?:,\d+)? @@+/.exec(l);
-    if (h) { header = false; cols = h[1].length - 1; n = Number(h[2]); continue; }
-    if (file === null) continue;
-    if (header) {
-      if (l.startsWith('new file mode ')) items.push({ where: `${sha} file name ${file}`, text: file });
-      else if (l.startsWith('+++ ') && l !== '+++ /dev/null') file = unquotePath(l.slice(4)).replace(/^b\//, '');
-      continue;
-    }
-    const pre = l.slice(0, cols);
-    if (pre.length < cols || pre.includes('-') || pre.startsWith('\\')) continue;
-    if (/^\++$/.test(pre)) items.push({ where: `${sha} ${file}:${n}`, text: l.slice(cols) });
-    n++;
-  }
-  return items;
-}
-
-// Records of `git log -z --format=%h%x00%ae%x00%ce%x00%B` as [{ where, text }]: each commit's message
-// lines and its author and committer emails.
-function commitItems(out) {
-  const items = [];
-  const f = out.split('\0');
-  for (let k = 0; k + 3 < f.length; k += 4) {
-    const sha = f[k].replace(/^\n+/, '');
-    items.push({ where: `${sha} author`, text: f[k + 1] }, { where: `${sha} committer`, text: f[k + 2] });
-    for (const t of f[k + 3].split('\n')) items.push({ where: `${sha} message`, text: t.replace(/\r$/, '') });
-  }
-  return items;
-}
-
-// Refs matching a for-each-ref pattern (a prefix or a glob). A list git cannot give throws.
-function listRefs(g, pattern) {
-  const r = gitRead(g, ['for-each-ref', '--format=%(refname)', pattern]);
-  if (!r.ok) throw new Error(`git for-each-ref ${pattern} failed: ${r.err}`);
-  return r.out.split('\n').map((l) => l.trim()).filter(Boolean);
-}
-const configAll = (g, key) => { const r = gitRead(g, ['config', '--get-all', key]); return r.ok ? r.out.split('\n').map((l) => l.trim()).filter(Boolean) : []; };
-
-// What a push sends, for rule 20: { refs, remote }. remote is the remote named on the command line
-// (origin when none is; null for a URL or path, whose refs the repository does not track). refs
-// are the local refs whose commits go out: each refspec's source (HEAD as itself; a glob such as
-// refs/tags/* as every ref it matches, a bare one under refs/heads/; a deletion sends nothing); with
-// no refspec, remote.<remote>.push, else push.default (matching: every local branch the remote
-// has; nothing: none; current, simple, upstream or unset: HEAD); every local branch for --all or
-// --branches; every tag for --tags or --follow-tags.
-// The remote a push goes to, as git picks it: the command line's repository, --repo, then
-// branch.<current>.pushRemote, remote.pushDefault, branch.<current>.remote, origin. null for a URL
-// or path (nothing on it is tracked); a name that is not a configured remote throws.
-function pushRemote(inv, g, words) {
-  let r = words[0] || inv.values['--repo'];
-  if (!r) {
-    const b = gitRead(g, ['symbolic-ref', '-q', '--short', 'HEAD']);
-    const br = b.ok ? b.out.trim() : '';
-    r = (br && configAll(g, `branch.${br}.pushRemote`)[0]) || configAll(g, 'remote.pushDefault')[0] ||
-      (br && configAll(g, `branch.${br}.remote`)[0]) || 'origin';
-  }
-  if (r.includes(SUBST)) throw new Error('the remote has a value the guard cannot see');
-  if (/[:/\\]/.test(r) || r === '.' || r === '..') return null;
-  const known = gitRead(g, ['remote']);
-  if (!known.ok) throw new Error(`git remote failed: ${known.err}`);
-  if (!known.out.split('\n').map((l) => l.trim()).includes(r)) throw new Error(`${r} is not a configured remote`);
-  return r;
-}
-
-function pushSources(inv, g) {
-  const words = positionals(inv.args).filter((w) => w !== '--');
-  const remote = pushRemote(inv, g, words);
-  let specs = words.slice(1);
-  const del = has(inv.args, '--delete', '-d');
-  const all = has(inv.args, '--all', '--branches');
-  const tags = has(inv.args, '--tags');
-  const refs = new Set();
-  if (!del && specs.length === 0 && !all && !tags && remote && (configAll(g, `remote.${remote}.mirror`)[0] || '').toLowerCase() === 'true') {
-    for (const r of listRefs(g, 'refs')) refs.add(r); // a mirror remote gets every ref
-    return { refs: [...refs], remote };
-  }
-  if (!del && specs.length === 0 && !all && !tags) {
-    specs = remote ? configAll(g, `remote.${remote}.push`) : [];
-    if (specs.length === 0) {
-      const mode = (configAll(g, 'push.default')[0] || 'simple').toLowerCase();
-      if (mode === 'matching') {
-        for (const r of listRefs(g, 'refs/heads')) {
-          if (!remote || gitRead(g, ['rev-parse', '--verify', '-q', `refs/remotes/${remote}/${r.replace(/^refs\/heads\//, '')}`]).ok) refs.add(r);
-        }
-      } else if (mode !== 'nothing') refs.add('HEAD');
-    }
-  }
-  if (!del) {
-    for (const s of specs) {
-      const spec = s.replace(/^\+/, '');
-      const src = spec.includes(':') ? spec.slice(0, spec.indexOf(':')) : spec;
-      if (src === '') continue;
-      if (src.includes('*')) for (const r of listRefs(g, src.startsWith('refs/') ? src : `refs/heads/${src}`)) refs.add(r);
-      else refs.add(src);
-    }
-  }
-  if (all) for (const r of listRefs(g, 'refs/heads')) refs.add(r);
-  if (tags || has(inv.args, '--follow-tags')) for (const r of listRefs(g, 'refs/tags')) refs.add(r);
-  return { refs: [...refs], remote };
-}
-
-// What a push of refs to remote sends, as lines to scan: { items } or { error }. The commits are
-// `git rev-list <refs> --not --remotes=<remote>` (every commit reachable from them when remote is
-// null or tracks nothing yet), each with its added lines, added file names, message, and author
-// and committer emails; and each annotated tag among refs (or, for --tags, every tag) with its
-// message and tagger email.
-function outgoing(g, refs, remote) {
-  if (refs.length === 0) return { items: [] };
-  const range = [...refs, '--not', ...(remote ? [`--remotes=${remote}`] : []), '--'];
-  const log = gitRead(g, ['log', '-z', '--no-color', '--no-show-signature', '--format=%h%x00%ae%x00%ce%x00%B', ...range]);
-  if (!log.ok) return { error: `git log ${refs.join(' ')} failed: ${log.err}` };
-  const patch = gitRead(g, ['-c', 'core.quotePath=false', 'log', '-p', '--cc', '-U0', '--no-color', '--no-show-signature',
-    '--no-ext-diff', '--no-textconv', '--no-renames', '--no-relative', '--src-prefix=a/', '--dst-prefix=b/', '--format=%x01%h', ...range]);
-  if (!patch.ok) return { error: `git log -p ${refs.join(' ')} failed: ${patch.err}` };
-  const items = [...patchItems(patch.out), ...commitItems(log.out)];
-  const tags = gitRead(g, ['for-each-ref', '--format=%(refname)%00%(objecttype)%00%(taggeremail)%00%(contents)%01', 'refs/tags']);
-  if (!tags.ok) return { error: `git for-each-ref refs/tags failed: ${tags.err}` };
-  const sent = new Set(refs);
-  for (const rec of tags.out.split('\x01')) {
-    const [ref, type, tagger, body] = rec.replace(/^\n+/, '').split('\0');
-    if (type !== 'tag' || !(sent.has(ref) || sent.has(ref.replace(/^refs\/tags\//, '')))) continue;
-    const name = ref.replace(/^refs\/tags\//, '');
-    items.push({ where: `tag ${name} tagger`, text: tagger.replace(/^<|>$/g, '') });
-    for (const t of body.split('\n')) items.push({ where: `tag ${name} message`, text: t.replace(/\r$/, '') });
-  }
-  return { items };
-}
-
-// The hits in what a push sends: { hits: [{ where, match }] } or { error }. Allowed: a home segment
-// or host segment (the host word without its desktop marker) in allow, compared case-insensitively;
-// a Windows system profile (Public, Default, Default User, All Users); the repository's user.email;
-// noreply@anthropic.com and *@noreply.anthropic.com; an address at an RFC 2606 reserved domain,
-// with a user part of git, x-access-token or oauth2, or right after http://, https://, ssh:// or
-// git:// (URL userinfo).
-const scanCache = new Map();
-function privacyScan(inv, allow, shellEnv) {
-  const g = gitContext(inv, shellEnv);
+// What the scan finds in what this push sends: { hits } or { error }. scan is the required module.
+function privacyCheck(scan, inv, policy) {
+  const g = gitContext(inv);
   if (g.error) return g;
+  const p = {
+    words: positionals(inv.args), repo: inv.values['--repo'], del: has(inv.args, '--delete', '-d'),
+    all: has(inv.args, '--all', '--branches'), tags: has(inv.args, '--tags'), followTags: has(inv.args, '--follow-tags'),
+  };
   let src;
-  try { src = pushSources(inv, g); } catch (e) { return { error: e.message }; }
-  const key = JSON.stringify([g.key, src.refs, src.remote]);
-  if (!scanCache.has(key)) scanCache.set(key, outgoing(g, src.refs, src.remote));
-  const o = scanCache.get(key);
-  if (o.error) return o;
-  const email = gitRead(g, ['config', 'user.email']);
-  const userEmail = email.ok ? email.out.trim().toLowerCase() : '';
-  const ok = new Set(allow.map((a) => a.toLowerCase()));
-  const hits = [];
-  for (const { where, text } of o.items) {
-    for (const m of text.matchAll(PRIVACY)) {
-      let allowed;
-      let shown = m[0].replace(ANCHOR, '');
-      if (m[1]) {
-        const e = m[1].toLowerCase();
-        allowed = (userEmail !== '' && e === userEmail) || e === 'noreply@anthropic.com' || e.endsWith('@noreply.anthropic.com') ||
-          RESERVED_DOMAIN.test(e.slice(e.indexOf('@') + 1)) || URL_USERS.has(e.slice(0, e.indexOf('@'))) ||
-          URL_SCHEME.test(text.slice(0, m.index));
-      } else if (m[2] || m[3]) {
-        const seg = m[2] || m[3];
-        allowed = ok.has(seg.replace(/\.+$/, '').toLowerCase()) ||
-          PLACEHOLDER_SEGMENT.test(text.slice(m.index + m[0].length - seg.length));
-      } else {
-        let a = m.index;
-        let b = m.index + m[0].length;
-        while (a > 0 && /[\w-]/.test(text[a - 1])) a--;
-        while (b < text.length && /[\w-]/.test(text[b])) b++;
-        shown = text.slice(a, b);
-        allowed = ok.has(shown.replace(m[4], '').toLowerCase());
-      }
-      if (!allowed) hits.push({ where, match: shown });
-    }
+  try { src = scan.pushSources(g, p); } catch (e) {
+    if (e instanceof scan.ScanError) return { error: e.message };
+    throw e;
   }
-  return { hits };
+  return scan.scanPush(g, src.refs, src.remote, policy.privacy);
 }
+const SHARED_LINE = 'The push shares its line with another git command; the scan reads only commits that exist when it runs. ' +
+  'Run the push on a line of its own.';
+const scanFailed = (reason) => `The scan could not read what this push sends (${reason}); no push leaves without it. ` +
+  'Run node .claude/hooks/privacy-scan.js by hand and read its cannot line; fix the repository state (a commit on the ' +
+  'branch, a configured remote, a readable never or allow file) or ask the user. ADR 0018.';
 
 const isLease = (a) => a.startsWith('--force-with-lease') || a.startsWith('--force-if-includes');
 const isPlainForce = (a) => a === '--force' || a.startsWith('--force=') || a === '-f' || (a.startsWith('+') && a.length > 1);
@@ -571,6 +380,11 @@ function configWrite(inv, re) {
   const unset = has(inv.args, '--unset', '--unset-all', '--remove-section');
   return { unset, value: pos[k].includes('=') ? pos[k].slice(pos[k].indexOf('=') + 1) : pos[k + 1] };
 }
+// git replace -l / --list with at most one pattern only lists replace refs (rule 12 allows it).
+function listsReplaceRefs(args, opaque) {
+  const rest = args.filter((a) => a !== '-l' && a !== '--list');
+  return !opaque && args.length - rest.length === 1 && rest.length <= 1 && positionals(rest).length === rest.length;
+}
 const HOOKS_KEY = /^core\.hookspath(=|$)/i;
 const INCLUDE_KEY = /^include(if\..*)?\.path(=|$)|^include\./i;
 const ALIAS_KEY = /^alias\./i;
@@ -578,7 +392,8 @@ const ALIAS_KEY = /^alias\./i;
 const CONFIG_ENV = /^GIT_CONFIG(_GLOBAL|_SYSTEM|_PARAMETERS)?$/i;
 
 // Ordered rules. test(inv, ctx) returns false to pass, true to deny with the rule's advice, or a
-// string to deny with that advice instead. ctx: { agent, policy, envConfig }.
+// string to deny with that advice instead. ctx: { agent, policy, envConfig, gitCount } (gitCount: the
+// git invocations in the line, for rule 20).
 const RULES = [
   {
     n: 1, prefix: 'force push',
@@ -615,34 +430,55 @@ const RULES = [
     },
   },
   {
-    // Tried right after rule 3, so a caller who may not push is told that first.
+    // Tried right after rule 3, so a caller who may not push is told that first. The scan is
+    // required here, not at the top, so no other rule or command depends on it; any throw is this
+    // rule's deny.
     n: 20, prefix: 'personal data in the outgoing commits',
-    test: (inv, { policy }) => {
+    test: (inv, ctx) => {
       // An opaque push is rule 19's: it is denied there, with the reason that fits.
       if (!isPush(inv.sub) || inv.opaque) return false;
-      const s = privacyScan(inv, policy.git.push.privacyAllow, inv.shellEnv || {});
-      if (s.error) {
-        return `The guard could not work out what this push sends (${s.error}), and no push leaves without that scan; ` +
-          'fix the repository state (a commit on the branch, a readable upstream) or ask the user.';
+      if (ctx.gitCount > 1) return SHARED_LINE;
+      let s;
+      try {
+        s = privacyCheck(require('./privacy-scan'), inv, ctx.policy);
+      } catch (e) {
+        return scanFailed(`the scan failed: ${String(e && e.message ? e.message : e).split('\n')[0]}`);
       }
+      if (s.error) return scanFailed(`cannot ${s.error}`);
       if (s.hits.length === 0) return false;
-      const shown = s.hits.slice(0, 3).map((h) => `${h.where} (${h.match})`).join('; ');
-      return `${s.hits.length} hit${s.hits.length === 1 ? '' : 's'}${s.hits.length > 3 ? ', the first three' : ''}: ${shown}. ` +
-        'The repo is public: write `~`, a role or a placeholder instead. The fix is to amend or squash the unpushed commit, ' +
-        'never a later commit on top, and never a change to this rule.';
+      const n = s.hits.length;
+      const shown = s.hits.slice(0, 3).map((h) => `${h.where} (${h.class}: ${h.match})`).join('; ');
+      return `${n} hit${n === 1 ? '' : 's'}${n > 3 ? ', the first three' : ''}: ${shown}. Fix: write ~, <repo>, a role or a ` +
+        'placeholder and fold the edit into the unpushed commit (amend, or reset --soft and one new commit). A false ' +
+        'positive is the owner\'s: ask the user, then an entry in privacy.allow (a non-personal literal) or ' +
+        '~/.claude/privacy-allow.txt (the owner\'s own value), from the main session. Nothing in a brief lifts this. ADR 0018.';
     },
   },
   {
     n: 4, prefix: 'commit not permitted for this caller',
     test: (inv, { agent, policy }) => {
       if (!COMMIT_SUBS.has(inv.sub) || agent === null || has(inv.args, '--abort', '--quit')) return false;
-      const c = policy.git.commit;
+      // pull, merge and rebase are judged by git.integrate, each key it leaves null by git.commit's;
+      // the wording is the base's until the project sets the deciding key apart.
+      const g = policy.git;
+      const integrating = INTEGRATE_SUBS.has(inv.sub);
+      const limits = integrateLimits(g);
+      const c = integrating ? limits : g.commit;
+      const whoApart = g.integrate.subagents !== null;
       if (!mayAct(c.subagents, agent)) {
-        return `Under .claude/hooks/policy.json the subagents that make commits (commit, merge, pull, cherry-pick, revert, am, rebase) are: ${listOf(c.subagents)}. Describe the change in your report so it can be committed.`;
+        if (integrating && whoApart) {
+          return `Under .claude/hooks/policy.json the subagents that pull, merge or rebase (git.integrate) are: ${listOf(c.subagents)}. Leave the integration to the main session and report.`;
+        }
+        return `Under .claude/hooks/policy.json the subagents that make commits (${whoApart ? 'commit, cherry-pick, revert, am' : 'commit, merge, pull, cherry-pick, revert, am, rebase'}) are: ${listOf(c.subagents)}. Describe the change in your report so it can be committed.`;
       }
       if (c.protectedBranches.length === 0) return false;
       const b = currentBranch(inv.dir);
-      return b !== null && matches(c.protectedBranches, b) ? `Subagents do not make commits on ${b}; work on your own branch.` : false;
+      if (b === null || !matches(c.protectedBranches, b)) return false;
+      if (integrating && g.integrate.protectedBranches !== null) return `Subagents do not pull, merge or rebase on ${b} (git.integrate); work on your own branch.`;
+      if (integrating) return `Subagents do not make commits on ${b}; work on your own branch.`;
+      // A commit on a branch the agent may integrate: a merge or rebase in progress there ends with its own --continue.
+      const integrable = mayAct(limits.subagents, agent) && !matches(limits.protectedBranches, b);
+      return `Subagents do not make commits on ${b}; work on your own branch.${integrable ? ' A merge or rebase in progress here is concluded with git merge --continue or git rebase --continue.' : ''}`;
     },
   },
   {
@@ -696,7 +532,8 @@ const RULES = [
   {
     n: 12, prefix: 'history rewrite',
     advice: 'History rewrites and ref surgery are for the user; ask first.',
-    test: ({ sub, args }) => ['filter-branch', 'filter-repo', 'replace', 'update-ref'].includes(sub) ||
+    test: ({ sub, args, opaque }) => ['filter-branch', 'filter-repo', 'update-ref'].includes(sub) ||
+      (sub === 'replace' && !listsReplaceRefs(args, opaque)) ||
       (sub === 'reflog' && ['expire', 'delete'].includes(positionals(args)[0])),
   },
   {
@@ -761,12 +598,17 @@ const RULES = [
   {
     n: 19, prefix: 'unexpanded argument',
     test: (inv) => {
+      if (inv.tooDeep) return 'Shells nest deeper here (sh -c, eval, rebase --exec) than the guard reads, three levels, so it cannot see what runs inside. Run the inner command on a line of its own.';
       if (inv.sub === SUBST) return 'The command runs git with a subcommand or arguments the guard cannot see (a variable, a substitution, xargs input, or a command word that is an expansion). Run git by name with its arguments written out.';
       if (!DESTRUCTIVE.has(inv.sub) || !inv.opaque) return false;
       return `The guard cannot see what a variable, substitution or brace expansion becomes, and git ${inv.sub} can discard work or bypass hooks. Run it with the values written out.`;
     },
   },
 ];
+
+// The words of an -ArgumentList string as the started process gets them: whitespace and commas
+// separate, double quotes group and are dropped ('rebase -x "git push -f" main' is four words).
+const argWords = (s) => (s.match(/(?:"[^"]*"?|[^\s,"]+)+/g) || []).map((w) => w.replace(/"/g, ''));
 
 // Start-Process git -ArgumentList "push --force" (or "push","--force") as the git command it runs.
 function startProcessCommand(c) {
@@ -781,13 +623,18 @@ function startProcessCommand(c) {
     if (!w.startsWith('-') && file === null) file = w;
   }
   if (!file || !isGit(file)) return null;
-  const words = ['git', ...(argList || '').split(/[\s,]+/).filter(Boolean)];
+  const words = ['git', ...argWords(argList || '')];
   return { words, opaque: words.map((_, i) => i > 0 && opaque), text: c.text, stdin: [], fromData: true };
 }
 
+// The commands a git rebase in c hands to sh after each commit it replays (--exec, -x, repeats kept).
+const rebaseExecs = (c) => invocations(c, '.').filter((i) => i.sub === 'rebase')
+  .flatMap((i) => [...(i.every['-x'] || []), ...(i.every['--exec'] || [])]).filter((t) => typeof t === 'string');
+
 // Every command the line runs, with the directory each runs in. Quoted text and heredoc bodies
 // are read as commands too when a runner word appears (sh -c, eval, | bash, powershell -Command,
-// [scriptblock]::Create).
+// [scriptblock]::Create), and the command of every git rebase --exec or -x always. Text still
+// unread past the depth limit becomes one command marked tooDeep, which decide denies (rule 19).
 function commandsOf(command, dialect, cwd) {
   const top = parse(command, dialect);
   const cmds = top.commands.slice();
@@ -800,19 +647,36 @@ function commandsOf(command, dialect, cwd) {
     if (isRunner(c.words[k])) return true;
     return WRAPPERS.has(base(c.words[k])) && c.words.slice(k + 1).some(isRunner);
   });
-  let data = runner(cmds) ? top.data : [];
-  for (let depth = 0; depth < 3 && data.length > 0; depth++) {
-    const next = [];
-    for (const text of data) {
-      for (const d of ['bash', 'powershell']) {
-        const p = parse(text, d);
-        for (const c of p.commands) cmds.push(Object.assign(c, { fromData: true }));
-        if (runner(p.commands)) next.push(...p.data);
+  // Text to read as a command line, three levels deep: { text, dialects, hidden }. Data is read in
+  // both dialects; a rebase command in Bash, as git runs it with sh. hidden: the text is a word of a
+  // line already read, so a SUBST in it is an expansion of that line and opaque. A Start-Process
+  // command is reassembled here, so the rebase command of one is read too.
+  let pending = [];
+  const queue = (p, hidden) => {
+    if (runner(p.commands)) for (const text of p.data) pending.push({ text, dialects: ['bash', 'powershell'], hidden });
+    const started = p.commands.map(startProcessCommand).filter(Boolean);
+    cmds.push(...started);
+    for (const c of p.commands.concat(started)) {
+      for (const text of rebaseExecs(c)) pending.push({ text, dialects: ['bash'], hidden: true });
+    }
+  };
+  queue(top, false);
+  for (let depth = 0; depth < 3 && pending.length > 0; depth++) {
+    const now = pending;
+    pending = [];
+    for (const t of now) {
+      for (const d of t.dialects) {
+        const p = parse(t.text, d);
+        for (const c of p.commands) {
+          if (t.hidden) c.opaque = c.words.map((w, k) => c.opaque[k] || w.includes(SUBST));
+          cmds.push(Object.assign(c, { fromData: true }));
+        }
+        queue(p, t.hidden);
       }
     }
-    data = next;
   }
-  for (const c of cmds.slice()) { const s = startProcessCommand(c); if (s) cmds.push(s); }
+  // Fails closed: what the limit leaves unread could run anything.
+  if (pending.length > 0) cmds.push({ words: [SUBST], opaque: [true], text: pending[0].text, stdin: [], fromData: true, tooDeep: true });
   let dir = cwd;
   return cmds.map((c) => {
     const at = dir;
@@ -831,21 +695,9 @@ function opaqueCommand(cmd, mentionsGit) {
   if (k >= cmd.words.length || !(cmd.opaque && cmd.opaque[k])) return false;
   if (cmd.words[k + 1] === '=' || /^\$[A-Za-z_:]+=/.test(cmd.words[k])) return false;
   const last = cmd.words[k].split(/[\/\\]/).pop();
+  // A path ending in git is git only when what follows reads as git ("$R/.claude/hooks/git" "$X" is not).
+  if (cmd.words[k].match(/[\/\\]/) && isGit(last) && !pathGitRuns(cmd.words[k + 1])) return false;
   return !(cmd.words[k].match(/[\/\\]/) && last && !/[$\0{}]/.test(last) && !isGit(last));
-}
-
-// True when a word the parser produced names git: an unquoted word with a git token in it (G=git,
-// git, /usr/bin/git), the unquoted part of a partly quoted word (g=git" push -f"), or a quoted word
-// that is git or a path ending in git ($g = 'git'), or an assignment whose value starts with
-// one ($g='C:\Program Files\Git\cmd\git.exe', $c='git push -f'). A quoted string that merely
-// contains git or starts with it as an argument (a regex, "git push" for grep, a .git path part)
-// does not count.
-const LOOSE_GIT = /(^|[^A-Za-z0-9_-])git(\.exe)?([^A-Za-z0-9_-]|$)/i;
-const QUOTED_GIT = /^(.*[\/\\])?git(\.exe)?$/is;
-const ASSIGNED_GIT = /^\$?[A-Za-z_:][A-Za-z0-9_:]*=(.*[\/\\])?git(\.exe)?([\s,].*)?$/is;
-function namesGit(w, quoted, bare) {
-  if (!quoted) return LOOSE_GIT.test(w);
-  return LOOSE_GIT.test(bare || '') || QUOTED_GIT.test(w) || ASSIGNED_GIT.test(w);
 }
 
 // Variables exported for the rest of the line, into env (names upper-cased; an expansion in a
@@ -854,6 +706,7 @@ function namesGit(w, quoted, bare) {
 // updates an exported N). PowerShell: `$env:N = v`, `Set-Item [-Path] env:N [-Value] v` (or si),
 // `Remove-Item [-Path] env:N` (or ri, del, rm). Returns the indices of the words it resolved, so
 // decide can tell a GIT_DIR word it followed from one it did not (`set -a`, `read`, .NET calls).
+// Rule 20 reads the result; no other rule does.
 const ALLEXPORT = '\0allexport';
 function noteExports(cmd, env, vars) {
   const w = cmd.words;
@@ -917,7 +770,7 @@ const REPO_ENV_WORD = /(^|[^A-Za-z0-9_])(GIT_DIR|GIT_WORK_TREE)([^A-Za-z0-9_]|$)
 
 function decide(command, dialect, agent, cwd, loaded) {
   const cmds = commandsOf(command, dialect, cwd);
-  const mentionsGit = cmds.some(({ cmd }) => cmd.words.some((w, k) => namesGit(w, cmd.quoted && cmd.quoted[k], cmd.bare && cmd.bare[k])));
+  const mentionsGit = /(^|[^A-Za-z0-9_-])git(\.exe)?([^A-Za-z0-9_-]|$)/i.test(command);
   const invs = [];
   const shellEnv = {};
   const shellVars = {};
@@ -931,13 +784,14 @@ function decide(command, dialect, agent, cwd, loaded) {
       envUnresolved = true;
     });
     for (const inv of invocations(cmd, dir)) invs.push(Object.assign(inv, { shellEnv: Object.assign({}, shellEnv) }));
-    if (opaqueCommand(cmd, mentionsGit)) invs.push({ sub: SUBST, args: [], values: {}, opaque: true, globals: [], dir, text: cmd.text, first: false });
+    if (cmd.tooDeep) invs.push({ sub: SUBST, args: [], values: {}, every: {}, opaque: true, globals: [], dir, text: cmd.text, first: false, tooDeep: true });
+    else if (opaqueCommand(cmd, mentionsGit)) invs.push({ sub: SUBST, args: [], values: {}, every: {}, opaque: true, globals: [], dir, text: cmd.text, first: false });
   }
   if (envUnresolved) for (const inv of invs) inv.envUnresolved = true;
   if (invs.length === 0) return null;
   const clip = (t) => (t.length > 200 ? `${t.slice(0, 200)}...` : t);
   if (loaded.error) {
-    return `git-guard: policy file is malformed (${loaded.error}): \`${clip(invs[0].text)}\`. Every git command is denied until it is fixed; ask the user.`;
+    return `git-guard: policy file is malformed (${loaded.error}): \`${clip(invs[0].text)}\`. Every git command is denied until it is fixed; ask the user. A key from a newer base is one cause: remove it with the Edit tool (git, this checkout included, is denied until the policy loads), run the update, which brings the new policy.js, then put the key back.`;
   }
   // Config by environment (GIT_CONFIG_KEY_n=..., GIT_CONFIG_GLOBAL=..., $env:GIT_CONFIG_... = ...).
   const envConfig = [];
@@ -947,7 +801,10 @@ function decide(command, dialect, agent, cwd, loaded) {
       if (m) envConfig.push({ name: m[1], value: m[2] !== undefined ? m[2] : (cmd.words[k + 1] === '=' ? cmd.words[k + 2] || '' : '') });
     });
   }
-  const ctx = { agent, policy: loaded.policy, envConfig };
+  // Quoted text handed to a shell is parsed in both dialects, so the same command can appear twice:
+  // each (text, subcommand) pair counts once.
+  const gitCount = new Set(invs.map((i) => `${i.text}\0${i.sub}`)).size;
+  const ctx = { agent, policy: loaded.policy, envConfig, gitCount };
   for (const rule of RULES) {
     for (const inv of invs) {
       const r = rule.test(inv, ctx);

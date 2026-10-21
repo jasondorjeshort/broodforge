@@ -1,8 +1,8 @@
 {
-  "$comment": "Single-branch model: one branch (master); any subagent commits its own step wherever it works; only the pusher agent, started fresh for each push, pushes among subagents; the main session may too. Every push is scanned for personal data; only the placeholder user name user passes. Delegation slows at 80% and stops at 90%.",
+  "$comment": "Single-branch model: one branch (master); any subagent commits its own step wherever it works; only the pusher agent, started fresh for each push, pushes among subagents; the main session may too. Delegation slows at 80% and stops at 90%.",
   "git": {
     "commit": { "subagents": "any", "protectedBranches": [] },
-    "push": { "subagents": ["pusher"], "branches": ["*"], "mainSession": true, "forceWithLease": [], "privacyAllow": ["user"] },
+    "push": { "subagents": ["pusher"], "branches": ["*"], "mainSession": true, "forceWithLease": [] },
     "branchDelete": { "branches": [], "requireMergedPr": false },
     "hooksPath": null
   },

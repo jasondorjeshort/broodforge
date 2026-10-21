@@ -14,7 +14,7 @@ faster option costs.
 
 | Host | What it serves | What it must run | Facts that bear on the design |
 |---|---|---|---|
-| The owner's Windows 11 PC | The Broodforge project's own channel; the owner and a few trusted people drive | One Broodforge instance; git; Claude Code; the owner's own interactive Claude Code sessions at the same time | Behind NAT, no inbound port; may sleep or reboot, so sessions get interrupted (R-17); shares `~/.claude` with the owner's own sessions; long paths, junctions, PowerShell and Git Bash quirks in `../reference/claude-code-on-windows.md` (N-04); no root-style user separation without an admin console |
+| The owner's Windows 11 PC | The Broodforge project's own channel; the owner and a few trusted people drive | One Broodforge instance; git; Claude Code; the owner's own interactive Claude Code sessions at the same time | Behind NAT, no inbound port; may sleep or reboot, so sessions get interrupted (R-17); shares `~/.claude` with the owner's own sessions; long paths, junctions, PowerShell and Git Bash quirks in `../hatchery/reference/claude-code-on-windows.md` (N-04); no root-style user separation without an admin console |
 | A Linux droplet | Utopia's channels; the full trust range of the vision, trolls included | One Broodforge instance; git; Claude Code; later Utopia's own test runs (R-47) | Public IP, always on; headless, so no desktop keychain; root available, so users, namespaces and systemd units are usable; the box the vision calls the biggest hole (N-16), so reach enforcement (N-14) matters most here |
 
 Both instances connect outward to Discord's gateway; nothing listens on a public port in the first

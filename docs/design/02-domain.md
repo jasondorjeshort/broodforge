@@ -129,7 +129,7 @@ session, branch, path, when it was created, and its state: active, pushed, kept 
 commits, removed (R-35). A subagent worktree is a worktree whose parent is the session's worktree,
 not a session of its own (R-31). Relations: one session; zero or more child worktrees; the commits
 made in it. Open: naming of branches and directories, and what Windows requires of worktree
-creation and removal (`../reference/claude-code-on-windows.md`, Git worktrees; the
+creation and removal (`../hatchery/reference/claude-code-on-windows.md`, Git worktrees; the
 architecture doc).
 
 ## Turn

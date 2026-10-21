@@ -2,11 +2,14 @@
 paths:
   - "docs/**"
   - "CLAUDE.md"
+  - ".claude/agreement/**"
+  - ".claude/project/**"
 ---
 
 # Conventions for docs/
 
-These load automatically when a file under `docs/` or `CLAUDE.md` is read or edited. The map of what goes where is
+These load automatically when a file matching one of the `paths:` above (`docs/**`, `CLAUDE.md`,
+`.claude/agreement/**`, `.claude/project/**`) is read or edited. The map of what goes where is
 `docs/README.md`; the reasoning is ADR 0002.
 
 ## Size caps (enforced by the pusher, check 7; the post-edit hook warns)
@@ -19,15 +22,22 @@ These load automatically when a file under `docs/` or `CLAUDE.md` is read or edi
   must stay capped. Aim under 300 anyway.
 - `docs/HANDOFF.md`, and each `docs/handoff/*.md` where that directory exists: at most 40 lines, at most 120 together. Detail
   goes to an idea or a finding; the handoff links.
-- `CLAUDE.md`: at most 150 lines. A new paragraph of facts goes to `docs/reference/` with a pointer.
+- `CLAUDE.md`: at most 40 lines, loading at most 190 (`node .claude/hooks/policy.js --claude-check`);
+  `edit.capExempt` naming `CLAUDE.md` lifts both. A new paragraph of facts goes to `docs/reference/` with a pointer.
 
 ## Indexes
 
-- Every directory under `docs/` has a `README.md` with one line per file. Adding, renaming, resolving,
-  or deleting a file updates that index in the same edit. The post-edit hook warns about an unlisted file.
-  Exception: `docs/handoff/` has no README; its index is the `@handoff/<file>.md` lines of
-  `docs/HANDOFF.md` (`handoff` skill, `split.md`).
-- `docs/design/README.md` lists every ADR; `docs/findings/README.md` shows status per file.
+- A directory under `docs/` is either indexed (its `README.md` has one line per file; adding,
+  renaming, resolving or deleting a file updates that index in the same edit; the post-edit hook
+  warns about an unlisted file) or listed on demand (its README carries the marker line
+  `Listed on demand: node .claude/hooks/queue-list.js <dir>`, the format and never a file name).
+  The marker is the hook's switch: with it, the hook checks that an edited file lists without `?`
+  instead of checking an index. Only `docs/ideas/`, `docs/operator/` and `docs/findings/` may carry it
+  (ADR 0017). Exception: `docs/handoff/` has no README; its index is the `@handoff/<file>.md` lines
+  of `docs/HANDOFF.md` (`handoff` skill, `split.md`).
+- `docs/design/README.md` lists every ADR of the tree's own `decisions/`. `docs/hatchery/` has its own
+  three READMEs (`README.md`, `decisions/README.md`, `reference/README.md`), base-owned; a project
+  never edits them.
 - An index is the one list a doc may carry. Prose never inventories files, fields, routes or
   counts ("the twelve commands", "a 400-line file"): every ordinary commit moves the figure, and a
   later session then "corrects" it. Write the rule that generates the list instead.
@@ -45,17 +55,31 @@ These load automatically when a file under `docs/` or `CLAUDE.md` is read or edi
 ## Frontmatter
 
 - `docs/findings/YYYY-MM-DD-<slug>.md`: required `date`, `status: open | resolved | superseded`,
-  `area`; optional `supersedes: <file>`, `promoted_to: <path>`. Sections in order: Question, What was
+  `area`; optional `supersedes: <file>`, `promoted_to: <path>`. The status is read by its first word
+  (`resolved (ADR 0011)` reads `resolved`). Sections in order: Question, What was
   tried, Result, Next (Next may be omitted when resolved). Use the `finding` skill.
 - `docs/ideas/YYYY-MM-DD-<slug>.md`: required `date`, `kind: bug | feature | question | chore`;
   optional `related: [<file>, ...]`. Search for an existing idea before adding one (its README,
   "Before adding").
 - `docs/operator/YYYY-MM-DD-<slug>.md`: no frontmatter; its README says what the body carries.
-- `docs/reference/<topic>.md`: required `verified: YYYY-MM-DD`, `source: <url or "observed">`. When a
+- `docs/reference/<topic>.md` and `docs/hatchery/reference/<topic>.md`: required `verified: YYYY-MM-DD`, `source: <url or "observed">`. When a
   fact changes, fix it in place and bump `verified:`; do not append history.
-- `docs/design/decisions/NNNN-*.md` and `docs/design/proposals/NNNN-*.md`: no frontmatter; the
+- `docs/hatchery/decisions/NNNN-*.md`, `docs/design/decisions/NNNN-*.md` and `docs/design/proposals/NNNN-*.md`: no frontmatter; the
   `Date:` and `Status:` lines under the title are the record. Templates are in the `adr` and
   `proposal` skills; status values are in the directory READMEs.
+
+## Personal data (ADR 0018)
+
+- Tracked text (docs, commit messages, tests, fixtures, hook examples) never carries: a home path
+  with a user segment in any spelling (drive, root, cygdrive, mnt, or a project-folder slug), an
+  email or a person's name other than a listed identity (`privacy.identities`; write the role
+  instead: the owner, the coordinator, a downstream project's owner), a host name, a session link
+  (allowed only as a commit message's `Claude-Session:` trailer, ADR 0020; never in a tracked
+  file), a recorded conversation, or a grant file's content.
+- Write paths as `~`, `<repo>`, `../<dir>` or `<scratchpad>`. Briefs are not committed and keep
+  absolute paths; a tracked file an agent writes from one follows this section.
+- A refused push is fixed in the text and folded into the unpushed commit, never lifted; a false
+  positive is the owner's (`git.md` of the agreement).
 
 ## Content rules
 
@@ -82,6 +106,6 @@ These load automatically when a file under `docs/` or `CLAUDE.md` is read or edi
   `[no-check: <reason>]`; closed records (proposals, decisions, findings) are exempt by policy.
   A moved paragraph leaves a pointer behind.
 - Write files that contain apostrophes or backticks with the Write or Edit tool, not a Bash heredoc
-  (`docs/reference/claude-code-on-windows.md`, Shells). The `git-guard` hook reads
+  (`docs/hatchery/reference/claude-code-on-windows.md`, Shells). The `git-guard` hook reads
   quoted text and heredoc bodies as data, so text that only mentions a git command is not denied
   unless the command line hands it to a shell.

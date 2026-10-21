@@ -24,7 +24,7 @@ recorded fixtures move to `fixtures/engine/<name>/` after a person reads them.
 ## Build (Git Bash on the PC)
 
 The owner's `~/.npmrc` has `location=global`: never a bare `npm install`, `npm ci`, `-g` or
-`--no-global` (`docs/reference/claude-code-on-windows.md`, "npm on this PC"). Create an empty
+`--no-global` (`docs/hatchery/reference/claude-code-on-windows.md`, "npm on this PC"). Create an empty
 file first (`: > <empty.npmrc>`), and set `B=<repo>/spike` (this clone's path, forward slashes), then:
 
 ```

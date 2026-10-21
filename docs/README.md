@@ -1,7 +1,7 @@
 # docs/ — the map
 
 Read the index of a directory before its files. Nothing here is loaded automatically except
-`HANDOFF.md` and the files it imports. Layout and reasoning: `design/decisions/0002-repository-layout.md`.
+`HANDOFF.md` and the files it imports. Layout and reasoning: `hatchery/decisions/0002-repository-layout.md`.
 
 | Path | What lives there | Loaded |
 |---|---|---|
@@ -11,6 +11,7 @@ Read the index of a directory before its files. Nothing here is loaded automatic
 | `design/` | What we build and why: `00`-`06` design docs, `proposals/`, `decisions/` (ADRs). | on demand; start at `design/README.md` |
 | `reference/` | Durable facts about tools, APIs, platforms, environments. One topic per file, `verified:` date. | on demand; start at `reference/README.md` |
 | `findings/` | Dated, status-tagged results of investigations: root causes, benchmarks, failed approaches. | on demand; start at `findings/README.md` |
+| `hatchery/` | Hatchery's own decisions and reference, as the base ships them; updated only by `update-from-hatchery`, never edited here. | on demand; start at `hatchery/README.md` |
 
 Where does a new piece of text go? Ask in this order:
 

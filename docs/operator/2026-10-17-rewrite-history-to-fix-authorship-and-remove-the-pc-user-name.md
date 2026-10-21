@@ -51,7 +51,7 @@ Do not run it inside a checkout that any Claude session has open.
 
    For Hatchery also `git push --force origin task/T94`. Do Hatchery first, then this repository, since this one's history includes Hatchery's root.
 
-6. Afterwards: every checkout is re-cloned, not pulled (`docs/reference/claude-code-on-windows.md`
+6. Afterwards: every checkout is re-cloned, not pulled (`docs/hatchery/reference/claude-code-on-windows.md`
    for the git identity settings to restore); a tester pass refreshes the docs that cite commit
    hashes; a request to GitHub support to purge the unreachable objects, with the old root sha;
    the backup branch is deleted on both remotes once the purge is confirmed, and the on-disk copies

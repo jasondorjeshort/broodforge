@@ -1,7 +1,19 @@
 # 0006. Hook policy lives in one file beside the hooks
 
 Date: 2026-10-13
-Status: accepted
+Status: accepted, superseded in part by 0016, 0017 and 0021
+Superseded in part by [0016](0016-base-owned-and-project-owned-files.md), 2026-10-17: the sentence
+under the key table that keeps the 150-line `CLAUDE.md` cap a constant in `post-edit.js` (the
+project file's caps are 40 and 190, in `policy.js`, lifted by `edit.capExempt` naming `CLAUDE.md`),
+and the policy file is never patched rather than kept on conflict; the living key table gains
+`update.exclude` in place, as its own rule allows. Everything else stands.
+Superseded in part by [0017](0017-queue-directories-list-on-demand.md), 2026-10-17: "only
+exemptions are policy" gains one exemption that is not: the index check for a queue directory is
+switched off by a marker line in that directory's own README, never by a key, so the key table
+gains nothing. Everything else stands.
+Superseded in part by [0021](0021-guardrails-bound-damage.md), 2026-10-21: the base values of
+`git.commit.subagents` and `git.push.subagents` become `"any"`, and under `usage.mode: "warn"` the
+coordinator may write a session grant with its reason; the key table takes both in place. Everything else stands.
 
 The key table and "The HOLD override" section are living: they are amended in place as keys and
 formats change, and keep the provenance notes a decision record carries (the projects a key came
@@ -46,14 +58,17 @@ per model seen downstream (task branches, single branch, per-meter thresholds), 
 |---|---|---|---|
 | `git.commit.subagents` | `"any"`, `"none"` or agent names | `["runner"]` | Subagents that may commit. The main session always may. |
 | `git.commit.protectedBranches` | branch patterns | `[]` | No subagent commits while the current branch matches. |
+| `git.integrate.subagents` | as `git.commit.subagents`, or `null` | `null` | Subagents that may `pull`, `merge` or `rebase`, which integrate a branch rather than write a commit of their own; `null` takes `git.commit.subagents` (Dystopo, its ADR 0036: a subagent integrates `main` and resolves the conflicts, a plain commit there stays refused). |
+| `git.integrate.protectedBranches` | branch patterns, or `null` | `null` | No subagent pulls, merges or rebases while the current branch matches; `null` takes `git.commit.protectedBranches`, so a project that sets neither key judges the three as commits, as before the key. |
 | `git.push.subagents` | as above | `["pusher"]` | Subagents that may push. |
 | `git.push.branches` | branch patterns | `["*"]` | Every branch a subagent's push updates must match. |
 | `git.push.mainSession` | boolean | `true` | Whether the main session pushes. |
 | `git.push.forceWithLease` | branch patterns | `[]` | `--force-with-lease` is allowed, for anyone, when every target matches; otherwise it is a force push. |
-| `git.push.privacyAllow` | list of names | `["user"]` | Placeholder and service-account names that `git-guard` rule 20, the push privacy scan, lets through: the path segment after `Users/` or `home/`, or a host segment, compared case-insensitively. Emails are not listed here (the repository's `user.email`, Anthropic's noreply addresses and the RFC 2606 reserved domains pass); a person's user name never belongs in it. |
 | `git.branchDelete.branches` | branch patterns | `[]` | `branch -D` and `push --delete` are allowed only for these. |
 | `git.branchDelete.requireMergedPr` | boolean | `false` | Also require a merged pull request on GitHub (`gh`, fails closed). |
 | `git.hooksPath` | path or `null` | `null` | The one value `core.hooksPath` may be set to; `null` allows none. |
+| `privacy.allow` | literal strings, case-insensitive; a `*` or `/` is malformed | `["user"]` | Lifts a hit of any class of the privacy scan whose match equals an entry. Non-personal literals only; edited by the owner from the main session (ADR 0018, scan contract section 2). |
+| `privacy.identities` | list of `{ "name", "email" }`, each a non-empty string, the email with one `@` | `[]` | The identities allowed as author, committer or tagger; the first is the repository identity decant and adopt set. Empty turns the `identity` class off with a notice on stderr (ADR 0018). |
 | `usage.hold` / `usage.deny` | percent / percent or `null` | `50` / `null` | No new subagents at `hold`; stop at `deny`, a ceiling no override lifts. `null` means no deny line: HOLD is the only line, and the override can lift it up to and past a saturated meter. `hold` may not exceed a `deny` that is set. |
 | `usage.fiveHour` / `usage.sevenDay` | `{ "hold", "deny" }`, each percent or `null` | both `null` | Per-meter thresholds; `null` inherits `usage.hold` / `usage.deny`, so a meter has no deny line when its own and the shared `deny` are both `null`. Each meter is judged by its own pair and the worse verdict wins (ReGenesis, its ADR 0004). |
 | `usage.staleSeconds` | seconds | `7200` | Older usage data is stale. |
@@ -61,7 +76,8 @@ per model seen downstream (task branches, single branch, per-meter thresholds), 
 | `usage.overrideEnv` | variable name or `null` | `null` | An environment variable that, set to `1` when the session starts, lifts HOLD on both meters for that session (never the deny line): the launch-time form of a session grant (The HOLD override). |
 | `usage.pool` | `null` or `{ "command": argv, "timeoutSeconds": integer 1 to 60 }` | `null` | A command run once, without a shell, only when the gate is about to deny at HOLD; its stdout is read as the `cswap list --json` contract and the deny names another account with room, or says there is none or no reading (ADR 0011). `timeoutSeconds` defaults to `15`. Hatchery's own file sets `["cswap", "list", "--json"]`. |
 | `usage.holdAdvice` / `usage.denyAdvice` | text | the base's wording | The sentence after the threshold in each deny. |
-| `edit.capExempt` | path patterns | `[]` | Docs exempt from the 300-line cap. |
+| `edit.capExempt` | path patterns | `[]` | Paths exempt from the docs caps; `CLAUDE.md` by exact name also exempts the project file's 40 and the loaded 190 (ADR 0016), so a broad pattern never lifts them unmeant. |
+| `update.exclude` | path patterns | `[]` | Base-owned paths an update from Hatchery never brings: files the project removed or replaced for good. A departure from a hook or skill is a departure-table row, not an exclude (ADR 0016). |
 | `edit.anchorExempt` | path patterns | proposals, decisions, findings | Docs whose backtick-quoted paths are not checked: closed records that name paths as they were. |
 | `edit.formatters` | extension to argv | `{}` | Formatter per file extension, e.g. `".rs": ["rustfmt"]`. |
 

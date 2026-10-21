@@ -16,7 +16,8 @@ even if the answer is "unresolved, here is what was ruled out".
    `build / android`), optional `supersedes: <file>`.
 2. Sections: Question (what was being asked), What was tried (commands, versions, environment),
    Result (what is known now, with evidence), Next (what would resolve it; omit when resolved).
-3. Add a line to `docs/findings/README.md` with status and a one-line summary.
+3. If `docs/findings/README.md` carries an index table, add its row; otherwise the post-edit warning
+   is the check (the file must list without `?`: `node .claude/hooks/queue-list.js findings`).
 4. If status is open and the coordinator should act, add the path under the handoff's Open
    findings (where that lives per shape: `handoff` skill).
 
@@ -26,15 +27,19 @@ even if the answer is "unresolved, here is what was ruled out".
 2. Promote the durable part: a fact about a tool or environment goes to `docs/reference/<topic>.md`
    (create or extend; set `verified:` to today); a decision goes through the `adr` skill. Set
    `promoted_to: <path>` in the finding. The finding keeps the evidence; the reference keeps the fact.
-3. Update the index line and remove the entry from the handoff.
+3. If `docs/findings/README.md` carries an index table, update its row; otherwise the post-edit
+   warning is the check (the file must list without `?`). Remove the entry from the handoff.
 
 ## Supersede
 
 When a later finding replaces an earlier one, write the new file with `supersedes: <old file>`,
-set the old to `status: superseded`, and update both index lines.
+set the old to `status: superseded`, and, where the README carries an index table, update both rows. Remove the old finding from the handoff's Open findings, as Resolve step 3 does.
 
 ## Rules
 
 - Cap 150 lines; link to logs rather than pasting them. Large evidence goes under `tmp/`
   (gitignored) or in the report, not in the finding.
+- Paste rule (ADR 0018): command output goes in as classes, counts and `file:line`, scrubbed. A
+  value that would itself be a hit (a home path with a user segment, an email, a name, a host,
+  a session link) is never quoted, in a finding or in a report; write `~`, `<repo>` or a role.
 - Never edit a finding to say something different from what was observed; write a new one.

@@ -1,7 +1,11 @@
 # 0010. Update mode when both tests pass
 
 Date: 2026-10-15
-Status: accepted
+Status: accepted, superseded in part by 0016
+Superseded in part by 0016 (`0016-base-owned-and-project-owned-files.md`), 2026-10-17: there is
+one update mode, so the line decides `FROM` and nothing else; the out-of-scope item (the join
+merge as a base option) is moot. The line deciding over `merge-base`, and the join merge as a
+project's recorded departure, stand.
 
 Record: no proposal (a procedure, not a major choice); owner approved reopening what ADR 0009 put
 out of scope. Amends ADR 0009 where its Decision excludes the update procedure, and ADR 0004,

@@ -1,7 +1,7 @@
 ---
 date: 2026-10-16
 kind: bug
-related: [2026-10-14-git-guard-could-scope-commits-by-repository-location.md]
+related: [2026-10-14-git-guard-could-scope-commits-by-repository-location.md, 2026-10-21-carry-back-quoted-git-does-not-name-git.md]
 ---
 
 # The git guard refuses script lines where a bare git word sits beside a variable expansion
@@ -30,3 +30,5 @@ the expansion's value could be it.
 
 - Whether `$B git ...` (the expansion as the runner, git as its first argument) stays denied; the
   tokenizer cannot tell a wrapper from a script path.
+- 2026-10-21: the update to Hatchery `dc896c3` took the base's guard, which has no `namesGit`;
+  "the line names git" is a substring test over the raw text again (the related carry-back idea).

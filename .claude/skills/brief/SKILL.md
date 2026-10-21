@@ -11,7 +11,7 @@ the brief supplies what only this task knows.
 
 ## Steps
 
-1. Pick the agent by task (routing table in `CLAUDE.md`). If the task mixes kinds (design plus
+1. Pick the agent by task (routing table in `.claude/agreement/model-routing.md`). If the task mixes kinds (design plus
    code), split it into two briefs in sequence.
 2. Fill `template.md` in this directory. Every field is required; write "none" rather than
    leaving one out.
@@ -59,6 +59,11 @@ the brief supplies what only this task knows.
   someone else.
 - Paths in a brief use forward slashes (`C:/Users/...`) even on Windows: the Bash tool is Git Bash
   and strips the backslashes from an unquoted path. A command meant for another repository says
-  `git -C <path>`, never `cd` (`docs/reference/claude-code-on-windows.md`, Working directory and git).
+  `git -C <path>`, never `cd` (`docs/hatchery/reference/claude-code-on-windows.md`, Working directory and git).
+- Briefs are not committed, so they keep absolute paths; a tracked file an agent writes follows
+  `.claude/rules/docs.md`, "Personal data" (`~`, `<repo>`, roles, no emails or names), and the
+  brief says so when the task writes one.
+- No brief asks an agent to edit `privacy.allow`, the never list or the user allow list: they
+  are the owner's, edited from the main session after asking the user (ADR 0018).
 - Name only tools the agent has (`.claude/agents/<name>.md`): the runner has no Write tool, so a
   file it needs is written by the coordinator and the brief gives the path.

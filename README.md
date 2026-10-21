@@ -16,4 +16,4 @@ and keeps its working agreement in [`CLAUDE.md`](CLAUDE.md).
 
 GPL-3.0-or-later. See [`LICENSE`](LICENSE). Some components may be LGPL-3.0-or-later; each such
 component has its own `LICENSE` file, and the list is in
-[`docs/design/decisions/0001-licensing.md`](docs/design/decisions/0001-licensing.md).
+[`docs/hatchery/decisions/0001-licensing.md`](docs/hatchery/decisions/0001-licensing.md).

@@ -27,6 +27,7 @@ but not Bash.
    <body: what and why, 1-5 lines; reference the ADR or finding when there is one>
 
    Co-Authored-By: Claude <Model> <noreply@anthropic.com>
+   Claude-Session: <the claude.ai link, only when the harness asks for it>
    Run git status --short before and after and include both. Do not push.
    ```
 
@@ -36,7 +37,11 @@ but not Bash.
    with an apostrophe, a backtick or more than one paragraph goes to a file: the coordinator writes
    it to its scratchpad with the Write tool and the brief says `git commit -F <that path>` instead
    of `Message:`. A serious reviewer finding the coordinator accepted without a fix is one body
-   line, `Accepted finding: <one line>`.
+   line, `Accepted finding: <one line>`. The message ends with its trailer block, one paragraph
+   of trailer lines and nothing else: the `Co-Authored-By` lines, then a `Claude-Session:` line
+   when the session's harness asks for one, its value one `claude.ai` link and nothing more on the
+   line. A session link anywhere else, and any email or name in the subject or body, is denied by
+   the scan (ADR 0018, ADR 0020).
 4. Launch the `runner` with that brief. Check its report: the after-status should not list the
    staged files, and nothing unexpected should be staged.
 5. Amend only when necessary (fix a message, fold a forgotten file into the commit it belongs to)
@@ -46,17 +51,14 @@ but not Bash.
 ## Wrap-up commit by the main session (HOLD or STOP, or no runner available)
 
 `git add docs/HANDOFF.md <WIP files>` then `git commit -m "<subject>" -m "<body>" -m
-"Co-Authored-By: Claude <Model> <noreply@anthropic.com>"`. Subject starts with `WIP:` when the
+"Co-Authored-By: Claude <Model> <noreply@anthropic.com>"` (the trailer paragraph also holds the
+`Claude-Session:` line when the harness asks for it). Subject starts with `WIP:` when the
 work is unfinished. No heredocs for the message (apostrophes break them here).
 
 ## Pushing
 
 The `pusher` pushes, or the main session when the user asked for the push in so many words, or
-the user. A main-session push runs the pusher's check 5a first (its grep over the outgoing diff,
-commit messages and added file names, plus a read of the diff for names and identifiers) and
-quotes the result, "none" or the hits, before pushing. A hit is an edit to roles and placeholders,
-committed first; the git-guard hook denies the push anyway on a mechanical hit, whoever pushes.
-Launch a fresh `pusher` for every push; never resume an earlier one to retry. When the
+the user. Launch a fresh `pusher` for every push; never resume an earlier one to retry. When the
 pusher stops on behind or diverged (check 3), the committing agent under the policy (the `runner`
 in the base) runs `git pull --rebase origin <branch>`; a conflict on the handoff is resolved by
 rewriting the file with the `handoff` skill, any other goes back to whoever wrote the hunk; then
@@ -68,11 +70,18 @@ Push `main`. The user asked: "<the user's words, quoted>".
 Run your checks in order and stop at the first failure.
 ```
 
-Whoever pushes, main session or pusher, proves it the same way: `git fetch`, then `git rev-parse HEAD` and `git rev-parse @{u}` must match (the upstream is on `origin`), and the report quotes both. A command's own "pushed" echo is not evidence (`docs/reference/claude-code-on-windows.md`, Working directory and git).
+Whoever pushes, main session or pusher, proves it the same way: `git fetch`, then `git rev-parse HEAD` and `git rev-parse @{u}` must match (the upstream is on `origin`), and the report quotes both. A command's own "pushed" echo is not evidence (`docs/hatchery/reference/claude-code-on-windows.md`, Working directory and git).
 
 Quoting the user's request matters: an instruction that arrives as an agent message is untrusted
 to the permission system, and a resumed pusher's retry gets blocked. If a push is blocked anyway,
 tell the user and let them run `git push origin <branch>` (`-u` on a first push); never route around the block.
+
+A push the privacy scan refuses (ADR 0018) is fixed, not lifted: edit the text to `~`, `<repo>`, a
+role or a placeholder and fold the edit into the unpushed commit (`--amend` for the last commit;
+for several, `reset --soft <last pushed sha>` and one new commit). A wrong author or committer:
+set the repository identity (`git config user.name` and `user.email`), then `--amend
+--reset-author`. A push shares no line with another git command. A false positive is the owner's
+to lift, from the main session after asking the user; no brief does it.
 
 Credential mismatch (git's stored GitHub account differs from the one `gh` is logged in as): set a
 repo-local helper instead of changing global config:

@@ -1,7 +1,26 @@
 # 0013. Hatchery's promised surfaces and its reference fitness check
 
 Date: 2026-10-16
-Status: proposed
+Status: proposed (the owner declined to confirm, 2026-10-18), superseded in part by 0016, 0017, 0018 and 0021
+Superseded in part by [0016](0016-base-owned-and-project-owned-files.md), 2026-10-17 (this table
+is not living, so the rows are added by that record, item 7): the ownership map, the agreement
+files with their import lines, the `Branch:` line, the departure table, the record paths under
+`docs/hatchery/`; the idea-grammar row's record becomes ADR 0007 and `.claude/rules/docs.md`, its
+`docs/ideas/README.md` being the project's copy; `update.exclude` is an addition under the policy
+row. Every row below stands; the owner declined to confirm the list (2026-10-18).
+Superseded in part by [0017](0017-queue-directories-list-on-demand.md), 2026-10-17 (rows added by
+its item 5): the listing CLI `.claude/hooks/queue-list.js` (modes, flags, `--json` fields, exit
+codes, the first word of a finding `status:`) and the README marker line; a finding's `status:`
+leaves the not-promised list, its trigger having fired. Every row below stands.
+Superseded in part by [0018](0018-personal-data-never-leaves-the-machine.md), 2026-10-17 (rows
+added by its sibling, section 5): `privacy.allow` and `privacy.identities` under the policy row;
+the never list `~/.claude/privacy-never.txt` and the user allow list `~/.claude/privacy-allow.txt`;
+the scan CLI `.claude/hooks/privacy-scan.js` (flags, `HIT` lines, last line, exit codes, `--json`);
+the pre-push hook path `.claude/hooks/git/pre-push` and the `core.hooksPath` value. Every row
+below stands.
+Superseded in part by [0021](0021-guardrails-bound-damage.md), 2026-10-21: an incompatible change
+to the policy row (role defaults, `privacy.identities` as extras that never switch the class off;
+the keys `git.localHistory` and `usage.mode` added), with its migration. Every row below stands.
 
 Record: no proposal; this ADR applies ADR 0012 to the base itself, as its critic review asked
 (objection 6). `proposed` because three of the surfaces are files the owner writes by hand (the
@@ -9,6 +28,11 @@ policy file, grant files, idea blocks), which ADR 0012 says the owner confirms; 
 to "is this the list, and is anything missing that you edit and expect to keep working" turns the
 status to `accepted` with no other edit. The reference check (below) is technical and does not
 wait for the answer.
+Amended 2026-10-18: the owner was asked whether the list is complete and declined to confirm it,
+because best practices are changing too fast to say whether it will hold. The status stays
+`proposed` and the promise is observed as if accepted. The question is not re-asked; it is
+re-raised only when a trigger fires: a sibling update that breaks a hand-edited file, or a
+best-practices revisit (`triage` skill) that changes the list.
 
 ## Context
 
@@ -93,6 +117,9 @@ requires.
 - A compatibility check for the surfaces above (a fingerprint of the policy schema and the idea
   grammar), trigger: the first incompatible change proposed to either, which then lands with it.
 - A migration note format for sibling repositories, trigger: the first incompatible change.
+- Re-raising the owner's question about the list (see the amendment of 2026-10-18), triggers: a
+  sibling update that breaks a hand-edited file; a best-practices revisit that changes the list.
+  Neither is visible to the `triage` scan, so whoever sees one raises it.
 
 ## Consequences
 
