@@ -5,7 +5,7 @@ Updated: 2026-10-21, after the P12 commit, by main session (rooted in the repo, 
 
 ## Now
 
-- P12 is committed on `main` (one commit, review fixes amended in), unpushed. Nothing has
+- P12 is pushed on `main` (one commit, review fixes amended in, f7bcd7f). Nothing has
   connected to Discord: `docs/operator/2026-10-21-discord-application-bot-and-test-server.md` is
   the owner's step before the first live run, which is P12's Proof second half.
 - P12 left unbuilt: the relay (`not-built`), the post-restart notice in a venue (P11 remainder item 5).
@@ -15,12 +15,11 @@ Updated: 2026-10-21, after the P12 commit, by main session (rooted in the repo, 
 
 1. Owner: the Discord operator entry, then the first live session (`serve --discord live` on the
    scratch-shaped root) while an agent reads `session tail` and `audit`; findings from it.
-2. Pusher: push `main` when the owner asks.
-3. Coder: the P11 remainder `Plan:` (items 1, 2, 6, 8), then `/usage`, the relay, the post-restart notice.
-4. Carry-backs to Hatchery (`carry-back` skill), the `Plan:` ideas of 2026-10-21.
-5. Tester: resolve the net-diff finding; `session end` runs the closing turn from the `closing`
+2. Coder: the P11 remainder `Plan:` (items 1, 2, 6, 8), then `/usage`, the relay, the post-restart notice.
+3. Carry-backs to Hatchery (`carry-back` skill), the `Plan:` ideas of 2026-10-21.
+4. Tester: resolve the net-diff finding; `session end` runs the closing turn from the `closing`
    fixture (the P10 remainder idea's 2026-10-17 line); then its other `Plan:` items.
-6. Architect, then coder: the earlier privacy layers against the base's ADR 0018 pieces. Triage
+5. Architect, then coder: the earlier privacy layers against the base's ADR 0018 pieces. Triage
    the ideas of 2026-10-17 and the Questions of 2026-10-21. Architect: the surfaces ADR. Owner:
    the droplet and PC account entries; P14, `spike/`.
 
