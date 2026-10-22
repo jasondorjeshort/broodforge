@@ -38,7 +38,13 @@ func TestMask(t *testing.T) {
 		"key:sk-ant-abc":                   true,
 		"sk" + zwsp + "-ant-api03-abc":     true,
 		"s" + zwsp + "k-ant-api03-abc":     true,
+		"_sk-ant-api03-abcdefgh_":          true, // Discord italics
+		"__sk-ant-api03-abcdefgh__":        true, // underline
+		"keysk-ant-api03-abcdefgh":         true, // glued to a word
+		"sk-a͏nt-api03-abcdefgh":           true, // U+034F, a nonspacing mark
+		"kéysk-ant-api03-abcdefgh":        true,
 		"the task-ant-colony test fails":   false,
+		"multitask-ant-ok":                 false,
 		"sk-other and ask-ant-eater":       false,
 		"nothing here at all, not one key": false,
 	} {

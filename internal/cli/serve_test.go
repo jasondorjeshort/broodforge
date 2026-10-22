@@ -56,7 +56,8 @@ func TestProofServeSession(t *testing.T) {
 		return clitest.Run(t, env, append([]string{"--root", root}, args...)...)
 	}
 
-	want(t, run("serve", "--discord", "live"), 1, "", "error: start-discord: the live gateway is not built yet (P12); run serve --discord dry-run\n")
+	want(t, run("serve", "--discord", "live"), 1, "",
+		"error: start-discord: live needs discord.applicationId, discord.guildId, discord.botCredentialId in config/instance.json\n")
 	stdout, exit := startServe(t, env, root)
 	if r := run("status", "--wait", "10", "--expect", "ok"); r.Code != 0 || !strings.HasPrefix(r.Stdout, "config: ok\ndiscord: dry-run connected\nsessions: 0 open,") {
 		t.Fatalf("status: exit %d %q %q", r.Code, r.Stdout, r.Stderr)

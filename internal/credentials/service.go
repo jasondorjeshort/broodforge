@@ -22,13 +22,17 @@ import (
 const (
 	KindAPIKey       = "api-key"
 	KindSubscription = "subscription"
+	// KindBotToken is the Discord bot token, the instance's own (user_id null; ADR 0022: the
+	// store holds the bot token), read by the gateway and `discord check` only.
+	KindBotToken = "bot-token"
 
 	StatusUsable     = "usable"
 	StatusNeedsLogin = "needs-login"
 	StatusRemoved    = "removed"
 
-	// ProviderAnthropic is the one provider of the first version.
+	// ProviderAnthropic is the engine credentials' provider, ProviderDiscord the bot token's.
 	ProviderAnthropic = "anthropic"
+	ProviderDiscord   = "discord"
 )
 
 // MaxValue bounds an API key read from stdin.
@@ -134,10 +138,15 @@ func newID() (string, error) {
 	return "cred-" + strconv.FormatUint(binary.BigEndian.Uint64(b[:]), 36), nil
 }
 
-// Add records a credential for a registered user. An API key's value goes into the store
-// file first, so a row never names a value that is not there; a subscription gets its config
-// directory from the harness and starts needs-login.
+// Add records a credential for a registered user, audited as added on the host. An API key's
+// value goes into the store file first, so a row never names a value that is not there; a
+// subscription gets its config directory from the harness and starts needs-login.
 func (s *Service) Add(kind, user, label string, value []byte) (Record, error) {
+	return s.AddBy(actorHost, kind, user, label, value)
+}
+
+// AddBy is Add with the audit actor named: the Discord user who ran /credential add.
+func (s *Service) AddBy(actor, kind, user, label string, value []byte) (Record, error) {
 	switch kind {
 	case KindAPIKey:
 		if len(value) == 0 || len(value) > MaxValue {
@@ -147,6 +156,8 @@ func (s *Service) Add(kind, user, label string, value []byte) (Record, error) {
 		if len(value) != 0 {
 			return Record{}, &Error{CodeBadValue, "a subscription credential has no value; its user logs in"}
 		}
+	case KindBotToken:
+		return Record{}, &Error{CodeBadKind, "a bot-token credential belongs to the instance: add it with --instance, not --user"}
 	default:
 		return Record{}, &Error{CodeBadKind, "kind is " + strconv.Quote(kind) + ", want api-key or subscription"}
 	}
@@ -163,14 +174,42 @@ func (s *Service) Add(kind, user, label string, value []byte) (Record, error) {
 	if !registered {
 		return Record{}, &Error{CodeUnknownUser, user + " is not registered"}
 	}
+	return s.add(actor, kind, user, label, value)
+}
+
+// AddInstance records one of the instance's own credentials, with user_id null: the Discord
+// bot token, whose value is read from stdin as an API key's is. bot-token is the one instance
+// kind so far.
+func (s *Service) AddInstance(kind, label string, value []byte) (Record, error) {
+	if kind != KindBotToken {
+		return Record{}, &Error{CodeBadKind, "kind is " + strconv.Quote(kind) + ", want bot-token for an instance credential"}
+	}
+	if len(value) == 0 || len(value) > MaxValue {
+		return Record{}, &Error{CodeBadValue, "a bot-token credential reads its value from stdin, 1 to 65536 bytes"}
+	}
+	if label == "" {
+		return Record{}, &Error{CodeBadValue, "a credential needs a label"}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.add(actorHost, kind, "", label, value)
+}
+
+// add writes the value, the row and the audit event; the caller holds s.mu and has checked the
+// kind, the value and the user ("" for the instance's own).
+func (s *Service) add(actor, kind, user, label string, value []byte) (Record, error) {
 	id, err := newID() // 48 random bits; a collision fails the insert below
 	if err != nil {
 		return Record{}, err
 	}
-	r := Record{ID: id, Kind: kind, Provider: ProviderAnthropic, User: user, Label: label,
+	provider := ProviderAnthropic
+	if kind == KindBotToken {
+		provider = ProviderDiscord
+	}
+	r := Record{ID: id, Kind: kind, Provider: provider, User: user, Label: label,
 		AddedAt: store.FormatTime(s.now())}
 	switch kind {
-	case KindAPIKey:
+	case KindAPIKey, KindBotToken:
 		r.Status, r.StoreRef = StatusUsable, id
 		if err := s.vault.Put(id, value); err != nil {
 			return Record{}, err
@@ -182,22 +221,32 @@ func (s *Service) Add(kind, user, label string, value []byte) (Record, error) {
 		}
 		r.Status, r.StoreRef = StatusNeedsLogin, dir
 	}
-	details, err := json.Marshal(map[string]string{"id": id, "kind": kind, "user": user, "label": label})
+	// The user is null for the instance's own credential, as `credential show` gives it.
+	var userRef *string
+	if user != "" {
+		userRef = &user
+	}
+	details, err := json.Marshal(struct {
+		ID    string  `json:"id"`
+		Kind  string  `json:"kind"`
+		Label string  `json:"label"`
+		User  *string `json:"user"`
+	}{id, kind, label, userRef})
 	if err != nil {
 		return Record{}, err
 	}
 	err = s.st.Write(func(tx *store.Tx) error {
 		if _, err := tx.Insert(`INSERT INTO credential (id, kind, provider, user_id, label, status, added_at, store_ref)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, store.Text(r.ID), store.Text(r.Kind), store.Text(r.Provider),
-			store.Text(r.User), store.Text(r.Label), store.Text(r.Status), store.Text(r.AddedAt), store.Text(r.StoreRef)); err != nil {
+			store.OptText(r.User), store.Text(r.Label), store.Text(r.Status), store.Text(r.AddedAt), store.Text(r.StoreRef)); err != nil {
 			return err
 		}
-		_, err := s.aud.Append(tx, audit.Event{Kind: audit.KindCredentialAdded, Actor: actorHost, Registration: user, Details: details})
+		_, err := s.aud.Append(tx, audit.Event{Kind: audit.KindCredentialAdded, Actor: actor, Registration: user, Details: details})
 		return err
 	})
 	if err != nil {
 		switch kind {
-		case KindAPIKey:
+		case KindAPIKey, KindBotToken:
 			_ = s.vault.Delete(id)
 		case KindSubscription:
 			_ = s.harness.Remove(r.StoreRef)
@@ -209,7 +258,10 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, store.Text(r.ID), store.Text(r.Kind), store.Te
 
 // Remove marks a credential removed and deletes its value; the next session start naming it
 // is refused (R-41).
-func (s *Service) Remove(id string) (Record, error) {
+func (s *Service) Remove(id string) (Record, error) { return s.RemoveBy(actorHost, id) }
+
+// RemoveBy is Remove with the audit actor named: the Discord user who ran /credential remove.
+func (s *Service) RemoveBy(actor, id string) (Record, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r, err := Show(s.st, id)
@@ -227,14 +279,14 @@ func (s *Service) Remove(id string) (Record, error) {
 		if _, err := tx.Exec("UPDATE credential SET status = ? WHERE id = ?", store.Text(StatusRemoved), store.Text(id)); err != nil {
 			return err
 		}
-		_, err := s.aud.Append(tx, audit.Event{Kind: audit.KindCredentialRemoved, Actor: actorHost, Registration: r.User, Details: details})
+		_, err := s.aud.Append(tx, audit.Event{Kind: audit.KindCredentialRemoved, Actor: actor, Registration: r.User, Details: details})
 		return err
 	})
 	if err != nil {
 		return r, err
 	}
 	r.Status = StatusRemoved
-	if r.Kind == KindAPIKey {
+	if r.Kind == KindAPIKey || r.Kind == KindBotToken {
 		if err := s.vault.Delete(id); err != nil {
 			return r, err
 		}
@@ -280,7 +332,11 @@ func (s *Service) subscription(id string) (Record, error) {
 	if err != nil {
 		return r, err
 	}
-	if r.Kind != KindSubscription {
+	switch r.Kind {
+	case KindSubscription:
+	case KindBotToken:
+		return r, &Error{CodeBadKind, id + " is the instance's bot-token credential; it has no login"}
+	default:
 		return r, &Error{CodeNotSubscription, id + " is an " + r.Kind + " credential"}
 	}
 	if r.Status == StatusRemoved {
@@ -302,6 +358,27 @@ func (s *Service) Secret(id string) ([]byte, error) {
 		return nil, &Error{CodeBadKind, id + " is a " + r.Kind + " credential and has no value"}
 	}
 	return s.vault.Get(r.StoreRef)
+}
+
+// BotToken is the Discord bot token's value, for the gateway and `discord check` only: the
+// record must be a bot-token credential that is not removed. It reads the store file with the
+// key, so the bot and a standalone command share it; q is the bot's store or a read-only one.
+func BotToken(q store.Querier, root, keyFile, id string) ([]byte, error) {
+	r, err := Show(q, id)
+	if err != nil {
+		return nil, err
+	}
+	if r.Status == StatusRemoved {
+		return nil, &Error{CodeRemoved, id + " is removed"}
+	}
+	if r.Kind != KindBotToken {
+		return nil, &Error{CodeBadKind, id + " is a " + r.Kind + " credential, want bot-token"}
+	}
+	v, err := OpenVault(StorePath(root), keyFile)
+	if err != nil {
+		return nil, err
+	}
+	return v.Get(r.StoreRef)
 }
 
 // List and Show read the bot's own store.

@@ -13,6 +13,7 @@ import (
 	"github.com/jasondorjeshort/broodforge/internal/config"
 	"github.com/jasondorjeshort/broodforge/internal/control"
 	"github.com/jasondorjeshort/broodforge/internal/credentials"
+	"github.com/jasondorjeshort/broodforge/internal/discord"
 )
 
 // The credential commands (05-debug-interface.md, Credentials). init is (file); list and show
@@ -31,13 +32,16 @@ var credentialInit = Command{
 }
 
 // credentialAdd is `broodforge credential add --kind api-key|subscription --user <user id>
-// --label <text>`: an API key's value is read from stdin, never an argument; prints the new id.
+// --label <text>`, or `--instance --kind bot-token --label <text>` for the instance's own
+// (user_id null): an API key's or a bot token's value is read from stdin, never an argument;
+// prints the new id.
 var credentialAdd = Command{
 	Name:  "credential add",
 	Class: ClassWrite,
 	Flags: []Flag{
-		{Name: "kind", Kind: FlagString, Value: "api-key|subscription", Usage: "the credential kind"},
+		{Name: "kind", Kind: FlagString, Value: "api-key|subscription|bot-token", Usage: "the credential kind"},
 		{Name: "user", Kind: FlagString, Value: "<user id>", Usage: "the registered user it belongs to"},
+		{Name: "instance", Kind: FlagBool, Usage: "the instance's own credential (the bot token), no user; exclusive with --user"},
 		{Name: "label", Kind: FlagString, Value: "<text>", Usage: "a label for lists"},
 	},
 	Columns: []string{"id"},
@@ -77,12 +81,14 @@ var credentialRemove = Command{
 
 // credentialLogin is `broodforge credential login <id> [--done]`: prints the command the user
 // runs to log the engine into the subscription's config directory; --done records it usable
-// and prints the list line. --relay is P12's.
+// and prints the list line. --relay, ADR 0022's direct-message relay, is not built: it is
+// refused not-built whatever relay.loginByDirectMessage says.
 var credentialLogin = Command{
 	Name:  "credential login",
 	Class: ClassWrite,
 	Flags: []Flag{
 		{Name: "done", Kind: FlagBool, Usage: "the user has logged in: record the credential usable"},
+		{Name: "relay", Kind: FlagBool, Usage: "run the login over Discord direct messages (not built)"},
 		{Name: "id", Kind: FlagString, Value: "<id>"},
 	},
 	Columns: recordColumns,
@@ -136,7 +142,11 @@ type loginResult = string
 // readCredentialValue reads an API key from stdin for the request (never a flag); one trailing
 // newline is dropped, so `echo` and `printf` give the same value.
 func readCredentialValue(env *Env) (map[string]string, error) {
-	if env.String("kind") != credentials.KindAPIKey {
+	if env.Bool("instance") && env.String("user") != "" {
+		return nil, &usageError{"credential add: --instance and --user are exclusive"}
+	}
+	kind := env.String("kind")
+	if kind != credentials.KindAPIKey && kind != credentials.KindBotToken {
 		return nil, nil
 	}
 	b, err := io.ReadAll(io.LimitReader(env.Stdin, credentials.MaxValue+1))
@@ -145,7 +155,7 @@ func readCredentialValue(env *Env) (map[string]string, error) {
 	}
 	b = bytes.TrimSuffix(bytes.TrimSuffix(b, []byte("\n")), []byte("\r"))
 	if len(b) == 0 || len(b) > credentials.MaxValue {
-		return nil, &usageError{"credential add: --kind api-key reads its value from stdin, 1 to 65536 bytes"}
+		return nil, &usageError{"credential add: --kind " + kind + " reads its value from stdin, 1 to 65536 bytes"}
 	}
 	return map[string]string{"value": string(b)}, nil
 }
@@ -221,9 +231,19 @@ func credentialError(err error) error {
 func CredentialHandlers(svc *credentials.Service) func(*control.Registry) {
 	return func(reg *control.Registry) {
 		reg.Handle("credential.add", func(_ context.Context, call *control.Call) (json.RawMessage, error) {
-			var a struct{ Kind, User, Label, Value string }
+			var a struct {
+				Kind, User, Label, Value string
+				Instance                 bool
+			}
 			if err := json.Unmarshal(call.Args, &a); err != nil {
 				return nil, control.NewError(control.CodeBadArgs, err.Error())
+			}
+			if a.Instance {
+				if a.User != "" {
+					return nil, control.NewError(control.CodeBadArgs, "--instance and --user are exclusive")
+				}
+				rec, err := svc.AddInstance(a.Kind, a.Label, []byte(a.Value))
+				return recordResult(rec, err)
 			}
 			rec, err := svc.Add(a.Kind, a.User, a.Label, []byte(a.Value))
 			return recordResult(rec, err)
@@ -246,11 +266,14 @@ func CredentialHandlers(svc *credentials.Service) func(*control.Registry) {
 		byID := func(f func(id string, done bool) (json.RawMessage, error)) control.Handler {
 			return func(_ context.Context, call *control.Call) (json.RawMessage, error) {
 				var a struct {
-					ID   string
-					Done bool
+					ID          string
+					Done, Relay bool
 				}
 				if err := json.Unmarshal(call.Args, &a); err != nil {
 					return nil, control.NewError(control.CodeBadArgs, err.Error())
+				}
+				if a.Relay {
+					return nil, control.NewError(discord.CodeNotBuilt, "credential login --relay: the direct-message login relay (ADR 0022) is not built yet; run credential login "+a.ID+" and finish the login on the host")
 				}
 				return f(a.ID, a.Done)
 			}

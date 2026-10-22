@@ -276,3 +276,56 @@ func TestServiceRefusals(t *testing.T) {
 		t.Errorf("Show: %v", err)
 	}
 }
+
+// TestServiceBotToken: the bot token is the instance's own credential, user_id null, read back
+// by BotToken only; it has no login, and Add with a user refuses it.
+func TestServiceBotToken(t *testing.T) {
+	svc, st, root := newService(t)
+	if _, err := svc.Add(KindBotToken, "1001", "bot", []byte("x")); code(err) != CodeBadKind {
+		t.Errorf("a user's bot token: %v", err)
+	}
+	if _, err := svc.AddInstance(KindAPIKey, "k", []byte("x")); code(err) != CodeBadKind {
+		t.Errorf("an instance api key: %v", err)
+	}
+	if _, err := svc.AddInstance(KindBotToken, "bot", nil); code(err) != CodeBadValue {
+		t.Errorf("no value: %v", err)
+	}
+	r, err := svc.AddInstance(KindBotToken, "bot", []byte("placeholder"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.User != "" || r.Provider != ProviderDiscord || r.Status != StatusUsable || r.StoreRef != r.ID {
+		t.Errorf("record %+v", r)
+	}
+	nullUser := false
+	if err := st.Query("SELECT user_id IS NULL FROM credential WHERE id = ?", []store.Value{store.Text(r.ID)},
+		func(row *store.Row) error { nullUser = row.Int(0) == 1; return nil }); err != nil || !nullUser {
+		t.Errorf("user_id is not null: %v", err)
+	}
+	events, err := audit.Query(st, audit.Filter{Kinds: []audit.Kind{audit.KindCredentialAdded}})
+	if err != nil || len(events) != 1 || !bytes.Contains(events[0].Details, []byte(`"user":null`)) || bytes.Contains(events[0].Details, []byte("placeholder")) {
+		t.Errorf("credential-added: %v %v", events, err)
+	}
+	if v, err := BotToken(st, root, filepath.Join(root, "test.key"), r.ID); err != nil || string(v) != "placeholder" {
+		t.Errorf("BotToken: %q %v", v, err)
+	}
+	if _, err := svc.LoginCommand(r.ID); code(err) != CodeBadKind {
+		t.Errorf("login of a bot token: %v", err)
+	}
+	if _, err := svc.Secret(r.ID); code(err) != CodeBadKind {
+		t.Errorf("the engine's secret: %v", err)
+	}
+	api, err := svc.Add(KindAPIKey, "1001", "k", []byte("scratch"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := BotToken(st, root, filepath.Join(root, "test.key"), api.ID); code(err) != CodeBadKind {
+		t.Errorf("BotToken of an api key: %v", err)
+	}
+	if _, err := svc.Remove(r.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := BotToken(st, root, filepath.Join(root, "test.key"), r.ID); code(err) != CodeRemoved {
+		t.Errorf("BotToken after remove: %v", err)
+	}
+}

@@ -1,5 +1,5 @@
 ---
-verified: 2026-10-16
+verified: 2026-10-21
 source: observed (go.mod, go mod graph, and the LICENSE file of each module in the module cache)
 ---
 
@@ -19,17 +19,17 @@ through `GOPROXY` and the checksum database).
 | Module | Version | Licence | Owner |
 |---|---|---|---|
 | `github.com/disgoorg/disgo` | v0.19.6 | Apache-2.0 | `discord` |
+| `github.com/disgoorg/snowflake/v2` | v2.0.3 | Apache-2.0 | `discord` (disgo's id type) |
 | `zombiezen.com/go/sqlite` | v1.4.2 | ISC | `store` |
 | `golang.org/x/sys` | v0.49.0 | BSD-3-Clause | `spawn`, `control` |
 
-`control` imports `golang.org/x/sys/windows` (Windows build only); `store` imports
-`zombiezen.com/go/sqlite` and its `sqlitex`, and no other package does; `discord` imports
-`github.com/disgoorg/disgo/discord` (the message, component and button types the outbox's
-payloads are built with), and no other package does. Until its owner imports what it needs,
-each module is held by a blank import in `internal/deps/deps.go`: disgo's root package stays
-there until P12 imports the gateway, because only the root pulls in the gateway's requirements
-(gorilla/websocket and the rest) and `go mod tidy` would drop them otherwise; x/sys stays pinned
-there through `golang.org/x/sys/cpu` because `x/sys/windows` does not build on Linux.
+`control` and `spawn` import `golang.org/x/sys/windows` (Windows build only; `go mod tidy`
+counts every platform, so the module stays pinned); `store` imports `zombiezen.com/go/sqlite`
+and its `sqlitex`, and no other package does; `discord` imports disgo's `discord` (the message,
+component, interaction and permission types), `gateway` and `rest` packages and the snowflake
+id type, and no other package does. It does not import disgo's `bot` package or its root,
+which pull in `voice`: so godave and `golang.org/x/crypto` are not in `go.mod`. No module is
+held by a blank import any more; every one is imported by the package that owns it.
 
 zombiezen facts (finding `docs/findings/2026-10-16-sqlite-facts-seen-while-building-the-store.md`):
 
@@ -61,13 +61,11 @@ zombiezen facts (finding `docs/findings/2026-10-16-sqlite-facts-seen-while-build
 | Module | Version | Licence | Required by |
 |---|---|---|---|
 | `github.com/gorilla/websocket` | v1.5.3 | BSD-2-Clause | disgo (gateway) |
-| `github.com/disgoorg/godave` | v0.1.0 | Apache-2.0 | disgo (voice) |
 | `github.com/disgoorg/json/v2` | v2.0.0 | Apache-2.0 | disgo |
 | `github.com/disgoorg/omit` | v1.0.0 | Apache-2.0 | disgo |
-| `github.com/disgoorg/snowflake/v2` | v2.0.3 | Apache-2.0 | disgo |
 | `github.com/klauspost/compress` | v1.18.4 | BSD-3-Clause; `gzhttp/` Apache-2.0, two `s2/cmd` dirs MIT | disgo |
 | `github.com/sasha-s/go-csync` | v0.0.0-20240107134140-fcbab37b09ad | Apache-2.0 | disgo |
-| `golang.org/x/crypto` | v0.48.0 | BSD-3-Clause | disgo |
+| `golang.org/x/text` | v0.34.0 | BSD-3-Clause | zombiezen sqlite's tests (kept at the version x/crypto selected before it left) |
 | `modernc.org/sqlite` | v1.37.1 | BSD-3-Clause | zombiezen sqlite |
 | `modernc.org/libc` | v1.65.7 | BSD-3-Clause | modernc sqlite |
 | `modernc.org/mathutil` | v1.7.1 | BSD-3-Clause | modernc |
@@ -96,6 +94,6 @@ zombiezen facts (finding `docs/findings/2026-10-16-sqlite-facts-seen-while-build
 
 - `go list -m all` also lists modules that only the dependencies' own tests need (testify,
   go-cmp, pprof and others); they are in `go.sum` but not in `go.mod` and not in the binary.
-- disgo's root package pulls in its voice package and with it godave and x/crypto; `discord`
-  importing only the subpackages it needs (`bot`, `gateway`, `rest`, `discord`, `events`) links less.
+- disgo's root package and its `bot` package pull in its voice package and with it godave and
+  x/crypto; `discord` uses `gateway` and `rest` directly, without `bot`, and links neither.
 - In Git Bash, `read` without `-r` eats the backslashes of a Windows module-cache path.

@@ -80,6 +80,7 @@ type bot struct {
 	backend    spawn.Backend
 	svc        *session.Service
 	adapter    *discord.Adapter
+	gateway    *discord.Gateway // nil on a dry run
 	wt         *WorktreeService
 	srv        *control.Server
 	addr       string
@@ -174,6 +175,11 @@ func runServe(_ context.Context, env *Env) error {
 }
 
 func (b *bot) close() {
+	if b.gateway != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		b.gateway.Close(ctx)
+		cancel()
+	}
 	if b.adapter != nil {
 		b.adapter.Close()
 	}
@@ -211,7 +217,17 @@ func startBot(env *Env) (*bot, error) {
 	switch b.discord {
 	case config.DiscordDryRun:
 	case config.DiscordLive:
-		return nil, control.NewError(stepDiscord, "the live gateway is not built yet (P12); run serve --discord dry-run")
+		// config check requires these only when the file says live; --discord live needs them too.
+		var missing []string
+		for _, k := range []struct{ key, v string }{{"discord.applicationId", c.Instance.Discord.ApplicationID},
+			{"discord.guildId", c.Instance.Discord.GuildID}, {"discord.botCredentialId", c.Instance.Discord.BotCredentialID}} {
+			if k.v == "" {
+				missing = append(missing, k.key)
+			}
+		}
+		if len(missing) > 0 {
+			return nil, control.NewError(stepDiscord, "live needs "+strings.Join(missing, ", ")+" in config/instance.json")
+		}
 	default:
 		return nil, control.NewError(stepDiscord, "discord mode "+quoteArg(b.discord)+": want live or dry-run")
 	}
@@ -310,7 +326,14 @@ func startBot(env *Env) (*bot, error) {
 		Secret: b.creds.Secret}
 	// The Discord adapter without the gateway (P11): the service tells it of each new session.
 	b.adapter = discord.New(discord.Config{Config: b.config, Channel: b.channel, DryRun: b.discord == config.DiscordDryRun,
-		Groups: func() map[string][]string { return b.config().Instance.RoleGroups }})
+		Groups:      func() map[string][]string { return b.config().Instance.RoleGroups },
+		Credentials: discordCredentials{b.creds}})
+	if b.discord == config.DiscordLive {
+		// Step 9's first half: the token and the ids, before anything is served; Open connects.
+		if b.gateway, err = b.newGateway(env, keyPath); err != nil {
+			return fail(stepDiscord, err)
+		}
+	}
 	b.svc = session.New(session.Config{
 		Root: root, Instance: c.Instance.InstanceName, DryRun: b.discord == config.DiscordDryRun, Started: b.adapter.SessionStarted,
 		Groups:  func() map[string][]string { return b.config().Instance.RoleGroups },
@@ -330,7 +353,57 @@ func startBot(env *Env) (*bot, error) {
 		return fail(stepControl, err)
 	}
 	b.adapter.Run()
+
+	// (9) The Discord gateway, and (10) the start-up report to the notice channel.
+	if b.gateway != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		err := b.gateway.Open(ctx)
+		cancel()
+		if err != nil {
+			b.close()
+			return nil, stepError(stepDiscord, err)
+		}
+	}
 	return b, nil
+}
+
+// newGateway builds the live gateway: the bot token from the credential store, the ids from
+// config/instance.json, the start-up report (04's operator flow) for the notice channel.
+func (b *bot) newGateway(env *Env, keyPath string) (*discord.Gateway, error) {
+	d := b.cfg.Instance.Discord
+	token, err := credentials.BotToken(b.st, b.root, keyPath, d.BotCredentialID)
+	if err != nil {
+		return nil, credentialError(err)
+	}
+	report, err := startupReport(b.st, b.cfg)
+	if err != nil {
+		return nil, err
+	}
+	return discord.NewGateway(b.adapter, discord.GatewayConfig{Token: string(token), ApplicationID: d.ApplicationID,
+		GuildID: d.GuildID, NoticeChannel: d.NoticeChannelID, Instance: b.cfg.Instance.InstanceName, Report: report, Log: env.Stderr})
+}
+
+// startupReport is 04's operator flow for the notice channel: `Broodforge <instance> started:
+// engine <version>, <n> projects. Interrupted sessions: s0003 (#broodforge).`; not 04: the
+// engine is `fake` when none is configured, and the second sentence is left out when none was.
+func startupReport(st *store.Store, c *config.Config) (string, error) {
+	version := c.Instance.Engine.Version
+	if version == "" {
+		version = config.HarnessFake
+	}
+	text := fmt.Sprintf("Broodforge %s started: engine %s, %d projects.", c.Instance.InstanceName, version, len(c.Projects))
+	rows, err := session.List(st, session.StateInterrupted)
+	if err != nil {
+		return "", err
+	}
+	var parts []string
+	for _, r := range rows {
+		parts = append(parts, r.ID+" (<#"+r.Channel+">)")
+	}
+	if len(parts) > 0 {
+		text += " Interrupted sessions: " + strings.Join(parts, ", ") + "."
+	}
+	return text, nil
 }
 
 func quoteArg(s string) string { return `"` + s + `"` }

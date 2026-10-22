@@ -14,8 +14,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/jasondorjeshort/broodforge/internal/config"
 	"github.com/jasondorjeshort/broodforge/internal/control"
+	"github.com/jasondorjeshort/broodforge/internal/credentials"
 	"github.com/jasondorjeshort/broodforge/internal/discord"
 	"github.com/jasondorjeshort/broodforge/internal/session"
 )
@@ -78,8 +81,26 @@ var sessionTranscript = Command{
 	},
 }
 
+// discordCheck is `broodforge discord check [--guild <id>] [--json]` (file): the bot token from
+// the credential store against the guild, once, over REST; one line per configured channel,
+// the notice channel and each venue category, then the message-content intent. Any missing is
+// exit 1; the token is never printed. No token, a malformed one or no connection is
+// start-discord, the refusal `serve --discord live` gives.
+var discordCheck = Command{
+	Name:  "discord check",
+	Class: ClassFile,
+	Flags: []Flag{
+		{Name: "guild", Kind: FlagString, Value: "<id>", Usage: "the guild to check; default discord.guildId"},
+	},
+	Columns: discord.CheckColumns,
+	Local:   runDiscordCheck,
+}
+
+// CodeDiscordMissing is `discord check` finding a channel, a permission or the intent missing.
+const CodeDiscordMissing = "discord-missing"
+
 func init() {
-	commands = append(commands, &discordRender, &discordInject, &sessionOutbox, &sessionTranscript)
+	commands = append(commands, &discordCheck, &discordRender, &discordInject, &sessionOutbox, &sessionTranscript)
 	required[&discordRender] = []string{"events"}
 	positionals[&discordInject] = []string{injectArgs}
 	variadic[&discordInject] = true
@@ -317,6 +338,123 @@ func DiscordHandlers(a *discord.Adapter, svc *session.Service) func(*control.Reg
 		})
 		panelHandlers(a, reg)
 	}
+}
+
+func runDiscordCheck(ctx context.Context, env *Env) error {
+	c, err := config.Load(env.Root, credentialExists)
+	if err != nil {
+		return configFailure(env, err)
+	}
+	d := c.Instance.Discord
+	guild := env.String("guild")
+	if guild == "" {
+		guild = d.GuildID
+	}
+	refuse := func(msg string) error { return control.NewError(stepDiscord, msg) }
+	switch {
+	case guild == "":
+		return refuse("no guild: give --guild <id> or set discord.guildId")
+	case d.BotCredentialID == "":
+		return refuse("discord.botCredentialId is not set; add the token with credential add --instance --kind bot-token")
+	}
+	keyPath, err := credentials.KeyPath(env.Root, c.Instance.InstanceName, c.Instance.Credentials.KeyFile, os.LookupEnv)
+	if err != nil {
+		return refuse(refusalText(err))
+	}
+	st, err := openStoreAt(env.Root)
+	if err != nil {
+		return err
+	}
+	token, err := credentials.BotToken(st, env.Root, keyPath, d.BotCredentialID)
+	st.Close()
+	if err != nil {
+		return refuse(refusalText(err))
+	}
+	var chans []discord.CheckChannel
+	for _, ch := range c.Channels() {
+		chans = append(chans, discord.CheckChannel{ID: ch.ID, Reach: ch.Reach})
+	}
+	if d.NoticeChannelID != "" {
+		chans = append(chans, discord.CheckChannel{ID: d.NoticeChannelID, Reach: discord.CheckNotice})
+	}
+	seen := map[string]bool{}
+	for _, p := range c.Projects {
+		if cat := p.Venue.Category; cat != "" && !seen[cat] {
+			seen[cat] = true
+			chans = append(chans, discord.CheckChannel{ID: cat, Reach: discord.CheckCategory})
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	res, err := discord.Check(ctx, string(token), guild, chans)
+	if err != nil {
+		return refuse(control.OneLine(err.Error()))
+	}
+	head, err := json.Marshal(map[string]string{"result": "guild", "guild": res.Guild, "name": res.Name})
+	if err != nil {
+		return err
+	}
+	if err := env.Out.Record(head, []string{"result", "guild", "name"}); err != nil {
+		return err
+	}
+	for _, l := range res.Lines {
+		b, err := json.Marshal(l)
+		if err != nil {
+			return err
+		}
+		if err := env.Out.Record(b, discord.CheckColumns); err != nil {
+			return err
+		}
+	}
+	if res.Missing > 0 {
+		return control.NewError(CodeDiscordMissing, fmt.Sprintf("%d of %d missing", res.Missing, len(res.Lines)))
+	}
+	return nil
+}
+
+// refusalText is a credentials refusal's message without its code, any other error's text.
+func refusalText(err error) string {
+	if e, ok := credentials.IsRefusal(err); ok {
+		return e.Message
+	}
+	return control.OneLine(err.Error())
+}
+
+// discordCredentials is /credential's view of the credential store (discord.Credentials): the
+// caller is the user and the audit actor; a refusal becomes the session service's error type.
+type discordCredentials struct{ svc *credentials.Service }
+
+func credentialInfo(r credentials.Record) discord.CredentialInfo {
+	return discord.CredentialInfo{ID: r.ID, Kind: r.Kind, Label: r.Label, Status: r.Status, LastUsedAt: r.LastUsedAt}
+}
+
+func asSessionError(err error) error {
+	if e, ok := credentials.IsRefusal(err); ok {
+		return &session.Error{Code: e.Code, Message: e.Message}
+	}
+	return err
+}
+
+func (d discordCredentials) Add(user, kind, label string, value []byte) (discord.CredentialInfo, error) {
+	r, err := d.svc.AddBy(user, kind, user, label, value)
+	return credentialInfo(r), asSessionError(err)
+}
+
+func (d discordCredentials) List(user string) ([]discord.CredentialInfo, error) {
+	recs, err := d.svc.List(user)
+	if err != nil {
+		return nil, asSessionError(err)
+	}
+	out := make([]discord.CredentialInfo, len(recs))
+	for i, r := range recs {
+		out[i] = credentialInfo(r)
+	}
+	return out, nil
+}
+
+func (d discordCredentials) Remove(user, id string) (discord.CredentialInfo, error) {
+	r, err := d.svc.RemoveBy(user, id)
+	return credentialInfo(r), asSessionError(err)
 }
 
 func splitList(s string) []string {

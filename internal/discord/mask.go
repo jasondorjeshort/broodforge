@@ -14,16 +14,19 @@ const Masked = "[masked]"
 const KeyPrefix = "sk-ant-"
 
 var (
-	// formatChars are Unicode format characters (zero-width space and joiners, bidi marks),
-	// which show as nothing and could hide the prefix from a plain match.
-	formatChars = regexp.MustCompile(`\p{Cf}`)
-	// keyStart is the prefix at a word start, so `task-ant-colony` is not a key.
-	keyStart = regexp.MustCompile(`\b` + regexp.QuoteMeta(KeyPrefix))
+	// hidden are Unicode format characters (zero-width space and joiners, bidi marks) and
+	// nonspacing marks (U+034F and the combining accents), which show as nothing or ride on a
+	// letter and could hide the prefix from a plain match.
+	hidden = regexp.MustCompile(`[\p{Cf}\p{Mn}]`)
+	// keyShape is the prefix with a key-length tail anywhere, glued to a word or inside
+	// Discord's `_` and `__` markup included; or the prefix with any tail where no letter or
+	// digit precedes it. So `task-ant-colony`, glued and short, is not a key.
+	keyShape = regexp.MustCompile(regexp.QuoteMeta(KeyPrefix) + `[A-Za-z0-9_\-]{8,}|(?:^|[^A-Za-z0-9])` + regexp.QuoteMeta(KeyPrefix))
 )
 
-// HasKey reports whether an inbound message carries an Anthropic key: the prefix at a word
-// start once format characters are removed.
-func HasKey(text string) bool { return keyStart.MatchString(formatChars.ReplaceAllString(text, "")) }
+// HasKey reports whether an inbound message carries an Anthropic key, once hidden characters
+// are removed: the prefix with a key-length tail anywhere, or the prefix after no letter or digit.
+func HasKey(text string) bool { return keyShape.MatchString(hidden.ReplaceAllString(text, "")) }
 
 var (
 	// sk- prefixed keys (Anthropic's sk-ant-, OpenAI-style sk-), at least eight characters on.

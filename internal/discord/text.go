@@ -359,8 +359,66 @@ func contributeRolesText(channel string) string {
 
 func couldNotStartText(reason string) string { return "Could not start a session: " + reason + "." }
 
-// startedText is the start's ephemeral reply. not 04.
-func startedText(id string) string { return "Session " + id + " is open in " + channelRef(id) + "." }
+// subscriptionReadyText is 04's reply to /credential add kind:subscription (the relay off).
+func subscriptionReadyText(id string) string {
+	return "Your Claude login directory is ready (" + id + "); Broodforge never reads it. The owner finishes\nthe login on the host (`broodforge credential login " + id + "` prints the command), sends you the\nsign-in link, and you send back the code Anthropic shows. Once the owner marks it done, /credential list says usable."
+}
+
+// apiKeyStoredText is 04's reply to the API-key form.
+func apiKeyStoredText(id, last4 string) string {
+	return "Stored " + id + " (API key, ends in ..." + last4 + ")."
+}
+
+// credentialListText is /credential list: id, kind, label, status and the date last used, one
+// credential a line (04). not 04: the layout, and `none yet` for an empty list.
+func credentialListText(infos []CredentialInfo) string {
+	if len(infos) == 0 {
+		return "You have no credentials yet. Add one with /credential add."
+	}
+	lines := make([]string, 0, len(infos))
+	for _, c := range infos {
+		status := c.Status
+		if status == "needs-login" {
+			status = "needs login"
+		}
+		used := "never used"
+		if len(c.LastUsedAt) >= 10 {
+			used = "last used " + c.LastUsedAt[:10]
+		}
+		kind := credentialKindName(c.Kind)
+		lines = append(lines, c.ID+" · "+kind+" · "+c.Label+" · "+status+" · "+used)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// The API-key form (04, Credentials): the field's label is 04's; not 04: the title.
+const (
+	apiKeyModalTitle = "Add an Anthropic API key"
+	apiKeyFieldLabel = "Anthropic API key"
+)
+
+// otherGuildText answers an interaction from outside the one server the instance serves
+// (R-11). not 04.
+const otherGuildText = "Broodforge serves one server; use it there."
+
+// credentialRemovedText and credentialDefaultText answer remove and default. not 04.
+func credentialRemovedText(id string) string { return "Removed " + id + "." }
+
+func credentialDefaultText(id string) string {
+	return "Sessions you start use " + id + " from now on."
+}
+
+// loginOnHostText is /credential login with the relay off. not 04: 04 gives the relay's
+// wording only; this is the subscription reply's host route.
+func loginOnHostText(id string) string {
+	return "the owner finishes the login on the host (`broodforge credential login " + id + "` prints the command) and sends you the sign-in link."
+}
+
+// startedText is the start's ephemeral reply, naming the venue (a dry run's is the session id).
+// not 04.
+func startedText(id, venue string) string {
+	return "Session " + id + " is open in " + channelRef(venue) + "."
+}
 
 // panelText is the project channel's panel (04, The project channel and the panel).
 func panelText(projectName, handoff string, start []string) string {

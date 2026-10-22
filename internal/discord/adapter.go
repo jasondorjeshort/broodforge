@@ -38,12 +38,33 @@ type Config struct {
 	Clock session.Clock
 	// DryRun is discord.mode dry-run: posts go to the outbox and `discord inject` is served.
 	DryRun bool
+	// Credentials serves /credential (04, Credentials); nil answers it not-built.
+	Credentials Credentials
+}
+
+// Credentials is what /credential needs of the credential store, which the adapter does not
+// import (03: discord talks to the session service, config and policy): `serve` adapts the
+// credentials service to it. A refusal is a *session.Error with the store's code.
+type Credentials interface {
+	// Add records a credential of kind for user, audited with user as the actor; value is an
+	// API key's, nil for a subscription.
+	Add(user, kind, label string, value []byte) (CredentialInfo, error)
+	// List is the user's credentials in the order added.
+	List(user string) ([]CredentialInfo, error)
+	// Remove marks one removed, audited with user as the actor.
+	Remove(user, id string) (CredentialInfo, error)
+}
+
+// CredentialInfo is a credential as /credential list shows it: never a value.
+type CredentialInfo struct {
+	ID, Kind, Label, Status, LastUsedAt string
 }
 
 // Adapter is 03's discord component without the gateway (P11): it follows every session's
 // events into a View, paces the posts through one Coalescer for the bot and writes them to the
 // Outbox, and runs the inbound handlers `discord inject` feeds (command parsing, the key-paste
-// scan, the role check, custom ids). P12 puts the gateway behind the same handlers and sink.
+// scan, the role check, custom ids). The live gateway (gateway.go) feeds the same handlers and
+// sends every post the outbox records through REST as well.
 type Adapter struct {
 	cfg    Config
 	svc    *session.Service
@@ -53,10 +74,14 @@ type Adapter struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 	nextID atomic.Int64
+	live   atomic.Pointer[Gateway] // set before Run on a live instance
 
-	mu     sync.Mutex
-	venues map[string]string // venue channel id to session id
-	panels map[string]Panel
+	mu      sync.Mutex
+	venues  map[string]string // venue channel id to session id
+	venueOf map[string]string // session id to its venue channel id
+	ready   map[string]chan struct{}
+	ended   map[string]bool // sessions whose session-ended event the renderer saw
+	panels  map[string]Panel
 }
 
 // Panel is a project channel's panel message (04, The project channel and the panel).
@@ -75,8 +100,14 @@ func New(cfg Config) *Adapter {
 		cfg.Groups = func() map[string][]string { return nil }
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	a := &Adapter{cfg: cfg, Outbox: NewOutbox(), ctx: ctx, cancel: cancel, venues: map[string]string{}, panels: map[string]Panel{}}
-	a.co = NewCoalescer(func(now time.Time, p Post) { a.Outbox.add(now, p) })
+	a := &Adapter{cfg: cfg, Outbox: NewOutbox(), ctx: ctx, cancel: cancel, venues: map[string]string{},
+		venueOf: map[string]string{}, ready: map[string]chan struct{}{}, ended: map[string]bool{}, panels: map[string]Panel{}}
+	a.co = NewCoalescer(func(now time.Time, p Post) {
+		p = a.Outbox.add(now, p)
+		if g := a.live.Load(); g != nil {
+			g.send(p)
+		}
+	})
 	return a
 }
 
@@ -84,13 +115,76 @@ func New(cfg Config) *Adapter {
 // Started hook is the adapter's.
 func (a *Adapter) Attach(svc *session.Service) { a.svc = svc }
 
-// Run starts the coalescer on the adapter's clock.
+// Run starts the coalescer on the adapter's clock. A session whose last post is out is done in
+// the outbox; on a live instance an ended one's venue is deleted VenueDeleteAfter later (04).
 func (a *Adapter) Run() {
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
-		a.co.Run(a.ctx, a.cfg.Clock, a.Outbox.markDone)
+		a.co.Run(a.ctx, a.cfg.Clock, func(id string) {
+			a.Outbox.markDone(id)
+			a.mu.Lock()
+			ended := a.ended[id]
+			// The session is done: its start was answered long ago, so its wait channel and
+			// its ended mark go (the venue binding stays until the venue is deleted).
+			delete(a.ended, id)
+			delete(a.ready, id)
+			a.mu.Unlock()
+			if g := a.live.Load(); g != nil && ended {
+				g.scheduleVenueDelete(id, VenueDeleteAfter)
+			}
+		})
 	}()
+}
+
+// bindVenue records channel as session id's venue: in a dry run the session id itself, live
+// the private channel the gateway created (or found at its start).
+func (a *Adapter) bindVenue(id, channel string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.venues[channel] = id
+	a.venueOf[id] = channel
+	ch := a.ready[id]
+	if ch == nil {
+		ch = make(chan struct{})
+		a.ready[id] = ch
+	}
+	select {
+	case <-ch:
+	default:
+		close(ch)
+	}
+}
+
+// unbindVenue forgets a deleted venue.
+func (a *Adapter) unbindVenue(id string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if ch, ok := a.venueOf[id]; ok {
+		delete(a.venues, ch)
+	}
+	delete(a.venueOf, id)
+}
+
+// venueChannel is session id's venue channel once bound, waiting up to wait for it.
+func (a *Adapter) venueChannel(id string, wait time.Duration) string {
+	a.mu.Lock()
+	ch := a.ready[id]
+	if ch == nil {
+		ch = make(chan struct{})
+		a.ready[id] = ch
+	}
+	a.mu.Unlock()
+	select {
+	case <-ch:
+	case <-time.After(wait):
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if v, ok := a.venueOf[id]; ok {
+		return v
+	}
+	return id
 }
 
 // Close stops the coalescer and every follower.
@@ -114,14 +208,19 @@ func (a *Adapter) name(user string) string {
 // SessionStarted is the session service's Started hook: a View follows the session's events
 // from the first, on its own goroutine, until the session closes.
 func (a *Adapter) SessionStarted(id string) {
-	a.mu.Lock()
-	a.venues[id] = id
-	a.mu.Unlock()
+	if a.live.Load() == nil {
+		a.bindVenue(id, id) // a dry run's venue is the session id; live, the gateway binds it
+	}
 	v := NewView(id, ViewConfig{NewID: a.newID, Name: a.name, Offer: a.co.Offer})
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
 		_ = a.svc.Follow(a.ctx, id, 0, func(ev session.Event) (bool, error) {
+			if ev.Type == session.EventSessionEnded {
+				a.mu.Lock()
+				a.ended[id] = true
+				a.mu.Unlock()
+			}
 			v.Handle(ev)
 			return false, nil
 		})
@@ -195,26 +294,33 @@ func (a *Adapter) Message(ctx context.Context, in Inbound) (Reply, error) {
 	if !a.cfg.DryRun {
 		return Reply{}, a.refuse(in, "message", CodeLiveInstance, "discord inject is for a dry-run instance")
 	}
+	rep, _, err := a.message(ctx, in)
+	return rep, err
+}
+
+// message is a plain message's handler, the gateway's and inject's; queued says the session
+// queued it for the next turn (04: the hourglass).
+func (a *Adapter) message(ctx context.Context, in Inbound) (rep Reply, queued bool, err error) {
 	if err := a.keyPasted(in, "message"); err != nil {
-		return Reply{}, err
+		return Reply{}, false, err
 	}
 	if sess := a.sessionOf(in.Channel); sess != "" {
 		sub, err := a.svc.Submit(ctx, session.SendRequest{Session: sess, As: in.User, Roles: heldRoles(in.Roles), Text: in.Text})
 		if err != nil {
-			return Reply{}, a.venueRefusal(sess, err)
+			return Reply{}, false, a.venueRefusal(sess, err)
 		}
-		return none("turn " + strconv.Itoa(sub.Turn) + " " + sub.State), nil
+		return none("turn " + strconv.Itoa(sub.Turn) + " " + sub.State), sub.State == session.SubmitQueued, nil
 	}
 	ch, ok := a.cfg.Channel(in.Channel)
 	if !ok {
-		return none("not a configured channel"), nil
+		return none("not a configured channel"), false, nil
 	}
 	if _, reg, err := a.svc.Registered(in.User); err != nil {
-		return Reply{}, err
+		return Reply{}, false, err
 	} else if reg && policy.Permitted(in.Roles, ch.Roles.Start, a.cfg.Groups(), false) {
-		return ephemeral(lobbyHintText), nil // Owner 2: a plain message never starts a session
+		return ephemeral(lobbyHintText), false, nil // Owner 2: a plain message never starts a session
 	}
-	return none("a plain message in the lobby from someone who may not start"), nil
+	return none("a plain message in the lobby from someone who may not start"), false, nil
 }
 
 // Command is a slash command, which Discord delivers as an interaction (in a dry run, `discord
@@ -224,16 +330,25 @@ func (a *Adapter) Command(ctx context.Context, in Inbound) (Reply, error) {
 	if !a.cfg.DryRun {
 		return Reply{}, a.refuse(in, "command", CodeLiveInstance, "discord inject is for a dry-run instance")
 	}
-	if err := a.keyPasted(in, "command"); err != nil {
-		return Reply{}, err
-	}
 	sl, err := ParseSlash(in.Text)
 	if err != nil {
+		if kerr := a.keyPasted(in, "command"); kerr != nil {
+			return Reply{}, kerr
+		}
 		msg := err.Error()
 		if errors.Is(err, ErrNotSlash) {
 			msg = "a command starts with /"
 		}
 		return Reply{}, a.refuse(in, "command", CodeBadArgs, msg)
+	}
+	return a.command(ctx, in, sl)
+}
+
+// command runs a parsed slash command, the gateway's interaction or inject's text: the
+// key-paste scan over the text first (an interaction's text is its options joined).
+func (a *Adapter) command(ctx context.Context, in Inbound, sl Slash) (Reply, error) {
+	if err := a.keyPasted(in, "command"); err != nil {
+		return Reply{}, err
 	}
 	return a.slash(ctx, in, sl)
 }
@@ -339,7 +454,9 @@ func (a *Adapter) slash(ctx context.Context, in Inbound, sl Slash) (Reply, error
 			return Reply{}, a.venueRefusal(sess, err)
 		}
 		return ephemeral(r.Name + " was invited."), nil // not 04
-	case SlashCredential, SlashUsage:
+	case SlashCredential:
+		return a.credential(in, sl)
+	case SlashUsage:
 	}
 	return Reply{}, a.refuse(in, "command", CodeNotBuilt, "/"+sl.Name+" is not built in the dry-run adapter yet")
 }
@@ -350,6 +467,11 @@ func (a *Adapter) Click(ctx context.Context, in Inbound) (Reply, error) {
 	if !a.cfg.DryRun {
 		return Reply{}, a.refuse(in, "click", CodeLiveInstance, "discord inject is for a dry-run instance")
 	}
+	return a.click(ctx, in)
+}
+
+// click is a button press's handler, the gateway's and inject's.
+func (a *Adapter) click(ctx context.Context, in Inbound) (Reply, error) {
 	cid, err := ParseCustomID(in.CustomID)
 	if err != nil {
 		// Never the id itself, which the presser shapes: its length and prefix only.
@@ -389,7 +511,11 @@ func (a *Adapter) start(ctx context.Context, in Inbound, channel string) (Reply,
 	}
 	st, err := a.svc.Start(ctx, session.StartRequest{Channel: channel, As: in.User, Roles: heldRoles(in.Roles)})
 	if err == nil {
-		return ephemeral(startedText(st.ID)), nil
+		wait := time.Duration(0)
+		if a.live.Load() != nil {
+			wait = venueWait // the gateway creates the private channel through the coalescer
+		}
+		return ephemeral(startedText(st.ID, a.venueChannel(st.ID, wait))), nil
 	}
 	var se *session.Error
 	if !errors.As(err, &se) {

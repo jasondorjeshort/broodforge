@@ -7,24 +7,23 @@ related: [2026-10-16-p10-remainder-closing-turn-needs-login-interrupt-kill-live-
 # P11 remainder: what the dry-run adapter left for P12 and later
 
 P11 landed `internal/discord/` without these. The P10 remainder is the session core; this is the
-Discord layer. Items 3, 4 and 7 are P12's by nature (message ids, a live venue, the gateway).
+Discord layer. P12 built the hourglass, deleting a pasted key, the venue's deletion and
+`/credential`; the numbers below are kept so the Plan still reads.
 
 1. Event before the handoff. Anchor: `internal/session/events.go`, `sessionEnded` in
    `internal/discord/render.go`. Done: the summary place says "Ending: checking and handing off N
    commits..." (04, Ending a session).
 2. Summary detail. Anchor: `summaryText` in `internal/discord/text.go` (the "not 04" commits line).
    Done: each commit's hash and subject, the pull-request title, and posting to `venue.summaryChannel`.
-3. Hourglass on a queued message; deleting a pasted key. Anchor: the `EventMessageQueued` case in
-   `render.go`; `keyPasted` in `adapter.go`. Done: both work, needing Discord message ids (P12).
-4. Delete the venue 10 minutes after the summary. Anchor: `sessionEnded`. Done: deleted on the
-   injectable clock, also across a restart (P12).
 5. Texts: notice channel, credential-needs-login, Stop timeout, post-restart notice (R-17). Anchor:
-   `internal/discord/text.go`. Done: each has its 04 text rendered from an event; posting to the
-   notice channel is P12.
+   `internal/discord/text.go`. Done: each has its 04 text rendered from an event. P12 posts the
+   start-up report to the notice channel (`startupReport` in `internal/cli/serve.go`) and binds
+   an interrupted session's venue again at start (`sweep` in `internal/discord/gateway.go`), so
+   the post-restart notice has a channel to go to.
 6. Indent subagent calls. Anchor: `Event.ToolUseID` in `events.go`; `Handle` in `render.go`. Done:
    events carry the parent tool-use id and a subagent's calls render indented under it.
-7. `/credential` and `/usage`. Anchor: `slash` in `adapter.go` (answers `not-built`). Done: both
-   answer as 04 says; `/credential` needs the gateway (P12), `/usage` could land earlier.
+7. `/usage` (P12 built `/credential`). Anchor: the `SlashUsage` case of `slash` in `adapter.go`
+   (answers `not-built`). Done: it answers as 04 says.
 8. Store record for the panel. Anchor: `PostPanel`, `PanelOf` in `adapter.go`; the message id lives
    in the bot's memory, so a restart posts a second panel. Done: the id is stored and edited.
 9. `--clock real` is only exercised by hand. Anchor: `New` in `adapter.go`. Done: a repro in

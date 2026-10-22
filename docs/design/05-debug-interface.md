@@ -22,9 +22,11 @@ that widens a live session), the hidden probe `control echo`. Sections below giv
 Drive. `broodforge serve [--discord live|dry-run]` runs the bot in the foreground through 03's
 startup steps and prints `serving  <socket>` once the socket listens; a failed step is `error:
 start-<step>: <reason>`, exit 1 (`root`, `config`, `discord`, `credentials`, `store`, `engine`,
-`preflight`, `reconcile`, `control`); the flag overrides the config key for this run. Until P12
-the gateway is not built: live is `start-discord`. With only `fake` channels, steps 5 and 6 skip
-the engine checks. `broodforge status [--wait <seconds>] [--expect ok|last-good]` waits for the
+`preflight`, `reconcile`, `control`); the flag overrides the config key for this run. Live needs
+`discord.applicationId`, `guildId` and `botCredentialId` (a `bot-token` credential whose value
+has a bot token's shape, checked before anything connects) and opens the gateway after the
+socket (`05-debug-interface-discord.md`); any of it failing is `start-discord`. With only `fake`
+channels, steps 5 and 6 skip the engine checks. `broodforge status [--wait <seconds>] [--expect ok|last-good]` waits for the
 socket to answer and prints, in order: `config: ok` or `config: last-good from <time>`, `discord:
 live|dry-run connected|disconnected` (dry-run is always connected), `sessions: <open> open,
 <waiting> waiting-for-answer, <interrupted> interrupted`, `worktrees: <kept> kept with unpushed
@@ -91,12 +93,19 @@ value from stdin (never an argument) and prints the new id `cred-<base36>`; the 
 registered (`unknown-user`). `credential add
 --kind subscription --user <user id> --label <text>` runs `harness-create` for `<root>/harness/<id>`
 through the spawn backend (ADR 0022 companion; same-account: a directory operation), records the credential as `needs-login` and prints the
-id; it writes no settings, since the hook's settings file is per session. `credential login
+id; it writes no settings, since the hook's settings file is per session. `credential add
+--instance --kind bot-token --label <text>` records one of the instance's own credentials, the
+Discord bot token (provider `discord`, no user, `user_id` null): `--instance` is exclusive with
+`--user` (a usage error), the value is read from stdin, and `bot-token` with `--user` is
+`bad-kind`; it is the kind `discord.botCredentialId` names, and only the gateway and `discord
+check` read its value. `credential login
 <id>` prints the exact command the user runs to complete the engine's own login into that
 directory (spike C25's, `CLAUDE_CONFIG_DIR=<dir> <engine.path> auth login`, sh quoting); `credential login <id> --done` records `usable` once the owner
-has run it; `--relay` runs ADR 0022's relay, refused unless `relay.loginByDirectMessage` is
-true, and records `usable` itself on success. `credential list [--user <id>]` prints `<id>
-<kind>  <user id>  <label>  usable|needs-login|removed  <last used or ->`; the status is the
+has run it; a `bot-token` has no login (`bad-kind`); `--relay`, ADR 0022's relay, is not built
+and is refused `not-built` (the plan: refused unless `relay.loginByDirectMessage` is true, and
+`usable` recorded on success). `credential list [--user <id>]` prints `<id>
+<kind>  <user id>  <label>  usable|needs-login|removed  <last used or ->`, the user `-` for an
+instance credential; the status is the
 store's record (03): the bot never reads the config directory to infer it. `credential remove
 <id>` marks it removed; the next `session start` naming it is refused (R-41). `credential show
 <id> --json` prints the record without any store value.

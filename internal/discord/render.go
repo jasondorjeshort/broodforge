@@ -155,8 +155,8 @@ func (v *View) Handle(ev session.Event) {
 		v.sessionEnded(ev, t)
 	case session.EventMessageQueued, session.EventMessageDropped, session.EventParticipantInvited,
 		session.EventSessionInterrupted:
-		// The hourglass on a queued message needs its Discord message id (P12); a dropped
-		// message, an invitation and a restart's interruption post nothing in 04.
+		// The hourglass on a queued message is the gateway's (it holds the message's Discord
+		// id); a dropped message, an invitation and a restart's interruption post nothing in 04.
 	}
 }
 

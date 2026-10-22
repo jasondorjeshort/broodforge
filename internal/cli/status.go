@@ -93,7 +93,8 @@ func (b *bot) status(_ context.Context, _ *control.Call) (json.RawMessage, error
 		r.ConfigFrom = &t
 	}
 	// Dry-run has no gateway to lose: its sink is attached for the bot's life (P11 renders into it).
-	r.Discord.Mode, r.Discord.Connected = b.discord, true
+	// Live is connected while the gateway session is ready.
+	r.Discord.Mode, r.Discord.Connected = b.discord, b.gateway == nil || b.gateway.Connected()
 	var err error
 	if r.Sessions, err = session.CountSessions(b.st); err != nil {
 		return nil, err

@@ -85,12 +85,46 @@ func (p *Post) finish() {
 }
 
 // payload is the request body for the post, built with disgo's types (ADR 0023: disgo's types
-// appear in this package only).
+// appear in this package only); the live gateway sends the same bodies.
 func payload(p Post) json.RawMessage {
+	var b []byte
+	var err error
+	switch p.Op {
+	case OpCreate:
+		b, err = json.Marshal(messageCreate(p))
+	case OpEdit:
+		b, err = json.Marshal(messageUpdate(p))
+	case OpChannel, OpDelete, OpAttach:
+		return nil
+	}
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// messageCreate is a create post's body: the content, the buttons as one action row, and user
+// mentions only (a prompt's mention of the driver buzzes; no role or everyone ping).
+func messageCreate(p Post) dg.MessageCreate {
+	return dg.MessageCreate{Content: p.Body, Components: buttonRows(p.Buttons),
+		AllowedMentions: &dg.AllowedMentions{Parse: []dg.AllowedMentionType{dg.AllowedMentionTypeUsers}}}
+}
+
+// messageUpdate is an edit post's body: the content and the buttons, an empty list removing them.
+func messageUpdate(p Post) dg.MessageUpdate {
+	content := p.Body
+	rows := buttonRows(p.Buttons)
+	if rows == nil {
+		rows = []dg.LayoutComponent{}
+	}
+	return dg.MessageUpdate{Content: &content, Components: &rows}
+}
+
+func buttonRows(buttons []Button) []dg.LayoutComponent {
 	var rows []dg.LayoutComponent
-	if len(p.Buttons) > 0 {
-		bs := make([]dg.InteractiveComponent, len(p.Buttons))
-		for i, b := range p.Buttons {
+	if len(buttons) > 0 {
+		bs := make([]dg.InteractiveComponent, len(buttons))
+		for i, b := range buttons {
 			style := dg.ButtonStylePrimary
 			switch b.Style {
 			case StyleSecondary:
@@ -104,29 +138,11 @@ func payload(p Post) json.RawMessage {
 		}
 		rows = []dg.LayoutComponent{dg.NewActionRow(bs...)}
 	}
-	var b []byte
-	var err error
-	switch p.Op {
-	case OpCreate:
-		b, err = json.Marshal(dg.MessageCreate{Content: p.Body, Components: rows,
-			AllowedMentions: &dg.AllowedMentions{Parse: []dg.AllowedMentionType{dg.AllowedMentionTypeUsers}}})
-	case OpEdit:
-		content := p.Body
-		if rows == nil {
-			rows = []dg.LayoutComponent{}
-		}
-		b, err = json.Marshal(dg.MessageUpdate{Content: &content, Components: &rows})
-	case OpChannel, OpDelete, OpAttach:
-		return nil
-	}
-	if err != nil {
-		return nil
-	}
-	return b
+	return rows
 }
 
-// Outbox is the dry-run sink: every post the coalescer sends, in order, read by `session
-// outbox` and `panel show`. A follower waits on changed, closed and replaced on every append.
+// Outbox is the record of every post the coalescer sends, in order, read by `session outbox`
+// and `panel show`: the dry run's sink, and on a live instance the log of what the gateway sent. A follower waits on changed, closed and replaced on every append.
 type Outbox struct {
 	mu      sync.Mutex
 	posts   []Post
