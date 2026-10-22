@@ -13,9 +13,9 @@ Updated: 2026-10-21, after the P12 commit, by main session (rooted in the repo, 
 
 ## Next
 
-1. Owner: the Discord operator entry, then the first live session (`serve --discord live` on the
-   scratch-shaped root) while an agent reads `session tail` and `audit`; findings from it.
-2. Coder: the P11 remainder `Plan:` (items 1, 2, 6, 8), then `/usage`, the relay, the post-restart notice.
+1. Owner: the first live session continues (bot live on the scratch root, 2026-10-22); findings from it.
+2. Next pass (owner, 2026-10-22): `/session model|effort` (R-29), idea of that date; Open items to the
+   owner, architect for 01 and 04, then coder; after it the P11 remainder `Plan:`, `audit --follow`, `/usage`.
 3. Carry-backs to Hatchery (`carry-back` skill), the `Plan:` ideas of 2026-10-21.
 4. Tester: resolve the net-diff finding; `session end` runs the closing turn from the `closing`
    fixture (the P10 remainder idea's 2026-10-17 line); then its other `Plan:` items.

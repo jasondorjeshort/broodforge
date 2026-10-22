@@ -49,6 +49,12 @@ store file and report `not-running`. Done: with the bot up both use the control 
 Plan: coder, one pass. Socket stream for audit; a reconcile call excluding the live set; a repro
 in `tests/repro/` against a serving bot.
 
+2026-10-22 (coordinator, the first live run): `audit --follow` returns `not-running` before it
+dials anything (`internal/cli/audit.go`, the `follow` branch), so with the bot up and `status`
+answering over the pipe it still says `no bot at <pipe>`, and the owner chased a pipe that was
+fine. The first pass makes `--follow` real; until it lands the message should be `not-built`.
+`session tail <id> --follow` is the live view meanwhile.
+
 ## Open
 
 Whether `session invite` checks the invitee's roles before Discord (P12) can.
