@@ -1,13 +1,12 @@
 # Implementation plan: coder passes for `cmd/` and `internal/`
 
-Date: 2026-10-16. Status: plan for the Go bundle of ADR 0023, written after the PC spike closed
-every PC row (ADRs 0020 and 0022, Amendments of 2026-10-16) and `07-spike-plan.md`'s exit criterion
-was met for host-neutral code (the droplet rows are open and P14 is held). Each pass is one coder brief (`brief` skill); done is the `debug-interface` skill's
-checklist, its Proof run on a clean checkout from the doc alone, and the `05-debug-interface.md`
-section it builds matching the code. Every pass reads `CLAUDE.md`, `docs/design/README.md`,
-`03-architecture.md` (Components), `05-cli-conventions.md` and ADR 0023 (Decision), then its
-Implements line. Sizes: small is one sitting, medium one to two, large needs a mid-pass commit.
-"Owner sees" means the output is 04's.
+Date: 2026-10-16. Status: plan for the Go bundle of ADR 0023, written after the PC spike closed every PC row (ADRs
+0020 and 0022, Amendments of 2026-10-16) and `07-spike-plan.md`'s exit criterion was met for host-neutral code (the
+droplet rows are open and P14 is held). Each pass is one coder brief (`brief` skill); done is the `debug-interface`
+skill's checklist, its Proof run on a clean checkout from the doc alone, and the `05-debug-interface.md` section it
+builds matching the code. Every pass reads `CLAUDE.md`, `docs/design/README.md`, `03-architecture.md` (Components),
+`05-cli-conventions.md` and ADR 0023 (Decision), then its Implements line. Sizes: small is one sitting, medium
+one to two, large needs a mid-pass commit. "Owner sees" means the output is 04's.
 
 Standing rules. A pass's Files line is its boundary (every name there is created by the pass
 [no-check: the whole plan names files not yet written]). One module, one binary `cmd/broodforge`;
@@ -297,3 +296,5 @@ done] (Go and `gcc` for `-race` included). Proof: the droplet builds `bin/broodf
 build -o bin/ ./cmd/broodforge` from the pinned source and `CGO_ENABLED=1 go test -race ./...` passes; C30 and C31 by hand from a code
 session, `reach-report` matching the bind list, the Interrupt steps yielding a `result`. Depends on:
 P7 to P10.
+
+The passes for ADR 0025, P15 to P19, are in `08-implementation-plan-session-workflow.md`.

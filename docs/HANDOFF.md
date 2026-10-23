@@ -7,20 +7,19 @@ Updated: 2026-10-23, after ADR 0025, by main session (rooted in the repo, hooks 
 
 - ADR 0025 (`docs/design/decisions/0025-session-workflow-composition.md` and its companion) settles
   how a session composes the bot's and the repository's workflows; the owner answered its four calls
-  on 2026-10-23. Reviewed, fixes amended into the unpushed `5afaecd`. `cb046d4` (the subagent tool
+  on 2026-10-23. Reviewed, fixes amended into the unpushed `8893f7b`. `cb046d4` (the subagent tool
   is `Agent`, not `Task`; every launch in a session was denied) is reviewed and unpushed. Push on the user's word.
 - Until ADR 0025's passes land a session sees none of the repository's rules: a reviewer read and the
   pusher's checks before anything from it reaches `main`. P12 left: the relay, the post-restart notice.
 
 ## Next
 
-1. Architect: `08-implementation-plan.md` gains ADR 0025's passes in the order of its Consequences,
-   each with its `session show` line and debug surface.
-2. Coder, the first of those passes: the `pre-push` refusal (companion C1) and the push scan.
-3. Triage: the `main` handoff and `/session land` ideas route through ADR 0025 rule 7.
-4. Owner: continue the live session (milestone 1: edit Broodforge from `broodforge/discord`); set the
+1. Coder: P15 (`08-implementation-plan-session-workflow.md`), the session never pushes; then P16,
+   the push scan. P17-P19 follow in order; P19's real turns are the owner's.
+2. Triage: the `main` handoff and `/session land` ideas route through ADR 0025 rule 7.
+3. Owner: continue the live session (milestone 1: edit Broodforge from `broodforge/discord`); set the
    live `instance.json` timeouts to 0; a real root outside Temp.
-5. Then the last-good cold start (architect; the fake-engine header is the owner's), the net-diff
+4. Then the last-good cold start (architect; the fake-engine header is the owner's), the net-diff
    finding, the P11 remainder `Plan:`, `audit --follow`, `/usage`; carry-backs; the surfaces ADR.
 
 ## Waiting on user

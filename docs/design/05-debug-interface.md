@@ -80,6 +80,31 @@ bug is a tree beside `tests/config/valid/` and `tests/config/dup-key/`, or `conf
 <kept scratch root>`.
 Isolation. `config` reads the credential store for id existence only (03).
 
+## The workflow copy
+
+Surface. `broodforge workflow render --project <id> --out <dir> (file)` and `broodforge workflow
+probe --project <id> (file)` run ADR 0025's copy procedure and runtime probe (companion
+`decisions/0025-refusals-and-checks.md`) against the project's canonical without a session;
+`session start` runs the same code into `workflow/<session id>/`.
+
+Drive. `workflow render` lists `CLAUDE.md` and `.claude` on the default branch, archives what
+exists, writes `instructions.md`, `agents.json` and `hooks.json` under `--out`, and prints
+`workflow: <commit> <date>` or `workflow: none (<branch> at <commit> has no CLAUDE.md or .claude)`,
+then `wrote  <file>` per file, exit 0; a canonical it cannot read is `error: workflow-canonical:
+<what>`, exit 1. `workflow probe` prints `ok  <name>  <word>` per `hooks.json` entry, or the
+companion's not-started line on the first failure, exit 1; `--json` gives the entries (`name`,
+`event`, `matcher`, `command`, `timeout`, `runtime`).
+
+Observe. The files under `--out`; `session show <id>`'s `workflow:` and `hooks:` lines once a
+session has a copy; `config show --project <id>` for the `workflow` key.
+
+Reproduce. A failing case is a canonical tree: copy `fixtures/workflow/` [no-check: P17 creates
+it], edit, commit there, `workflow render --out <tmp>`. An unloadable import is a `note:` line in
+`instructions.md`, never an error.
+
+Isolation. Both commands read the canonical only and write under `--out`; a scratch root's
+canonical is the fixture.
+
 ## Registration and participants
 
 Moved to `05-debug-interface-session.md`: `register <user id>|list|show|set-default`, participants, and the `--as` and `--roles` every session command takes.
@@ -255,7 +280,7 @@ broodforge [--root <path>] [--json]
   serve  status  stop  reconcile                     scratch new|run|delete|prune
   config check|show|reload                           register <id>|list|show|set-default
   credential init|add|login|list|remove|show         session start|send|answer|mode|model|effort|timeout|interrupt|end|invite
-  session list|show|tail|outbox|transcript|reach-report   engine run|record
+  session list|show|tail|outbox|transcript|reach-report   engine run|record   workflow render|probe
   hook pre-tool-use|try|cases                        worktree list|check|bundle|handoff|forget|adopt
   usage  audit  panel post|show                        backup snapshot|verify|rehearse
   discord check|render|inject                        spawn preflight   engine-entry (internal)
