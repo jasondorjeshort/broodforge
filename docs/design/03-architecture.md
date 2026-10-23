@@ -220,8 +220,8 @@ ran a Haiku subagent yields both). The display name comes from the map in `polic
 unmapped id is used verbatim. A model that only compacted is a co-author: the stream cannot tell compaction from work.
 Two helps, neither the enforcement: the system prompt append says once that the `commit-msg` hook adds the trailer
 lines and lists none (a list there is stale from turn two, ADR 0025 rule 10), and `worktree-create` sets
-`core.hooksPath` in the clone to a Broodforge-owned `commit-msg` hook that appends any line of the
-`trailers` file in the session's `home` directory under `sessions/<id>` that is missing.
+`core.hooksPath` in the clone to the Broodforge-owned hooks: `commit-msg` appends any line of the `trailers`
+file in the session's `home` directory under `sessions/<id>` that is missing (`pre-push`: ADR 0025 rule 4).
 
 The enforcement is the bot's check at handoff (ADR 0022 companion, step 3): for each commit in
 `<base>..refs/sessions/<id>`, author and committer equal the driver and the trailer set computed

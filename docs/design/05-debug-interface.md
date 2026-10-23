@@ -229,7 +229,7 @@ Isolation. Preflight runs only the engine's `--version` (Linux: `engine-entry --
 
 ## Git handoff
 
-Moved to `05-debug-interface-git.md`: `worktree check|bundle|handoff`, the refusal codes, the hidden `git-askpass` and `git-commit-msg`, and the rules the code fixes.
+Moved to `05-debug-interface-git.md`: `worktree check|bundle|handoff`, the refusal codes, the hidden `git-askpass`, `git-commit-msg` and `git-pre-push`, and the rules the code fixes.
 
 ## Usage and audit queries
 

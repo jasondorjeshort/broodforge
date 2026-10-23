@@ -15,7 +15,7 @@ Planned documents (added as we go):
 | `04-ux.md` | The Discord flows, venues, buttons and message wording, Ticket Tool as the reference; a proposal with every owner decision marked and collected at the end |
 | `05-debug-interface.md` | How agents drive, observe, and reproduce every feature from a terminal |
 | `05-debug-interface-discord.md` | Companion to 05: the Discord adapter's drive, observe, reproduce and isolation, including the `discord` commands |
-| `05-debug-interface-git.md` | Companion to 05: the git handoff's drive, observe, reproduce and isolation, including `worktree check\|bundle\|handoff`, the askpass helper and the commit-msg hook |
+| `05-debug-interface-git.md` | Companion to 05: the git handoff's drive, observe, reproduce and isolation, including `worktree check\|bundle\|handoff`, the askpass helper and the commit-msg and pre-push hooks |
 | `05-debug-interface-session.md` | Companion to 05: registration and participants, the session commands (`session start\|send\|show\|tail\|list` and the rest), the trace summaries and deciders `session tail` shows, prompt-mode defer and resume |
 | `05-cli-conventions.md` | Companion to 05: the one binary and its flags, the control-socket wire format, output and exit-code rules, `--expect`, the scratch root, the shared isolation rules |
 | `06-platforms.md` | Target hosts, what each asks of every part, the sharing strategy between hosts, and the major choices bundled into proposal loops |

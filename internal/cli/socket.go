@@ -27,7 +27,13 @@ func socketCall(ctx context.Context, cmd *Command, env *Env) error {
 			return err
 		}
 	}
-	onEvent := func(ev json.RawMessage) error { return env.Out.Event(ev, cmd.EventColumns) }
+	onEvent := func(ev json.RawMessage) error {
+		cols := cmd.EventColumns
+		if cmd.EventColumnsFor != nil {
+			cols = cmd.EventColumnsFor(ev)
+		}
+		return env.Out.Event(ev, cols)
+	}
 	result, err := control.Do(ctx, addr, cmd.wireCmd(), args, onEvent)
 	var ce *control.Error
 	if errors.As(err, &ce) && ce.Code == control.CodeNotRunning {

@@ -1,0 +1,15 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# A session never pushes (ADR 0025, rule 4): every path exits 1, unlike commit-msg. The line is
+# cli.PrePushRefusal's (wording: owner to confirm); a test pins this copy to it. The script prints
+# it itself whenever the binary is absent, fails to start or does not print it first.
+line="Broodforge: session ${BROODFORGE_SESSION:-this tree} does not push. Commit in this tree; Broodforge pushes at the handoff when the session ends."
+bf="$(dirname "$0")/../../bin/broodforge"
+out=""
+if [ -x "$bf" ] || [ -x "$bf.exe" ]; then out="$("$bf" git-pre-push 2>&1 >/dev/null)"; fi
+case "$out" in
+"Broodforge: "*) printf '%s\n' "$out" >&2 ;;
+"") printf '%s\n' "$line" >&2 ;;
+*) printf '%s\n%s\n' "$line" "$out" >&2 ;;
+esac
+exit 1

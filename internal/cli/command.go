@@ -61,6 +61,9 @@ type Command struct {
 	// Columns are the result's keys in text order; EventColumns the streamed events'.
 	Columns      []string
 	EventColumns []string
+	// EventColumnsFor, when set, picks one event's columns by its shape instead of
+	// EventColumns, for a command that streams more than one kind of row.
+	EventColumnsFor func(ev json.RawMessage) []string
 	// Local runs the command without the socket (ClassRead fallback, ClassFile,
 	// ClassStandalone). Socket classes leave it nil to mean "socket only".
 	Local func(ctx context.Context, env *Env) error

@@ -40,6 +40,9 @@ func (LinuxSudoBwrap) WorktreeBundle(Worktree) (Bundle, error) { return Bundle{}
 // WorktreeRemove refuses: held.
 func (LinuxSudoBwrap) WorktreeRemove(string) error { return held() }
 
+// WorktreePrePush refuses: held.
+func (LinuxSudoBwrap) WorktreePrePush(string) (bool, error) { return false, held() }
+
 // HooksDir is unknown until the backend is built.
 func (LinuxSudoBwrap) HooksDir() string { return "" }
 

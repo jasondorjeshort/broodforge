@@ -44,7 +44,7 @@ func install(t *testing.T, dir string) string {
 	if err := os.WriteFile(filepath.Join(dir, "bin", filepath.Base(bin)), b, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{"askpass.sh", "askpass.cmd", "hooks/commit-msg"} {
+	for _, f := range []string{"askpass.sh", "askpass.cmd", "hooks/commit-msg", "hooks/pre-push"} {
 		src, err := os.ReadFile(filepath.Join("..", "..", "share", filepath.FromSlash(f)))
 		if err != nil {
 			t.Fatal(err)
@@ -180,7 +180,7 @@ func TestProofWorktree(t *testing.T) {
 	root := []string{"--root", p.root}
 
 	r := clitest.Run(t, nil, append(root, "worktree", "check", "s0001")...)
-	want(t, r, 0, head+"  ok\nok  1\n", "")
+	want(t, r, 0, "ok  pre-push\n"+head+"  ok\nok  1\n", "")
 	branch := "broodforge/" + p.instance + "/s0001"
 	refspec := "refs/sessions/s0001:refs/heads/" + branch
 	r = clitest.Run(t, nil, append(root, "worktree", "handoff", "s0001", "--dry-run", "--expect", "dry-run")...)
@@ -215,7 +215,7 @@ func TestProofWorktree(t *testing.T) {
 	r = clitest.Run(t, nil, append(root, "worktree", "handoff", "s0002", "--expect", "handoff-refused-attribution")...)
 	want(t, r, 0, bad+"  author:X <x@example.com>\n", "")
 	r = clitest.Run(t, nil, append(root, "worktree", "check", "s0002")...)
-	want(t, r, 1, bad+"  author:X <x@example.com>\n", "error: handoff-refused-attribution: 1 of 1 commits fail the attribution check\n")
+	want(t, r, 1, "ok  pre-push\n"+bad+"  author:X <x@example.com>\n", "error: handoff-refused-attribution: 1 of 1 commits fail the attribution check\n")
 	if _, err := os.Stat(tree2); err != nil {
 		t.Errorf("a refused handoff removed the tree: %v", err)
 	}
@@ -321,7 +321,7 @@ func TestWorktreeModelCountsFromItsFirstTurn(t *testing.T) {
 	s := p.startAt(t, "s0004", "2099-01-01T00:00:00Z", false)
 	head := gittest.Commit(t, gittest.Driver, nil, filepath.Join(s.Dir(), "tree"), "a.txt", "a\n", "during turn 1")
 	want(t, clitest.Run(t, nil, "--root", p.root, "worktree", "check", "s0004"), 1,
-		head+"  missing:Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n",
+		"ok  pre-push\n"+head+"  missing:Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n",
 		"error: handoff-refused-attribution: 1 of 1 commits fail the attribution check\n")
 }
 

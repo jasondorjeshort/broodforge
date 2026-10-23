@@ -25,7 +25,8 @@ import (
 // The worktree commands of 05-debug-interface.md (Git handoff) that P8 builds: check, bundle
 // and handoff are writes the bot serves (WorktreeHandlers), because each fetches into the
 // canonical; list, forget and adopt are later passes'. git-askpass and git-commit-msg are the
-// hidden standalone commands share/askpass.sh, share/askpass.cmd and share/hooks/commit-msg run.
+// hidden standalone commands share/askpass.sh, share/askpass.cmd and share/hooks/commit-msg run;
+// git-pre-push, which share/hooks/pre-push runs, is in git.go.
 
 // CodeUnknownSession is a session id the store does not hold; a project id the configuration
 // lacks is CodeUnknownProject (config.go).
@@ -33,15 +34,33 @@ const CodeUnknownSession = "unknown-session"
 
 var commitColumns = []string{"commit", "status"}
 
-// worktreeCheck is `broodforge worktree check <id>`: bundle, verify and fetch, then the
-// attribution check alone: one `<hash>  ok|<problems>` line per commit since the base, then
-// `ok  <commits>`; any failing commit is handoff-refused-attribution, exit 1.
+// hookColumns are worktree check's hook row in text order: `ok|missing  pre-push`.
+var hookColumns = []string{"status", "hook"}
+
+// checkEventColumns tells worktree check's hook row, which has a "hook" key, from its commit
+// lines.
+func checkEventColumns(ev json.RawMessage) []string {
+	var row struct {
+		Hook *string `json:"hook"`
+	}
+	if json.Unmarshal(ev, &row) == nil && row.Hook != nil {
+		return hookColumns
+	}
+	return commitColumns
+}
+
+// worktreeCheck is `broodforge worktree check <id>`: first `ok|missing  pre-push` (the tree
+// still runs the bot's pre-push hook, ADR 0025 rule 4; --json `{"hook","status"}`), then bundle,
+// verify and fetch, then the attribution check alone: one `<hash>  ok|<problems>` line per commit since the base, then
+// `ok  <commits>`; any failing commit is handoff-refused-attribution, exit 1, else a missing hook
+// is pre-push-missing, exit 1 (handoff is not refused for it).
 var worktreeCheck = Command{
-	Name:         "worktree check",
-	Class:        ClassWrite,
-	Flags:        []Flag{{Name: "id", Kind: FlagString, Value: "<session id>"}},
-	EventColumns: commitColumns,
-	Columns:      []string{"result", "commits"},
+	Name:            "worktree check",
+	Class:           ClassWrite,
+	Flags:           []Flag{{Name: "id", Kind: FlagString, Value: "<session id>"}},
+	EventColumns:    commitColumns,
+	EventColumnsFor: checkEventColumns,
+	Columns:         []string{"result", "commits"},
 }
 
 // worktreeBundle is `broodforge worktree bundle <id>`: the bundle step alone, printing
@@ -139,6 +158,12 @@ type WorktreeService struct {
 // actorHostCLI is the audit actor of a handoff run from the debug CLI.
 const actorHostCLI = "host"
 
+// hookLine is worktree check's first row: whether the tree still runs the bot's pre-push hook.
+type hookLine struct {
+	Hook   string `json:"hook"`
+	Status string `json:"status"`
+}
+
 type commitLine struct {
 	Commit string `json:"commit"`
 	Status string `json:"status"`
@@ -154,7 +179,7 @@ type bundleResult struct {
 	Commits int    `json:"commits"`
 }
 
-func encodeWorktree[T commitLine | attributionResult | bundleResult | git.Outcome](v T) (json.RawMessage, error) {
+func encodeWorktree[T hookLine | commitLine | attributionResult | bundleResult | git.Outcome](v T) (json.RawMessage, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)
@@ -206,9 +231,28 @@ func (s *WorktreeService) check(ctx context.Context, call *control.Call, id stri
 	if err != nil {
 		return nil, err
 	}
+	// The hook's row comes first, before the bundle. A tree the backend cannot read (gone
+	// after a handoff) prints no row, so the bundle step's own refusal stays the error.
+	prePush, hookErr := s.Backend.WorktreePrePush(sess.git.Dir())
+	if hookErr == nil {
+		state := "ok"
+		if !prePush {
+			state = "missing"
+		}
+		ev, err := encodeWorktree(hookLine{Hook: "pre-push", Status: state})
+		if err != nil {
+			return nil, err
+		}
+		if err := call.Emit(ev); err != nil {
+			return nil, err
+		}
+	}
 	c, err := git.Collect(ctx, s.Backend, sess.git, sess.attr)
 	if err != nil {
 		return nil, gitError(err)
+	}
+	if hookErr != nil {
+		return nil, gitError(hookErr)
 	}
 	if err := emitCommits(call, c.Checks); err != nil {
 		return nil, err
@@ -216,6 +260,10 @@ func (s *WorktreeService) check(ctx context.Context, call *control.Call, id stri
 	if failing := c.Failing(); len(failing) > 0 {
 		return nil, control.NewError(git.CodeRefusedAttribution,
 			fmt.Sprintf("%d of %d commits fail the attribution check", len(failing), len(c.Checks)))
+	}
+	if !prePush {
+		return nil, control.NewError(CodePrePushMissing,
+			"the tree's core.hooksPath is not "+s.Backend.HooksDir()+" with its pre-push hook; handoff still runs")
 	}
 	return encodeWorktree(attributionResult{"ok", len(c.Checks)})
 }

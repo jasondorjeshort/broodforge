@@ -4,6 +4,7 @@ package spawn
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -115,6 +116,46 @@ func TestHeldBackendRefusesWorktrees(t *testing.T) {
 	}
 	if err := b.WorktreeRemove(""); err == nil {
 		t.Error("remove: no refusal")
+	}
+}
+
+// WorktreePrePush is true only while the tree's core.hooksPath is HooksDir and the hook is there.
+func TestWorktreePrePush(t *testing.T) {
+	s, w := worktreeFixture(t)
+	if err := s.WorktreeCreate(w); err != nil {
+		t.Fatal(err)
+	}
+	check := func(want bool, why string) {
+		t.Helper()
+		got, err := s.WorktreePrePush(w.Session)
+		if err != nil || got != want {
+			t.Errorf("%s: WorktreePrePush %v %v, want %v", why, got, err, want)
+		}
+	}
+	check(false, "no pre-push under HooksDir")
+	if err := os.MkdirAll(s.HooksDir(), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.HooksDir(), "pre-push"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	check(true, "hooks path set, hook present")
+	gittest.Git(t, w.Tree(), "config", "core.hooksPath", filepath.ToSlash(t.TempDir()))
+	check(false, "hooks path elsewhere")
+	// Whitespace around the bot's directory: git runs no hook from there, so it is missing.
+	for _, v := range []string{s.HooksDir() + " ", " " + s.HooksDir(), s.HooksDir() + "\n", s.HooksDir() + "\t"} {
+		gittest.Git(t, w.Tree(), "config", "core.hooksPath", v)
+		check(false, fmt.Sprintf("hooks path %q", v))
+	}
+	gittest.Git(t, w.Tree(), "config", "core.hooksPath", s.HooksDir())
+	check(true, "hooks path set again")
+	gittest.Git(t, w.Tree(), "config", "--unset", "core.hooksPath")
+	check(false, "hooks path unset")
+	if _, err := s.WorktreePrePush("sessions/s0001"); err == nil {
+		t.Error("a relative session directory: no refusal")
+	}
+	if _, err := (LinuxSudoBwrap{}).WorktreePrePush(w.Session); err == nil || !strings.Contains(err.Error(), "held") {
+		t.Errorf("held backend: %v", err)
 	}
 }
 

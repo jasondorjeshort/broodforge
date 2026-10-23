@@ -7,16 +7,22 @@ are the ADR 0022 companion's (Clone at session start; Handoff at session end) an
 Surface. `worktree check|bundle|handoff <id>` are write commands the bot serves, because each
 fetches into the canonical; until `serve` (P10) they are proven through the harness
 (`cli.WorktreeHandlers`). `worktree list [--kept]` and `worktree forget|adopt` (ADR 0021) come
-with later passes. Two hidden standalone commands serve git itself: `broodforge git-askpass
+with later passes. Three hidden standalone commands serve git itself: `broodforge git-askpass
 <prompt>`, which `share/askpass.sh` (Linux) and `share/askpass.cmd` (Windows) run as git's
-`GIT_ASKPASS`, and `broodforge git-commit-msg <file>`, which `share/hooks/commit-msg` runs in a
-session's clone. The scripts find the binary as `<bf>/bin/broodforge` beside `<bf>/share`.
+`GIT_ASKPASS`, and `broodforge git-commit-msg <file>` and `broodforge git-pre-push`, which
+`share/hooks/commit-msg` and `share/hooks/pre-push` run in a session's clone. The scripts find the
+binary as `<bf>/bin/broodforge` beside `<bf>/share`.
 
-Drive. `worktree check <id>` runs the bundle, `git bundle verify` and the forced fetch into
-`refs/sessions/<id>`, then the attribution check alone: one line per commit since the base,
+Drive. `worktree check <id>` first prints `ok  pre-push` when the tree's `core.hooksPath` is
+exactly the bot's `<bf>/share/hooks` and its `pre-push` is there, else `missing  pre-push`
+(`--json`: `{"hook":"pre-push","status":"ok|missing"}`; no row when the tree cannot be read), then
+runs the bundle, `git bundle verify` and the forced fetch into `refs/sessions/<id>`, then the
+attribution check alone: one line per commit since the base,
 oldest first, `<hash>  ok|<problems>`, problems joined by `; ` from `author:<name <email>>`,
 `committer:<name <email>>` and `missing:<trailer line>`; then `ok  <commits>`, or
-`error: handoff-refused-attribution: <n> of <m> commits fail the attribution check`, exit 1.
+`error: handoff-refused-attribution: <n> of <m> commits fail the attribution check`, exit 1; with
+the commits passing, a missing hook ends it with `error: pre-push-missing: ...`, exit 1 (`handoff`
+is not refused for it: the tree's configuration is the session's).
 `worktree bundle <id>` prints `<bundle path>  <commits>`, or `none  0`. `worktree handoff <id>
 [--dry-run] [--expect <value>]` runs the five steps and prints `<outcome>  <remote>  <refspec>
 <commits>  <url>  <request>`, outcome `pushed`, `pull-request`, `none` (no commits: the tree is
@@ -45,7 +51,12 @@ with `GIT_ASKPASS` and, when the project names `repo.gitCredentialId`, the value
 `error: no-git-credential: ...` and exits 1, so git reads no answer and the push fails. The hook
 appends each missing line of `sessions/<id>/home/trailers` through `git interpret-trailers`
 and never blocks a commit: with no binary beside `share/` it prints one `commit-msg: no ...`
-line and exits 0. A done handoff sets the worktree row `removed` and the session's
+line and exits 0. The `pre-push` hook is the opposite: every push from the tree, whatever remote
+or path it names, prints `Broodforge: session <id> does not push. ...` (`cli.PrePushRefusal`,
+`<id>` from `BROODFORGE_SESSION`, `this tree` when unset; the script prints the same line first
+itself when the binary is absent, fails to start or prints something else) and exits 1, git's own `error: failed to push some refs` after it. `git push
+--no-verify` and `git -c core.hooksPath= push` skip it: a refusal, not the boundary (ADR 0025,
+rule 4). A done handoff sets the worktree row `removed` and the session's
 end outcome to the branch or the request URL; a failed one sets the row `kept`.
 
 Observe. `worktree list` (later pass); `audit --session <id> --kind push,pull-request-opened,handoff-refused`;
@@ -55,7 +66,10 @@ branch` for the pushed branch in scratch.
 Reproduce. In a scratch root, commit in the session tree with a wrong author (`git -C
 <root>/sessions/s0001/tree commit --author "X <x@example.com>" -m t` after a change) and run
 `worktree handoff s0001 --expect handoff-refused-attribution`. The whole P8 Proof:
-`go test -v -run 'TestProofWorktree|TestWorktreeRefusals|TestAskpass' ./internal/cli/`. A pull
+`go test -v -run 'TestProofWorktree|TestWorktreeRefusals|TestAskpass' ./internal/cli/`. The
+`pre-push` refusal: `git -C <root>/sessions/s0001/tree push origin HEAD` from a terminal inside
+the tree, then `worktree check s0001`; the P15 Proof is `go test -v -run
+'TestProofPrePush|TestGitPrePush|TestPrePushHook' ./internal/cli/`. A pull
 request cannot complete offline: `--dry-run` is the reproduction; `go test ./internal/git/` posts
 to a local test server.
 

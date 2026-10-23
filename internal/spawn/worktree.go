@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -187,6 +188,38 @@ func (s *SameAccount) WorktreeBundle(w Worktree) (Bundle, error) {
 		return Bundle{}, err
 	}
 	return Bundle{Path: path, Commits: n}, nil
+}
+
+// prePushHook is the hook under HooksDir that refuses every push from a session tree (ADR 0025,
+// rule 4).
+const prePushHook = "pre-push"
+
+// WorktreePrePush reports whether the session's tree still runs the bot's pre-push hook: its
+// core.hooksPath, as git resolves it in the tree (`git -C <sess>/tree config --get`), is
+// HooksDir exactly, and HooksDir/pre-push is a regular file, executable off Windows (git skips a
+// hook without the bit there). An unset or different hooks path is false, not an error.
+func (s *SameAccount) WorktreePrePush(session string) (bool, error) {
+	if err := checkSessionDir(session); err != nil {
+		return false, err
+	}
+	w := Worktree{Session: session}
+	out, err := runGit(CodeWorktree, "-C", w.Tree(), "config", "--default", "", "--get", "core.hooksPath")
+	if err != nil {
+		return false, err
+	}
+	// Only git's own line end is stripped: a value with other whitespace around it is a path
+	// git does not find the hook under, so it must not compare equal.
+	if strings.TrimSuffix(out, "\n") != s.HooksDir() {
+		return false, nil
+	}
+	fi, err := os.Stat(filepath.Join(s.HooksDir(), prePushHook))
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, &Error{CodeWorktree, err.Error()}
+	}
+	return fi.Mode().IsRegular() && (runtime.GOOS == "windows" || fi.Mode().Perm()&0o111 != 0), nil
 }
 
 // WorktreeRemove deletes <sess>/tree and <sess>/out.bundle; the session's home stays. A missing

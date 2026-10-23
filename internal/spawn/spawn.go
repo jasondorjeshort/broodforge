@@ -61,6 +61,10 @@ type Backend interface {
 	WorktreeCreate(w Worktree) error
 	WorktreeBundle(w Worktree) (Bundle, error)
 	WorktreeRemove(session string) error
+	// WorktreePrePush reads the session tree's core.hooksPath through git, as the other
+	// worktree operations run it, and reports whether it is HooksDir with its pre-push hook
+	// present (ADR 0025, rule 4); the bot's own git never opens the tree (ADR 0022).
+	WorktreePrePush(session string) (bool, error)
 	// HooksDir is the directory the clone's core.hooksPath names; Askpass the GIT_ASKPASS
 	// helper the bot's push names. Both are under <bf>/share.
 	HooksDir() string
