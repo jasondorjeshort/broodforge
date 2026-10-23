@@ -566,10 +566,10 @@ func (s *Service) open(ctx context.Context, ch Channel, gs git.Session, reg regi
 		answers: map[string]answerRec{}, baselines: map[string]map[string]engine.ModelUsage{},
 		turnModels: map[string]int64{}, sessionModels: map[string]int64{}}
 	if req.IdleTimeoutSeconds > 0 {
-		l.idleTimeout = time.Duration(req.IdleTimeoutSeconds) * time.Second
+		l.idleTimeout = secondsTimeout(req.IdleTimeoutSeconds)
 	}
 	if req.PromptTimeoutSeconds > 0 {
-		l.promptTimeout = time.Duration(req.PromptTimeoutSeconds) * time.Second
+		l.promptTimeout = secondsTimeout(req.PromptTimeoutSeconds)
 	}
 	now := s.stamp()
 	err = s.cfg.Store.Write(func(tx *store.Tx) error {

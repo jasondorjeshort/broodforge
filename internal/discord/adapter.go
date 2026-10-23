@@ -442,7 +442,7 @@ func (a *Adapter) slash(ctx context.Context, in Inbound, sl Slash) (Reply, error
 			return Reply{}, err
 		}
 		timeout := strings.Join(sl.Args, " ")
-		if _, ok := session.ParseIdleTimeout(timeout); !ok {
+		if _, _, ok := session.ParseIdleTimeout(timeout); !ok {
 			return Reply{}, a.refuse(in, "command", CodeBadArgs, "Not a timeout: "+timeout+". Give "+session.TimeoutText+".")
 		}
 		ev, err := a.svc.SetIdleTimeout(session.TimeoutRequest{ActRequest: act, Timeout: timeout})

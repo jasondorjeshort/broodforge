@@ -90,6 +90,12 @@ func validateInstance(in *Instance, exists CredentialExists) []string {
 	return out
 }
 
+// MaxTimeoutMinutes caps a timeout in minutes at a year, so the product with time.Minute
+// cannot overflow time.Duration. A larger value is a warning and is capped on load
+// (capTimeouts), not an error. It is the same year as session.MaxTimeout, which config
+// cannot import.
+const MaxTimeoutMinutes = 365 * 24 * 60
+
 // neverOrPositive checks a timeout in minutes where 0 (or absent) is none: a session that never
 // ends for inactivity, a permission prompt that waits for its answer.
 func neverOrPositive(key string, v *int) []string {

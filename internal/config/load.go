@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -179,7 +180,30 @@ func LoadDir(dir string, exists CredentialExists) (*Config, error) {
 		return nil, &InvalidError{Problems: problems}
 	}
 	c.Files = append(c.Files, projectFiles...)
+	c.capTimeouts(ipath, projectFiles)
 	return c, nil
+}
+
+// capTimeouts caps every timeout above MaxTimeoutMinutes at it and warns, one warning per
+// value: "<key> <value> is more than a year; capped at 525600".
+func (c *Config) capTimeouts(ipath string, projectFiles []File) {
+	cap1 := func(file, key string, v *int) {
+		if v != nil && *v > MaxTimeoutMinutes {
+			c.Warnings = append(c.Warnings, Problem{File: file, Message: key + " " + strconv.Itoa(*v) +
+				" is more than a year; capped at " + strconv.Itoa(MaxTimeoutMinutes)})
+			*v = MaxTimeoutMinutes
+		}
+	}
+	d := &c.Instance.Defaults
+	cap1(ipath, "defaults.idleTimeoutMinutes", &d.IdleTimeoutMinutes)
+	cap1(ipath, "defaults.promptTimeoutMinutes", &d.PromptTimeoutMinutes)
+	for i := range c.Projects {
+		for _, id := range channelIDs(&c.Projects[i]) {
+			ch := c.Projects[i].Channels[id]
+			cap1(projectFiles[i].Path, "channels."+id+".idleTimeoutMinutes", ch.IdleTimeoutMinutes)
+			cap1(projectFiles[i].Path, "channels."+id+".promptTimeoutMinutes", ch.PromptTimeoutMinutes)
+		}
+	}
 }
 
 // duplicateChannels is R-07: a channel id in two project files is an error, reported on each

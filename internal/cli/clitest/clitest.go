@@ -87,19 +87,26 @@ type Result struct {
 	Stderr string
 }
 
+// Environ is the process environment without any BROODFORGE_* entry (a test run inside a
+// Broodforge session inherits them), plus extra KEY=VALUE entries.
+func Environ(extra []string) []string {
+	var out []string
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(strings.ToUpper(kv), "BROODFORGE_") {
+			out = append(out, kv)
+		}
+	}
+	return append(out, extra...)
+}
+
 // Run runs the binary with args and returns its exit code and output; it fails the test only
-// if the binary cannot be started. env adds KEY=VALUE entries; BROODFORGE_ROOT is removed from
-// the inherited environment so only the test decides the root. Each run is logged, so
+// if the binary cannot be started. env adds KEY=VALUE entries; BROODFORGE_* is removed from
+// the inherited environment so only the test decides it (Environ). Each run is logged, so
 // `go test -v` shows the commands and their exit codes.
 func Run(t testing.TB, env []string, args ...string) Result {
 	t.Helper()
 	cmd := exec.Command(Binary(t), args...)
-	for _, kv := range os.Environ() {
-		if !strings.HasPrefix(strings.ToUpper(kv), "BROODFORGE_ROOT=") {
-			cmd.Env = append(cmd.Env, kv)
-		}
-	}
-	cmd.Env = append(cmd.Env, env...)
+	cmd.Env = Environ(env)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()

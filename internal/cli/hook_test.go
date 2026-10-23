@@ -22,7 +22,7 @@ var hookEnv = []string{"BROODFORGE_SESSION=s0001", "BROODFORGE_MODE=prompt", "BR
 func runStdin(t *testing.T, env []string, stdin string, args ...string) clitest.Result {
 	t.Helper()
 	cmd := exec.Command(clitest.Binary(t), args...)
-	cmd.Env = append(cmd.Environ(), env...)
+	cmd.Env = clitest.Environ(env)
 	cmd.Stdin = strings.NewReader(stdin)
 	var out, errb strings.Builder
 	cmd.Stdout, cmd.Stderr = &out, &errb

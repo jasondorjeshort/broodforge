@@ -26,7 +26,43 @@ var configReload = Command{
 	Columns: []string{"result", "changed"},
 }
 
-func init() { commands = append(commands, &configReload) }
+func init() {
+	commands = append(commands, &configReload)
+	renderers[&configReload] = renderReload
+}
+
+// renderReload prints the result as the columns do, then (text) one `warning: <file>: <message>`
+// line per warning, as config check does; --json carries them in the `warnings` field.
+func renderReload(env *Env, result json.RawMessage) error {
+	if err := env.Out.Result(result, configReload.Columns); err != nil {
+		return err
+	}
+	if env.JSON {
+		return nil
+	}
+	var r reloaded
+	if err := json.Unmarshal(result, &r); err != nil {
+		return err
+	}
+	for _, w := range r.Warnings {
+		line, err := marshal("warning: " + w)
+		if err != nil {
+			return err
+		}
+		if err := env.Out.Record(line, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func warningTexts(c *config.Config) []string {
+	out := make([]string, len(c.Warnings))
+	for i, w := range c.Warnings {
+		out[i] = w.String()
+	}
+	return out
+}
 
 // reload is the bot's config.reload.
 func (b *bot) reload(_ context.Context, _ *control.Call) (json.RawMessage, error) {
@@ -66,7 +102,7 @@ func (b *bot) reload(_ context.Context, _ *control.Call) (json.RawMessage, error
 		return nil, control.NewError(CodeReloadNeedsRestart, err.Error())
 	}
 	if len(keys) == 0 && b.lastGoodAt() == nil {
-		return json.Marshal(reloaded{Result: "reloaded"}) // nothing changed: no event, no write
+		return json.Marshal(reloaded{Result: "reloaded", Warnings: warningTexts(c)}) // nothing changed: no event, no write
 	}
 	if keys == nil {
 		keys = []string{} // the bot ran on last-good: the same content, now from config/
@@ -78,17 +114,19 @@ func (b *bot) reload(_ context.Context, _ *control.Call) (json.RawMessage, error
 	b.mu.Lock()
 	b.cfg, b.lastGood = c, nil
 	b.mu.Unlock()
-	r := reloaded{Result: "reloaded"}
+	r := reloaded{Result: "reloaded", Warnings: warningTexts(c)}
 	if changed != "" {
 		r.Changed = &changed
 	}
 	return json.Marshal(r)
 }
 
-// reloaded is config reload's result; Changed is null when no key changed.
+// reloaded is config reload's result; Changed is null when no key changed. Warnings are
+// config check's, shaped the same.
 type reloaded struct {
-	Result  string  `json:"result"`
-	Changed *string `json:"changed"`
+	Result   string   `json:"result"`
+	Changed  *string  `json:"changed"`
+	Warnings []string `json:"warnings"`
 }
 
 // CodeReloadNeedsRestart refuses a reload changing what `serve` fixes at its start.

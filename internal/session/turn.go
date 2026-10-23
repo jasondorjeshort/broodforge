@@ -441,10 +441,8 @@ func (s *Service) deferLocked(l *live, n, k int, esid string, u engine.TurnUsage
 		l.log.add(Event{Time: stamp, Type: EventPermissionDecision, Turn: n, ToolUseID: id, Tool: dc.tool, Target: dc.target,
 			Decision: dec, DecidedBy: DecidedByPolicy, Summary: dec + " " + TraceLine(dc.tool, dc.target) + " (" + DecidedByPolicy + ")"})
 	}
-	until := "" // no prompt timeout: it waits for an answer
-	if l.promptTimeout > 0 {
-		until = store.FormatTime(now.Add(l.promptTimeout))
-	}
+	// Never is a year (effectiveTimeout): the deadline is always real.
+	until := store.FormatTime(now.Add(effectiveTimeout(l.promptTimeout)))
 	l.pending = &Pending{ToolUseID: d.ToolUseID, Tool: c.tool, Target: c.target, Since: stamp, Until: until,
 		Dropped: len(dropped)}
 	l.state = StateWaitingForAnswer

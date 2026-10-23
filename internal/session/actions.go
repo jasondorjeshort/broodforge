@@ -492,11 +492,8 @@ func (s *Service) closeSession(l *live, actor, reason, before, outcome, summary 
 
 func (s *Service) armIdleLocked(l *live) {
 	s.disarmIdleLocked(l)
-	if l.idleTimeout <= 0 {
-		return
-	}
 	gen := l.idleGen
-	l.idleTimer = s.cfg.Clock.AfterFunc(l.idleTimeout, func() { s.idleFired(l, gen) })
+	l.idleTimer = s.cfg.Clock.AfterFunc(effectiveTimeout(l.idleTimeout), func() { s.idleFired(l, gen) })
 }
 
 func (s *Service) disarmIdleLocked(l *live) {
@@ -511,22 +508,20 @@ func (s *Service) disarmIdleLocked(l *live) {
 func (s *Service) idleFired(l *live, gen int) {
 	l.mu.Lock()
 	stale := gen != l.idleGen || (l.state != StateWaitingForInput && l.state != StateWaitingForAnswer)
+	idle := effectiveTimeout(l.idleTimeout)
 	l.mu.Unlock()
 	if stale || s.closing.Load() {
 		return
 	}
 	// 04, Failure flows (session-ended).
-	summary := "Session " + l.id + " ended: no activity for " + humanDuration(l.idleTimeout) + "."
+	summary := "Session " + l.id + " ended: no activity for " + humanDuration(idle) + "."
 	_, _ = s.end(context.Background(), l, ActorInstance, "", "idle", summary, gen)
 }
 
 func (s *Service) armPromptLocked(l *live) {
 	s.disarmPromptLocked(l)
-	if l.promptTimeout <= 0 {
-		return
-	}
 	gen := l.promptGen
-	l.promptTimer = s.cfg.Clock.AfterFunc(l.promptTimeout, func() { s.promptFired(l, gen) })
+	l.promptTimer = s.cfg.Clock.AfterFunc(effectiveTimeout(l.promptTimeout), func() { s.promptFired(l, gen) })
 }
 
 func (s *Service) disarmPromptLocked(l *live) {
@@ -545,7 +540,7 @@ func (s *Service) promptFired(l *live, gen int) {
 	if gen != l.promptGen || l.pending == nil || s.closing.Load() {
 		return
 	}
-	reason := "the prompt timed out after " + humanDuration(l.promptTimeout)
+	reason := "the prompt timed out after " + humanDuration(effectiveTimeout(l.promptTimeout))
 	_ = s.answerLocked(l, AnswerDeny, DecidedByPromptTimeout, ActorInstance, "", "", reason)
 }
 

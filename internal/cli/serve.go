@@ -271,6 +271,9 @@ func startBot(env *Env) (*bot, error) {
 		return fail(stepCredentials, err)
 	}
 	b.cfg = c
+	for _, w := range c.Warnings {
+		fmt.Fprintf(env.Stderr, "warning: %s\n", w)
+	}
 	var invalid error
 	if b.lastGood != nil {
 		invalid = loadErr

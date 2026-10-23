@@ -66,7 +66,7 @@ type StartInfo struct {
 	Reach          string   `json:"reach"`
 	Credential     string   `json:"credential"`
 	CredentialKind string   `json:"credentialKind"`
-	IdleTimeout    string   `json:"idleTimeout"` // 04's words: "60 minutes"
+	IdleTimeout    string   `json:"idleTimeout"` // 04's words: "60 minutes", "90 seconds" or "never"
 	Answer         []string `json:"answer"`
 }
 

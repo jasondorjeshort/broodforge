@@ -206,6 +206,37 @@ func TestProblems(t *testing.T) {
 	}
 }
 
+func TestTimeoutAboveAYearIsCappedWithAWarning(t *testing.T) {
+	inst := strings.Replace(minimalInstance, `"idleTimeoutMinutes":60`, `"idleTimeoutMinutes":307445735`, 1)
+	proj := strings.Replace(minimalProject, `"reach":"code"`, `"reach":"code","promptTimeoutMinutes":525601`, 1)
+	r := root(t, inst, map[string]string{"p.json": proj})
+	c, err := config.Load(r, nil)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	var got []string
+	for _, w := range c.Warnings {
+		got = append(got, w.Message)
+	}
+	want := []string{"defaults.idleTimeoutMinutes 307445735 is more than a year; capped at 525600",
+		"channels.100.promptTimeoutMinutes 525601 is more than a year; capped at 525600"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("warnings %q, want %q", got, want)
+	}
+	e := c.Effective(c.Project("p"), "100")
+	if e.IdleTimeoutMinutes != 525600 || e.PromptTimeoutMinutes != 525600 {
+		t.Errorf("effective %d %d, want both 525600", e.IdleTimeoutMinutes, e.PromptTimeoutMinutes)
+	}
+}
+
+func TestTimeoutOfAYearHasNoWarning(t *testing.T) {
+	inst := strings.Replace(minimalInstance, `"idleTimeoutMinutes":60`, `"idleTimeoutMinutes":525600`, 1)
+	c, err := config.Load(root(t, inst, map[string]string{"p.json": minimalProject}), nil)
+	if err != nil || len(c.Warnings) != 0 {
+		t.Errorf("a year: %v, warnings %v", err, c)
+	}
+}
+
 func TestCredentialExistence(t *testing.T) {
 	inst := strings.Replace(minimalInstance, `"mode":"dry-run"`, `"mode":"dry-run","botCredentialId":"cred-gone"`, 1)
 	proj := strings.Replace(minimalProject, `"canonical":"c"`, `"canonical":"c","gitCredentialId":"cred-ok"`, 1)

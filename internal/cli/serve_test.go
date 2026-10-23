@@ -19,13 +19,16 @@ import (
 // startServe runs `serve` on root in the background and returns its stdout and its exit.
 func startServe(t *testing.T, env []string, root string, args ...string) (*bytes.Buffer, <-chan int) {
 	t.Helper()
+	stdout, _, exit := startServeBuffers(t, env, root, args...)
+	return stdout, exit
+}
+
+// startServeBuffers is startServe that also returns stderr, which is safe to read only once the
+// exit channel has delivered.
+func startServeBuffers(t *testing.T, env []string, root string, args ...string) (*bytes.Buffer, *bytes.Buffer, <-chan int) {
+	t.Helper()
 	cmd := exec.Command(clitest.Binary(t), append([]string{"--root", root, "serve"}, args...)...)
-	for _, kv := range os.Environ() {
-		if !strings.HasPrefix(strings.ToUpper(kv), "BROODFORGE_ROOT=") {
-			cmd.Env = append(cmd.Env, kv)
-		}
-	}
-	cmd.Env = append(cmd.Env, env...)
+	cmd.Env = clitest.Environ(env)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Start(); err != nil {
@@ -46,7 +49,32 @@ func startServe(t *testing.T, env []string, root string, args ...string) (*bytes
 	t.Cleanup(func() {
 		_ = cmd.Process.Kill()
 	})
-	return &stdout, exit
+	return &stdout, &stderr, exit
+}
+
+// TestServePrintsConfigWarnings: a timeout above a year is capped, and serve says so on stderr
+// in the form config check uses.
+func TestServePrintsConfigWarnings(t *testing.T) {
+	_, env := scratchEnv(t)
+	root, _ := scratchNew(t, env)
+	project := root + "/config/projects/scratch.json"
+	good, err := os.ReadFile(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(project, []byte(strings.Replace(string(good), `"promptTimeoutMinutes": null`, `"promptTimeoutMinutes": 525601`, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr, exit := startServeBuffers(t, env, root)
+	if r := clitest.Run(t, env, "--root", root, "status", "--wait", "10", "--expect", "ok"); r.Code != 0 {
+		t.Fatalf("status: %d %q", r.Code, r.Stderr)
+	}
+	want(t, clitest.Run(t, env, "--root", root, "stop"), 0, "stopped  0\n", "")
+	<-exit
+	wantLine := "warning: " + project + ": channels.100.promptTimeoutMinutes 525601 is more than a year; capped at 525600\n"
+	if !strings.Contains(stderr.String(), wantLine) {
+		t.Errorf("serve stderr %q lacks %q", stderr.String(), wantLine)
+	}
 }
 
 func TestProofServeSession(t *testing.T) {
@@ -185,6 +213,67 @@ func TestProofConfigReload(t *testing.T) {
 	if code := <-exit; code != 0 {
 		t.Errorf("serve exited %d", code)
 	}
+}
+
+// TestReloadCarriesConfigWarnings: a reload that caps a timeout says so, as lines in text and in
+// the warnings field of --json.
+func TestReloadCarriesConfigWarnings(t *testing.T) {
+	_, env := scratchEnv(t)
+	root, _ := scratchNew(t, env)
+	run := func(args ...string) clitest.Result {
+		return clitest.Run(t, env, append([]string{"--root", root}, args...)...)
+	}
+	_, exit := startServe(t, env, root)
+	if r := run("status", "--wait", "10", "--expect", "ok"); r.Code != 0 {
+		t.Fatalf("status: %d %q", r.Code, r.Stderr)
+	}
+	project := root + "/config/projects/scratch.json"
+	good, err := os.ReadFile(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	set := func(minutes string) {
+		t.Helper()
+		body := strings.Replace(string(good), `"promptTimeoutMinutes": null`, `"promptTimeoutMinutes": `+minutes, 1)
+		if err := os.WriteFile(project, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	set("525601")
+	want(t, run("config", "reload"), 0, "reloaded  projects/scratch.json\nwarning: "+project+
+		": channels.100.promptTimeoutMinutes 525601 is more than a year; capped at 525600\n", "")
+	set("525602")
+	r := run("--json", "config", "reload")
+	if !strings.Contains(r.Stdout, `"warnings":["`+project+`: channels.100.promptTimeoutMinutes 525602 is more than a year; capped at 525600"]`) {
+		t.Errorf("reload --json: %q", r.Stdout)
+	}
+	want(t, run("stop"), 0, "stopped  0\n", "")
+	<-exit
+}
+
+// TestSessionStartNotesACappedTimeoutOnlyOnSuccess: the note goes to stderr once the start worked.
+func TestSessionStartNotesACappedTimeoutOnlyOnSuccess(t *testing.T) {
+	_, env := scratchEnv(t)
+	root, _ := scratchNew(t, env)
+	run := func(args ...string) clitest.Result {
+		return clitest.Run(t, env, append([]string{"--root", root}, args...)...)
+	}
+	_, exit := startServe(t, env, root)
+	if r := run("status", "--wait", "10", "--expect", "ok"); r.Code != 0 {
+		t.Fatalf("status: %d %q", r.Code, r.Stderr)
+	}
+	if r := run("register", "1001", "--name", "Ada", "--email", "ada@example.com"); r.Code != 0 {
+		t.Fatalf("register: %q", r.Stderr)
+	}
+	start := func(channel string) clitest.Result {
+		return run("session", "start", "--channel", channel, "--as", "1001", "--credential", "cred-scratch", "--idle-timeout-seconds", "31536001")
+	}
+	if r := start("999"); r.Code == 0 || strings.Contains(r.Stderr, "capped") {
+		t.Errorf("a failed start: %d %q", r.Code, r.Stderr)
+	}
+	want(t, start("100"), 0, "s0001\n", "idle timeout capped at a year\n")
+	want(t, run("stop"), 0, "stopped  1\n", "")
+	<-exit
 }
 
 // TestProofReloadRefusals: config/ naming another instance is refused by the bot, which the

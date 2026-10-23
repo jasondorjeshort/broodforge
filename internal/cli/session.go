@@ -11,6 +11,7 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/jasondorjeshort/broodforge/internal/control"
 	"github.com/jasondorjeshort/broodforge/internal/credentials"
@@ -32,7 +33,7 @@ var actingFlags = []Flag{
 
 // sessionStart is `broodforge session start --channel <id> --as <user id> [--roles <ids>]
 // [--credential <id>] [--mode prompt|policy] [--model <alias|model id>] [--reach read-only|code]
-// [--fixture <dir>] [--idle-timeout-seconds <n>] [--prompt-timeout-seconds <n>]`: prints the session id.
+// [--fixture <dir>] [--idle-timeout-seconds <seconds>] [--prompt-timeout-seconds <seconds>]`: prints the session id.
 var sessionStart = Command{
 	Name:   "session start",
 	Class:  ClassWrite,
@@ -44,8 +45,8 @@ var sessionStart = Command{
 		{Name: "model", Kind: FlagString, Value: "<alias|model id>", Usage: "opus, sonnet, haiku, fable or a model id they name (default: the channel's)"},
 		{Name: "reach", Kind: FlagString, Value: "read-only|code", Usage: "override the channel's reach (dry-run only)"},
 		{Name: "fixture", Kind: FlagString, Value: "<dir>", Usage: "the fake's fixture: a name under engine.fakeFixtures or a path (dry-run only)"},
-		{Name: "idle-timeout-seconds", Kind: FlagInt, Value: "<n>", Usage: "override the idle timeout (dry-run only)"},
-		{Name: "prompt-timeout-seconds", Kind: FlagInt, Value: "<n>", Usage: "override the prompt timeout (dry-run only)"},
+		{Name: "idle-timeout-seconds", Kind: FlagInt, Value: "<seconds>", Usage: "override the idle timeout (dry-run only)"},
+		{Name: "prompt-timeout-seconds", Kind: FlagInt, Value: "<seconds>", Usage: "override the prompt timeout (dry-run only)"},
 	}, actingFlags...),
 	Columns: []string{"id"},
 }
@@ -109,8 +110,21 @@ func init() {
 	positionals[&sessionShow] = []string{"id"}
 	positionals[&sessionTail] = []string{"id"}
 	extraArgs[&sessionStart] = absoluteFixture
+	renderers[&sessionStart] = renderStarted
 	extraArgs[&sessionSend] = sendText
 	renderers[&sessionShow] = renderSessionShow
+}
+
+// renderStarted prints the session id, and once the start succeeded notes on stderr a timeout
+// override above a year, which the bot capped.
+func renderStarted(env *Env, result json.RawMessage) error {
+	maxSeconds := int(session.MaxTimeout / time.Second)
+	for _, t := range []string{"idle", "prompt"} {
+		if env.Int(t+"-timeout-seconds") > maxSeconds {
+			fmt.Fprintf(env.Stderr, "%s timeout capped at a year\n", t)
+		}
+	}
+	return env.Out.Result(result, sessionStart.Columns)
 }
 
 // absoluteFixture sends a --fixture path as an absolute path, since the bot's working directory
