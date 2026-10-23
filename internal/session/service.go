@@ -260,10 +260,11 @@ func (s *Service) registration(user string) (registration, bool, error) {
 // splitRoles reads --roles: comma-separated role ids; "" is none given.
 func splitRoles(s string) []string { return policy.SplitList(s) }
 
-// StartRequest is `session start` (05-debug-interface-session.md).
+// StartRequest is `session start` (05-debug-interface-session.md). Model is an alias or a model
+// id policy knows (policy.ResolveModel); "" is the channel's.
 type StartRequest struct {
-	Channel, As, Roles, Credential, Mode, Reach, Fixture string
-	IdleTimeoutSeconds, PromptTimeoutSeconds             int
+	Channel, As, Roles, Credential, Mode, Reach, Fixture, Model string
+	IdleTimeoutSeconds, PromptTimeoutSeconds                    int
 }
 
 // Started is the new session.
@@ -300,7 +301,10 @@ type live struct {
 	// answers a call the process before made.
 	calls map[string]call
 
+	model         string // the session row's, mirrored for the summary (P12a); a turn reads the row
 	turnMode      string // the mode the running turn started with (a switch waits for the next)
+	turnModel     string // the model and effort the running turn started with, from the row
+	turnEffort    string
 	requester     string // the running turn's requester (R-44)
 	proc          int    // the running turn's engine process, 1 up
 	pending       *Pending
@@ -395,6 +399,10 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (Started, error) 
 		return Started{}, s.refuse(actor, "", "start", "roles",
 			&Error{CodeRefused, "start needs a role in " + strings.Join(ch.Roles.Start, ",")})
 	}
+	model, effort, chModel, err := s.startModel(actor, ch, req.Model)
+	if err != nil {
+		return Started{}, err
+	}
 	credID := req.Credential
 	if credID == "" {
 		credID = reg.DefaultCredential
@@ -442,10 +450,10 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (Started, error) 
 			return err
 		}
 		id = git.SessionID(n)
-		if _, err := tx.Exec(`INSERT INTO session (rowid, id, channel_id, project_id, driver_id, state, harness, credential_id, mode, reach, started_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, store.Int(n), store.Text(id), store.Text(ch.ID), store.Text(ch.Project),
+		if _, err := tx.Exec(`INSERT INTO session (rowid, id, channel_id, project_id, driver_id, state, harness, credential_id, mode, reach, model, effort, started_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, store.Int(n), store.Text(id), store.Text(ch.ID), store.Text(ch.Project),
 			store.Text(req.As), store.Text(StateStarting), store.Text(ch.Harness), store.Text(credID), store.Text(mode),
-			store.Text(reach), store.Text(started)); err != nil {
+			store.Text(reach), store.OptText(model), store.OptText(effort), store.Text(started)); err != nil {
 			return err
 		}
 		_, err := tx.Exec("INSERT INTO participant (session_id, user_id, role, joined_at) VALUES (?, ?, ?, ?)",
@@ -457,7 +465,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, store.Int(n), store.Text(id), store.T
 	}
 	gs := git.Session{Root: s.cfg.Root, ID: id, Instance: s.cfg.Instance, Canonical: ch.Repo.Canonical,
 		Remote: orDefault(ch.Repo.Remote, "origin"), DefaultBranch: orDefault(ch.Repo.DefaultBranch, "main")}
-	l, stage, err := s.open(ctx, ch, gs, reg, credID, delivery, mode, reach, fixture, req)
+	l, stage, err := s.open(ctx, ch, gs, reg, credID, delivery, mode, reach, fixture, modelPick{model, effort, chModel}, req)
 	if err != nil {
 		code, msg := "session-start", err.Error()
 		var se *Error
@@ -516,7 +524,7 @@ const (
 // refs/sessions/<id> (RemoveTree), and the directories open made, so a failed start leaves
 // nothing behind; it returns the stage that failed.
 func (s *Service) open(ctx context.Context, ch Channel, gs git.Session, reg registration, credID string,
-	delivery engine.Delivery, mode, reach, fixture string, req StartRequest) (*live, string, error) {
+	delivery engine.Delivery, mode, reach, fixture string, pick modelPick, req StartRequest) (*live, string, error) {
 	if _, err := s.cfg.CreateTree(ctx, gs); err != nil {
 		return nil, stageClone, err
 	}
@@ -552,7 +560,7 @@ func (s *Service) open(ctx context.Context, ch Channel, gs git.Session, reg regi
 		}
 		return fail(stageEngine, err)
 	}
-	l := &live{id: gs.ID, ch: ch, mode: mode, reach: reach, driver: reg, credential: credID, delivery: delivery,
+	l := &live{id: gs.ID, ch: ch, mode: mode, model: pick.model, reach: reach, driver: reg, credential: credID, delivery: delivery,
 		eng: eng, git: gs, tree: tree, home: home, idleTimeout: ch.IdleTimeout, promptTimeout: ch.PromptTimeout,
 		log: newEventLog(), state: StateWaitingForInput, participants: map[string]string{reg.User: RoleDriver}, calls: map[string]call{},
 		answers: map[string]answerRec{}, baselines: map[string]map[string]engine.ModelUsage{},
@@ -575,7 +583,7 @@ func (s *Service) open(ctx context.Context, ch Channel, gs git.Session, reg regi
 		}
 		_, err := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindSessionStarted, Actor: actorOf(req.As), Session: gs.ID,
 			Registration: reg.User, Details: details("channel", ch.ID, "project", ch.Project, "credential", credID,
-				"mode", mode, "reach", reach, "harness", ch.Harness, "branch", gs.Branch(), "tree", tree, "fixture", fixture)})
+				"mode", mode, "model", pick.model, "effort", pick.effort, "reach", reach, "harness", ch.Harness, "branch", gs.Branch(), "tree", tree, "fixture", fixture)})
 		return err
 	})
 	if err != nil {
@@ -590,7 +598,7 @@ func (s *Service) open(ctx context.Context, ch Channel, gs git.Session, reg regi
 	l.log.add(Event{Time: now, Type: EventSessionStarted, User: reg.User,
 		Summary: "Session " + gs.ID + " on " + ch.ProjectName + ", branch " + gs.Branch() + ", driver " + reg.Name + ".",
 		Start: &StartInfo{Channel: ch.ID, ProjectName: ch.ProjectName, Branch: gs.Branch(), Driver: reg.User, DriverName: reg.Name,
-			Mode: mode, ChannelMode: ch.Mode, Reach: reach, Credential: credID, CredentialKind: kind,
+			Mode: mode, ChannelMode: ch.Mode, Model: pick.model, ChannelModel: pick.channel, Effort: pick.effort, Reach: reach, Credential: credID, CredentialKind: kind,
 			IdleTimeout: humanDuration(l.idleTimeout), Answer: append([]string{}, ch.Roles.Answer...)}})
 	return l, "", nil
 }

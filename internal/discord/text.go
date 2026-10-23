@@ -37,16 +37,53 @@ func modeName(mode string) string {
 
 // modelShort is the footer's model name: `Opus` for claude-opus-5-5 (04, The turn loop); an id
 // policy does not know is shown as it is.
-func modelShort(id string) string {
-	name := policy.ModelDisplayName(id)
-	rest, ok := strings.CutPrefix(name, "Claude ")
-	if !ok {
-		return name
+func modelShort(id string) string { return session.ModelShort(id) }
+
+// modelLine is the header's model line (04, Model and effort): `Model: Opus (this channel's
+// default). Effort: high.`, the parenthesis `this channel's default`, `chosen at start` or
+// `from turn <n>`; `Model: the engine's own.` when nothing set one; `Effort:` only once set.
+func modelLine(m headerState) string {
+	line := modelPart(m)
+	if m.effort != "" {
+		line += " Effort: " + m.effort + "."
 	}
-	if f := strings.Fields(rest); len(f) > 0 {
-		return f[0]
+	return line
+}
+
+func modelPart(m headerState) string {
+	if m.model == "" {
+		return "Model: the engine's own."
 	}
-	return name
+	return "Model: " + modelShort(m.model) + " (" + m.why + ")."
+}
+
+// modelQueryText is /model's answer: the model line, then how to switch.
+func modelQueryText(m headerState) string {
+	a := policy.ModelAliases()
+	list := strings.Join(a, ", ")
+	if n := len(a); n > 1 {
+		list = strings.Join(a[:n-1], ", ") + " or " + a[n-1]
+	}
+	return modelPart(m) + " Switch with /model " + list + "."
+}
+
+// maxEchoRunes bounds the value a refusal repeats. not 04: 04 echoes the value whole.
+const maxEchoRunes = 40
+
+func echo(v string) string {
+	if r := []rune(v); len(r) > maxEchoRunes {
+		return string(r[:maxEchoRunes]) + "…"
+	}
+	return v
+}
+
+// notAModelText and notAnEffortText are 04's refusals of a value policy does not know.
+func notAModelText(v string) string {
+	return "Not a model: " + echo(v) + ". Models: " + session.ModelsText() + "."
+}
+
+func notAnEffortText(v string) string {
+	return "Not an effort: " + echo(v) + ". Efforts: " + session.EffortsText() + "."
 }
 
 // tokens is a token count as 04 writes it: 950, 48.2k, 212k, 1.2M.
@@ -150,13 +187,10 @@ func credentialKindName(kind string) string {
 
 // headerText is the venue's pinned header (04, Starting and the first message).
 // not 04: the name in it is the full registered name (see the top of this file).
-func headerText(id string, st *session.StartInfo) string {
-	why := "this channel's default"
-	if st.Mode != st.ChannelMode {
-		why = "chosen at start" // not 04
-	}
+func headerText(id string, st *session.StartInfo, m headerState) string {
 	return "Session " + id + " on " + st.ProjectName + ", branch " + st.Branch + ", driver " + st.DriverName + ".\n" +
-		"Mode: " + modeName(st.Mode) + " (" + why + "). Credential: " + st.Credential + " (" + credentialKindName(st.CredentialKind) + ").\n" +
+		"Mode: " + modeName(m.mode) + " (" + m.modeWhy + "). Credential: " + st.Credential + " (" + credentialKindName(st.CredentialKind) + ").\n" +
+		modelLine(m) + "\n" + // not 04: the line's place in the header
 		"Reach: " + st.Reach + ". Ends after " + st.IdleTimeout + " without activity. Who may answer prompts: " + roleList(st.Answer) + ".\n" +
 		"Write what you want done. Everyone who writes here is handed to the agent by name."
 }

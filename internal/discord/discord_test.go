@@ -216,6 +216,7 @@ func TestViewHeaderAndTurn(t *testing.T) {
 	v.Handle(ev(session.EventSessionStarted, 0, func(e *session.Event) { e.Start = testStart }))
 	header := "Session s0001 on Broodforge, branch broodforge/pc/s0001, driver Jason.\n" +
 		"Mode: asks first (this channel's default). Credential: cred-7k2m (Claude subscription).\n" +
+		"Model: the engine's own.\n" +
 		"Reach: code. Ends after 60 minutes without activity. Who may answer prompts: the driver.\n" +
 		"Write what you want done. Everyone who writes here is handed to the agent by name."
 	if p := (*posts)[1]; p.Body != header || !p.Pinned || p.Buttons[0].CustomID != "bf:s0001:end" {

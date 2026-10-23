@@ -131,3 +131,27 @@ the fake engine; a guild bug is first a recorded interaction or message JSON fed
 `onInteraction` or `onMessage` there.
 Isolation. Only `serve --discord live` and `discord check` connect, both to the guild
 configured or given; a value without a bot token's shape is refused before any connection.
+
+## Model and effort (P12a)
+
+Drive. Registered with 04's commands: `/session start model:<alias>` (optional) in a project channel;
+in a venue `/model [<alias>]` (top-level; `not-a-venue` elsewhere), `/session model <alias>` and
+`/session effort low|medium|high|max`, `model` and `effort` as Discord choice lists; setting is the
+driver's, `/model` alone anyone's there (`ephemeral  <04's Model: line>`). An alias is the lowercase
+second word of a display name in `policy`'s model map (`opus`, `sonnet`, `haiku`, `fable`; the map
+gains `claude-fable-5-1` = `Claude Fable 5.1`) and resolves to that entry's id, the value the engine's
+`--model` gets; the typed form (`discord inject command --channel s0001 --user 1001 --roles 10
+"/model sonnet"`; a venue message starting with `/` is text for the agent) also takes a full id
+the map holds, bare or with a date suffix (`-20261001`), passed as typed. Anything else is `bad-args` with 04's `Not a model:` text (or `Not an effort: <value>.
+Efforts: low, medium, high, max.`) before any turn starts; nothing unknown reaches the engine. The
+service side (`SetModel`, `SetEffort`, the events, the session row) is `05-debug-interface-session.md`'s.
+The header's parenthesis is `this channel's default`, `chosen at start` or `from turn <n>`; `Model:
+the engine's own.` when nothing set it; `Effort:` only once set; the renderer edits the pinned
+header in place on a `model-changed` or `effort-changed` event.
+Observe. `session show`, `session tail`, `session outbox` (an `edit` of the header's message id),
+`audit --kind model-changed`, the fake's `received-<n>.json` (`model`, `effort` of the `TurnRequest`).
+Reproduce. P12a's Proof (`08-implementation-plan.md`): `"/session start model:sonnet"` on `--channel
+100`, then `"/model fable"` and `"/model gpt"` (refused `bad-args`) on `--channel s0001`.
+Isolation. Dry run; the fake records the flags and runs no model. Effort is the coder's check first
+(`internal/engine/claudecode.go`, `Args`): without an engine flag for it, the effort commands and
+column are left out of the pass and the docs' effort lines wait.

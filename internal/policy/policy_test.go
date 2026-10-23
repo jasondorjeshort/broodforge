@@ -156,3 +156,29 @@ func TestClassRowsMatchClassOf(t *testing.T) {
 		t.Error("an mcp tool is not ClassOther")
 	}
 }
+
+func TestResolveModelAndEfforts(t *testing.T) {
+	if got := strings.Join(ModelAliases(), ","); got != "opus,sonnet,haiku,fable" {
+		t.Errorf("aliases %s", got)
+	}
+	for v, want := range map[string]string{
+		"opus": "claude-opus-5-5", "Sonnet": "claude-sonnet-5-5", "haiku": "claude-haiku-5-5", "fable": "claude-fable-5-1",
+		"claude-fable-5-1": "claude-fable-5-1", "claude-opus-5-5-20261001": "claude-opus-5-5-20261001",
+	} {
+		if got, ok := ResolveModel(v); !ok || got != want {
+			t.Errorf("ResolveModel(%q) = %q, %v; want %q", v, got, ok, want)
+		}
+	}
+	for _, v := range []string{"", "gpt", "claude-opus-5-55", "claude-opus", "claude-sonnet-5-5[1m]", "claude-opus-5-5 --x", "CLAUDE-OPUS-5-5",
+		"claude-opus-5-5-x", "claude-opus-5-5-2026100", "claude-opus-5-5-202610011", "claude-opus-5-5-20261001-x"} {
+		if got, ok := ResolveModel(v); ok {
+			t.Errorf("ResolveModel(%q) = %q, want refused", v, got)
+		}
+	}
+	if ModelDisplayName("claude-fable-5-1") != "Claude Fable 5.1" {
+		t.Error("fable has no display name")
+	}
+	if !ParseEffort("max") || ParseEffort("xhigh") || ParseEffort("") {
+		t.Error("ParseEffort")
+	}
+}

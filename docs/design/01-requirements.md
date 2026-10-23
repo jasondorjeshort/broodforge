@@ -73,7 +73,7 @@ How to read this doc:
 | R-27 | A policy-mode answer never allows more than the channel's reach allows; a request outside the reach is denied, not escalated to a person (choice). | v1 |
 | R-53 | A permission prompt nobody answers within the channel's prompt timeout (default 5 minutes) is denied, the turn finishes with its output kept, and the session stays open; the idle timeout of R-15 is separate. | v1 |
 | R-28 | The driver can switch a running session between policy mode and prompt mode from Discord. | v1 (Q 5) |
-| R-29 | A person can change the model or effort of a session from Discord. | later (Q 5) |
+| R-29 | The driver can choose a session's model at start and change its model or effort from Discord; a change takes effect at the next turn. | v1 (Q 5) |
 
 ### Git, worktrees and attribution
 
@@ -202,7 +202,8 @@ The vision's open questions, with the requirements they touch:
 3. Threads, private channels or the project channel for a session: R-12, R-20, R-23. Answered
    2026-10-14 in `04-ux.md`.
 4. The author rule when several people drove: R-33. Answered 2026-10-14 in `04-ux.md`.
-5. Mode, model and effort switching from Discord: R-28, R-29. Answered 2026-10-14 in `04-ux.md`.
+5. Mode, model and effort switching from Discord: R-28, R-29. Answered 2026-10-14 in `04-ux.md`;
+   R-29 promoted to `v1` on 2026-10-22, after the first live run (04, Model and effort).
 
 Also the owner's, because they decide what is spent: the cap thresholds of R-46, when it comes.
 

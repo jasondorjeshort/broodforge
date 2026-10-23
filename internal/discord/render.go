@@ -3,6 +3,7 @@
 package discord
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,13 +16,15 @@ import (
 // its buttons, the mode switch, and the summary with the transcript. It is fed by one
 // goroutine; its posts go to offer, which the coalescer paces. Every body passes the mask.
 type View struct {
-	id    string
-	venue string // the private channel; in a dry run its id is the session id
-	lobby string // the project channel
-	start *session.StartInfo
-	newID func() string
-	name  func(user string) string
-	offer func(Post)
+	id     string
+	venue  string // the private channel; in a dry run its id is the session id
+	lobby  string // the project channel
+	start  *session.StartInfo
+	header string      // the pinned header's message id
+	hdr    headerState // the header's mode and model lines, kept current (P12a)
+	newID  func() string
+	name   func(user string) string
+	offer  func(Post)
 
 	events []session.Event // everything seen, for the transcript
 
@@ -143,6 +146,9 @@ func (v *View) Handle(ev session.Event) {
 			reach = v.start.Reach
 		}
 		v.create(modeChangedText(ev.Result, reach), nil)
+		v.hdr.apply(ev) // the next header edit shows it
+	case session.EventModelChanged, session.EventEffortChanged:
+		v.switched(ev)
 	case session.EventParticipantJoined:
 		v.create(ev.Summary, nil)
 	case session.EventHandoffRefused:
@@ -167,9 +173,62 @@ func (v *View) started(ev session.Event) {
 	}
 	v.lobby = v.start.Channel
 	v.post(Post{Op: OpChannel, MessageID: v.venue, First: "#" + venueName(v.id, v.start.DriverName)})
-	id := v.newID()
-	v.post(Post{Op: OpCreate, MessageID: id, Pinned: true, Body: headerText(v.id, v.start),
-		Buttons: []Button{{Label: "End session", CustomID: CustomID{Kind: IDEnd, Session: v.id}.String(), Style: StyleDanger}}})
+	v.hdr.apply(session.Event{Type: session.EventSessionStarted, Start: v.start}) // v.start, never nil
+	v.header = v.newID()
+	v.post(Post{Op: OpCreate, MessageID: v.header, Pinned: true, Body: headerText(v.id, v.start, v.hdr), Buttons: v.endButton()})
+}
+
+func (v *View) endButton() []Button {
+	return []Button{{Label: "End session", CustomID: CustomID{Kind: IDEnd, Session: v.id}.String(), Style: StyleDanger}}
+}
+
+// switched is a model or effort switch: 04's `From the next turn:` line, then the pinned
+// header edited in place.
+func (v *View) switched(ev session.Event) {
+	v.hdr.apply(ev)
+	v.create(ev.Summary, nil)
+	if v.header != "" && v.start != nil {
+		v.post(Post{Op: OpEdit, MessageID: v.header, Body: headerText(v.id, v.start, v.hdr), Buttons: v.endButton()})
+	}
+}
+
+// headerState is the session's mode, model and effort as the header shows them, from its
+// events: the start's, then each switch, so a header edited for one switch shows the others.
+type headerState struct {
+	mode, modeWhy      string
+	model, why, effort string
+}
+
+func (m *headerState) apply(ev session.Event) {
+	// Four types of many, so not a switch the exhaustive check would make list them all.
+	if ev.Type == session.EventSessionStarted && ev.Start != nil {
+		m.mode, m.modeWhy = ev.Start.Mode, "this channel's default"
+		if ev.Start.Mode != ev.Start.ChannelMode {
+			m.modeWhy = "chosen at start" // not 04
+		}
+		m.model, m.effort, m.why = ev.Start.Model, ev.Start.Effort, "this channel's default"
+		if ev.Start.Model != ev.Start.ChannelModel {
+			m.why = "chosen at start"
+		}
+	}
+	if ev.Type == session.EventModeChanged {
+		m.mode, m.modeWhy = ev.Result, "from turn "+strconv.Itoa(ev.Turn) // not 04: model's words
+	}
+	if ev.Type == session.EventModelChanged {
+		m.model, m.why = ev.Result, "from turn "+strconv.Itoa(ev.Turn)
+	}
+	if ev.Type == session.EventEffortChanged {
+		m.effort = ev.Result
+	}
+}
+
+// headerOf is the header state after the events.
+func headerOf(evs []session.Event) headerState {
+	var m headerState
+	for _, ev := range evs {
+		m.apply(ev)
+	}
+	return m
 }
 
 // splitLines is a text's lines, each cut to maxLineRunes so any one line fits a message.

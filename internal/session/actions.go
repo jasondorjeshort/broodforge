@@ -613,7 +613,7 @@ func Reach(q store.Querier, id string) (ReachReport, error) {
 // trailers' names, 03 Attribution). l.mu is held.
 func (s *Service) endInfo(l *live, reason, outcome string, out git.Outcome, by string) *EndInfo {
 	info := &EndInfo{By: by, Reason: reason, StartedAt: l.startedAt, Turns: l.turn, In: l.sessIn, Out: l.sessOut,
-		Model: topModel(l.sessionModels, l.ch.Model), Branch: l.git.Branch(), Outcome: outcome, Commits: out.Commits,
+		Model: topModel(l.sessionModels, l.model), Branch: l.git.Branch(), Outcome: outcome, Commits: out.Commits,
 		Author: l.driver.Name, CoAuthors: []string{}}
 	switch {
 	case out.Request != nil:

@@ -10,24 +10,25 @@ import (
 // no bot runs (ADR 0021), so both print the same records.
 
 // ListRow is one line of `session list`: `<id>  <state>  <channel>  <driver>  <mode>  <reach>
-// <turns>  <started at>`.
+// <model or ->  <turns>  <started at>`.
 type ListRow struct {
-	ID        string `json:"id"`
-	State     string `json:"state"`
-	Channel   string `json:"channel"`
-	Driver    string `json:"driver"`
-	Mode      string `json:"mode"`
-	Reach     string `json:"reach"`
-	Turns     int64  `json:"turns"`
-	StartedAt string `json:"startedAt"`
+	ID        string  `json:"id"`
+	State     string  `json:"state"`
+	Channel   string  `json:"channel"`
+	Driver    string  `json:"driver"`
+	Mode      string  `json:"mode"`
+	Reach     string  `json:"reach"`
+	Model     *string `json:"model"`
+	Turns     int64   `json:"turns"`
+	StartedAt string  `json:"startedAt"`
 }
 
 // ListColumns are ListRow's text columns.
-var ListColumns = []string{"id", "state", "channel", "driver", "mode", "reach", "turns", "startedAt"}
+var ListColumns = []string{"id", "state", "channel", "driver", "mode", "reach", "model", "turns", "startedAt"}
 
 // List is every session, or those in one state, by id.
 func List(q store.Querier, state string) ([]ListRow, error) {
-	query := `SELECT s.id, s.state, s.channel_id, s.driver_id, s.mode, s.reach,
+	query := `SELECT s.id, s.state, s.channel_id, s.driver_id, s.mode, s.reach, s.model,
     (SELECT count(*) FROM turn t WHERE t.session_id = s.id), s.started_at FROM session s`
 	var args []store.Value
 	if state != "" {
@@ -37,8 +38,8 @@ func List(q store.Querier, state string) ([]ListRow, error) {
 	query += " ORDER BY s.rowid"
 	out := []ListRow{}
 	err := q.Query(query, args, func(r *store.Row) error {
-		out = append(out, ListRow{ID: r.Text(0), State: r.Text(1), Channel: r.Text(2), Driver: r.Text(3), Mode: r.Text(4),
-			Reach: r.Text(5), Turns: r.Int(6), StartedAt: r.Text(7)})
+		out = append(out, ListRow{ID: r.Text(0), State: r.Text(1), Channel: r.Text(2), Driver: r.Text(3), Mode: r.Text(4), Model: optional(r, 6),
+			Reach: r.Text(5), Turns: r.Int(7), StartedAt: r.Text(8)})
 		return nil
 	})
 	return out, err
@@ -81,6 +82,8 @@ type Detail struct {
 	Harness         string        `json:"harness"`
 	Credential      string        `json:"credential"`
 	EngineSessionID *string       `json:"engineSessionId"`
+	Model           *string       `json:"model"`
+	Effort          *string       `json:"effort"`
 	StartedAt       string        `json:"startedAt"`
 	EndedAt         *string       `json:"endedAt"`
 	EndOutcome      *string       `json:"endOutcome"`
@@ -103,12 +106,13 @@ func Show(q store.Querier, id string) (Detail, error) {
 	var d Detail
 	found := false
 	err := q.Query(`SELECT id, state, channel_id, project_id, driver_id, mode, reach, harness, credential_id,
-    engine_session_id, started_at, ended_at, end_outcome, (SELECT count(*) FROM turn WHERE session_id = s.id)
+    engine_session_id, started_at, ended_at, end_outcome, (SELECT count(*) FROM turn WHERE session_id = s.id), model, effort
 FROM session s WHERE id = ?`, []store.Value{store.Text(id)}, func(r *store.Row) error {
 		found = true
 		d = Detail{ID: r.Text(0), State: r.Text(1), Channel: r.Text(2), Project: r.Text(3), Driver: r.Text(4),
 			Mode: r.Text(5), Reach: r.Text(6), Harness: r.Text(7), Credential: r.Text(8), EngineSessionID: optional(r, 9),
-			StartedAt: r.Text(10), EndedAt: optional(r, 11), EndOutcome: optional(r, 12), Turns: r.Int(13)}
+			StartedAt: r.Text(10), EndedAt: optional(r, 11), EndOutcome: optional(r, 12), Turns: r.Int(13),
+			Model: optional(r, 14), Effort: optional(r, 15)}
 		return nil
 	})
 	if err != nil {

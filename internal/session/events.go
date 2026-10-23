@@ -60,6 +60,9 @@ type StartInfo struct {
 	DriverName     string   `json:"driverName"`
 	Mode           string   `json:"mode"`
 	ChannelMode    string   `json:"channelMode"`
+	Model          string   `json:"model,omitempty"`        // the row's at start; "" the engine's own
+	ChannelModel   string   `json:"channelModel,omitempty"` // the channel's, resolved
+	Effort         string   `json:"effort,omitempty"`       // the row's; "" unset
 	Reach          string   `json:"reach"`
 	Credential     string   `json:"credential"`
 	CredentialKind string   `json:"credentialKind"`

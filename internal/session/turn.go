@@ -171,8 +171,10 @@ func (s *Service) startTurnLocked(l *live, msgs []queued) (int, error) {
 			store.Text(l.id), store.Int(int64(n)), store.Text(msgs[0].user), store.Text(input), store.Text(now)); err != nil {
 			return err
 		}
-		_, err := tx.Exec("UPDATE session SET state = ? WHERE id = ?", store.Text(StateRunningTurn), store.Text(l.id))
-		return err
+		if _, err := tx.Exec("UPDATE session SET state = ? WHERE id = ?", store.Text(StateRunningTurn), store.Text(l.id)); err != nil {
+			return err
+		}
+		return s.turnModelLocked(tx, l)
 	}); err != nil {
 		return 0, s.turnNotStarted(l, n, msgs[0].user, err)
 	}
@@ -223,8 +225,8 @@ func (s *Service) startProcessLocked(l *live, input string, answer *engine.TurnA
 		HookEnv:            env,
 		Input:              input,
 		Answer:             answer,
-		Model:              l.ch.Model,
-		Effort:             l.ch.Effort,
+		Model:              l.turnModel,
+		Effort:             l.turnEffort,
 		SystemPromptAppend: SystemPromptAppend(l.id, l.ch.ProjectName, l.reach, l.driver.Name, lines),
 	}
 	h, err := l.eng.StartTurn(req)
@@ -647,7 +649,7 @@ func (s *Service) endTurnLocked(l *live, n int, r *engine.ResultEvent, u engine.
 	l.pending = nil
 	s.disarmPromptLocked(l)
 	usage := &TurnUsage{In: l.turnIn, Out: l.turnOut, OutUnknown: l.turnOutUnknown, SessionIn: l.sessIn, SessionOut: l.sessOut,
-		Model: topModel(l.turnModels, l.ch.Model), Mode: l.turnMode}
+		Model: topModel(l.turnModels, l.turnModel), Mode: l.turnMode}
 	return Event{Time: now, Type: EventTurnEnded, Turn: n, Result: res, Summary: reason, Usage: usage}
 }
 

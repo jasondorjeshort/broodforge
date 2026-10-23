@@ -49,9 +49,9 @@ var _ Engine = (*ClaudeCode)(nil)
 func (c *ClaudeCode) Name() string { return "claude-code" }
 
 // Args is ADR 0020's command line after the binary: the fixed flags, the empty MCP map, then
-// --resume, --model and --append-system-prompt when the request sets them. Effort is not
-// passed: the engine's flag for it is unverified on the pinned version and no caller sets it
-// yet; the pass that needs it checks the flag against the engine first.
+// --resume, --model, --effort and --append-system-prompt when the request sets them. --effort
+// is the engine's own flag (`claude --help` on 2.1.309: low, medium, high, xhigh, max); the
+// session sends only a level policy.Efforts lists.
 func Args(req TurnRequest, mcpConfig string) []string {
 	args := []string{"-p", "--output-format", "stream-json", "--verbose", "--input-format", "stream-json",
 		"--permission-mode", "default", "--setting-sources", "user", "--strict-mcp-config", "--mcp-config", mcpConfig}
@@ -60,6 +60,9 @@ func Args(req TurnRequest, mcpConfig string) []string {
 	}
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)
+	}
+	if req.Effort != "" {
+		args = append(args, "--effort", req.Effort)
 	}
 	if req.SystemPromptAppend != "" {
 		args = append(args, "--append-system-prompt", req.SystemPromptAppend)

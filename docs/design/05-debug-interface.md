@@ -252,7 +252,7 @@ Moved to `05-debug-interface-discord.md`: `discord check|render|inject`, the dry
 broodforge [--root <path>] [--json]
   serve  status  stop  reconcile                     scratch new|run|delete|prune
   config check|show|reload                           register <id>|list|show|set-default
-  credential init|add|login|list|remove|show         session start|send|answer|mode|interrupt|end|invite
+  credential init|add|login|list|remove|show         session start|send|answer|mode|model|effort|interrupt|end|invite
   session list|show|tail|outbox|transcript|reach-report   engine run|record
   hook pre-tool-use|try|cases                        worktree list|check|bundle|handoff|forget|adopt
   usage  audit  panel post|show                        backup snapshot|verify|rehearse

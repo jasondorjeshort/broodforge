@@ -257,6 +257,21 @@ root with the fake: the owner registers, starts, sends, clicks Allow and ends fr
 agent reads `session tail` and `audit`; with P7's real engine this is the vision's first usable
 version. Depends on: P11; the bot token and a test guild.
 
+## P12a. Model and effort from Discord (small; owner sees the header line and replies)
+
+Implements: R-29; `04-ux.md` (Model and effort); `05-debug-interface-discord.md` (Model and effort);
+`05-debug-interface-session.md` (`session start --model`, `session model|effort`, the `model:` line).
+Files: `internal/policy/roles.go` (fable; aliases); `internal/store/migrations/0002-session-model.sql`
+[no-check: written in this pass] (`model`, `effort`); `internal/audit/audit.go`; `internal/session/`
+(`StartRequest.Model`, `SetModel`, `SetEffort`, the spawn); `internal/discord/` and `internal/cli/session.go`
+(commands, choice lists, `/model`, wording, the header edit); `internal/engine/claudecode.go` only if the
+pinned engine has an effort flag (the coder checks first; without it, effort, commands and column, is out
+of this pass). Proof: `session start --channel 100 --as 1001 --roles 10 --credential cred-scratch --model
+sonnet`; `session show s0001` prints `model: claude-sonnet-5-5`; `discord inject command --channel s0001
+--user 1001 --roles 10 "/model"` prints the `Model:` line; `"/model fable"` yields `model-changed` in
+`session tail`, an `edit` of the pinned header in `session outbox` and `claude-fable-5-1` in the next
+`received-<n>.json`; `"/model gpt"` is `bad-args` plus `action-refused`. Depends on: P12.
+
 ## P13. The Windows instance (medium; owner steps)
 
 Implements: ADR 0022 (Windows); `03-architecture.md` (Process model, Windows column: the bot task

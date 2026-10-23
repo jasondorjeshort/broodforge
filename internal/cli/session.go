@@ -31,8 +31,8 @@ var actingFlags = []Flag{
 }
 
 // sessionStart is `broodforge session start --channel <id> --as <user id> [--roles <ids>]
-// [--credential <id>] [--mode prompt|policy] [--reach read-only|code] [--fixture <dir>]
-// [--idle-timeout-seconds <n>] [--prompt-timeout-seconds <n>]`: prints the session id.
+// [--credential <id>] [--mode prompt|policy] [--model <alias|model id>] [--reach read-only|code]
+// [--fixture <dir>] [--idle-timeout-seconds <n>] [--prompt-timeout-seconds <n>]`: prints the session id.
 var sessionStart = Command{
 	Name:   "session start",
 	Class:  ClassWrite,
@@ -41,6 +41,7 @@ var sessionStart = Command{
 		{Name: "channel", Kind: FlagString, Value: "<id>", Usage: "the configured channel"},
 		{Name: "credential", Kind: FlagString, Value: "<id>", Usage: "the credential (default: the driver's)"},
 		{Name: "mode", Kind: FlagString, Value: "prompt|policy", Usage: "the permission mode (default: the channel's)"},
+		{Name: "model", Kind: FlagString, Value: "<alias|model id>", Usage: "opus, sonnet, haiku, fable or a model id they name (default: the channel's)"},
 		{Name: "reach", Kind: FlagString, Value: "read-only|code", Usage: "override the channel's reach (dry-run only)"},
 		{Name: "fixture", Kind: FlagString, Value: "<dir>", Usage: "the fake's fixture: a name under engine.fakeFixtures or a path (dry-run only)"},
 		{Name: "idle-timeout-seconds", Kind: FlagInt, Value: "<n>", Usage: "override the idle timeout (dry-run only)"},
@@ -212,7 +213,8 @@ func runSessionShow(_ context.Context, env *Env) error {
 
 // renderSessionShow prints `session show`: `session: <id>  <state>  <channel>  <project>
 // <driver>  <mode>  <reach>  <harness>`, `credential: <id>`, `engine-session: <id or ->`,
-// `turns: <n>`, one `participants: <user id>  driver|contributor  <joined at>` per participant,
+// `model: <id or ->  effort: <level or ->`, `turns: <n>`, one `participants: <user id>
+// driver|contributor  <joined at>` per participant,
 // `worktree: <path>  <branch>  <state>` (or -), `pending: <tool use id>  <tool>  <target>  since
 // <time>  until <deadline>` (or -).
 func renderSessionShow(env *Env, raw json.RawMessage) error {
@@ -228,6 +230,7 @@ func renderSessionShow(env *Env, raw json.RawMessage) error {
 		"session: " + strings.Join([]string{d.ID, d.State, d.Channel, d.Project, d.Driver, d.Mode, d.Reach, d.Harness}, "  "),
 		"credential: " + d.Credential,
 		"engine-session: " + orDash(deref(d.EngineSessionID)),
+		"model: " + orDash(deref(d.Model)) + "  effort: " + orDash(deref(d.Effort)),
 		fmt.Sprintf("turns: %d", d.Turns),
 	}
 	for _, p := range d.Participants {
@@ -258,14 +261,14 @@ func SessionHandlers(svc *session.Service) func(*control.Registry) {
 		registerHandlers(svc, reg)
 		reg.Handle("session.start", func(ctx context.Context, call *control.Call) (json.RawMessage, error) {
 			var a struct {
-				Channel, As, Roles, Credential, Mode, Reach, Fixture string
-				IdleTimeoutSeconds, PromptTimeoutSeconds             int
+				Channel, As, Roles, Credential, Mode, Reach, Fixture, Model string
+				IdleTimeoutSeconds, PromptTimeoutSeconds                    int
 			}
 			if err := json.Unmarshal(call.Args, &a); err != nil {
 				return nil, control.NewError(control.CodeBadArgs, err.Error())
 			}
 			st, err := svc.Start(ctx, session.StartRequest{Channel: a.Channel, As: a.As, Roles: a.Roles, Credential: a.Credential,
-				Mode: a.Mode, Reach: a.Reach, Fixture: a.Fixture, IdleTimeoutSeconds: a.IdleTimeoutSeconds,
+				Mode: a.Mode, Model: a.Model, Reach: a.Reach, Fixture: a.Fixture, IdleTimeoutSeconds: a.IdleTimeoutSeconds,
 				PromptTimeoutSeconds: a.PromptTimeoutSeconds})
 			if err != nil {
 				return nil, sessionError(err)
@@ -333,6 +336,28 @@ func SessionHandlers(svc *session.Service) func(*control.Registry) {
 				return nil, sessionError(err)
 			}
 			return encodeSession(r)
+		})
+		reg.Handle("session.model", func(_ context.Context, call *control.Call) (json.RawMessage, error) {
+			var a struct{ ID, Model, As, Roles string }
+			if err := json.Unmarshal(call.Args, &a); err != nil {
+				return nil, control.NewError(control.CodeBadArgs, err.Error())
+			}
+			ev, err := svc.SetModel(session.ModelRequest{ActRequest: session.ActRequest{Session: a.ID, As: a.As, Roles: a.Roles}, Model: a.Model})
+			if err != nil {
+				return nil, sessionError(err)
+			}
+			return encodeSession(sendLine{Kind: string(ev.Type), Turn: ev.Turn, Detail: ev.Result})
+		})
+		reg.Handle("session.effort", func(_ context.Context, call *control.Call) (json.RawMessage, error) {
+			var a struct{ ID, Effort, As, Roles string }
+			if err := json.Unmarshal(call.Args, &a); err != nil {
+				return nil, control.NewError(control.CodeBadArgs, err.Error())
+			}
+			ev, err := svc.SetEffort(session.EffortRequest{ActRequest: session.ActRequest{Session: a.ID, As: a.As, Roles: a.Roles}, Effort: a.Effort})
+			if err != nil {
+				return nil, sessionError(err)
+			}
+			return encodeSession(sendLine{Kind: string(ev.Type), Turn: ev.Turn, Detail: ev.Result})
 		})
 		reg.Handle("session.end", func(ctx context.Context, call *control.Call) (json.RawMessage, error) {
 			var a struct {
@@ -483,6 +508,30 @@ var sessionMode = Command{
 	Columns: []string{"kind", "turn", "detail"},
 }
 
+// sessionModel is `broodforge session model <id> <alias|model id>`: the driver's switch, from
+// the next turn; prints `model-changed  <next turn>  <model id>`.
+var sessionModel = Command{
+	Name:  "session model",
+	Class: ClassWrite,
+	Flags: append([]Flag{
+		{Name: "id", Kind: FlagString, Value: "<session id>"},
+		{Name: "model", Kind: FlagString, Value: "<alias|model id>"},
+	}, actingFlags...),
+	Columns: []string{"kind", "turn", "detail"},
+}
+
+// sessionEffort is `broodforge session effort <id> low|medium|high|max`: the driver's switch,
+// from the next turn; prints `effort-changed  <next turn>  <level>`.
+var sessionEffort = Command{
+	Name:  "session effort",
+	Class: ClassWrite,
+	Flags: append([]Flag{
+		{Name: "id", Kind: FlagString, Value: "<session id>"},
+		{Name: "effort", Kind: FlagString, Value: "low|medium|high|max"},
+	}, actingFlags...),
+	Columns: []string{"kind", "turn", "detail"},
+}
+
 // sessionInvite is `broodforge session invite <id> --user <user id>`: the driver's; prints the
 // invited registration.
 var sessionInvite = Command{
@@ -522,10 +571,13 @@ var sessionReachReport = Command{
 }
 
 func init() {
-	commands = append(commands, &sessionAnswer, &sessionInterrupt, &sessionMode, &sessionInvite, &sessionEnd, &sessionReachReport)
+	commands = append(commands, &sessionAnswer, &sessionInterrupt, &sessionMode, &sessionModel, &sessionEffort, &sessionInvite, &sessionEnd,
+		&sessionReachReport)
 	positionals[&sessionAnswer] = []string{"id", "decision"}
 	positionals[&sessionInterrupt] = []string{"id"}
 	positionals[&sessionMode] = []string{"id", "mode"}
+	positionals[&sessionModel] = []string{"id", "model"}
+	positionals[&sessionEffort] = []string{"id", "effort"}
 	positionals[&sessionInvite] = []string{"id"}
 	required[&sessionInvite] = []string{"user"}
 	positionals[&sessionEnd] = []string{"id"}

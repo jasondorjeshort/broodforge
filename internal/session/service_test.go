@@ -47,8 +47,9 @@ func exec(t *testing.T, st *store.Store, stmts ...string) {
 }
 
 // newHarness makes a store with users 1001 (credential cred-a, usable) and 1002 (no default),
-// a subscription cred-b that needs login, and two channels on the fake, every list group
-// trusted (role 10): 100 (code reach, policy mode) and 200 (read-only, policy). The tree is a
+// a subscription cred-b that needs login, and channels on the fake, every list group
+// trusted (role 10): 100 (code reach, policy mode), 200 (read-only, policy) and 300 (100 with
+// a model policy does not know). The tree is a
 // directory, not a clone; RemoveTree removes it and records the session.
 func newHarness(t *testing.T, fixtureDir string, dryRun bool) *harness {
 	t.Helper()
@@ -73,6 +74,8 @@ func newHarness(t *testing.T, fixtureDir string, dryRun bool) *harness {
 	channels := map[string]Channel{
 		"100": {ID: "100", Project: "p", ProjectName: "Project P", Reach: "code", Mode: "policy", Harness: "fake", Roles: roles, Repo: repo},
 		"200": {ID: "200", Project: "p", ProjectName: "Project P", Reach: "read-only", Mode: "policy", Harness: "fake", Roles: roles, Repo: repo},
+		// 300 holds a model policy does not know, as a last-good file from before P12a may (model_test.go).
+		"300": {ID: "300", Project: "p", ProjectName: "Project P", Reach: "code", Mode: "policy", Harness: "fake", Roles: roles, Repo: repo, Model: "gpt-5"},
 	}
 	clock := NewManualClock(time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC))
 	h := &harness{st: st, root: root, clock: clock}

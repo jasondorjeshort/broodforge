@@ -402,7 +402,41 @@ func (a *Adapter) slash(ctx context.Context, in Inbound, sl Slash) (Reply, error
 		if sess != "" {
 			return Reply{}, a.refuse(in, "command", CodeNotVenue, "/session start works in a project channel.") // not 04
 		}
-		return a.start(ctx, in, in.Channel)
+		model := sl.Options["model"]
+		if _, ok := policy.ResolveModel(model); model != "" && !ok {
+			return Reply{}, a.refuse(in, "command", CodeBadArgs, notAModelText(model))
+		}
+		return a.start(ctx, in, in.Channel, model)
+	case SlashModel:
+		if err := needVenue(); err != nil {
+			return Reply{}, err
+		}
+		if len(sl.Args) == 0 {
+			evs, err := a.svc.Events(sess, 0)
+			if err != nil {
+				return Reply{}, a.venueRefusal(sess, err)
+			}
+			return ephemeral(modelQueryText(headerOf(evs))), nil
+		}
+		return a.setModel(in, act, sl)
+	case SlashSessionModel:
+		if err := needVenue(); err != nil {
+			return Reply{}, err
+		}
+		return a.setModel(in, act, sl)
+	case SlashSessionEffort:
+		if err := needVenue(); err != nil {
+			return Reply{}, err
+		}
+		effort := strings.Join(sl.Args, " ")
+		if !policy.ParseEffort(effort) {
+			return Reply{}, a.refuse(in, "command", CodeBadArgs, notAnEffortText(effort))
+		}
+		ev, err := a.svc.SetEffort(session.EffortRequest{ActRequest: act, Effort: effort})
+		if err != nil {
+			return Reply{}, a.venueRefusal(sess, err)
+		}
+		return none("effort from turn " + strconv.Itoa(ev.Turn) + ": " + effort), nil
 	case SlashSessionStop:
 		if err := needVenue(); err != nil {
 			return Reply{}, err
@@ -498,18 +532,33 @@ func (a *Adapter) click(ctx context.Context, in Inbound) (Reply, error) {
 		}
 		return none(cid.Session + " ended"), nil
 	case IDStart:
-		return a.start(ctx, in, cid.Channel)
+		return a.start(ctx, in, cid.Channel, "")
 	}
 	return Reply{}, a.refuse(in, "click", CodeBadArgs, "unknown custom id")
 }
 
-// start is the panel's button and /session start (04, The project channel and the panel):
-// a refusal creates nothing and is answered in 04's words.
-func (a *Adapter) start(ctx context.Context, in Inbound, channel string) (Reply, error) {
+// setModel is /model <alias> and /session model <alias>: a value policy does not know is
+// refused before the service sees it (04's `Not a model:`); the venue's `From the next turn:`
+// line and the header edit come from the model-changed event.
+func (a *Adapter) setModel(in Inbound, act session.ActRequest, sl Slash) (Reply, error) {
+	value := strings.Join(sl.Args, " ")
+	if _, ok := policy.ResolveModel(value); !ok {
+		return Reply{}, a.refuse(in, "command", CodeBadArgs, notAModelText(value))
+	}
+	ev, err := a.svc.SetModel(session.ModelRequest{ActRequest: act, Model: value})
+	if err != nil {
+		return Reply{}, a.venueRefusal(act.Session, err)
+	}
+	return none("model from turn " + strconv.Itoa(ev.Turn) + ": " + ev.Result), nil
+}
+
+// start is the panel's button and /session start [model:<alias>] (04, The project channel and
+// the panel): a refusal creates nothing and is answered in 04's words.
+func (a *Adapter) start(ctx context.Context, in Inbound, channel, model string) (Reply, error) {
 	if _, ok := a.cfg.Channel(channel); !ok {
 		return Reply{}, a.refuse(in, "start", CodeUnknownChan, "/session start works in a project channel.") // not 04
 	}
-	st, err := a.svc.Start(ctx, session.StartRequest{Channel: channel, As: in.User, Roles: heldRoles(in.Roles)})
+	st, err := a.svc.Start(ctx, session.StartRequest{Channel: channel, As: in.User, Roles: heldRoles(in.Roles), Model: model})
 	if err == nil {
 		wait := time.Duration(0)
 		if a.live.Load() != nil {

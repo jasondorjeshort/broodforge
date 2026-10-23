@@ -91,7 +91,7 @@ func TestProofServeSession(t *testing.T) {
 		!strings.Contains(r.Stdout, "\nparticipants: 1001  driver  ") || !strings.Contains(r.Stdout, "\npending: -\n") {
 		t.Errorf("session show:\n%s", r.Stdout)
 	}
-	if r := run("session", "list"); !strings.HasPrefix(r.Stdout, "s0001  waiting-for-input  100  1001  policy  code  1  ") {
+	if r := run("session", "list"); !strings.HasPrefix(r.Stdout, "s0001  waiting-for-input  100  1001  policy  code  -  1  ") {
 		t.Errorf("session list (the store through a running bot): %q %q", r.Stdout, r.Stderr)
 	}
 	if r := run("audit", "--kind", "permission-decision", "--json"); !strings.Contains(r.Stdout, `"decidedBy":"policy","decision":"allow"`) {

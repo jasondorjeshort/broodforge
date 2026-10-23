@@ -42,6 +42,8 @@ const (
 	KindWorktreeForgotten    Kind = "worktree-forgotten"
 	KindWorktreeAdopted      Kind = "worktree-adopted"
 	KindModeChanged          Kind = "mode-changed"
+	KindModelChanged         Kind = "model-changed"
+	KindEffortChanged        Kind = "effort-changed"
 	KindParticipantInvited   Kind = "participant-invited"
 )
 

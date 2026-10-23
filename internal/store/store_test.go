@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -231,7 +232,7 @@ func TestSchemaNewerRefused(t *testing.T) {
 	}
 	plain.Close()
 	s.Close()
-	want := "store schema 9999, binary knows 1; upgrade the binary or restore an older snapshot"
+	want := "store schema 9999, binary knows " + strconv.FormatInt(Known(), 10) + "; upgrade the binary or restore an older snapshot"
 	_, err = Create(root)
 	if se := wantCode(t, err, CodeStoreSchema); se.Message != want {
 		t.Errorf("Create: %q, want %q", se.Message, want)
@@ -256,7 +257,7 @@ func TestReadOnlyRefusesAnUnmigratedStore(t *testing.T) {
 	}
 	plain.Close()
 	_, err = OpenReadOnly(root)
-	if se := wantCode(t, err, CodeStoreSchema); se.Message != "store schema 0, binary knows 1; start the bot once to migrate it" {
+	if se := wantCode(t, err, CodeStoreSchema); se.Message != "store schema 0, binary knows "+strconv.FormatInt(Known(), 10)+"; start the bot once to migrate it" {
 		t.Errorf("message %q", se.Message)
 	}
 }

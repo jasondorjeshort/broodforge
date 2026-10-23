@@ -3,6 +3,9 @@
 package cli_test
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -84,7 +87,7 @@ func TestProofDiscordInject(t *testing.T) {
 	waitOutbox(t, run, "  delete  ")
 	want(t, run("discord", "inject", "click", "--custom-id", "bf:s0001:end", "--user", "1001", "--roles", "10"), 0, "none  s0001 ended\n", "")
 	out := waitOutbox(t, run, "  attach  ")
-	for _, w := range []string{"  channel  s0001  0  #s0001-ada\n", "  create  m2  339  Session s0001 on Scratch, branch ",
+	for _, w := range []string{"  channel  s0001  0  #s0001-ada\n", "  create  m2  364  Session s0001 on Scratch, branch ",
 		"  Working · turn 1 · 0:00\n", "  Session s0001 ended by Ada Example · 0 commits · nothing to push; the tree was removed.\n",
 		"  attach  m"} {
 		if !strings.Contains(out, w) {
@@ -98,6 +101,74 @@ func TestProofDiscordInject(t *testing.T) {
 		t.Errorf("transcript:\n%s", r.Stdout)
 	}
 	want(t, run("stop"), 0, "stopped  0\n", "")
+	<-exit
+}
+
+// TestProofDiscordModel: P12a's Proof. A start chooses the model, /model answers with the
+// header's line, a switch is the driver's, edits the pinned header and reaches the next turn's
+// engine request, and a bad value is bad-args and audited.
+func TestProofDiscordModel(t *testing.T) {
+	_, env := scratchEnv(t)
+	root, _ := scratchNew(t, env)
+	run := func(args ...string) clitest.Result {
+		return clitest.Run(t, env, append([]string{"--root", root}, args...)...)
+	}
+	_, exit := startServe(t, env, root)
+	if r := run("status", "--wait", "10", "--expect", "ok"); r.Code != 0 {
+		t.Fatalf("status: %d %q", r.Code, r.Stderr)
+	}
+	run("discord", "inject", "command", "--channel", "100", "--user", "1001", "/register name:Ada Example email:ada@example.com")
+	run("register", "set-default", "1001", "cred-scratch")
+	want(t, run("session", "start", "--channel", "100", "--as", "1001", "--roles", "10", "--model", "gpt"), 1, "",
+		"error: bad-args: --model \"gpt\": want opus, sonnet, haiku, fable or a model id they name\n")
+	want(t, run("session", "start", "--channel", "100", "--as", "1001", "--roles", "10", "--credential", "cred-scratch", "--model", "sonnet"), 0, "s0001\n", "")
+	if r := run("session", "show", "s0001"); !strings.Contains(r.Stdout, "\nmodel: claude-sonnet-5-5  effort: -\nturns: 0\n") {
+		t.Errorf("session show:\n%s", r.Stdout)
+	}
+	inject := func(user, text string) clitest.Result {
+		return run("discord", "inject", "command", "--channel", "s0001", "--user", user, "--roles", "10", text)
+	}
+	want(t, inject("1001", "/model"), 0, "ephemeral  Model: Sonnet (chosen at start). Switch with /model opus, sonnet, haiku or fable.\n", "")
+	want(t, inject("1001", "/model fable"), 0, "none  model from turn 1: claude-fable-5-1\n", "")
+	want(t, inject("1001", "/session effort max"), 0, "none  effort from turn 1: max\n", "")
+	want(t, inject("1001", "/model gpt"), 1, "", "error: bad-args: Not a model: gpt. Models: opus, sonnet, haiku, fable.\n")
+	want(t, inject("1001", "/session effort xhigh"), 1, "", "error: bad-args: Not an effort: xhigh. Efforts: low, medium, high, max.\n")
+	run("discord", "inject", "command", "--channel", "100", "--user", "1002", "/register name:Sam Example email:sam@example.com")
+	want(t, run("session", "model", "s0001", "opus", "--as", "1002"), 1, "", "error: refused: model needs the driver, Ada Example\n")
+	if r := run("session", "tail", "s0001"); !strings.Contains(r.Stdout, "  model-changed  From the next turn: Fable.\n") ||
+		!strings.Contains(r.Stdout, "  effort-changed  From the next turn: effort max.\n") {
+		t.Errorf("tail:\n%s", r.Stdout)
+	}
+	out := waitOutbox(t, run, "  create  m4  ")
+	if !strings.Contains(out, "  edit  m1  ") {
+		t.Errorf("no edit of the header m1:\n%s", out)
+	}
+	if r := run("--json", "session", "outbox", "s0001", "--all"); !strings.Contains(r.Stdout, `\nModel: Fable (from turn 1). Effort: max.\n`) {
+		t.Errorf("the header was not edited to the switch:\n%s", r.Stdout)
+	}
+	if r := run("audit", "--kind", "model-changed"); !strings.Contains(r.Stdout, `{"from":"claude-sonnet-5-5","to":"claude-fable-5-1"}`) {
+		t.Errorf("audit model-changed: %q", r.Stdout)
+	}
+	if r := run("audit", "--kind", "action-refused", "--json"); !strings.Contains(r.Stdout, `"message":"Not a model: gpt. Models: opus, sonnet, haiku, fable.","reason":"bad-args"`) {
+		t.Errorf("audit action-refused: %q", r.Stdout)
+	}
+	want(t, run("discord", "inject", "message", "--channel", "s0001", "--user", "1001", "--roles", "10", "go"), 0, "none  turn 1 started\n", "")
+	waitOutbox(t, run, "  delete  ")
+	b, err := os.ReadFile(filepath.Join(root, "sessions", "s0001", "fake", "received-1.json"))
+	var req struct{ Model, Effort string }
+	if err != nil || json.Unmarshal(b, &req) != nil || req.Model != "claude-fable-5-1" || req.Effort != "max" {
+		t.Errorf("received-1.json: %s %v", b, err)
+	}
+	if r := run("session", "list"); !strings.Contains(r.Stdout, "  code  claude-fable-5-1  1  ") {
+		t.Errorf("session list %q", r.Stdout)
+	}
+	// /session start model:<alias> in the project channel.
+	want(t, run("discord", "inject", "command", "--channel", "100", "--user", "1001", "--roles", "10", "/session start model:haiku"), 0,
+		"ephemeral  Session s0002 is open in <#s0002>.\n", "")
+	if r := run("session", "show", "s0002"); !strings.Contains(r.Stdout, "\nmodel: claude-haiku-5-5  effort: -\n") {
+		t.Errorf("session show s0002:\n%s", r.Stdout)
+	}
+	want(t, run("stop"), 0, "stopped  2\n", "")
 	<-exit
 }
 

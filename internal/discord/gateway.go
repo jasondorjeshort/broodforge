@@ -872,6 +872,12 @@ func slashOf(d dg.SlashCommandInteractionData) (Slash, string, bool) {
 	switch d.CommandName() {
 	case "register":
 		return Slash{Kind: SlashRegister, Name: "register", Options: opts}, text, sub == ""
+	case "model":
+		s := Slash{Kind: SlashModel, Name: "model", Options: map[string]string{}}
+		if v, ok := opts["model"]; ok {
+			s.Args = []string{v}
+		}
+		return s, text, sub == ""
 	case "usage":
 		return Slash{Kind: SlashUsage, Name: "usage", Options: opts}, text, sub == ""
 	case "credential":
@@ -881,12 +887,19 @@ func slashOf(d dg.SlashCommandInteractionData) (Slash, string, bool) {
 		switch sub {
 		case "start":
 			s.Kind = SlashSessionStart
+			if v, ok := opts["model"]; ok {
+				s.Options["model"] = v
+			}
 		case "stop":
 			s.Kind = SlashSessionStop
 		case "end":
 			s.Kind = SlashSessionEnd
 		case "mode":
 			s.Kind, s.Args = SlashSessionMode, []string{opts["mode"]}
+		case "model":
+			s.Kind, s.Args = SlashSessionModel, []string{opts["model"]}
+		case "effort":
+			s.Kind, s.Args = SlashSessionEffort, []string{opts["effort"]}
 		case "invite":
 			s.Kind, s.Options["user"] = SlashSessionInvite, opts["user"]
 		default:
@@ -898,9 +911,10 @@ func slashOf(d dg.SlashCommandInteractionData) (Slash, string, bool) {
 }
 
 // Commands are 04's slash commands as registered in the guild (Owner 1): /register,
-// /session start|stop|end|mode|invite, /credential add|list|remove|default|login, /usage.
+// /session start|stop|end|mode|model|effort|invite, /credential add|list|remove|default|login,
+// /usage, /model. The model and effort options are choice lists of policy's aliases and levels.
 func Commands() []dg.ApplicationCommandCreate {
-	str := func(name, desc string, max int, choices ...string) dg.ApplicationCommandOption {
+	str := func(name, desc string, max int, choices ...string) dg.ApplicationCommandOptionString {
 		o := dg.ApplicationCommandOptionString{Name: name, Description: desc, Required: true}
 		if max > 0 {
 			o.MaxLength = &max
@@ -914,15 +928,22 @@ func Commands() []dg.ApplicationCommandCreate {
 		return dg.ApplicationCommandOptionSubCommand{Name: name, Description: desc, Options: opts}
 	}
 	id := str("id", "the credential id, cred-...", 40)
+	model := str("model", "the model", 0, policy.ModelAliases()...)
+	optional := func(o dg.ApplicationCommandOptionString) dg.ApplicationCommandOptionString {
+		o.Required = false
+		return o
+	}
 	return []dg.ApplicationCommandCreate{
 		dg.SlashCommandCreate{Name: "register", Description: "Register the name and email your commits are authored as",
 			Options: []dg.ApplicationCommandOption{str("name", "your name as git writes it", 100), str("email", "your email as git writes it", 254)}},
 		dg.SlashCommandCreate{Name: "session", Description: "Start, stop, end or steer a Claude Code session",
 			Options: []dg.ApplicationCommandOption{
-				sub("start", "start a session in this project channel"),
+				sub("start", "start a session in this project channel", optional(model)),
 				sub("stop", "stop the running turn"),
 				sub("end", "end this session and hand off its commits"),
 				sub("mode", "switch from the next turn", str("mode", "asks first or acts freely", 0, "asks-first", "acts-freely")),
+				sub("model", "switch the model from the next turn", model),
+				sub("effort", "switch the effort from the next turn", str("effort", "the effort", 0, policy.Efforts...)),
 				sub("invite", "let someone into this session", dg.ApplicationCommandOptionUser{Name: "user", Description: "who", Required: true}),
 			}},
 		dg.SlashCommandCreate{Name: "credential", Description: "Your Claude credentials",
@@ -934,5 +955,7 @@ func Commands() []dg.ApplicationCommandCreate {
 				sub("login", "log a subscription in", id),
 			}},
 		dg.SlashCommandCreate{Name: "usage", Description: "Your token usage"},
+		dg.SlashCommandCreate{Name: "model", Description: "This session's model, or switch it from the next turn",
+			Options: []dg.ApplicationCommandOption{optional(model)}},
 	}
 }

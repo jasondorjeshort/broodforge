@@ -20,6 +20,9 @@ const (
 	SlashSessionInvite
 	SlashCredential
 	SlashUsage
+	SlashModel         // /model [<alias>], top-level, in a venue (P12a)
+	SlashSessionModel  // /session model <alias>
+	SlashSessionEffort // /session effort <level>
 )
 
 // Slash is a parsed slash command: its kind, the words after the command name (a mode, a
@@ -40,14 +43,17 @@ var slashNames = []struct {
 	kind SlashKind
 	opts []string // the options it takes; any other is refused
 }{
-	{"session start", SlashSessionStart, nil},
+	{"session start", SlashSessionStart, []string{"model"}},
 	{"session stop", SlashSessionStop, nil},
 	{"session end", SlashSessionEnd, nil},
 	{"session mode", SlashSessionMode, nil},
+	{"session model", SlashSessionModel, nil},
+	{"session effort", SlashSessionEffort, nil},
 	{"session invite", SlashSessionInvite, []string{"user"}},
 	{"credential", SlashCredential, []string{"kind", "label", "id"}},
 	{"register", SlashRegister, []string{"name", "email"}},
 	{"usage", SlashUsage, nil},
+	{"model", SlashModel, nil},
 }
 
 var optionRE = regexp.MustCompile(`^([a-z][a-z-]*):(.*)$`)

@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/jasondorjeshort/broodforge/internal/policy"
 )
 
 // The rules are 03-architecture.md's (Configuration) and ADR 0021's. Each check returns one
@@ -141,6 +143,17 @@ func validateChannel(key, id string, ch Channel, groups map[string][]string, che
 	}
 	if ch.Harness != nil {
 		out = append(out, oneOf(key+".harness", *ch.Harness, HarnessClaudeCode, HarnessFake)...)
+	}
+	// model and effort: what the session's start would accept (policy's resolver, P12a); null
+	// is unset, the engine's own.
+	if ch.Model != nil {
+		if _, ok := policy.ResolveModel(*ch.Model); !ok {
+			out = append(out, key+".model: "+quote(*ch.Model)+", want "+strings.Join(policy.ModelAliases(), ", ")+
+				" or a model id they name")
+		}
+	}
+	if ch.Effort != nil {
+		out = append(out, oneOf(key+".effort", *ch.Effort, policy.Efforts...)...)
 	}
 	out = append(out, positive(key+".idleTimeoutMinutes", ch.IdleTimeoutMinutes)...)
 	out = append(out, positive(key+".promptTimeoutMinutes", ch.PromptTimeoutMinutes)...)

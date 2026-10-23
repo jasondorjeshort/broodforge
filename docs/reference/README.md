@@ -12,3 +12,4 @@ already certain. When a fact turns out to be wrong, fix it and bump `verified:`;
 |---|---|---|
 | `go-on-windows.md` | The Go toolchain on the owner's PC: gcc for `-race`, the `CGO_ENABLED` lines, junctions, the scanner. Claude Code's own Windows behaviour is `../hatchery/reference/claude-code-on-windows.md`. | 2026-10-16 |
 | `go-dependencies.md` | Every module in `go.mod`: version, licence, which component or tool needs it; commands to check one. | 2026-10-16 |
+| `claude-code-flags.md` | The engine flags the adapter passes (`--model`, `--effort`, `--resume`): what each takes, how to check them against a new engine version. | 2026-10-23 |

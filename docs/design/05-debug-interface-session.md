@@ -48,7 +48,13 @@ turn's end or its wait for an answer, exit 0, printing `turn-ended  <n>
 completed|error|interrupted|deferred` or `waiting-for-answer  <n>  <tool use id> [<tool>]
 <target>` instead; `--tail` streams the turn's events meanwhile and, without `--wait`, prints the
 start line after them. `session mode <id> prompt|policy` (the driver; from the next turn) prints
-`mode-changed  <next turn>  <mode>`. `session interrupt <id>` (the `answer` list) stops the
+`mode-changed  <next turn>  <mode>`. `session start` also takes `[--model <alias|model id>]`, resolved
+as `05-debug-interface-discord.md` (Model and effort) says; absent, the channel's own `model` key (`defaults`
+has none; null is unset); the result is copied to the session row at start like `reach` (empty: the engine's
+own), and the spawn reads the row, not the channel. `session model <id> <alias|model id>` and `session
+effort <id> low|medium|high|max` (the driver; from the next turn) print `model-changed  <next turn>
+<model id>` and `effort-changed  <next turn>  <level>`, write the audit kind of that name with `from`
+and `to`, and refuse a bad value as `bad-args` naming the accepted ones. `session interrupt <id>` (the `answer` list) stops the
 running turn and prints `turn-ended  <n>  interrupted` once it ended; while a call waits for an
 answer it denies the call with the reason `interrupted` and ends the turn without a resume (the
 default until the owner decides); otherwise `no-running-turn`. `session end <id>
@@ -64,9 +70,9 @@ writes the pull request is not run yet (no `closing` fixture; the fallback title
 `--no-closing-turn` changes nothing. `session invite <id> --user <user id>` (the driver) prints
 the invited registration and writes `participant-invited`; the invitee becomes a participant on
 their first message (R-13), so no co-author line is owed for an invitation alone. `session list
-[--state <state>]` prints `<id>  <state>  <channel>  <driver>  <mode>  <reach>  <turns>  <started
-at>`. `session show <id>` prints `session: <id>  <state>  <channel>  <project>  <driver>  <mode>
-<reach>  <harness>`, `credential: <id>`, `engine-session: <id or ->`, `turns: <n>`, the
+[--state <state>]` prints `<id>  <state>  <channel>  <driver>  <mode>  <reach>  <model or ->  <turns>
+<started at>`. `session show <id>` prints `session: <id>  <state>  <channel>  <project>  <driver>  <mode>
+<reach>  <harness>`, `credential: <id>`, `engine-session: <id or ->`, `model: <id or ->  effort: <level or ->`, `turns: <n>`, the
 `participants:` lines, `worktree: <path>  <branch>  <state>` and `pending: -`, or while waiting
 `pending: <tool use id>  <tool>  <target>  since <time>  until <deadline>`. `session tail <id>
 [--follow] [--since <seq>] [--limit <n>|--all]` prints `<seq>  <time>  <type>  <summary>`.
@@ -76,7 +82,8 @@ Types: `session-started` (04's header line, `Session <id> on <project>, branch <
 line, `[<tool>] <target>`), `permission-decision` (`<decision> [<tool>] <target> (<decided
 by>)`), `tool-result` (the trace line, with 04's outcome after ` -> ` when the call was denied,
 blocked, bypassed or failed), `waiting-for-answer` (`<tool use id> [<tool>] <target>`),
-`mode-changed` (04's `From the next turn: asks first.` or `acts freely.`), `turn-ended` (the stop
+`mode-changed` (04's `From the next turn: asks first.` or `acts freely.`), `model-changed` and
+`effort-changed` (04's `From the next turn: Sonnet.`, `From the next turn: effort high.`), `turn-ended` (the stop
 reason, or `interrupted`), `handoff-refused`, `session-ended` (`Session <id> ended by <name>.`, or
 04's `Session <id> ended: no activity for <n> minutes.`), `session-interrupted`. A decision row's
 decider is `policy` (the hook answered from the table; also the `deferred` row, and the `dropped`
