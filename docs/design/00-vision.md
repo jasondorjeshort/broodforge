@@ -73,6 +73,13 @@ the primary one.
   and providers (a second and third engine without touching the core). Many instances or servers
   per deployment is not a growth axis. Agents know every language, so language and library
   choices are judged on mechanical properties, not on a programmer's familiarity.
+- Check in rarely; lose nothing (2026-10-23). The way people use Claude Code from Discord is not
+  the way they use it at a terminal: they start work, leave, and come back hours or a day later.
+  That is the normal rhythm, not an absence. So waiting is free and nothing is lost to it: a
+  session stays open until a person ends it, and a permission prompt waits for its answer. The
+  work sits in its own worktree on its own branch, and no engine runs and no tokens are spent
+  while it waits, so nobody being around is harmless. A timeout that closes a session or denies a prompt is an
+  option a channel or a driver chooses, never the default (R-15, R-53).
 
 ## The first usable version
 
