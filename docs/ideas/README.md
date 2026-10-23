@@ -88,4 +88,6 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-21-go-rules-become-a-lint-test.md` | chore | The mechanical rules of `go.md` (SPDX, host branching, `any`, imports) become one test under `tests/lint/`; the import exceptions move to 03's `cli` row |
 | `2026-10-22-session-model-and-effort-from-discord.md` | feature | `/session model` and `/session effort` (R-29) promoted from later to the next pass, so Broodforge can be built in Broodforge; wording and value rules open |
 | `2026-10-22-discord-layer-trace-for-debugging-the-live-bot.md` | feature | A debug-only `serve --trace` of interactions, scan outcomes, REST calls and gateway events, readable over the control pipe; what a second bot cannot see |
+| `2026-10-23-handoff-main-lands-a-session-on-the-default-branch.md` | feature | A third `handoff` value, `main`: check, rebase, fast-forward push to the default branch, falling back to the session branch; gated on a role group; waits on the owner's ADR |
+| `2026-10-23-session-land-pushes-to-main-mid-session.md` | feature | `/session land` runs the `main` handoff's steps on the commits so far and keeps the session open; waits on the owner's ADR |
 | `2026-10-21-coder-stop-hook-for-build-and-vet.md` | question | A SubagentStop hook in the coder frontmatter running build and vet; a carry-back; wait for the trigger or build now |

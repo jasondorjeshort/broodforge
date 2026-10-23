@@ -35,6 +35,8 @@ Updated: 2026-10-23, after the idle-timeout commit, by Broodforge session s0005
 - P12a: the wording above; `/model` alone also shows effort?; does a switch post name who switched?
   P12: a refusal to a plain message (a pasted key, the lobby hint) goes by direct message, falling
   back to a channel reply with a mention. Keep, or always in-channel?
+- The owner's proposal and ADR for landing on main: the `main` handoff and `/session land` ideas of
+  2026-10-23 (`Waits:` on it).
 - Which name and email go on this project's commits? (`privacy.identities`, as in Hatchery's policy.)
 - The two `Question:` ideas of 2026-10-21; wording: hook no-answer phrase, first vs full names, "acts freely".
 
