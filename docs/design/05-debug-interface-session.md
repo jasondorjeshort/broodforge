@@ -33,9 +33,12 @@ Isolation. A scratch root has no registrations; the ids above are not Discord's.
 
 Drive. `broodforge session start --channel <id> --as <user id> [--roles <ids>] [--credential
 <id>] [--mode prompt|policy] [--reach read-only|code] [--fixture <dir>] [--idle-timeout-seconds
-<n>] [--prompt-timeout-seconds <n>]` prints the session id (`s0001`); `--reach`, `--fixture` and
-the timeouts are dry-run only (`live-instance`). `--credential` defaults to the driver's
-(`no-credential` without one; R-41: `credential-not-usable: <id> is <status>`); `--fixture` is a
+<seconds>] [--prompt-timeout-seconds <seconds>]` prints the session id (`s0001`); `--reach`, `--fixture`
+and the timeouts are dry-run only (`live-instance`). Every timeout is at most a year: a larger
+`--...-timeout-seconds` is capped, with `idle timeout capped at a year` (or `prompt`) on stderr, and
+0 or absent takes the channel's value. In a timeout's words `<n>` is a count with its unit, `5 minutes`
+for whole minutes and else seconds (`90 seconds`). Never is a timer of a year, worded "never".
+`--credential` defaults to the driver's (`no-credential` without one; R-41: `credential-not-usable: <id> is <status>`); `--fixture` is a
 name under `engine.fakeFixtures` or a path, default `basic` (`unknown-fixture`; a broken
 `fixture.json` is `bad-fixture`). A start refused before its row writes `action-refused` and
 leaves nothing; one that fails later (the clone, the fake, the store) also removes the tree and
@@ -56,7 +59,9 @@ effort <id> low|medium|high|max` (the driver; from the next turn) print `model-c
 <model id>` and `effort-changed  <next turn>  <level>`, write the audit kind of that name with `from`
 and `to`, and refuse a bad value as `bad-args` naming the accepted ones. `session timeout <id>
 never|<minutes>|<duration>` (the driver; effective now) sets the session's idle timeout (`never`,
-`off` or `0` is none; a bare number is minutes; else a Go duration of at least a minute) and
+`off` or `0` is never; a bare number is minutes; else a Go duration of at least a minute such as
+`1h30m15s`, which reads `5415 seconds`; above a year is capped, and the summary adds
+` Capped at a year.`) and
 prints `timeout-changed  <next turn>  <never or 04's words>`; audit `timeout-changed` with `from`
 and `to`; held in the bot's memory, not the row. `session interrupt <id>` (the `answer` list) stops the
 running turn and prints `turn-ended  <n>  interrupted` once it ended; while a call waits for an
@@ -88,9 +93,9 @@ by>)`), `tool-result` (the trace line, with 04's outcome after ` -> ` when the c
 blocked, bypassed or failed), `waiting-for-answer` (`<tool use id> [<tool>] <target>`),
 `mode-changed` (04's `From the next turn: asks first.` or `acts freely.`), `model-changed` and
 `effort-changed` (04's `From the next turn: Sonnet.`, `From the next turn: effort high.`),
-`timeout-changed` (04's `Ends after <n> minutes without activity.` or `Never ends for inactivity.`), `turn-ended` (the stop
+`timeout-changed` (04's `Ends after <n> without activity.` or `Never ends for inactivity.`), `turn-ended` (the stop
 reason, or `interrupted`), `handoff-refused`, `session-ended` (`Session <id> ended by <name>.`, or
-04's `Session <id> ended: no activity for <n> minutes.`), `session-interrupted`. A decision row's
+04's `Session <id> ended: no activity for <n>.`), `session-interrupted`. A decision row's
 decider is `policy` (the hook answered from the table; also the `deferred` row, and the `dropped`
 row of every other call of that message, C28), `participant` or `prompt-timeout` (an answer),
 `instance` (dropped as its session ended), `hook` (it failed: exit 2, `hook:`, audited `action-refused` with actor `hook`), `config` (the
@@ -135,14 +140,16 @@ list; a driver-only list refuses others with 04's `Only <name> (the driver) can 
 `no-pending`), prints `turn  <n>  resumed` or with `--wait` the outcome, and the resumed process
 (the answer in `BROODFORGE_ANSWER`, no stdin line, C27) continues the same turn in `session
 tail`. `allow-session` also puts the tool in `BROODFORGE_SESSION_ALLOW` from that resume on (04,
-Owner 6); `--reason` on a deny is `BROODFORGE_ANSWER_REASON` (with an allow it is `bad-args`: the agent sees no reason for an allow); a resume that cannot start ends the turn as an error and the answer is `resume-failed`. The prompt timeout
-(`--prompt-timeout-seconds <n>` at start, else the channel's minutes; 0 is none: the call waits
-and `session show` prints `until -`) denies the pending call with
-the reason `the prompt timed out after <n> minutes|seconds`, decider `prompt-timeout`, and the
-turn finishes: the trace line `[<tool>] <target> -> denied: the prompt timed out after <n>
-minutes.` (04). The idle timeout (`--idle-timeout-seconds <n>`, else the channel's minutes, 0
-being none; `session timeout` changes it) runs from the last turn's end, or the start of a wait,
-and ends the session (`session-ended`, reason `idle` in `audit`); the two
+Owner 6); `--reason` on a deny is `BROODFORGE_ANSWER_REASON` (with an allow it is `bad-args`: the agent sees
+no reason for an allow); a resume that cannot start ends the turn as an error and the answer is
+`resume-failed`. The prompt timeout
+(`--prompt-timeout-seconds <seconds>` at start, else the channel's minutes) denies the pending
+call with the reason `the prompt timed out after <n>`, decider `prompt-timeout`, and the turn
+finishes: the trace line `[<tool>] <target> -> denied: the prompt timed out after <n>.` (04).
+With none set (never) the call still carries a real deadline, a year out: `session show` prints it
+as `until`, and `--json` has `until` always. The idle timeout (`--idle-timeout-seconds <seconds>`
+at start, else the channel's minutes; `session timeout` changes it) runs from the last turn's end,
+or the start of a wait, and ends the session (`session-ended`, reason `idle` in `audit`); the two
 timers are independent (R-53). Both run on the service's clock, which the tests replace
 (`session.ManualClock`). With the fixture `parallel`, the message's two Writes leave one
 `deferred` and one `dropped` row.

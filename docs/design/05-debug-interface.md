@@ -20,8 +20,9 @@ that widens a live session), the hidden probe `control echo`. Sections below giv
 ## Bot lifecycle
 
 Drive. `broodforge serve [--discord live|dry-run]` runs the bot in the foreground through 03's
-startup steps and prints `serving  <socket>` once the socket listens; a failed step is `error:
-start-<step>: <reason>`, exit 1 (`root`, `config`, `discord`, `credentials`, `store`, `engine`,
+startup steps, prints each configuration warning (`warning: <file>: <what>`, as `config check`
+does) to stderr, and prints `serving  <socket>` once the socket listens; a failed step is
+`error: start-<step>: <reason>`, exit 1 (`root`, `config`, `discord`, `credentials`, `store`, `engine`,
 `preflight`, `reconcile`, `control`); the flag overrides the config key for this run. Live needs
 `discord.applicationId`, `guildId` and `botCredentialId` (a `bot-token` credential whose value
 has a bot token's shape, checked before anything connects) and opens the gateway after the
@@ -50,8 +51,8 @@ before any write, so a second bot never touches the first's sessions or audit lo
 ## Configuration
 
 Drive. `broodforge config check (file)` validates `config/` without the bot: `ok  <projects>
-<channels>`, exit 0, then warnings prefixed `warning:`; on any problem one `error: bad-config:
-<file>: <what>` line each, exit 1 (a channel id in two project files is one, R-07; an unknown or
+<channels>`, exit 0, then warnings prefixed `warning:` (a timeout above a year is one, capped at 525600); on any
+problem one `error: bad-config: <file>: <what>` line each, exit 1 (a channel id in two project files is one, R-07; an unknown or
 repeated key names its dotted path, `duplicate key channels.100`); paths print with `/` on both
 hosts; no `config/instance.json` is `no-config`. `broodforge config show [--effective] [--channel
 <id>] [--project <id>] [--last-good] (file)` prints the parsed files, one `<file>  <content>`
@@ -61,7 +62,8 @@ record each, comments removed; `--effective` prints each channel with
 `broodforge config reload [--expect reloaded]` asks the running bot to read `config/` again: valid,
 it runs on it from then on (a running session keeps the reach and mode it started with), rewrites
 the last-good copy, writes `configuration-changed` and prints `reloaded  <changed keys>`; nothing
-changed prints `reloaded  -` and writes nothing. Refused, the old configuration stays and
+changed prints `reloaded  -` and writes nothing. Either way a warning of the new configuration
+follows as a `warning: <file>: <what>` line (`--json`: a `warnings` array, as `config check`'s). Refused, the old configuration stays and
 `configuration-invalid` is written (`"using":"previous"`): invalid files are one `error:
 bad-config: <file>: <what>; ...` line; another `instanceName` is `bad-config` too; a change to a
 key the bot reads only at its start (`schemaVersion`, `credentials`, `discord`, `engine`,
@@ -118,7 +120,7 @@ string and refuses any other value with exit 1.
 
 ## Session lifecycle without Discord
 
-Moved to `05-debug-interface-session.md`: `session start|send|mode|interrupt|end|invite|list|show|tail`, the event types and summaries `session tail` prints, who decided a call, `tests/repro/full-session.sh`, and P11's `session outbox|transcript` and `panel post|show`.
+Moved to `05-debug-interface-session.md`: `session start|send|answer|mode|model|effort|timeout|interrupt|end|invite|list|show|tail|reach-report`, the event types and summaries `session tail` prints, who decided a call, `tests/repro/full-session.sh`, and P11's `session outbox|transcript` and `panel post|show`.
 
 ## A turn against the fake engine
 
@@ -252,7 +254,7 @@ Moved to `05-debug-interface-discord.md`: `discord check|render|inject`, the dry
 broodforge [--root <path>] [--json]
   serve  status  stop  reconcile                     scratch new|run|delete|prune
   config check|show|reload                           register <id>|list|show|set-default
-  credential init|add|login|list|remove|show         session start|send|answer|mode|model|effort|interrupt|end|invite
+  credential init|add|login|list|remove|show         session start|send|answer|mode|model|effort|timeout|interrupt|end|invite
   session list|show|tail|outbox|transcript|reach-report   engine run|record
   hook pre-tool-use|try|cases                        worktree list|check|bundle|handoff|forget|adopt
   usage  audit  panel post|show                        backup snapshot|verify|rehearse

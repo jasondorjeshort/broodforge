@@ -104,7 +104,7 @@ arikawa covers; resume, reconnects and the per-route limits are disgo's.
 Drive. `serve --discord live` on a root whose `discord` keys are set: after the control socket it
 checks the application behind the token against `discord.applicationId` and the
 message-content intent, registers 04's slash commands in `discord.guildId` (`/register`,
-`/session start|stop|end|mode|invite`, `/credential add|list|remove|default|login`, `/usage`),
+top-level `/model`, `/session start|stop|end|mode|model|effort|timeout|invite`, `/credential add|list|remove|default|login`, `/usage`),
 binds the venues of earlier runs under each `venue.category` (a text channel whose topic is
 `<instanceName>:<session id>`, the mark every venue is created with: an open or interrupted
 session's is bound again, an ended one's is deleted ten minutes after its end; a channel
@@ -163,7 +163,7 @@ driver's), read by `session.ParseIdleTimeout`: a bad value is `bad-args` with 04
 timeout:` text before the service is called. The service side is `session timeout`
 (`05-debug-interface-session.md`); the renderer posts the event's summary and edits the pinned
 header on `timeout-changed`, whose sentence is `Ends after <n> without activity.` or `Never ends
-for inactivity.`
+for inactivity.`, with ` Capped at a year.` appended above a year
 Observe. `session outbox` (the header's `edit`), `audit --kind timeout-changed`.
 Reproduce. `discord inject command --channel s0001 --user 1001 --roles 10 "/session timeout 30"`,
 then `"/session timeout soon"` (refused `bad-args`).

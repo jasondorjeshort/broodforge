@@ -53,8 +53,9 @@ whether a project may span several repositories (not required; the vision speaks
 A Discord text channel bound to one project (R-07); the unit of configuration (R-08). Identity:
 the Discord channel id. Holds: its project; its reach (read-only, code; later host, R-49); the
 role ids allowed to start a session, to contribute, and to answer permission prompts (R-25);
-the default permission mode (R-26); the default harness; the idle timeout (R-15; 0 is none, the default; the driver may change a session's); the prompt timeout (R-53; 0 is none, the default); later a token
-limit (R-46). A "questions" channel is a channel whose reach is read-only and whose harness is a
+the default permission mode (R-26); the default harness; the idle timeout (R-15; 0 is never, the
+default, a year internally; the driver may change a session's); the prompt timeout (R-53; 0 is never,
+the default, also a year internally); both capped at a year; later a token limit (R-46). A "questions" channel is a channel whose reach is read-only and whose harness is a
 small model (R-19); it is not a different kind of thing. Relations: one project; many sessions.
 Open: the venue a session gets when it starts in the channel (vision Q 3, UX doc); whether a
 channel without a project is ever needed (nothing in the vision needs one).
@@ -62,8 +63,9 @@ channel without a project is ever needed (nothing in the vision needs one).
 ## Session
 
 One run of a harness over one worktree, started from a channel by a driver, ending when the
-driver ends it, the channel's idle timeout passes, the owner ends it, or the bot dies (R-15,
-R-17). Identity: an id the instance assigns, short and unique, used in Discord and by the debug
+driver ends it, the idle timeout passes (a session starts at the channel's value, which the
+driver can change), the owner ends it, or the bot dies (R-15, R-17). Identity: an id the instance assigns,
+short and unique, used in Discord and by the debug
 interface alike; the harness's own session id is stored as a reference, not as identity. Holds:
 channel and project; driver; venue (the thread or channel id where its messages go); worktree;
 backend (harness and credential, fixed for the session, R-40); permission mode, which the driver

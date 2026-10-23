@@ -34,7 +34,7 @@ names; everything else goes through `SessionService`. Host differences live in `
 `status`, `subscribe(sessionId)`. The Discord adapter and the control socket call the same methods and read the same
 `SessionEvent` stream; a behaviour reachable from Discord only is a bug. N-26: each session's turn is its own engine
 process and goroutine, nothing in `session` awaits another session, and store writes are short transactions (ADR 0021):
-a stuck engine delays only its own session until the idle timeout.
+a stuck engine delays only its own session, until a person stops or ends it.
 
 Registration and participants (R-01 to R-04, R-13, R-25, N-18). `discord` owns the register command: one registration
 per Discord user id; registering again replaces name and email with an audit event (R-02). `session` owns participants:
@@ -187,8 +187,9 @@ is a new file plus `worktree forget` for the old rows.
 
 Rules: a role list holds group names from `roleGroups` or raw role ids; `"driver"` under `answer` means the driver only
 (R-25). A channel inherits `defaults` for a key it omits. `idleTimeoutMinutes` and `promptTimeoutMinutes` 0 (or absent
-from `defaults`) is no timeout, the default: a session never ends for inactivity, a prompt waits for its answer; a
-negative value is an error. `harness` is `claude-code` or `fake`; `handoff` is `pull-request` (default) or `push`;
+from `defaults`) is never, the default: a session does not end for inactivity, a prompt waits for its answer (each
+is a timer of a year, the cap on any timeout); a negative value is an error; a value above 525600 (a year) is capped there
+with a warning from `config check`, `config reload` and `serve`. `harness` is `claude-code` or `fake`; `handoff` is `pull-request` (default) or `push`;
 `venue.category` is the category id sessions are created under, `venue.summaryChannel` optional, also receiving each
 summary and transcript; `discord.mode` is `live` or `dry-run`; `engine.fakeFixtures` is the `fake`'s fixture directory.
 The panel message id is recorded per project channel in the store when `panel post <channel id>` runs: a project has
