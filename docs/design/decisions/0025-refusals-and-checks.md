@@ -59,3 +59,14 @@ Replace the proposal's V12, V16 to V18 and V20; each row names the pass that clo
 | C4 (V18) | The merge route (a deciding hook beside a rewriting one): whether the input is re-judged. | Not needed by the decision; run only if the chain is ever abandoned (the proposal's reversal conditions). |
 | C5 (V20) | The `tools` field of an `--agents` definition restricts the subagent. | The loaders pass; until then the field is passed through and not relied on. |
 | C6 (V13) | The bot's own hook fires for a subagent's call in a live session. | The first injected session's audit (a `permission decision` row with `agent_type`). |
+
+## Build order
+
+Moved from the ADR's Consequences on 2026-10-23, unchanged:
+
+- Build, in order after `cb046d4`: `pre-push` with `worktree check` (C1); the push scan and the
+  instance's `privacy` keys; the copy, `workflow` key, probe and `config check`; the chain (C2, C3);
+  the loaders (C5), each with its `session show` line (`workflow: <commit> <date>`, `hooks:
+  <names>`, `review: ...`). `08-implementation-plan.md` gains the passes; 03, the hook contract, the
+  session and git debug docs, 04 and the 0022 companion's living tables follow in them. Corrected
+  now: 03's "per process" sentence and trailer-list help, 04's `Task`.

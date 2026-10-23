@@ -61,7 +61,10 @@ func build() {
 		buildErr = err
 		return
 	}
-	cmd := exec.Command("go", "build", "-o", dir+string(os.PathSeparator), "./cmd/broodforge")
+	// The binary reads no machine literal (config.MachineLiterals), so no test depends on the
+	// user and host names of the machine it runs on.
+	cmd := exec.Command("go", "build", "-ldflags=-X github.com/jasondorjeshort/broodforge/internal/config.machineLiteralsOff=true",
+		"-o", dir+string(os.PathSeparator), "./cmd/broodforge")
 	cmd.Dir = filepath.Dir(gomod)
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if out, err := cmd.CombinedOutput(); err != nil {

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/jasondorjeshort/broodforge/internal/audit"
@@ -112,6 +113,8 @@ type worktreeProof struct {
 	root, instance, canonical, remote string
 	st                                *store.Store
 	backend                           spawn.Backend
+	// cfg is the configuration the service reads per call, so a test can change it between calls.
+	cfg atomic.Pointer[config.Config]
 }
 
 func newWorktreeProof(t *testing.T) *worktreeProof {
@@ -136,7 +139,8 @@ VALUES ('cred-a', 'api-key', 'anthropic', '1001', 'a', 'usable', '2026-01-01T00:
 	cfg := &config.Config{Instance: config.Instance{SchemaVersion: 1, InstanceName: name},
 		Projects: []config.Project{{ID: "p", Name: "P", Handoff: config.HandoffPush,
 			Repo: config.Repo{Canonical: p.canonical, Remote: "origin", DefaultBranch: "main"}}}}
-	serve(t, addr, cli.WorktreeHandlers(&cli.WorktreeService{Root: root, Config: cfg, Store: p.st,
+	p.cfg.Store(cfg)
+	serve(t, addr, cli.WorktreeHandlers(&cli.WorktreeService{Root: root, Config: cfg, Current: p.cfg.Load, Store: p.st,
 		Audit: audit.NewWriter(nil), Backend: b}))
 	return p
 }

@@ -126,6 +126,9 @@ type Handoff struct {
 	Session     Session
 	Mode        string // ModePush or ModePullRequest
 	Attribution Attribution
+	// Privacy is the push scan's lists (ADR 0025 rule 7); the scan adds the Attribution's
+	// identities (WithSession).
+	Privacy Privacy
 	// CredentialID is the project's git credential; "" sends none, and a remote that asks for
 	// one gets no answer from the helper.
 	CredentialID string
@@ -139,7 +142,8 @@ type Handoff struct {
 }
 
 // Run hands the session off. Refusals keep the tree; a done push or request removes it through
-// worktree-remove and deletes refs/sessions/<id> (R-35). dryRun stops after the check.
+// worktree-remove and deletes refs/sessions/<id> (R-35). dryRun stops after the check: the
+// attribution check, then, with every commit passing it, the push scan.
 func (h *Handoff) Run(ctx context.Context, dryRun bool) (Outcome, error) {
 	s := h.Session
 	if h.Mode != ModePush && h.Mode != ModePullRequest {
@@ -150,6 +154,11 @@ func (h *Handoff) Run(ctx context.Context, dryRun bool) (Outcome, error) {
 		if failing := c.Failing(); len(failing) > 0 {
 			err = &Error{Code: CodeRefusedAttribution, Commits: failing,
 				Message: strconv.Itoa(len(failing)) + " of " + strconv.Itoa(len(c.Checks)) + " commits fail the attribution check"}
+		} else if c.Commits > 0 {
+			var hits []PrivacyHit
+			if hits, err = ScanPrivacy(ctx, s, c.Base, h.Privacy.WithSession(h.Attribution)); err == nil && len(hits) > 0 {
+				err = PrivacyRefusal(hits, c.Commits)
+			}
 		}
 	}
 	if err != nil {
@@ -289,13 +298,22 @@ func (h *Handoff) refused(err error) {
 		Commit string `json:"commit"`
 		Status string `json:"status"`
 	}
+	type hit struct {
+		Commit   string `json:"commit"`
+		Class    string `json:"class"`
+		Location string `json:"location"`
+	}
 	d := struct {
 		Code    string   `json:"code"`
 		Message string   `json:"message"`
 		Commits []commit `json:"commits,omitempty"`
+		Privacy []hit    `json:"privacy,omitempty"`
 	}{Code: ge.Code, Message: ge.Message}
 	for _, c := range ge.Commits {
 		d.Commits = append(d.Commits, commit{c.Hash, c.Status()})
+	}
+	for _, x := range ge.Hits {
+		d.Privacy = append(d.Privacy, hit(x))
 	}
 	if b, err := json.Marshal(d); err == nil {
 		h.emit(audit.KindHandoffRefused, audit.PhaseNone, b)

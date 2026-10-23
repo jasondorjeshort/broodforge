@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jasondorjeshort/broodforge/internal/cli/clitest"
+	"github.com/jasondorjeshort/broodforge/internal/config"
 	"github.com/jasondorjeshort/broodforge/internal/control/controltest"
 	"github.com/jasondorjeshort/broodforge/internal/spawn/spawntest"
 )
@@ -17,7 +18,10 @@ import (
 
 // TestMain also makes this test binary the stand-in engine when the spawn runs it with
 // spawntest.Env set (engine_real_test.go).
+// It also empties config.MachineLiterals, so no test of this package reads the machine's user
+// or host name (the harness's binary is built with the same switch, clitest).
 func TestMain(m *testing.M) {
+	config.MachineLiterals = func() []config.MachineLiteral { return nil }
 	spawntest.Main()
 	os.Exit(clitest.Main(m))
 }

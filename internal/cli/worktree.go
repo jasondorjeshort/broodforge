@@ -37,23 +37,33 @@ var commitColumns = []string{"commit", "status"}
 // hookColumns are worktree check's hook row in text order: `ok|missing  pre-push`.
 var hookColumns = []string{"status", "hook"}
 
-// checkEventColumns tells worktree check's hook row, which has a "hook" key, from its commit
-// lines.
+// privacyColumns are a push-scan hit's row: `privacy: <sha>  <class>  <location>`.
+var privacyColumns = []string{"privacy:", "class", "location"}
+
+// checkEventColumns tells worktree check's hook row, which has a "hook" key, and a push-scan
+// hit, which has a "privacy" key, from its commit lines.
 func checkEventColumns(ev json.RawMessage) []string {
 	var row struct {
-		Hook *string `json:"hook"`
+		Hook    *string `json:"hook"`
+		Privacy *string `json:"privacy"`
 	}
-	if json.Unmarshal(ev, &row) == nil && row.Hook != nil {
+	switch {
+	case json.Unmarshal(ev, &row) != nil:
+	case row.Hook != nil:
 		return hookColumns
+	case row.Privacy != nil:
+		return privacyColumns
 	}
 	return commitColumns
 }
 
 // worktreeCheck is `broodforge worktree check <id>`: first `ok|missing  pre-push` (the tree
 // still runs the bot's pre-push hook, ADR 0025 rule 4; --json `{"hook","status"}`), then bundle,
-// verify and fetch, then the attribution check alone: one `<hash>  ok|<problems>` line per commit since the base, then
-// `ok  <commits>`; any failing commit is handoff-refused-attribution, exit 1, else a missing hook
-// is pre-push-missing, exit 1 (handoff is not refused for it).
+// verify and fetch, then the attribution check: one `<hash>  ok|<problems>` line per commit since the base, then
+// `ok  <commits>`; any failing commit is handoff-refused-attribution, exit 1; else the push scan
+// (ADR 0025 rule 7), one `privacy: <sha>  <class>  <location>` line per hit (--json
+// `{"privacy","class","location"}`) and handoff-refused-privacy, exit 1; else a missing hook is
+// pre-push-missing, exit 1 (handoff is not refused for it).
 var worktreeCheck = Command{
 	Name:            "worktree check",
 	Class:           ClassWrite,
@@ -74,7 +84,8 @@ var worktreeBundle = Command{
 
 // worktreeHandoff is `broodforge worktree handoff <id> [--dry-run] [--expect <value>]`: the
 // companion's five steps, printing `<outcome>  <remote>  <refspec>  <commits>  <url>
-// <request>`; a refused attribution streams the failing commit lines first.
+// <request>`; a refused attribution streams the failing commit lines first, a refused push
+// scan its `privacy:` lines.
 var worktreeHandoff = Command{
 	Name:   "worktree handoff",
 	Class:  ClassWrite,
@@ -83,8 +94,9 @@ var worktreeHandoff = Command{
 		{Name: "dry-run", Kind: FlagBool, Usage: "stop after the check and print what would be sent"},
 		{Name: "id", Kind: FlagString, Value: "<session id>"},
 	},
-	EventColumns: commitColumns,
-	Columns:      []string{"outcome", "remote", "refspec", "commits", "url", "request"},
+	EventColumns:    commitColumns,
+	EventColumnsFor: checkEventColumns,
+	Columns:         []string{"outcome", "remote", "refspec", "commits", "url", "request"},
 }
 
 // gitAskpass is the hidden `broodforge git-askpass <prompt>`, git's GIT_ASKPASS through the
@@ -169,6 +181,13 @@ type commitLine struct {
 	Status string `json:"status"`
 }
 
+// privacyLine is one push-scan hit: the commit, the class, where; never the value.
+type privacyLine struct {
+	Privacy  string `json:"privacy"`
+	Class    string `json:"class"`
+	Location string `json:"location"`
+}
+
 type attributionResult struct {
 	Result  string `json:"result"`
 	Commits int    `json:"commits"`
@@ -179,7 +198,7 @@ type bundleResult struct {
 	Commits int    `json:"commits"`
 }
 
-func encodeWorktree[T hookLine | commitLine | attributionResult | bundleResult | git.Outcome](v T) (json.RawMessage, error) {
+func encodeWorktree[T hookLine | commitLine | privacyLine | attributionResult | bundleResult | git.Outcome](v T) (json.RawMessage, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)
@@ -192,6 +211,19 @@ func encodeWorktree[T hookLine | commitLine | attributionResult | bundleResult |
 func emitCommits(call *control.Call, checks []git.CommitCheck) error {
 	for _, c := range checks {
 		ev, err := encodeWorktree(commitLine{c.Hash, c.Status()})
+		if err != nil {
+			return err
+		}
+		if err := call.Emit(ev); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func emitPrivacy(call *control.Call, hits []git.PrivacyHit) error {
+	for _, h := range hits {
+		ev, err := encodeWorktree(privacyLine{h.Commit, h.Class, h.Location})
 		if err != nil {
 			return err
 		}
@@ -261,6 +293,18 @@ func (s *WorktreeService) check(ctx context.Context, call *control.Call, id stri
 		return nil, control.NewError(git.CodeRefusedAttribution,
 			fmt.Sprintf("%d of %d commits fail the attribution check", len(failing), len(c.Checks)))
 	}
+	if len(c.Checks) > 0 {
+		hits, err := git.ScanPrivacy(ctx, sess.git, c.Base, sess.privacy.WithSession(sess.attr))
+		if err != nil {
+			return nil, gitError(err)
+		}
+		if err := emitPrivacy(call, hits); err != nil {
+			return nil, err
+		}
+		if len(hits) > 0 {
+			return nil, control.NewError(git.CodeRefusedPrivacy, git.PrivacySummary(hits, len(c.Checks)))
+		}
+	}
 	if !prePush {
 		return nil, control.NewError(CodePrePushMissing,
 			"the tree's core.hooksPath is not "+s.Backend.HooksDir()+" with its pre-push hook; handoff still runs")
@@ -292,6 +336,13 @@ func (s *WorktreeService) handoff(ctx context.Context, call *control.Call, id st
 				return nil, eerr
 			}
 		}
+		if errors.As(err, &ge) && ge.Code == git.CodeRefusedPrivacy && len(ge.Hits) > 0 {
+			// The hits are the lines; the error is the count, as worktree check prints it.
+			if eerr := emitPrivacy(call, ge.Hits); eerr != nil {
+				return nil, eerr
+			}
+			return nil, control.NewError(ge.Code, git.PrivacySummary(ge.Hits, ge.Checked))
+		}
 		var ce *control.Error
 		if errors.As(err, &ce) {
 			return nil, ce
@@ -313,7 +364,7 @@ func (s *WorktreeService) runHandoff(ctx context.Context, id string, dryRun bool
 		return git.Outcome{}, err
 	}
 	h := &git.Handoff{Backend: s.Backend, Session: sess.git, Mode: sess.project.HandoffOrDefault(),
-		Attribution: sess.attr, CredentialID: sess.project.Repo.GitCredentialID, Secret: s.Secret,
+		Attribution: sess.attr, Privacy: sess.privacy, CredentialID: sess.project.Repo.GitCredentialID, Secret: s.Secret,
 		Forge: s.Forge, API: s.API, Title: sess.title, Record: s.record, Actor: actor}
 	out, err := h.Run(ctx, dryRun)
 	if err != nil {
@@ -358,6 +409,7 @@ func (s *WorktreeService) record(ev audit.Event) error {
 type loadedSession struct {
 	git     git.Session
 	attr    git.Attribution
+	privacy git.Privacy
 	project *config.Project
 	title   string
 }
@@ -423,6 +475,7 @@ GROUP BY u.model ORDER BY 2, 1`, []store.Value{store.Text(id)}, func(r *store.Ro
 	if err != nil {
 		return ls, err
 	}
+	ls.privacy = instancePrivacy(s.config().Instance.Privacy)
 	repo := ls.project.Repo
 	ls.git = git.Session{Root: s.Root, ID: id, Instance: s.config().Instance.InstanceName, Canonical: repo.Canonical,
 		Remote: orDefault(repo.Remote, "origin"), DefaultBranch: orDefault(repo.DefaultBranch, "main")}
@@ -431,6 +484,23 @@ GROUP BY u.model ORDER BY 2, 1`, []store.Value{store.Text(id)}, func(r *store.Ro
 		ls.title += ": " + truncateRunes(strings.Join(strings.Fields(firstInput), " "), titleRunes)
 	}
 	return ls, nil
+}
+
+// instancePrivacy is the push scan's data from config/instance.json and the machine's own
+// literals, the OS user and host names (ADR 0025 rule 7); the
+// scan adds the session's identities (git.Privacy.WithSession). config check refuses an
+// identity that does not parse, so none is dropped here from a loaded configuration.
+func instancePrivacy(p config.Privacy) git.Privacy {
+	out := git.Privacy{Never: p.Never, Allow: p.Allow}
+	for _, m := range config.MachineLiterals() {
+		out.Machine = append(out.Machine, m.Value)
+	}
+	for _, id := range p.Identities {
+		if name, email, ok := config.ParseIdentity(id); ok {
+			out.Identities = append(out.Identities, git.Identity{Name: name, Email: email})
+		}
+	}
+	return out
 }
 
 func orDefault(s, d string) string {

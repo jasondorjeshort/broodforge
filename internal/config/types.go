@@ -20,6 +20,17 @@ type Instance struct {
 	Relay         Relay               `json:"relay"`
 	RoleGroups    map[string][]string `json:"roleGroups"`
 	Defaults      Defaults            `json:"defaults"`
+	Privacy       Privacy             `json:"privacy"`
+}
+
+// Privacy is the push scan's data (ADR 0025 rule 7), the owner's lists under the names of the
+// base's policy.json privacy section: Never, literals refused as a name wherever they stand;
+// Allow, literals that lift a hit whose match (a home path's user segment, a host's word) they
+// equal, case-insensitively; Identities, `Name <email>` pairs that may author and co-author.
+type Privacy struct {
+	Never      []string `json:"never"`
+	Allow      []string `json:"allow"`
+	Identities []string `json:"identities"`
 }
 
 // Credentials names the credential store key (ADR 0022).

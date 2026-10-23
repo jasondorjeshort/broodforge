@@ -124,12 +124,7 @@ wording in the agreement's advice), after the first injected session; the PC bou
 
 ## Consequences
 
-- Build, in order after `cb046d4`: `pre-push` with `worktree check` (C1); the push scan and the
-  instance's `privacy` keys; the copy, `workflow` key, probe and `config check`; the chain (C2, C3);
-  the loaders (C5), each with its `session show` line (`workflow: <commit> <date>`, `hooks:
-  <names>`, `review: ...`). `08-implementation-plan.md` gains the passes; 03, the hook contract, the
-  session and git debug docs, 04 and the 0022 companion's living tables follow in them. Corrected
-  now: 03's "per process" sentence and trailer-list help, 04's `Task`.
+- Build: the order and the docs that follow are the companion's (Build order, moved there 2026-10-23).
 - Costs: a subset of the engine's hook protocol (matcher, stdin, exit code, one output field) lives
   in `internal/hook`, checked against every pin by a two-child chain fixture; a slow project hook
   denies its own calls; the appended rules cost tokens every turn until D; the Go push scan must
@@ -147,3 +142,9 @@ wording in the agreement's advice), after the first injected session; the PC bou
 - Prediction, check by 2027-01-31: no audited push attempt from a session tree succeeded on either
   host.
 - Prediction, check when P14 lands: the droplet row decides D within one pass, the rule unchanged.
+
+## Amendments
+
+- 2026-10-23, review of P16: for a session push an identity's own address passes as author, as
+  committer and in a trailer-block `Co-Authored-By`, because the bot writes them there
+  (`internal/git/attribution.go`); ADR 0018's email row stands everywhere else.

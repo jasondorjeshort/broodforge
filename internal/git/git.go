@@ -16,11 +16,14 @@ import (
 )
 
 // Error is a refusal with a stable code (05-debug-interface.md, Git handoff); the CLI maps it
-// to its error line. Commits holds the failing commits of handoff-refused-attribution.
+// to its error line. Commits holds the failing commits of handoff-refused-attribution; Hits
+// and Checked the hits of handoff-refused-privacy and how many commits the scan read.
 type Error struct {
 	Code    string
 	Message string
 	Commits []CommitCheck
+	Hits    []PrivacyHit
+	Checked int
 }
 
 func (e *Error) Error() string { return e.Code + ": " + e.Message }
@@ -34,6 +37,7 @@ const (
 	CodeRefusedBundleVerify = "handoff-refused-bundle-verify"
 	CodeRefusedFetch        = "handoff-refused-fetch"
 	CodeRefusedAttribution  = "handoff-refused-attribution"
+	CodeRefusedPrivacy      = "handoff-refused-privacy"
 	CodeFailedPush          = "handoff-failed-push"
 	CodeFailedPullRequest   = "handoff-failed-pull-request"
 	CodeNoCredential        = "no-git-credential"

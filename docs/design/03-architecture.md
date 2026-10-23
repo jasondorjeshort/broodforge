@@ -157,11 +157,10 @@ order (reach deny before the pending answer). `policy` holds the table.
 
 ## Configuration
 
-JSON, parsed by the runtime, no dependency; a key beginning with `//` is ignored at every level,
-which is how the owner comments. Files under `config/`: `instance.json` and one
-`projects/<project id>.json` per project. `config check`, `reload` and last-good are ADR
-0021's. A project id matches `^[a-z][a-z0-9-]{0,31}$`, is set once and never changed; a rename
-is a new file plus `worktree forget` for the old rows.
+JSON, parsed by the runtime, no dependency; a key beginning with `//` is ignored at every level, which is how
+the owner comments. Files under `config/`: `instance.json` and one `projects/<project id>.json` per project.
+`config check`, `reload` and last-good are ADR 0021's. A project id matches `^[a-z][a-z0-9-]{0,31}$`, is set
+once and never changed; a rename is a new file plus `worktree forget` for the old rows.
 
 ```json
 { "schemaVersion": 1, "instanceName": "pc",
@@ -173,7 +172,8 @@ is a new file plus `worktree forget` for the old rows.
   "paths": { "install": "…" }, "audit": { "fileSink": null },
   "relay": { "loginByDirectMessage": false },
   "roleGroups": { "trusted": ["role id"], "members": ["role id"] },
-  "defaults": { "idleTimeoutMinutes": 0, "promptTimeoutMinutes": 0, "mode": "prompt", "harness": "claude-code" } }
+  "defaults": { "idleTimeoutMinutes": 0, "promptTimeoutMinutes": 0, "mode": "prompt", "harness": "claude-code" },
+  "privacy": { "never": ["…"], "allow": ["broodforge"], "identities": ["Name <email>"] } }
 ```
 
 ```json

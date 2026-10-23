@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jasondorjeshort/broodforge/internal/policy"
 )
@@ -87,7 +88,39 @@ func validateInstance(in *Instance, exists CredentialExists) []string {
 	out = append(out, neverOrPositive("defaults.promptTimeoutMinutes", &d.PromptTimeoutMinutes)...)
 	out = append(out, oneOf("defaults.mode", d.Mode, ModePrompt, ModePolicy)...)
 	out = append(out, oneOf("defaults.harness", d.Harness, HarnessClaudeCode, HarnessFake)...)
+	// The scan skips a never literal under three characters, as the base's does, so config
+	// refuses one rather than let it pass silently; an allow entry is a literal, never a pattern
+	// or a path (the base's policy.js).
+	for i, n := range in.Privacy.Never {
+		if utf8.RuneCountInString(strings.TrimSpace(n)) < minLiteral {
+			out = append(out, "privacy.never."+strconv.Itoa(i)+": "+quote(n)+", want a literal of 3 or more characters")
+		}
+	}
+	for i, a := range in.Privacy.Allow {
+		if strings.ContainsAny(a, "*/") {
+			out = append(out, "privacy.allow."+strconv.Itoa(i)+": "+quote(a)+", want a literal without * or /")
+		}
+	}
+	for i, id := range in.Privacy.Identities {
+		if _, _, ok := ParseIdentity(id); !ok {
+			out = append(out, "privacy.identities."+strconv.Itoa(i)+": "+quote(id)+", want Name <email>")
+		}
+	}
 	return out
+}
+
+// minLiteral is the shortest literal the push scan reads; it skips a shorter one.
+const minLiteral = 3
+
+var identityRE = regexp.MustCompile(`^([^<>\s](?:[^<>]*[^<>\s])?)\s*<([^<>\s@]+@[^<>\s@]+)>$`)
+
+// ParseIdentity reads a privacy.identities entry, `Name <email>`.
+func ParseIdentity(s string) (name, email string, ok bool) {
+	m := identityRE.FindStringSubmatch(strings.TrimSpace(s))
+	if m == nil {
+		return "", "", false
+	}
+	return m[1], m[2], true
 }
 
 // MaxTimeoutMinutes caps a timeout in minutes at a year, so the product with time.Minute

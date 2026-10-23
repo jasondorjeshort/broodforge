@@ -20,8 +20,11 @@ runs the bundle, `git bundle verify` and the forced fetch into `refs/sessions/<i
 attribution check alone: one line per commit since the base,
 oldest first, `<hash>  ok|<problems>`, problems joined by `; ` from `author:<name <email>>`,
 `committer:<name <email>>` and `missing:<trailer line>`; then `ok  <commits>`, or
-`error: handoff-refused-attribution: <n> of <m> commits fail the attribution check`, exit 1; with
-the commits passing, a missing hook ends it with `error: pre-push-missing: ...`, exit 1 (`handoff`
+`error: handoff-refused-attribution: <n> of <m> commits fail the attribution check`, exit 1. With
+the commits passing, the push scan (ADR 0025 rule 7) prints one `privacy: <sha>  <class>
+<location>` line per hit (`--json`: `{"privacy":<sha>,"class","location"}`), then `error:
+handoff-refused-privacy: <n> of <m> commits carry personal data`, exit 1, the tree kept; with
+none, a missing hook ends it with `error: pre-push-missing: ...`, exit 1 (`handoff`
 is not refused for it: the tree's configuration is the session's).
 `worktree bundle <id>` prints `<bundle path>  <commits>`, or `none  0`. `worktree handoff <id>
 [--dry-run] [--expect <value>]` runs the five steps and prints `<outcome>  <remote>  <refspec>
@@ -30,7 +33,8 @@ removed) or `dry-run`, which stops after the check; for `pull-request` the reque
 `{"url":<endpoint>,"credential":<id>,"body":{"title","head","base","body"}}`, the credential by
 id only. Refusals, exit 1, tree kept: `handoff-refused-bundle` (the bundle step itself),
 `handoff-refused-bundle-verify`, `handoff-refused-fetch`, `handoff-refused-attribution` (the
-failing commit lines stream on stdout first), `handoff-failed-push` (git's first telling stderr
+failing commit lines stream on stdout first), `handoff-refused-privacy` (the `privacy:` lines
+first; the session's venue gets the ADR 0025 companion's push-scan text), `handoff-failed-push` (git's first telling stderr
 line), `handoff-failed-pull-request` (`HTTP <status>: <message>`). A session id that is not
 `s` and four or more base-36 digits is `bad-args`; an unknown one `unknown-session`; one whose
 `refs/sessions/<id>` is gone (handed off already) `already-handed-off`, with no audit row.
@@ -44,7 +48,22 @@ after the fetch, so default-branch commits the session merged are not checked as
 committer time: each other participant from `participant.joined_at` (R-13: a contributor joins
 on their first accepted message), in join order, then each model with non-zero usage from the
 `started_at` of its first turn (03, Attribution), by `policy`'s display name; the key matches without case, the
-value exactly. The push runs `git -c credential.helper= push <remote> refs/sessions/<id>:refs/heads/<branch>`
+value exactly. The push scan (`internal/git/privacy.go`) ports the base's `privacy-scan.js` classes
+over author, committer, message and added lines (not file names, tags, transcripts or key shapes):
+`home-path`, `email`, `name` (an author or committer pair outside the identities, or as a whole
+word, any case, the OS user name, the host name or a `privacy.never` literal, each of 3 or more
+characters), `host` and `session-link`; `<location>` is
+`<path>:<line>`, `message:<line>`, `author` or `committer`, one line per (commit, class, location).
+Identities are the instance's `privacy.identities` (`Name <email>` each) plus the driver, the other
+participants and the models with usage; an identity's address passes as author or committer, in a
+trailer-block `Co-Authored-By` naming it, and in an added line of `.claude/hooks/policy.json`.
+`privacy.allow` lifts a hit whose match equals an entry, any case (a home path's user segment, a
+host's word); the bot's service account (`broodforge`, `broodforge-engine`) must be in the
+instance's `privacy.allow`, since the OS user name is a never literal and the project's name is in
+every import path, else each commit naming the project shows a `name` row;
+`config check` refuses a `never` entry under 3 characters, an `allow` entry holding
+`*` or `/`, and an identity not `Name <email>`. A scan whose `git log` fails is
+`handoff-refused-fetch` with git's line, never a hit. The push runs `git -c credential.helper= push <remote> refs/sessions/<id>:refs/heads/<branch>`
 with `GIT_ASKPASS` and, when the project names `repo.gitCredentialId`, the value in
 `BROODFORGE_GIT_CREDENTIAL` on that one process. The helper answers a `Username` prompt with
 `x-access-token` and a `Password` prompt with that value; any other prompt, or none set, prints
@@ -69,7 +88,10 @@ Reproduce. In a scratch root, commit in the session tree with a wrong author (`g
 `go test -v -run 'TestProofWorktree|TestWorktreeRefusals|TestAskpass' ./internal/cli/`. The
 `pre-push` refusal: `git -C <root>/sessions/s0001/tree push origin HEAD` from a terminal inside
 the tree, then `worktree check s0001`; the P15 Proof is `go test -v -run
-'TestProofPrePush|TestGitPrePush|TestPrePushHook' ./internal/cli/`. A pull
+'TestProofPrePush|TestGitPrePush|TestPrePushHook' ./internal/cli/`. The push scan: commit a line
+with a home path in the tree and run `worktree check s0001`; the P16 Proof is `go test -v -run
+TestProofPushScan ./internal/cli/` and `go test -run 'Privacy|TrailerBlock|ParseLog'
+./internal/git/`. A pull
 request cannot complete offline: `--dry-run` is the reproduction; `go test ./internal/git/` posts
 to a local test server.
 

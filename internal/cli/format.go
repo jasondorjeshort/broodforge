@@ -98,6 +98,12 @@ func textFields(raw json.RawMessage, cols []string) []string {
 	}
 	out := make([]string, len(cols))
 	for i, c := range cols {
+		// A column named `<key>:` is labelled: `<key>: <value>`, one column (worktree check's
+		// `privacy: <sha>`).
+		if key, ok := strings.CutSuffix(c, ":"); ok {
+			out[i] = c + " " + textValue(obj[key])
+			continue
+		}
 		out[i] = textValue(obj[c])
 	}
 	return out
