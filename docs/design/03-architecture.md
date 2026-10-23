@@ -84,7 +84,7 @@ Prompt mode: the hook returns `defer` for a call a person must answer; the proce
 `engineSessionId`, publishes `waiting-for-answer`; `discord` posts buttons. A click by a
 participant the channel lets answer (R-25) calls `SessionService.answer`; `session` starts a new
 process with `--resume` and the answer in the hook environment, and the same `tool_use_id` fires
-the hook again and gets it. Other clicks are refused; no click in the prompt timeout denies it (R-53).
+the hook again and gets it. Other clicks are refused; no click in the prompt timeout, when there is one, denies it (R-53).
 Parallel calls (ADR 0020, C28, observed for a deferred pair): the engine defers each, ends the turn
 naming only the last, and drops the rest; the model re-issues them after the resume, one prompt and
 one process each. The `tool-use` ids of that message with no result and not in `deferred` get rows `dropped`; 04 says so.
@@ -173,7 +173,7 @@ is a new file plus `worktree forget` for the old rows.
   "paths": { "install": "…" }, "audit": { "fileSink": null },
   "relay": { "loginByDirectMessage": false },
   "roleGroups": { "trusted": ["role id"], "members": ["role id"] },
-  "defaults": { "idleTimeoutMinutes": 0, "promptTimeoutMinutes": 5, "mode": "prompt", "harness": "claude-code" } }
+  "defaults": { "idleTimeoutMinutes": 0, "promptTimeoutMinutes": 0, "mode": "prompt", "harness": "claude-code" } }
 ```
 
 ```json
@@ -189,8 +189,9 @@ is a new file plus `worktree forget` for the old rows.
 
 Rules: a role list holds group names from `roleGroups` or raw role ids; `"driver"` under `answer`
 means the driver only (R-25). A channel inherits `defaults` for a key it omits.
-`idleTimeoutMinutes` 0 (or absent from `defaults`) is no idle timeout, the default; a negative
-value is an error. `harness` is
+`idleTimeoutMinutes` and `promptTimeoutMinutes` 0 (or absent from `defaults`) is no timeout, the
+default: a session never ends for inactivity, a prompt waits for its answer; a negative value is
+an error. `harness` is
 `claude-code` or `fake`; `handoff` is `pull-request` (default) or `push`; `venue.category` is
 the category id sessions are created under, `venue.summaryChannel` optional, also receiving each
 summary and transcript; `discord.mode` is `live` or `dry-run`; `engine.fakeFixtures` is the

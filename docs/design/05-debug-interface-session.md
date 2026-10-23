@@ -136,7 +136,8 @@ list; a driver-only list refuses others with 04's `Only <name> (the driver) can 
 (the answer in `BROODFORGE_ANSWER`, no stdin line, C27) continues the same turn in `session
 tail`. `allow-session` also puts the tool in `BROODFORGE_SESSION_ALLOW` from that resume on (04,
 Owner 6); `--reason` on a deny is `BROODFORGE_ANSWER_REASON` (with an allow it is `bad-args`: the agent sees no reason for an allow); a resume that cannot start ends the turn as an error and the answer is `resume-failed`. The prompt timeout
-(`--prompt-timeout-seconds <n>` at start, else the channel's minutes) denies the pending call with
+(`--prompt-timeout-seconds <n>` at start, else the channel's minutes; 0 is none: the call waits
+and `session show` prints `until -`) denies the pending call with
 the reason `the prompt timed out after <n> minutes|seconds`, decider `prompt-timeout`, and the
 turn finishes: the trace line `[<tool>] <target> -> denied: the prompt timed out after <n>
 minutes.` (04). The idle timeout (`--idle-timeout-seconds <n>`, else the channel's minutes, 0

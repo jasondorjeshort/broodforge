@@ -83,19 +83,18 @@ func validateInstance(in *Instance, exists CredentialExists) []string {
 		}
 	}
 	d := &in.Defaults
-	idle, prompt := d.IdleTimeoutMinutes, d.PromptTimeoutMinutes
-	if idle < 0 { // 0 or absent: sessions never end for inactivity
-		out = append(out, "defaults.idleTimeoutMinutes: "+strconv.Itoa(idle)+", want 0 (never) or a positive number")
-	}
-	out = append(out, positiveRequired("defaults.promptTimeoutMinutes", prompt)...)
+	out = append(out, neverOrPositive("defaults.idleTimeoutMinutes", &d.IdleTimeoutMinutes)...)
+	out = append(out, neverOrPositive("defaults.promptTimeoutMinutes", &d.PromptTimeoutMinutes)...)
 	out = append(out, oneOf("defaults.mode", d.Mode, ModePrompt, ModePolicy)...)
 	out = append(out, oneOf("defaults.harness", d.Harness, HarnessClaudeCode, HarnessFake)...)
 	return out
 }
 
-func positiveRequired(key string, v int) []string {
-	if v <= 0 {
-		return []string{key + ": " + strconv.Itoa(v) + ", want a positive number"}
+// neverOrPositive checks a timeout in minutes where 0 (or absent) is none: a session that never
+// ends for inactivity, a permission prompt that waits for its answer.
+func neverOrPositive(key string, v *int) []string {
+	if v != nil && *v < 0 {
+		return []string{key + ": " + strconv.Itoa(*v) + ", want 0 (never) or a positive number"}
 	}
 	return nil
 }
@@ -157,10 +156,8 @@ func validateChannel(key, id string, ch Channel, groups map[string][]string, che
 	if ch.Effort != nil {
 		out = append(out, oneOf(key+".effort", *ch.Effort, policy.Efforts...)...)
 	}
-	if v := ch.IdleTimeoutMinutes; v != nil && *v < 0 {
-		out = append(out, key+".idleTimeoutMinutes: "+strconv.Itoa(*v)+", want 0 (never) or a positive number")
-	}
-	out = append(out, positive(key+".promptTimeoutMinutes", ch.PromptTimeoutMinutes)...)
+	out = append(out, neverOrPositive(key+".idleTimeoutMinutes", ch.IdleTimeoutMinutes)...)
+	out = append(out, neverOrPositive(key+".promptTimeoutMinutes", ch.PromptTimeoutMinutes)...)
 	lists := []struct {
 		name   string
 		roles  []string

@@ -10,7 +10,9 @@ Updated: 2026-10-23, after the idle-timeout commit, by Broodforge session s0005
   `/session model|effort` and to migrate the store to schema 2.
 - Idle timeout (owner, 2026-10-23): `idleTimeoutMinutes` 0 or absent is never, the new default;
   `/session timeout` and `session timeout` change a running session's (04, Idle timeout). Held in
-  the bot's memory, not the row. The live `instance.json` still says 60: the owner sets it to 0.
+  the bot's memory, not the row. `promptTimeoutMinutes` likewise: 0 or absent is never, the
+  default (a prompt waits for its answer; `/session stop` or `end` still deny it). The live
+  `instance.json` still says 60 and 5: the owner sets both to 0 (and checks the channels').
   Rebuild and restart to register `/session timeout`.
 - P12 left unbuilt: the relay (`not-built`), the venue's post-restart notice (P11 remainder item 5).
   Subagents do not get the `LSP` tool (coder report of 2026-10-21); gopls is the main session's.

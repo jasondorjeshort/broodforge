@@ -53,7 +53,7 @@ whether a project may span several repositories (not required; the vision speaks
 A Discord text channel bound to one project (R-07); the unit of configuration (R-08). Identity:
 the Discord channel id. Holds: its project; its reach (read-only, code; later host, R-49); the
 role ids allowed to start a session, to contribute, and to answer permission prompts (R-25);
-the default permission mode (R-26); the default harness; the idle timeout (R-15; 0 is none, the default; the driver may change a session's); the prompt timeout (R-53); later a token
+the default permission mode (R-26); the default harness; the idle timeout (R-15; 0 is none, the default; the driver may change a session's); the prompt timeout (R-53; 0 is none, the default); later a token
 limit (R-46). A "questions" channel is a channel whose reach is read-only and whose harness is a
 small model (R-19); it is not a different kind of thing. Relations: one project; many sessions.
 Open: the venue a session gets when it starts in the channel (vision Q 3, UX doc); whether a

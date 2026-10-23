@@ -152,7 +152,7 @@ func TestProblems(t *testing.T) {
 		{"live needs ids", inst(`"mode":"dry-run"`, `"mode":"live"`), minimalProject, "i",
 			[]string{"discord.applicationId: missing", "discord.guildId: missing", "discord.botCredentialId: missing"}},
 		{"missing defaults", inst(`,"defaults":{"idleTimeoutMinutes":60,"promptTimeoutMinutes":5,"mode":"prompt","harness":"fake"}`, ``), minimalProject, "i",
-			[]string{"defaults.promptTimeoutMinutes: 0, want a positive number", // an absent idle timeout is never
+			[]string{ // an absent idle or prompt timeout is never
 				"defaults.mode: missing, want prompt or policy", "defaults.harness: missing, want claude-code or fake"}},
 		{"group names", inst(`"trusted":["10"]`, `"trusted":["x"],"12":["10"]`), minimalProject, "i",
 			[]string{"roleGroups.12: a group name must not be a role id or \"driver\"", "roleGroups.trusted: \"x\" is not a role id"}},

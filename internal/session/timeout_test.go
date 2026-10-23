@@ -23,6 +23,26 @@ func TestParseIdleTimeout(t *testing.T) {
 	}
 }
 
+// TestNoPromptTimeout: with the channel's prompt timeout 0, a deferred call waits for its answer
+// however long it takes, with no deadline shown.
+func TestNoPromptTimeout(t *testing.T) {
+	h := newHarness(t, "", true)
+	ctx := context.Background()
+	if _, err := h.svc.Start(ctx, StartRequest{Channel: "100", As: "1001", Mode: "prompt", Fixture: "defer"}); err != nil {
+		t.Fatal(err)
+	}
+	sub, err := h.svc.Submit(ctx, SendRequest{Session: "s0001", As: "1001", Text: "write hi.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, h.svc, "s0001", sub.Seq, isType(EventWaitingForAnswer, 1))
+	h.clock.Advance(24 * time.Hour)
+	d, err := h.svc.Show("s0001")
+	if err != nil || d.State != StateWaitingForAnswer || d.Pending == nil || d.Pending.Until != "" {
+		t.Fatalf("show a day later: %+v %+v, %v", d, d.Pending, err)
+	}
+}
+
 // TestSetIdleTimeout: the driver's switch takes effect now: never stops the clock, a new value
 // restarts it; it is audited with from and to; a non-driver and a bad value are refused.
 func TestSetIdleTimeout(t *testing.T) {

@@ -242,7 +242,7 @@ func renderSessionShow(env *Env, raw json.RawMessage) error {
 		lines = append(lines, "worktree: -")
 	}
 	if p := d.Pending; p != nil {
-		lines = append(lines, "pending: "+p.ToolUseID+"  "+p.Tool+"  "+orDash(p.Target)+"  since "+p.Since+"  until "+p.Until)
+		lines = append(lines, "pending: "+p.ToolUseID+"  "+p.Tool+"  "+orDash(p.Target)+"  since "+p.Since+"  until "+orDash(p.Until))
 	} else {
 		lines = append(lines, "pending: -")
 	}
