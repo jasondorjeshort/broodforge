@@ -88,21 +88,29 @@ probe --project <id> (file)` run ADR 0025's copy procedure and runtime probe (co
 `session start` runs the same code into `workflow/<session id>/`.
 
 Drive. `workflow render` lists `CLAUDE.md` and `.claude` on the default branch, archives what
-exists, writes `instructions.md`, `agents.json` and `hooks.json` under `--out`, and prints
-`workflow: <commit> <date>` or `workflow: none (<branch> at <commit> has no CLAUDE.md or .claude)`,
-then `wrote  <file>` per file, exit 0; a canonical it cannot read is `error: workflow-canonical:
-<what>`, exit 1. `workflow probe` prints `ok  <name>  <word>` per `hooks.json` entry, or the
-companion's not-started line on the first failure, exit 1; `--json` gives the entries (`name`,
-`event`, `matcher`, `command`, `timeout`, `runtime`).
+exists, writes `instructions.md`, `agents.json` (when an agent is defined) and `hooks.json` (when
+a listed event has a command hook) under `--out`, which must be absent or empty
+(`error: workflow-out: <dir> is not empty`), and prints `workflow: <commit> <date>`, `workflow:
+none (<branch> at <commit> has no CLAUDE.md or .claude)` or, under `inject: none`, `workflow: none
+(inject none)`, then `wrote  <file>` per file and `skipped  <file>  <why>` per agent file or
+link left out, exit 0; a canonical it cannot read is `error: workflow-canonical: <what>`; while
+hooks are listed, a `settings.json` that does not parse, or a hook of a listed event that is not a
+command or has none, is `error: workflow-settings: <what>` naming the event and matcher (rule 6:
+never a skip), exit 1. `workflow probe` renders into a temporary directory it removes and prints
+`ok  <name>  <word>` per `hooks.json` entry, or on the first failure the companion's not-started
+line and `error: workflow-probe-failed: <command> needs <word>`, exit 1; `--json` gives the
+entries (`name`, `event`, `matcher`, `command`, `timeout`, `runtime`). `config check` runs the same
+probe for every project that lists hooks: a failure is a `bad-config` line of the project file,
+`workflow.hooks: the <event> hook <command> needs <word>, which is not installed here`.
 
 Observe. The files under `--out`; `session show <id>`'s `workflow:` and `hooks:` lines once a
 session has a copy; `config show --project <id>` for the `workflow` key.
 
-Reproduce. A failing case is a canonical tree: copy `fixtures/workflow/` [no-check: P17 creates
-it], edit, commit there, `workflow render --out <tmp>`. An unloadable import is a `note:` line in
+Reproduce. A failing case is a canonical tree: copy `fixtures/workflow/` (its README has the
+commands), edit, commit there, `workflow render --out <tmp>`. An unloadable import is a `note:` line in
 `instructions.md`, never an error.
 
-Isolation. Both commands read the canonical only and write under `--out`; a scratch root's
+Isolation. Both commands read the canonical only and write under `--out` (probe: its temporary directory); a scratch root's
 canonical is the fixture.
 
 ## Registration and participants

@@ -25,10 +25,11 @@ names; everything else goes through `SessionService`. Host differences live in `
 | `store` | The SQLite data layer, migrations, reconciliation, scratch roots (ADR 0021) | `audit` writes in a `store` transaction; the import is `audit` to `store`, one direction |
 | `audit` | The sink interface: the `audit_event` table first, the optional file sink second | `store` |
 | `git` | Canonical checkouts, `refs/sessions/*`, clone and bundle through the spawn backend, the attribution check, push and pull request | `spawn`, `credentials`, `audit` |
+| `workflow` | A session's copy of a project's workflow from the canonical's default branch: list, archive, extract, the `@` import resolver, `instructions.md`, `agents.json`, `hooks.json`, the runtime probe (ADR 0025 rules 5, 6) | `spawn` (the bot's environment for git and the probe) |
 | `spawn` | `SpawnBackend`: `same-account` and `linux-sudo-bwrap`; interrupt; `engine-entry`; preflight | the OS |
 | `backup` | `backup snapshot`, `verify`, `rehearse` (never scheduled by the bot) | `store` |
 | `config` | Loading, validation, last-good, `reload`, `config check` | `credentials` (id existence), `policy` (the model and effort values) |
-| `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control`; `credentials` (`credential init`, the reads' store fallback, the bot's handlers); `session` (`serve` builds the service and serves it); `discord` (`serve`'s adapter, the standalone `discord render`); `git` and `policy` (the worktree handlers) |
+| `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control`; `credentials` (`credential init`, the reads' store fallback, the bot's handlers); `session` (`serve` builds the service and serves it); `discord` (`serve`'s adapter, the standalone `discord render`); `git` and `policy` (the worktree handlers); `workflow` (`workflow render` and `probe`, the handoff's copy path) |
 
 `SessionService` is the boundary N-11 names: `start`, `submit`, `answer`, `setMode`, `interrupt`, `end`, `invite`,
 `status`, `subscribe(sessionId)`. The Discord adapter and the control socket call the same methods and read the same
@@ -123,12 +124,11 @@ type DeferredTool struct{ ToolUseID, Name string; Input json.RawMessage }
 type Block struct{ Kind string; Text string; ID, Name string; Input json.RawMessage } // Kind: text | tool-use
 ```
 
-Stream-json subset consumed: `system` subtype `init` (session id, model, tools, `capabilities`);
-`assistant` (`message.id`, `message.model`, `message.usage`, text and `tool_use` content,
-`parent_tool_use_id`; one line per content block, S1); `user` with `tool_result` content and the
-optional `tool_result_meta`; `result` (`stop_reason`, `is_error`, `num_turns`, `deferred_tool_use`,
-`permission_denials`, `modelUsage`, `usage`). Everything else is `unknown`; partial messages are
-not requested; a `capabilities` set missing a name the adapter needs refuses at start (exit 1).
+Stream-json subset consumed: `system` subtype `init` (session id, model, tools, `capabilities`); `assistant`
+(`message.id`, `message.model`, `message.usage`, text and `tool_use` content, `parent_tool_use_id`; one line per content
+block, S1); `user` with `tool_result` content and the optional `tool_result_meta`; `result` (`stop_reason`, `is_error`,
+`num_turns`, `deferred_tool_use`, `permission_denials`, `modelUsage`, `usage`). Everything else is `unknown`; partial
+messages are not requested; a `capabilities` set missing a name the adapter needs refuses at start (exit 1).
 
 Usage delta: `modelUsage` is cumulative per engine session over the turns that reached a `result`
 (a killed turn's counts are absent from the next cumulative, S2); the turn's record per model is
@@ -149,11 +149,10 @@ true`. A recorded real-engine transcript is a fixture as captured (ADR 0020's sp
 
 ## The PreToolUse hook
 
-The whole contract is `03-hook-contract.md`: how the engine runs the hook and reads its exit
-codes (exit 2 blocks, everything else falls through, so the hook catches everything and exits 2),
-the `BROODFORGE_*` environment, path canonicalisation and the credential-path deny, the policy
-table per reach and mode (reads path-checked; web tools never read class), and the decision
-order (reach deny before the pending answer). `policy` holds the table.
+The whole contract is `03-hook-contract.md`: how the engine runs the hook and reads its exit codes (exit 2 blocks,
+everything else falls through, so the hook catches everything and exits 2), the `BROODFORGE_*` environment, path
+canonicalisation and the credential-path deny, the policy table per reach and mode (reads path-checked; web tools never
+read class), and the decision order (reach deny before the pending answer). `policy` holds the table.
 
 ## Configuration
 
@@ -180,7 +179,7 @@ once and never changed; a rename is a new file plus `worktree forget` for the ol
 { "id": "broodforge", "name": "Broodforge",
   "repo": { "canonical": "<root>/projects/broodforge", "remote": "origin", "defaultBranch": "main",
             "forge": "github", "gitCredentialId": "cred-…" },
-  "handoff": "pull-request",
+  "handoff": "pull-request", "workflow": { "inject": "repository", "hooks": ["PreToolUse", "PostToolUse"] },
   "venue": { "category": "<category id>", "summaryChannel": null },
   "channels": { "<discord channel id>": {
       "reach": "code", "roles": { "start": ["trusted"], "contribute": ["members"], "answer": ["driver"] },
@@ -189,17 +188,18 @@ once and never changed; a rename is a new file plus `worktree forget` for the ol
 
 Rules: a role list holds group names from `roleGroups` or raw role ids; `"driver"` under `answer` means the driver only
 (R-25). A channel inherits `defaults` for a key it omits. `idleTimeoutMinutes` and `promptTimeoutMinutes` 0 (or absent
-from `defaults`) is never, the default: a session does not end for inactivity, a prompt waits for its answer (each
-is a timer of a year, the cap on any timeout); a negative value is an error; a value above 525600 (a year) is capped there
-with a warning from `config check`, `config reload` and `serve`. `harness` is `claude-code` or `fake`; `handoff` is `pull-request` (default) or `push`;
-`venue.category` is the category id sessions are created under, `venue.summaryChannel` optional, also receiving each
-summary and transcript; `discord.mode` is `live` or `dry-run`; `engine.fakeFixtures` is the `fake`'s fixture directory.
-The panel message id is recorded per project channel in the store when `panel post <channel id>` runs: a project has
-several channels, and the bot never writes the owner's config files (ADR 0021). `credentials.keyFile` names the store
-key (ADR 0022; the default per host and the `BROODFORGE_KEY_FILE` override are the ADR's). `engine.version` must equal
-the version parsed from the binary's `--version` output (the leading dotted number of `2.1.296 (Claude Code)`), else a
-refusal naming both. A channel id in two project files is a `config check` error (R-07). Every credential id named must
-exist (ADR 0021).
+from `defaults`) is never, the default: a session does not end for inactivity, a prompt waits for its answer (each is a
+timer of a year, the cap on any timeout); a negative value is an error; a value above 525600 (a year) is capped there
+with a warning from `config check`, `config reload` and `serve`. `harness` is `claude-code` or `fake`; `handoff` is
+`pull-request` (default) or `push`; `workflow.inject` is `repository` (default) or `none` and `workflow.hooks` lists
+only `PreToolUse` and `PostToolUse`, none by default (ADR 0025 rule 6); `venue.category` is the category id sessions are
+created under, `venue.summaryChannel` optional, also receiving each summary and transcript; `discord.mode` is `live` or
+`dry-run`; `engine.fakeFixtures` is the `fake`'s fixture directory. The panel message id is recorded per project channel
+in the store when `panel post <channel id>` runs: a project has several channels, and the bot never writes the owner's
+config files (ADR 0021). `credentials.keyFile` names the store key (ADR 0022; the default per host and the
+`BROODFORGE_KEY_FILE` override are the ADR's). `engine.version` must equal the version parsed from the binary's
+`--version` output (the leading dotted number of `2.1.296 (Claude Code)`), else a refusal naming both. A channel id in
+two project files is a `config check` error (R-07). Every credential id named must exist (ADR 0021).
 
 ## Git: trees, branches, attribution, handoff
 

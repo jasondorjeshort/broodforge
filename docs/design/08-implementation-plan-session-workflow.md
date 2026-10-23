@@ -84,7 +84,9 @@ the first word of `command` that names a file (a path separator or a script suff
 []string}` on `Project`; `config check`: `inject` is `repository` or `none`, `hooks` only the two
 events); `internal/git/privacy.go` reads the copy's `.claude/hooks/policy.json` `privacy` section
 when the copy exists; `internal/cli/workflow.go` (`workflow render --project <id> --out <dir>
-(file)` and `workflow probe --project <id> (file)` as 05 describes); `fixtures/workflow/` (a
+(file)` and `workflow probe --project <id> (file)` as 05 describes; `config check` runs the same
+probe over each project that lists hooks, rendered to a temporary directory, a failure an error
+naming the command and the word, rule 6); `fixtures/workflow/` (a
 canonical tree: a `CLAUDE.md` with one `@` import and a missing one, two agents, three rules, a
 `.claude/hooks/policy.json` whose `privacy.identities` lists one placeholder identity, a
 `.claude/hooks/git-guard.js` and `post-edit.js` that print one line each, and a `settings.json`

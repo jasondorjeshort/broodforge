@@ -92,6 +92,7 @@ type Project struct {
 	Handoff  string             `json:"handoff"` // pull-request (the default) or push
 	Venue    Venue              `json:"venue"`
 	Channels map[string]Channel `json:"channels"`
+	Workflow *Workflow          `json:"workflow,omitempty"`
 }
 
 // HandoffOrDefault is the project's handoff, pull-request when the file omits it.
@@ -100,6 +101,27 @@ func (p *Project) HandoffOrDefault() string {
 		return HandoffPullRequest
 	}
 	return p.Handoff
+}
+
+// Workflow is what a session takes from the repository's own workflow (ADR 0025 rule 6): Inject,
+// repository (the default) or none; Hooks, the events of .claude/settings.json whose command
+// hooks the bot's hook runs as children, PreToolUse and PostToolUse only, none by default.
+type Workflow struct {
+	Inject string   `json:"inject"`
+	Hooks  []string `json:"hooks"`
+}
+
+// WorkflowOrDefault is the project's workflow key with an absent key or inject read as the
+// default: repository and no hooks.
+func (p *Project) WorkflowOrDefault() Workflow {
+	w := Workflow{}
+	if p.Workflow != nil {
+		w = *p.Workflow
+	}
+	if w.Inject == "" {
+		w.Inject = InjectRepository
+	}
+	return w
 }
 
 // Repo is the project's canonical checkout and forge.
@@ -160,6 +182,12 @@ const (
 	HandoffPush        = "push"
 
 	ForgeGitHub = "github"
+
+	InjectRepository = "repository"
+	InjectNone       = "none"
+
+	EventPreToolUse  = "PreToolUse"
+	EventPostToolUse = "PostToolUse"
 
 	RoleDriver = "driver"
 )

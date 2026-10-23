@@ -22,7 +22,9 @@ const (
 // configCheck is `broodforge config check (file)` (05-debug-interface.md, Configuration): it
 // validates config/ without the bot. Valid: `ok  <projects>  <channels>`, then one
 // `warning: <file>: <message>` line per warning (--json: one object with a warnings array).
-// Invalid: one `error: bad-config: <file>: <message>` line per problem on stderr, exit 1.
+// Invalid: one `error: bad-config: <file>: <message>` line per problem on stderr, exit 1. A
+// configuration that loads is then probed: each project's listed hooks' runtimes
+// (probeWorkflows), a missing one a problem of its project file naming the command and the word.
 var configCheck = Command{
 	Name:    "config check",
 	Class:   ClassFile,
@@ -75,10 +77,18 @@ type showFile struct {
 // exists (P6).
 var credentialExists config.CredentialExists = config.AnyCredential
 
-func runConfigCheck(_ context.Context, env *Env) error {
+func runConfigCheck(ctx context.Context, env *Env) error {
 	c, err := config.Load(env.Root, credentialExists)
 	if err != nil {
 		return configFailure(env, err)
+	}
+	// The runtime probe of each listed hook (ADR 0025 rule 6), only on a configuration that loads.
+	probs, err := probeWorkflows(ctx, c)
+	if err != nil {
+		return err
+	}
+	if len(probs) > 0 {
+		return configFailure(env, &config.InvalidError{Problems: probs})
 	}
 	warnings := make([]string, len(c.Warnings))
 	for i, w := range c.Warnings {

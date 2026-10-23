@@ -84,3 +84,44 @@ func TestHandoffRefusesPrivacyThenPushesTheAmend(t *testing.T) {
 		t.Fatalf("after the amend: %+v %v", out, err)
 	}
 }
+
+// WithCopy adds the privacy section of a workflow copy's .claude/hooks/policy.json: never and
+// allow literals and identities, the base's objects or Name <email> strings; no copy or no file
+// leaves the lists as they were; a file that does not parse is the fetch's refusal.
+func TestPrivacyWithCopy(t *testing.T) {
+	base := git.Privacy{Allow: []string{"user"}, Identities: []git.Identity{{Name: "A", Email: "a@example.com"}}}
+	got, err := base.WithCopy(filepath.Join(t.TempDir(), "absent"))
+	if err != nil || !reflect.DeepEqual(got, base) {
+		t.Errorf("no copy: %+v %v", got, err)
+	}
+	dir := t.TempDir()
+	if got, err := base.WithCopy(dir); err != nil || !reflect.DeepEqual(got, base) {
+		t.Errorf("no policy file: %+v %v", got, err)
+	}
+	policy := filepath.Join(dir, ".claude", "hooks", "policy.json")
+	if err := os.MkdirAll(filepath.Dir(policy), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(s string) {
+		if err := os.WriteFile(policy, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(`{"edit":{},"privacy":{"never":["secretword"],"allow":["bob"],"identities":[{"name":"B","email":"b@example.com"},"C <c@example.com>"]}}`)
+	got, err = base.WithCopy(dir)
+	want := git.Privacy{Never: []string{"secretword"}, Allow: []string{"user", "bob"}, Identities: []git.Identity{
+		{Name: "A", Email: "a@example.com"}, {Name: "B", Email: "b@example.com"}, {Name: "C", Email: "c@example.com"}}}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("section: got %+v %v", got, err)
+	}
+	if len(base.Allow) != 1 || len(base.Identities) != 1 {
+		t.Errorf("WithCopy changed its receiver: %+v", base)
+	}
+	for _, bad := range []string{`{`, `{"privacy":{"identities":["nobody"]}}`, `{"privacy":{"identities":[{"name":"N"}]}}`} {
+		write(bad)
+		var ge *git.Error
+		if _, err := base.WithCopy(dir); !errors.As(err, &ge) || ge.Code != git.CodeRefusedFetch {
+			t.Errorf("%s: %v", bad, err)
+		}
+	}
+}

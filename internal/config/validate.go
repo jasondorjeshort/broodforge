@@ -166,6 +166,12 @@ func validateProject(p *Project, fileName string, groups map[string][]string, ch
 	}
 	out = append(out, credential("repo.gitCredentialId", p.Repo.GitCredentialID, exists)...)
 	out = append(out, oneOf("handoff", p.HandoffOrDefault(), HandoffPullRequest, HandoffPush)...)
+	// The workflow key (ADR 0025 rule 6): only the two events are ever run from a repository.
+	w := p.WorkflowOrDefault()
+	out = append(out, oneOf("workflow.inject", w.Inject, InjectRepository, InjectNone)...)
+	for i, e := range w.Hooks {
+		out = append(out, oneOf("workflow.hooks."+strconv.Itoa(i), e, EventPreToolUse, EventPostToolUse)...)
+	}
 	for _, id := range channelIDs(p) {
 		out = append(out, validateChannel("channels."+id, id, p.Channels[id], groups, checkGroups)...)
 	}

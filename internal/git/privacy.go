@@ -3,7 +3,13 @@
 package git
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -63,6 +69,57 @@ func (p Privacy) WithSession(a Attribution) Privacy {
 	}
 	p.Identities = ids
 	return p
+}
+
+// WithCopy is p extended by the privacy section of the policy file in a session's workflow copy,
+// <copy>/.claude/hooks/policy.json (ADR 0025 rule 7; the 0025 companion's push-scan row): its
+// never and allow literals and its identities, each the base's {name, email} object or a
+// `Name <email>` string, read as data. No copy, no file or no section is p unchanged; a file
+// that does not parse refuses the scan as a failed read does, the fetch's code.
+func (p Privacy) WithCopy(copyDir string) (Privacy, error) {
+	b, err := os.ReadFile(filepath.Join(copyDir, filepath.FromSlash(policyPath)))
+	if errors.Is(err, fs.ErrNotExist) {
+		return p, nil
+	}
+	fail := func(why string) (Privacy, error) {
+		return p, &Error{Code: CodeRefusedFetch, Message: "the workflow copy's " + policyPath + ": " + why}
+	}
+	if err != nil {
+		return fail(err.Error())
+	}
+	var file struct {
+		Privacy struct {
+			Never      []string          `json:"never"`
+			Allow      []string          `json:"allow"`
+			Identities []json.RawMessage `json:"identities"`
+		} `json:"privacy"`
+	}
+	if err := json.Unmarshal(bytes.TrimPrefix(b, []byte{0xef, 0xbb, 0xbf}), &file); err != nil {
+		return fail(err.Error())
+	}
+	sec := file.Privacy
+	p.Never = append(append([]string{}, p.Never...), sec.Never...)
+	p.Allow = append(append([]string{}, p.Allow...), sec.Allow...)
+	ids := append([]Identity{}, p.Identities...)
+	for i, raw := range sec.Identities {
+		var obj struct{ Name, Email string }
+		var s string
+		id := Identity{}
+		switch {
+		case json.Unmarshal(raw, &obj) == nil:
+			id = Identity{Name: obj.Name, Email: obj.Email}
+		case json.Unmarshal(raw, &s) == nil:
+			if m := identityRE.FindStringSubmatch(s); m != nil {
+				id = Identity{Name: m[1], Email: m[2]}
+			}
+		}
+		if strings.TrimSpace(id.Name) == "" || !strings.Contains(id.Email, "@") {
+			return fail("privacy.identities." + strconv.Itoa(i) + " is neither {name, email} nor Name <email>")
+		}
+		ids = append(ids, id)
+	}
+	p.Identities = ids
+	return p, nil
 }
 
 // PrivacyHit is one hit: the commit, the class, and where (never the value).

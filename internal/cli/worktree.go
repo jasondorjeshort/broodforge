@@ -20,6 +20,7 @@ import (
 	"github.com/jasondorjeshort/broodforge/internal/policy"
 	"github.com/jasondorjeshort/broodforge/internal/spawn"
 	"github.com/jasondorjeshort/broodforge/internal/store"
+	"github.com/jasondorjeshort/broodforge/internal/workflow"
 )
 
 // The worktree commands of 05-debug-interface.md (Git handoff) that P8 builds: check, bundle
@@ -294,7 +295,11 @@ func (s *WorktreeService) check(ctx context.Context, call *control.Call, id stri
 			fmt.Sprintf("%d of %d commits fail the attribution check", len(failing), len(c.Checks)))
 	}
 	if len(c.Checks) > 0 {
-		hits, err := git.ScanPrivacy(ctx, sess.git, c.Base, sess.privacy.WithSession(sess.attr))
+		p, err := s.scanPrivacy(sess, id)
+		if err != nil {
+			return nil, gitError(err)
+		}
+		hits, err := git.ScanPrivacy(ctx, sess.git, c.Base, p.WithSession(sess.attr))
 		if err != nil {
 			return nil, gitError(err)
 		}
@@ -363,8 +368,12 @@ func (s *WorktreeService) runHandoff(ctx context.Context, id string, dryRun bool
 	if err != nil {
 		return git.Outcome{}, err
 	}
+	p, err := s.scanPrivacy(sess, id)
+	if err != nil {
+		return git.Outcome{}, err
+	}
 	h := &git.Handoff{Backend: s.Backend, Session: sess.git, Mode: sess.project.HandoffOrDefault(),
-		Attribution: sess.attr, Privacy: sess.privacy, CredentialID: sess.project.Repo.GitCredentialID, Secret: s.Secret,
+		Attribution: sess.attr, Privacy: p, CredentialID: sess.project.Repo.GitCredentialID, Secret: s.Secret,
 		Forge: s.Forge, API: s.API, Title: sess.title, Record: s.record, Actor: actor}
 	out, err := h.Run(ctx, dryRun)
 	if err != nil {
@@ -484,6 +493,13 @@ GROUP BY u.model ORDER BY 2, 1`, []store.Value{store.Text(id)}, func(r *store.Ro
 		ls.title += ": " + truncateRunes(strings.Join(strings.Fields(firstInput), " "), titleRunes)
 	}
 	return ls, nil
+}
+
+// scanPrivacy is the push scan's lists for a session: the instance's, extended by the privacy
+// section of the session's workflow copy when it has one (ADR 0025 rule 7). Only the paths that
+// scan read it, so a malformed copy never fails `worktree bundle`.
+func (s *WorktreeService) scanPrivacy(sess loadedSession, id string) (git.Privacy, error) {
+	return sess.privacy.WithCopy(workflow.Dir(s.Root, id))
 }
 
 // instancePrivacy is the push scan's data from config/instance.json and the machine's own

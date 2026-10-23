@@ -1,0 +1,8 @@
+{
+  "privacy": {
+    "allow": ["user"],
+    "identities": [
+      { "name": "Alice Example", "email": "alice@example.com" }
+    ]
+  }
+}

@@ -11,6 +11,8 @@ import (
 	"github.com/jasondorjeshort/broodforge/internal/cli/clitest"
 	"github.com/jasondorjeshort/broodforge/internal/git/gittest"
 	"github.com/jasondorjeshort/broodforge/internal/store"
+	"github.com/jasondorjeshort/broodforge/internal/workflow"
+	"github.com/jasondorjeshort/broodforge/internal/workflow/workflowtest"
 )
 
 // The P16 Proof (08-implementation-plan-session-workflow.md), on the built binary against the
@@ -72,5 +74,58 @@ func TestProofPushScan(t *testing.T) {
 	}
 	if got := strings.Join(kinds, " "); got != "handoff-refused: handoff-refused: push:attempted push:done" {
 		t.Errorf("audit %q", got)
+	}
+}
+
+// The P17 clause of P16's Proof: a commit whose Co-Authored-By names the identity of the
+// fixture's .claude/hooks/policy.json is refused with no workflow copy and passes once a copy
+// rendered from the fixture is at workflow/<id>. The fixture's placeholder address passes the
+// scan anywhere, so the test gives the identity an address the scan reads (pieced, so the
+// repository's own scan of this file reads none) before committing the fixture.
+func TestProofPushScanWorkflowCopy(t *testing.T) {
+	p := newWorktreeProof(t)
+	s := p.start(t, "s0001")
+	tree := filepath.Join(s.Dir(), "tree")
+	addr := "alice" + "@" + "mail.net"
+	c := gittest.Commit(t, gittest.Driver, nil, tree, "README", "base\nmore\n",
+		"Add a line\n\nCo-Authored-By: Alice Example <"+addr+">")
+	root := []string{"--root", p.root}
+
+	r := clitest.Run(t, nil, append(root, "worktree", "check", "s0001")...)
+	t.Logf("$ broodforge worktree check s0001  (no copy)\n%s%s", r.Stdout, r.Stderr)
+	want(t, r, 1, "ok  pre-push\n"+c+"  ok\nprivacy: "+c+"  email  message:3\n",
+		"error: handoff-refused-privacy: 1 of 1 commits carry personal data\n")
+
+	canonical := workflowtest.Canonical(t, func(dir string) {
+		policy := filepath.Join(dir, ".claude", "hooks", "policy.json")
+		b, err := os.ReadFile(policy)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(policy, []byte(strings.Replace(string(b), "alice@example.com", addr, 1)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if _, err := workflow.Render(t.Context(), workflow.Options{Canonical: canonical, Branch: "main"}, workflow.Dir(p.root, "s0001")); err != nil {
+		t.Fatal(err)
+	}
+	r = clitest.Run(t, nil, append(root, "worktree", "check", "s0001")...)
+	t.Logf("$ broodforge worktree check s0001  (copy at workflow/s0001)\n%s%s", r.Stdout, r.Stderr)
+	want(t, r, 0, "ok  pre-push\n"+c+"  ok\nok  1\n", "")
+
+	// A copy whose policy file does not parse refuses the scan (check, handoff) as a failed read,
+	// and never fails worktree bundle, which does not scan.
+	policy := filepath.Join(workflow.Dir(p.root, "s0001"), ".claude", "hooks", "policy.json")
+	if err := os.WriteFile(policy, []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if r := clitest.Run(t, nil, append(root, "worktree", "bundle", "s0001")...); r.Code != 0 {
+		t.Errorf("bundle with a malformed copy policy: exit %d %s%s", r.Code, r.Stdout, r.Stderr)
+	}
+	for _, cmd := range []string{"check", "handoff"} {
+		r = clitest.Run(t, nil, append(root, "worktree", cmd, "s0001")...)
+		if r.Code != 1 || !strings.HasPrefix(r.Stderr, "error: handoff-refused-fetch: the workflow copy's .claude/hooks/policy.json: ") {
+			t.Errorf("%s with a malformed copy policy: exit %d stderr %q", cmd, r.Code, r.Stderr)
+		}
 	}
 }
