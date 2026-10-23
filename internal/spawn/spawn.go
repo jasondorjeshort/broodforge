@@ -38,7 +38,7 @@ const DefaultInterrupt = 20 * time.Second
 
 const (
 	settingsFile      = "settings.json"
-	hookTimeoutSecond = 30 // the hook's timeout in the settings template (03-hook-contract.md)
+	hookTimeoutSecond = 30 // each hook's timeout in the settings template (03-hook-contract.md)
 )
 
 // Backend is SpawnBackend: how an engine process, and the maintenance commands around it, are
@@ -157,22 +157,28 @@ func SettingsPath(d Delivery, home string) (string, error) {
 	return "", &Error{CodeBadDelivery, "delivery kind " + quote(string(d.Kind))}
 }
 
-// HookCommand is the settings template's hook command: the binary, forward slashes, quoted
-// with double quotes when it holds a space (both sh and cmd read that form), then
+// HookCommand is the settings template's PreToolUse command: the binary, forward slashes,
+// quoted with double quotes when it holds a space (both sh and cmd read that form), then
 // `hook pre-tool-use`.
-func HookCommand(binary string) string {
+func HookCommand(binary string) string { return hookBinary(binary) + " hook pre-tool-use" }
+
+// PostHookCommand is the template's PostToolUse command, the same binary's `hook
+// post-tool-use` (ADR 0025 rule 2).
+func PostHookCommand(binary string) string { return hookBinary(binary) + " hook post-tool-use" }
+
+func hookBinary(binary string) string {
 	b := filepath.ToSlash(binary)
 	if strings.ContainsAny(b, " \t") {
 		b = `"` + b + `"`
 	}
-	return b + " hook pre-tool-use"
+	return b
 }
 
-// Settings is the settings template (03-hook-contract.md, How the engine runs it): one
-// PreToolUse command hook with an empty matcher and a thirty-second timeout. It is the same for
-// both credential kinds; the kind picks the path. ADR 0022's sandbox block joins it once C33
-// holds.
-func Settings(hookCommand string) []byte {
+// Settings is the settings template (03-hook-contract.md, How the engine runs it): a
+// PreToolUse and a PostToolUse command hook, each with an empty matcher and a thirty-second
+// timeout. It is the same for both credential kinds; the kind picks the path. ADR 0022's
+// sandbox block joins it once C33 holds.
+func Settings(preCommand, postCommand string) []byte {
 	type hook struct {
 		Type    string `json:"type"`
 		Command string `json:"command"`
@@ -184,10 +190,12 @@ func Settings(hookCommand string) []byte {
 	}
 	v := struct {
 		Hooks struct {
-			PreToolUse []matcher `json:"PreToolUse"`
+			PreToolUse  []matcher `json:"PreToolUse"`
+			PostToolUse []matcher `json:"PostToolUse"`
 		} `json:"hooks"`
 	}{}
-	v.Hooks.PreToolUse = []matcher{{Matcher: "", Hooks: []hook{{Type: "command", Command: hookCommand, Timeout: hookTimeoutSecond}}}}
+	v.Hooks.PreToolUse = []matcher{{Matcher: "", Hooks: []hook{{Type: "command", Command: preCommand, Timeout: hookTimeoutSecond}}}}
+	v.Hooks.PostToolUse = []matcher{{Matcher: "", Hooks: []hook{{Type: "command", Command: postCommand, Timeout: hookTimeoutSecond}}}}
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		panic(err) // a fixed struct of strings and ints always marshals

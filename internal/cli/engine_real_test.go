@@ -179,6 +179,38 @@ func TestProofEngineRealAPIKey(t *testing.T) {
 	}
 }
 
+// TestProofEngineRunWorkflow: engine run --real --workflow <dir> hands the hook
+// BROODFORGE_WORKFLOW, the copy's absolute path, and the settings file registers both hooks;
+// --workflow without --real, or naming no directory, is refused before any spawn.
+func TestProofEngineRunWorkflow(t *testing.T) {
+	root, sub, _ := realRoot(t)
+	log := filepath.Join(t.TempDir(), "standin.json")
+	r := clitest.Run(t, standinEnv(t, "basic", 1, log), "--root", root, "engine", "run", "--real", "--credential", sub,
+		"--cwd", t.TempDir(), "--prompt", "x", "--workflow", "../../tests/hook/chain")
+	if r.Code != 0 {
+		t.Fatalf("exit %d stderr %q", r.Code, r.Stderr)
+	}
+	rec, err := spawntest.ReadRecord(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rec.Values["BROODFORGE_WORKFLOW"]; got != repoRoot(t)+"/tests/hook/chain" {
+		t.Errorf("BROODFORGE_WORKFLOW = %q", got)
+	}
+	if !strings.Contains(rec.Settings, `hook pre-tool-use"`) || !strings.Contains(rec.Settings, `hook post-tool-use"`) {
+		t.Errorf("settings %q", rec.Settings)
+	}
+	none := filepath.Join(t.TempDir(), "standin.json")
+	env := standinEnv(t, "basic", 1, none)
+	want(t, clitest.Run(t, env, "--root", root, "engine", "run", "--real", "--credential", sub, "--cwd", t.TempDir(), "--prompt", "x",
+		"--workflow", "../../tests/hook/nosuchcopy"), 1, "", "error: bad-workflow: ../../tests/hook/nosuchcopy is not a directory\n")
+	want(t, clitest.Run(t, env, "engine", "run", "--fake", fixtures+"basic", "--prompt", "x", "--workflow", "../../tests/hook/chain"), 2, "",
+		"error: usage: engine run: --workflow needs --real\n")
+	if _, err := os.Stat(none); !os.IsNotExist(err) {
+		t.Errorf("an engine was spawned: %v", err)
+	}
+}
+
 // TestProofEngineRealRefusals: no credential, or one the store does not hold, exits with its
 // error line and no engine is spawned.
 func TestProofEngineRealRefusals(t *testing.T) {

@@ -77,6 +77,7 @@ Set by `spawn` on the engine process and inherited by the hook; the kept list in
 | `BROODFORGE_ANSWER_REASON` | after a prompt timeout only: the deny reason text, written by `session` (04's `the prompt timed out after 5 minutes`) and returned by the hook verbatim; else absent |
 | `BROODFORGE_SESSION_ALLOW` | comma-separated tool names a person allowed for the session; absent unless 04 adopts that button |
 | `BROODFORGE_HOOK_LOG` | `sessions/<id>/home/hook.log`, one line per decision, for debugging only, never audit |
+| `BROODFORGE_WORKFLOW` | absolute path of the session's copy, `workflow/<id>` (ADR 0025 rule 5); absent when nothing was copied or `inject` is `none`: the hook then runs no child (The child chain) |
 
 Under `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` the engine strips `CLAUDE_CONFIG_DIR` from the hook as
 it does from Bash (C34), so the hook never sees the config directory by name and no `BROODFORGE_*`
@@ -144,3 +145,44 @@ cwd, tool name, input and id) carries no message id to decide by, and a deny of 
 would be re-issued the same way at the same cost; `session` records the dropped calls
 (`03-architecture.md`, prompt mode). `session reach-report` prints the table's column for the
 session's reach beside the bind list the spawn uses.
+
+## The child chain
+
+ADR 0025 rule 2; the texts and lifts are its companion's (`decisions/0025-refusals-and-checks.md`),
+built in `internal/hook/chain.go` and `post.go`. The settings file registers a second entry point
+beside the first, `<install>/bin/broodforge hook post-tool-use`, empty matcher, thirty seconds.
+
+When. In code reach, after the Decision above when it is not `deny`, and only when
+`BROODFORGE_WORKFLOW` is set and `$BROODFORGE_WORKFLOW/hooks.json` exists; a variable naming no
+directory, or a `hooks.json` that does not read or parse, is a hook error. `post-tool-use` runs under the same three conditions.
+Which. The entries of the hook's own event, in file order, whose `matcher` matches `tool_name` as
+the engine's hooks documentation reads it: empty or `*` matches every tool, anything else is a
+case-sensitive regular expression the whole name must match; an invalid one matches nothing and
+is logged. How. Serially, each through `$CLAUDE_CODE_GIT_BASH_PATH -c <command>` on a host with
+drive letters (the spawn exports it from `engine.gitBashPath`; unset is a cannot-start deny naming
+it) and `/bin/sh -c <command>` elsewhere; cwd `BROODFORGE_TREE`; environment the hook's own with
+`CLAUDE_PROJECT_DIR` the copy's absolute path; stdin the engine's bytes unchanged. Budget: the
+smaller of the entry's `timeout` and ten seconds per child, the rest of twenty for the chain, then
+the child is killed. What is taken, `pre-tool-use`: exit 2 (reason: the first stderr line) or an
+exit-0 `hookSpecificOutput.permissionDecision` of `deny` (reason: the first line of its
+`permissionDecisionReason`), either reason cut at 1000 bytes; an exit with a background job still
+holding the pipes is judged by its code once they are closed;
+the first such child ends the chain, and the hook returns `deny` with the companion's child-deny
+text, `Denied by Broodforge: refused by the project's hook <name>: <reason>. ...`, so What the
+bot sees needs no new class. A child over its own budget, or one that cannot start (the shell will
+not start, or the shell exits 126 or 127: reason the first stderr line, else the OS error), is a
+deny with the companion's over-budget text (`<n>` its own budget) or cannot-start text; a child the
+chain's twenty seconds stopped, or never let start, is `Denied by Broodforge: the project's hook
+<name> was stopped|did not run: the project's hooks exceeded twenty seconds together before <name>
+finished|ran.` Every other exit, `allow`, `ask`,
+`defer`, `updatedInput` and any context is dropped: the hook's decision stands unchanged.
+`post-tool-use`: every matching child runs; an exit-0 `additionalContext` and an exit-2 child's
+stderr are joined by newlines into its own `{"hookSpecificOutput":{"hookEventName":"PostToolUse",
+"additionalContext":...}}`, nothing printed when there is none. It exits 0 on every path, an error
+a `hook: <what>` line on stderr, since a `PostToolUse` hook cannot block.
+Log. One `hook.log` line per child run or skipped matcher: `event`, `child` (the entry's `name`),
+`exit`, `ms`, `outcome` (`passed`, `deny`, `over-budget`, `over-chain-budget`, `not-started`, `context`, `skipped`),
+`detail` and `dropped` (the field names not taken, `permissionDecision=<value>` for a decision);
+the decision line of a child deny carries `trace`, `denied: refused by the project's hook <name>:
+<reason>`. A child's reason line is the one part of its output logged, in `detail` and `trace`; its
+other output and the tool input never are.

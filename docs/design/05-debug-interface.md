@@ -161,9 +161,10 @@ Drive. Through a session: `session send` on a scratch root, where the channel's 
 directory (default `fixtures/engine/basic/` [no-check: no code yet]). Adapter alone, no store, no session: `broodforge engine run
 --fake <fixture dir> [--turn <n>] [--cwd <dir>] --prompt "<text>"` streams `EngineEvent`s as JSONL to stdout exactly as the
 adapter parsed them and exits 0 when the fixture's `exit` is 0, else 1 with `error: engine-exit`. `engine run --real --credential
-<id> --cwd <dir> --prompt "<text>" [--resume <engine session id>] [--model <m>]`, with `--root`, does the same through the configured spawn
+<id> --cwd <dir> --prompt "<text>" [--resume <engine session id>] [--model <m>] [--workflow <dir>]`, with `--root`, does the same through the configured spawn
 backend: credential and git identity from the store, an API key through the key file; the hook sees session `engine-run`, code
-reach, `defaults.mode`, log `<root>/sessions/engine-run/home/hook.log`; Ctrl-C interrupts the turn; no `--credential` is `error:
+reach, `defaults.mode`, log `<root>/sessions/engine-run/home/hook.log`, and with `--workflow` `BROODFORGE_WORKFLOW` naming the
+directory, so its chain runs without a session (`error: bad-workflow` when it is not a directory); Ctrl-C interrupts the turn; no `--credential` is `error:
 usage`, an unknown one `error: unknown-credential`, nothing spawned. `engine record --credential <id> --cwd <dir> --out <fixture
 dir> --prompt "<text>" [--model <m>]` runs the real engine and writes the raw lines as `turn-<n>.jsonl` (`n` counting up in an existing
 directory, `--resume` the previous turn's, from `fixture.json` or its `init`) plus a `fixture.json` without delays (claim
@@ -199,19 +200,23 @@ included, is exit 2 with `hook: <what>` on stderr, the one exit the engine reads
 The same code path with flags, nothing logged: `broodforge hook try --tool <name> [--input
 '<json>'] [--tool-use-id <id>] [--cwd <path>] [--mode prompt|policy] [--reach read-only|code]
 [--tree <path>] [--canonical <path>] --transcript-path <path> [--answer <id>:allow|deny]
-[--answer-reason <text>] [--session-allow <names>] [--expect allow|deny|defer|hook]` prints
+[--answer-reason <text>] [--session-allow <names>] [--workflow <dir>] [--expect allow|deny|defer|hook]` prints
 `<decision>  <reason>` (defaults: `{}`, `toolu_01`, the tree, `prompt`, `code`, `.`, the tree); a
 hook error is `error: hook: <what>`, exit 1; `--transcript-path` is what the hook derives the
-config directory from (`03-hook-contract.md`, Paths), so a case can read inside it.
+config directory from (`03-hook-contract.md`, Paths), so a case can read inside it. `--workflow` runs that copy's
+`PreToolUse` children as the hook does (`03-hook-contract.md`, The child chain), after a decision that is not `deny`;
+on the PC `CLAUDE_CODE_GIT_BASH_PATH` must name Git Bash. `hook post-tool-use` takes the engine's `PostToolUse` JSON
+the same way and prints the children's `additionalContext` object or nothing, exit 0 always.
 Observe. The decision line; `BROODFORGE_HOOK_LOG` (`sessions/<id>/home/hook.log`), one line per
 decision; in a session, `audit --kind permission-decision --session <id>`.
 Reproduce. One `hook try` line with `--expect`, or a case file: `broodforge hook cases <file>`
 runs a JSONL of `{"tool","input","toolUseId","cwd","mode","reach","tree","canonical","transcript",
-"answer","answerReason","sessionAllow","expect","needs","note"}` objects (try's defaults; `expect`
+"answer","answerReason","sessionAllow","workflow","expect","needs","note"}` objects (try's defaults; `expect`
 also `error`; `needs` a path whose absence skips the case; relative paths but `input`'s from the
-file's directory; `{dir}` is that directory, `{posixdir}` its `/c/...` form), prints `ok|FAIL|skip  <line>  <tool>  <mode>  <reach>  <got>  <want>  <note>`,
-exit 1 `cases-failed` on a FAIL; `tests/hook/cases.jsonl` (over `tests/hook/linkworld/`) covers every cell, links, the refused spellings and 8.3 names.
-Isolation. Pure: no socket, no store, no root; `--tree` is any directory; only the log is written.
+file's directory, `workflow` too; `{dir}` is that directory, `{posixdir}` its `/c/...` form), prints `ok|FAIL|skip  <line>  <tool>  <mode>  <reach>  <got>  <want>  <note>`,
+exit 1 `cases-failed` on a FAIL; `tests/hook/cases.jsonl` (over `tests/hook/linkworld/`) covers every cell, links, the refused spellings and 8.3 names, and with
+`tests/hook/chain/` each child outcome (its `sleep.sh` case takes ten seconds).
+Isolation. No socket, no store, no root; `--tree` is any directory; only the log is written, and a `--workflow` child runs in the tree.
 
 ## Prompt-mode defer and resume
 

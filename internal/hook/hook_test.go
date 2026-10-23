@@ -221,7 +221,7 @@ var fixed = func() time.Time { return time.Date(2026, 10, 16, 12, 0, 0, 0, time.
 
 func run(stdin string, vars map[string]string) (int, string, string) {
 	var out, errb bytes.Buffer
-	code := PreToolUse(strings.NewReader(stdin), &out, &errb, env(vars), fixed)
+	code := PreToolUse(strings.NewReader(stdin), &out, &errb, env(vars), nil, fixed)
 	return code, out.String(), errb.String()
 }
 
@@ -278,8 +278,12 @@ func TestPreToolUseErrorsExit2(t *testing.T) {
 }
 
 // TestShippedCases runs tests/hook/cases.jsonl: every case ok, or skip for a link this host
-// does not have.
+// does not have. The workflow cases run tests/hook/chain/'s children, through a Git Bash on a
+// host with drive letters.
 func TestShippedCases(t *testing.T) {
+	if bash, _ := lookupEnv(childEnviron(t), EnvGitBashPath); bash != "" {
+		t.Setenv(EnvGitBashPath, bash)
+	}
 	f, err := os.Open("../../tests/hook/cases.jsonl")
 	if err != nil {
 		t.Fatal(err)

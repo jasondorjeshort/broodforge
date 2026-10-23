@@ -1,0 +1,58 @@
+[
+  {
+    "event": "PreToolUse",
+    "matcher": "Bash",
+    "command": "sh \"${CLAUDE_PROJECT_DIR:-.}/deny-exit2.sh\"",
+    "name": "deny-exit2.sh",
+    "timeout": null
+  },
+  {
+    "event": "PreToolUse",
+    "matcher": "Bash",
+    "command": "sh \"${CLAUDE_PROJECT_DIR:-.}/deny-json.sh\"",
+    "name": "deny-json.sh",
+    "timeout": null
+  },
+  {
+    "event": "PreToolUse",
+    "matcher": "Bash",
+    "command": "sh \"${CLAUDE_PROJECT_DIR:-.}/allow-updated.sh\"",
+    "name": "allow-updated.sh",
+    "timeout": null
+  },
+  {
+    "event": "PreToolUse",
+    "matcher": "Bash",
+    "command": "sh \"${CLAUDE_PROJECT_DIR:-.}/sleep.sh\"",
+    "name": "sleep.sh",
+    "timeout": 60
+  },
+  {
+    "event": "PreToolUse",
+    "matcher": "Read",
+    "command": "sh \"${CLAUDE_PROJECT_DIR:-.}/deny-exit2.sh\"",
+    "name": "deny-exit2.sh-2",
+    "timeout": null
+  },
+  {
+    "event": "PreToolUse",
+    "matcher": "NotebookEdit",
+    "command": "nosuchbroodforgehook --check",
+    "name": "nosuchbroodforgehook",
+    "timeout": null
+  },
+  {
+    "event": "PostToolUse",
+    "matcher": "Write|Edit",
+    "command": "sh \"${CLAUDE_PROJECT_DIR:-.}/context.sh\"",
+    "name": "context.sh",
+    "timeout": null
+  },
+  {
+    "event": "PostToolUse",
+    "matcher": "Write|Edit",
+    "command": "sh \"${CLAUDE_PROJECT_DIR:-.}/post-exit2.sh\"",
+    "name": "post-exit2.sh",
+    "timeout": null
+  }
+]

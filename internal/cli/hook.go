@@ -33,11 +33,22 @@ var hookPreToolUse = Command{
 	Local: runHookPreToolUse,
 }
 
+// hookPostToolUse is `broodforge hook post-tool-use`, standalone, as the engine runs it (ADR
+// 0025 rule 2): the repository's PostToolUse children from BROODFORGE_WORKFLOW in code reach,
+// their additionalContext on stdout as this hook's own; exit 0 always, an error a `hook:` line
+// on stderr.
+var hookPostToolUse = Command{
+	Name:  "hook post-tool-use",
+	Class: ClassStandalone,
+	Local: runHookPostToolUse,
+}
+
 // hookTry is the same code path with flags: `broodforge hook try --tool <name> --input <json>
 // [--tool-use-id <id>] [--mode prompt|policy] [--reach read-only|code] [--tree <path>]
 // [--canonical <path>] --transcript-path <path> [--answer <id>:allow|deny] [--answer-reason
-// <text>] [--session-allow <names>] [--expect allow|deny|defer|hook]`, printing `<decision>
-// <reason>`. A hook error is `error: hook: <what>`, exit 1. Nothing is logged.
+// <text>] [--session-allow <names>] [--workflow <dir>] [--expect allow|deny|defer|hook]`,
+// printing `<decision>  <reason>`; --workflow runs the copy's PreToolUse children as the hook
+// does under BROODFORGE_WORKFLOW. A hook error is `error: hook: <what>`, exit 1. Nothing is logged.
 var hookTry = Command{
 	Name:   "hook try",
 	Class:  ClassStandalone,
@@ -55,6 +66,7 @@ var hookTry = Command{
 		{Name: "answer", Kind: FlagString, Value: "<id>:allow|deny", Usage: "BROODFORGE_ANSWER"},
 		{Name: "answer-reason", Kind: FlagString, Value: "<text>", Usage: "BROODFORGE_ANSWER_REASON"},
 		{Name: "session-allow", Kind: FlagString, Value: "<names>", Usage: "BROODFORGE_SESSION_ALLOW"},
+		{Name: "workflow", Kind: FlagString, Value: "<dir>", Usage: "BROODFORGE_WORKFLOW: run this copy's PreToolUse children"},
 	},
 	Columns: tryColumns,
 	Local:   runHookTry,
@@ -74,15 +86,20 @@ var hookCases = Command{
 }
 
 func init() {
-	commands = append(commands, &hookPreToolUse, &hookTry, &hookCases)
+	commands = append(commands, &hookPreToolUse, &hookPostToolUse, &hookTry, &hookCases)
 	positionals[&hookCases] = []string{"file"}
 	hookStyle[&hookPreToolUse] = true
 }
 
 func runHookPreToolUse(_ context.Context, env *Env) error {
-	if code := hook.PreToolUse(env.Stdin, env.Out.w, env.Stderr, os.LookupEnv, time.Now); code != 0 {
+	if code := hook.PreToolUse(env.Stdin, env.Out.w, env.Stderr, os.LookupEnv, os.Environ(), time.Now); code != 0 {
 		return &exitError{code}
 	}
+	return nil
+}
+
+func runHookPostToolUse(_ context.Context, env *Env) error {
+	hook.PostToolUse(env.Stdin, env.Out.w, env.Stderr, os.LookupEnv, os.Environ(), time.Now)
 	return nil
 }
 
@@ -101,7 +118,8 @@ func runHookTry(_ context.Context, env *Env) error {
 		ToolUseID: env.String("tool-use-id"), Cwd: env.String("cwd"), Mode: env.String("mode"),
 		Reach: env.String("reach"), Tree: env.String("tree"), Canonical: env.String("canonical"),
 		Transcript: env.String("transcript-path"), Answer: env.String("answer"),
-		AnswerReason: env.String("answer-reason"), SessionAllow: env.String("session-allow")}.Run()
+		AnswerReason: env.String("answer-reason"), SessionAllow: env.String("session-allow"),
+		Workflow: env.String("workflow")}.Run()
 	if err != nil {
 		return hookError(err)
 	}

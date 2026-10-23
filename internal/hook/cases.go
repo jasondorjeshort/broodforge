@@ -47,9 +47,14 @@ type Try struct {
 	Answer       string
 	AnswerReason string
 	SessionAllow string
+	// Workflow is BROODFORGE_WORKFLOW: a copy whose PreToolUse children run after a decision
+	// that is not deny, in code reach; "" runs none.
+	Workflow string
+	// Environ is the children's environment, the hook's own; nil is this process's.
+	Environ []string
 }
 
-// Run decides one try through Decide, with the defaults filled in.
+// Run decides one try through Decide, with the defaults filled in, then the chain.
 func (t Try) Run() (decision, reason string, err error) {
 	s := Settings{Tree: t.Tree, Canonical: t.Canonical}
 	if s.Tree == "" {
@@ -82,11 +87,63 @@ func (t Try) Run() (decision, reason string, err error) {
 	if t.Tool == "" {
 		return "", "", &Error{"no tool_name"}
 	}
-	r, err := Decide(Input{ToolName: t.Tool, ToolInput: t.Input, ToolUseID: id, Cwd: t.Cwd, TranscriptPath: t.Transcript}, s)
+	in := Input{ToolName: t.Tool, ToolInput: t.Input, ToolUseID: id, Cwd: t.Cwd, TranscriptPath: t.Transcript}
+	r, err := Decide(in, s)
 	if err != nil {
 		return "", "", err
 	}
+	if runsChain(r, s, t.Workflow) {
+		if r, err = t.chain(in, s, r); err != nil {
+			return "", "", err
+		}
+	}
 	return r.Decision.String(), r.Reason, nil
+}
+
+// chain runs the copy's PreToolUse children as the hook does, on the stdin the engine would
+// send for in; nothing is logged.
+func (t Try) chain(in Input, s Settings, r policy.Result) (policy.Result, error) {
+	workflow, err := filepath.Abs(t.Workflow)
+	if err != nil {
+		return r, &Error{"cannot resolve " + EnvWorkflow + ": " + errText(err)}
+	}
+	tree, err := filepath.Abs(s.Tree)
+	if err != nil {
+		return r, &Error{"cannot resolve " + EnvTree + ": " + errText(err)}
+	}
+	cwd := in.Cwd
+	if cwd == "" {
+		cwd = filepath.ToSlash(tree)
+	}
+	input := in.ToolInput
+	if len(bytes.TrimSpace(input)) == 0 {
+		input = json.RawMessage("{}")
+	}
+	stdin, err := json.Marshal(engineInput{HookEventName: EventPreToolUse, ToolName: in.ToolName, ToolInput: input,
+		ToolUseID: in.ToolUseID, Cwd: cwd, TranscriptPath: in.TranscriptPath})
+	if err != nil {
+		return r, err
+	}
+	environ := t.Environ
+	if environ == nil {
+		environ = os.Environ()
+	}
+	deny, _, err := Chain{Workflow: workflow, Tree: tree, Environ: environ}.Pre(in.ToolName, stdin)
+	if err != nil || deny == nil {
+		return r, err
+	}
+	deny.Cell = r.Cell
+	return *deny, nil
+}
+
+// engineInput is the engine's hook input as hook try builds it for the children.
+type engineInput struct {
+	HookEventName  string          `json:"hook_event_name"`
+	ToolName       string          `json:"tool_name"`
+	ToolInput      json.RawMessage `json:"tool_input"`
+	ToolUseID      string          `json:"tool_use_id"`
+	Cwd            string          `json:"cwd"`
+	TranscriptPath string          `json:"transcript_path"`
 }
 
 // Case is one line of a case file (05-debug-interface.md, The PreToolUse hook). needs names a
@@ -104,6 +161,7 @@ type Case struct {
 	Answer       string          `json:"answer"`
 	AnswerReason string          `json:"answerReason"`
 	SessionAllow string          `json:"sessionAllow"`
+	Workflow     string          `json:"workflow"`
 	Expect       string          `json:"expect"`
 	Needs        string          `json:"needs"`
 	Note         string          `json:"note"`
@@ -164,7 +222,7 @@ func Cases(r io.Reader, dir string) ([]CaseResult, error) {
 		default:
 			return out, &BadCasesError{fmt.Sprintf("line %d: expect is %q, want allow, deny, defer or error", n, c.Expect)}
 		}
-		for _, f := range []*string{&c.Tree, &c.Canonical, &c.Transcript, &c.Needs, &c.Cwd} {
+		for _, f := range []*string{&c.Tree, &c.Canonical, &c.Transcript, &c.Needs, &c.Cwd, &c.Workflow} {
 			if *f != "" && !filepath.IsAbs(*f) && !rooted(*f) && filepath.VolumeName(*f) == "" {
 				*f = filepath.Join(absDir, *f)
 			}
@@ -179,7 +237,7 @@ func Cases(r io.Reader, dir string) ([]CaseResult, error) {
 		}
 		got, _, err := Try{Tool: c.Tool, Input: c.Input, ToolUseID: c.ToolUseID, Cwd: c.Cwd, Mode: c.Mode, Reach: c.Reach,
 			Tree: c.Tree, Canonical: c.Canonical, Transcript: c.Transcript, Answer: c.Answer,
-			AnswerReason: c.AnswerReason, SessionAllow: c.SessionAllow}.Run()
+			AnswerReason: c.AnswerReason, SessionAllow: c.SessionAllow, Workflow: c.Workflow}.Run()
 		var he *Error
 		switch {
 		case errors.As(err, &he):

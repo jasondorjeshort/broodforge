@@ -81,7 +81,7 @@ func (s *SameAccount) Start(spec Spec) (*Process, error) {
 			return nil, &Error{CodeSpawnFailed, "session home: " + err.Error()}
 		}
 	}
-	if err := writeSettings(path, Settings(HookCommand(s.binary))); err != nil {
+	if err := writeSettings(path, Settings(HookCommand(s.binary), PostHookCommand(s.binary))); err != nil {
 		return nil, &Error{CodeSpawnFailed, "settings: " + err.Error()}
 	}
 	env := Environment(os.Environ(), append(append([]Var{}, spec.Env...), own...))

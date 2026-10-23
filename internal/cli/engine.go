@@ -40,7 +40,7 @@ const (
 // the engine): `broodforge engine run --fake <fixture dir> [--turn <n>] [--cwd <dir>]
 // [--received-dir <dir>] --prompt <text> [--expect <value>]` replays a fixture; `engine run
 // --real --credential <id> --cwd <dir> --prompt <text> [--resume <engine session id>] [--model
-// <model>]` runs
+// <model>] [--workflow <dir>]` runs
 // the configured engine through the spawn backend (runEngineReal, below). Either streams the turn's
 // EngineEvents as JSONL on stdout, in text mode too, and exits with the turn's exit code (any
 // non-zero code is 1, `error: engine-exit: ...`). Its outcome token for --expect is `result`
@@ -55,6 +55,7 @@ var engineRun = Command{
 		{Name: "credential", Kind: FlagString, Value: "<id>", Usage: "--real: the credential the engine runs as"},
 		{Name: "resume", Kind: FlagString, Value: "<engine session id>", Usage: "--real: resume this engine session"},
 		{Name: "model", Kind: FlagString, Value: "<model>", Usage: "--real: the engine's --model (default: the account's)"},
+		{Name: "workflow", Kind: FlagString, Value: "<dir>", Usage: "--real: BROODFORGE_WORKFLOW, a copy whose hooks.json the hook chains"},
 		{Name: "turn", Kind: FlagInt, Default: "1", Value: "<n>", Usage: "--fake: the turn-<n>.jsonl to play"},
 		{Name: "cwd", Kind: FlagString, Value: "<dir>", Usage: "the request's working directory"},
 		{Name: "received-dir", Kind: FlagString, Value: "<dir>", Usage: "--fake: where received-<n>.json goes (default: the fixture directory)"},
@@ -73,6 +74,8 @@ func runEngine(ctx context.Context, env *Env) error {
 		return &usageError{"engine run: --fake and --real exclude each other"}
 	case env.Bool("real"):
 		return runEngineReal(ctx, env, "engine run", nil)
+	case env.String("workflow") != "":
+		return &usageError{"engine run: --workflow needs --real"}
 	case dir == "":
 		return &usageError{"engine run: --fake <fixture dir> or --real is required"}
 	}
@@ -189,6 +192,7 @@ const (
 	CodeBadCwd       = "bad-cwd"        // --cwd is not a directory
 	CodeBadOut       = "bad-out"        // the fixture directory cannot take a new turn
 	CodeOutInSession = "out-in-session" // engine record's --out is inside the instance root or --cwd
+	CodeBadWorkflow  = "bad-workflow"   // engine run's --workflow is not a directory
 )
 
 // standaloneSession is the session id the hook sees in a standalone run (engine run --real,
@@ -239,6 +243,19 @@ func runEngineReal(_ context.Context, env *Env, name string, out *string) error 
 	req, secret, err := standaloneRequest(env.Root, c, credID, absCwd)
 	if err != nil {
 		return err
+	}
+	if out == nil && env.String("workflow") != "" {
+		// The chain without a session (ADR 0025 rule 2): the hook reads the copy from
+		// BROODFORGE_WORKFLOW; the spawn exports CLAUDE_CODE_GIT_BASH_PATH from
+		// engine.gitBashPath, the shell the children run under on the PC.
+		wf, err := filepath.Abs(env.String("workflow"))
+		if err != nil {
+			return control.NewError(CodeBadWorkflow, err.Error())
+		}
+		if st, err := os.Stat(wf); err != nil || !st.IsDir() {
+			return control.NewError(CodeBadWorkflow, filepath.ToSlash(env.String("workflow"))+" is not a directory")
+		}
+		req.HookEnv = append(req.HookEnv, engine.HookVar{Name: hook.EnvWorkflow, Value: filepath.ToSlash(wf)})
 	}
 	req.Input, req.EngineSessionID, req.Model = prompt, env.String("resume"), env.String("model")
 

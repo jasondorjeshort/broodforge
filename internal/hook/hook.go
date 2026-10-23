@@ -284,6 +284,12 @@ func Decide(in Input, s Settings) (policy.Result, error) {
 		Reach: s.Reach, Paths: paths, Answer: s.Answer, SessionAllow: s.SessionAllow}), nil
 }
 
+// runsChain is whether the repository's PreToolUse children run after the bot's own result:
+// code reach only, a decision that is not deny, and a copy named (ADR 0025 rule 2).
+func runsChain(r policy.Result, s Settings, workflow string) bool {
+	return r.Decision != policy.Deny && s.Reach == policy.ReachCode && workflow != ""
+}
+
 // Output is the engine's hook output.
 type Output struct {
 	HookSpecificOutput HookSpecificOutput `json:"hookSpecificOutput"`
@@ -313,9 +319,20 @@ type logLine struct {
 	ToolUseID string `json:"toolUseId"`
 	Cell      string `json:"cell"`
 	Decision  string `json:"decision"`
+	// Trace is a child deny's `denied: refused by the project's hook <name>: <reason>`.
+	Trace string `json:"trace,omitempty"`
 }
 
-func appendLog(path string, l logLine) error {
+// childLogLine is one hook.log line of the chain: the call's names, then the child's line.
+type childLogLine struct {
+	Time      string `json:"time"`
+	Session   string `json:"session"`
+	Tool      string `json:"tool"`
+	ToolUseID string `json:"toolUseId"`
+	ChildLine
+}
+
+func appendLog[T logLine | childLogLine](path string, l T) error {
 	b, err := json.Marshal(l)
 	if err != nil {
 		return err
@@ -338,14 +355,16 @@ func appendLog(path string, l logLine) error {
 // PreToolUse is `broodforge hook pre-tool-use` as the engine runs it: the engine's JSON on
 // stdin, the session in the environment, the decision on stdout, exit 0. Every error it can
 // see, a panic included, is `hook: <what>` on stderr and exit 2.
-func PreToolUse(stdin io.Reader, stdout, stderr io.Writer, lookup func(string) (string, bool), now func() time.Time) (code int) {
+//
+// environ is the hook's own environment, handed to the chain's children; lookup reads it.
+func PreToolUse(stdin io.Reader, stdout, stderr io.Writer, lookup func(string) (string, bool), environ []string, now func() time.Time) (code int) {
 	defer func() {
 		if p := recover(); p != nil {
 			fmt.Fprintf(stderr, "hook: internal error: %v\n", p)
 			code = 2
 		}
 	}()
-	if err := preToolUse(stdin, stdout, lookup, now); err != nil {
+	if err := preToolUse(stdin, stdout, lookup, environ, now); err != nil {
 		msg := err.Error()
 		if _, ok := err.(*Error); !ok {
 			msg = "hook: " + msg
@@ -356,7 +375,7 @@ func PreToolUse(stdin io.Reader, stdout, stderr io.Writer, lookup func(string) (
 	return 0
 }
 
-func preToolUse(stdin io.Reader, stdout io.Writer, lookup func(string) (string, bool), now func() time.Time) error {
+func preToolUse(stdin io.Reader, stdout io.Writer, lookup func(string) (string, bool), environ []string, now func() time.Time) error {
 	s, session, log, err := FromEnv(lookup)
 	if err != nil {
 		return err
@@ -376,12 +395,34 @@ func preToolUse(stdin io.Reader, stdout io.Writer, lookup func(string) (string, 
 	if err != nil {
 		return err
 	}
+	stamp := func() string { return now().UTC().Format(time.RFC3339) }
+	var logErr error
+	workflow, _ := lookup(EnvWorkflow)
+	trace := ""
+	if runsChain(r, s, workflow) {
+		c := Chain{Workflow: workflow, Tree: s.Tree, Environ: environ, now: now, Log: func(l ChildLine) {
+			if logErr == nil {
+				logErr = appendLog(log, childLogLine{Time: stamp(), Session: session, Tool: in.ToolName, ToolUseID: in.ToolUseID, ChildLine: l})
+			}
+		}}
+		deny, why, err := c.Pre(in.ToolName, b)
+		if err != nil {
+			return err
+		}
+		if logErr != nil {
+			return logErr
+		}
+		if deny != nil {
+			deny.Cell = r.Cell
+			r, trace = *deny, why
+		}
+	}
 	out, err := Encode(r)
 	if err != nil {
 		return err
 	}
-	if err := appendLog(log, logLine{Time: now().UTC().Format(time.RFC3339), Session: session, Tool: in.ToolName,
-		ToolUseID: in.ToolUseID, Cell: r.Cell.String(), Decision: r.Decision.String()}); err != nil {
+	if err := appendLog(log, logLine{Time: stamp(), Session: session, Tool: in.ToolName,
+		ToolUseID: in.ToolUseID, Cell: r.Cell.String(), Decision: r.Decision.String(), Trace: trace}); err != nil {
 		return err
 	}
 	if _, err := stdout.Write(out); err != nil {

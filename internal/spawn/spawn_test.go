@@ -56,17 +56,23 @@ func TestSettings(t *testing.T) {
 			} `json:"hooks"`
 		} `json:"hooks"`
 	}
-	b := Settings(HookCommand("C:/Program Files/bf/bin/broodforge.exe"))
+	bin := "C:/Program Files/bf/bin/broodforge.exe"
+	b := Settings(HookCommand(bin), PostHookCommand(bin))
 	if err := json.Unmarshal(b, &v); err != nil {
 		t.Fatal(err)
 	}
-	m := v.Hooks["PreToolUse"]
-	if len(v.Hooks) != 1 || len(m) != 1 || m[0].Matcher != "" || len(m[0].Hooks) != 1 {
+	if len(v.Hooks) != 2 {
 		t.Fatalf("settings shape: %s", b)
 	}
-	h := m[0].Hooks[0]
-	if h.Type != "command" || h.Timeout != 30 || h.Command != `"C:/Program Files/bf/bin/broodforge.exe" hook pre-tool-use` {
-		t.Errorf("hook %+v", h)
+	for event, sub := range map[string]string{"PreToolUse": "pre-tool-use", "PostToolUse": "post-tool-use"} {
+		m := v.Hooks[event]
+		if len(m) != 1 || m[0].Matcher != "" || len(m[0].Hooks) != 1 {
+			t.Fatalf("settings shape: %s", b)
+		}
+		h := m[0].Hooks[0]
+		if h.Type != "command" || h.Timeout != 30 || h.Command != `"C:/Program Files/bf/bin/broodforge.exe" hook `+sub {
+			t.Errorf("%s hook %+v", event, h)
+		}
 	}
 	if c := HookCommand(`C:\bf\bin\broodforge.exe`); c != "C:/bf/bin/broodforge.exe hook pre-tool-use" && runtime.GOOS == "windows" {
 		t.Errorf("HookCommand %q", c)
@@ -213,7 +219,7 @@ func TestStartSubscription(t *testing.T) {
 			t.Errorf("%s missing", name)
 		}
 	}
-	if r.Settings != string(Settings("/opt/bf/bin/broodforge hook pre-tool-use")) {
+	if r.Settings != string(Settings("/opt/bf/bin/broodforge hook pre-tool-use", "/opt/bf/bin/broodforge hook post-tool-use")) {
 		t.Errorf("settings %q", r.Settings)
 	}
 	if st, err := os.Stat(home); err != nil || !st.IsDir() {
