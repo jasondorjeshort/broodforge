@@ -5,9 +5,9 @@ Updated: 2026-10-23, after the P12a commit, by main session (rooted in the repo,
 
 ## Now
 
-- P12a (model and effort from Discord, R-29 now v1) is committed on `main`, reviewed, fixes folded in;
-  push pending the owner's word. The live bot must be rebuilt (`bin/`) and restarted to register
-  `/model` and `/session model|effort` and to migrate the store to schema 2.
+- P12a (model and effort from Discord, R-29 now v1) is pushed on `main` (9eb3b73, reviewed, fixes
+  folded in). The live bot must be rebuilt (`bin/`) and restarted to register `/model` and
+  `/session model|effort` and to migrate the store to schema 2.
 - P12 left unbuilt: the relay (`not-built`), the venue's post-restart notice (P11 remainder item 5).
   Subagents do not get the `LSP` tool (coder report of 2026-10-21); gopls is the main session's.
 
