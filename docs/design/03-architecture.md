@@ -139,7 +139,9 @@ interrupted (ADR 0020), its own record outside the baseline. Models that worked 
 `modelUsage`, or the distinct `model` values seen when interrupted.
 
 The command line is ADR 0020's; the stdin message is one stream-json `user` line with one text block; the system prompt
-append is per process; `--mcp-config` names `<bf>/share/empty/mcp.json`, an empty map shipped with Broodforge and
+append is passed per process but the engine renders the prompt once per conversation and reuses it on every resume
+until a compaction renders it again (ADR 0025; from which launch's flags is not determined), so it carries nothing
+that changes within a session; `--mcp-config` names `<bf>/share/empty/mcp.json`, an empty map shipped with Broodforge and
 reached through the existing `<bf>` bind (ADR 0022 companion). The `fake` replays a fixture directory: `turn-<n>.jsonl`
 files of verbatim stream-json lines, an optional per-line delay in `fixture.json`, each `TurnRequest` received written
 as `received-<n>.json` for assertions; `interrupt()` ends the current file early with `exit` carrying `interrupted:
@@ -216,7 +218,8 @@ with `noreply@anthropic.com`. Models used by subagents are contributors too: `mo
 covers them (ADR 0020, Amendments), so every model with non-zero usage in the session gets a line (an Opus agent that
 ran a Haiku subagent yields both). The display name comes from the map in `policy` (model id prefix to name); an
 unmapped id is used verbatim. A model that only compacted is a co-author: the stream cannot tell compaction from work.
-Two helps, neither the enforcement: the system prompt append lists the exact trailer lines, and `worktree-create` sets
+Two helps, neither the enforcement: the system prompt append says once that the `commit-msg` hook adds the trailer
+lines and lists none (a list there is stale from turn two, ADR 0025 rule 10), and `worktree-create` sets
 `core.hooksPath` in the clone to a Broodforge-owned `commit-msg` hook that appends any line of the
 `trailers` file in the session's `home` directory under `sessions/<id>` that is missing.
 

@@ -67,5 +67,16 @@ Decisions so far (this project's own; Hatchery's records are in
 - [0024 Decanted from Hatchery](decisions/0024-decanted-from-hatchery.md): the provenance record:
   the `Hatchery base:` line the updates patch from (ADR 0016 of the base), the licence kept, and
   the departure table of base-owned files this project edits, each with its carry-back.
+- [0025 Session workflow composition](decisions/0025-session-workflow-composition.md): a Discord
+  session composes the bot's contract (a precedence header, the hook, attribution, the push) with
+  the repository's own workflow, copied per session from the canonical's default branch and
+  injected by `--append-system-prompt-file` and `--agents`; repository `PreToolUse` and
+  `PostToolUse` hooks run only as deny-only children of the bot's hook, code reach, opt-in per
+  project; a session never pushes (`pre-push` and `pushurl`); every push is scanned; the driver
+  process coordinates; the trailer list lives in the `commit-msg` hook alone; the PC keeps a gate
+  outside the session. Skills by plugin and the landing ideas deferred with triggers; `auto` mode
+  out of scope, its own proposal from its idea file. Companion
+  [refusals and checks](decisions/0025-refusals-and-checks.md): the copy procedure, the runtime
+  probe, the refusal texts and lifts, the open checks.
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).

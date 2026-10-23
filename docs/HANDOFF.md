@@ -1,40 +1,40 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-23, after the review's defect fixes, by main session (rooted in the repo, hooks loaded)
+Updated: 2026-10-23, after ADR 0025, by main session (rooted in the repo, hooks loaded)
 
 ## Now
 
-- The bot runs the real engine from a scratch root. P12a and the idle and prompt timeouts (session
-  s0005, owner-pushed, `97ad23f`) are on `main`; the timeout commits were reviewed after the push:
-  `docs/findings/2026-10-23-first-live-session-commits-reached-main-unreviewed.md` (open).
-- A Discord session loads none of the project's `CLAUDE.md`, agents or hooks
-  (`docs/findings/2026-10-23-session-settings-sources-drop-claude-md-and-agents.md`). Until the design
-  question is settled, treat everything from a session as unreviewed: a reviewer read and the pusher's
-  checks before it reaches `main`.
-- P12 left unbuilt: the relay, the venue's post-restart notice. Subagents get no `LSP` tool.
+- ADR 0025 (`docs/design/decisions/0025-session-workflow-composition.md` and its companion) settles
+  how a session composes the bot's and the repository's workflows; the owner answered its four calls
+  on 2026-10-23. Reviewed, fixes amended into the unpushed `5afaecd`. `cb046d4` (the subagent tool
+  is `Agent`, not `Task`; every launch in a session was denied) is reviewed and unpushed. Push on the user's word.
+- Until ADR 0025's passes land a session sees none of the repository's rules: a reviewer read and the
+  pusher's checks before anything from it reaches `main`. P12 left: the relay, the post-restart notice.
 
 ## Next
 
-1. Owner: continue the live session (milestone 1: edit Broodforge from `broodforge/discord`); set the
-   live `instance.json` timeouts to 0; a real root outside Temp, eventually.
-2. Architect: a proposal for the two workflows in a session (the ideas of 2026-10-23: sessions load
-   none of the project's rules; engine `auto` permission mode; landing on `main`).
-3. Review defects fixed, unpushed (9a65371, aadfec2). Next: the last-good cold start (architect;
-   the fake-engine header is the owner's), the net-diff finding, the other `Plan:` items.
-4. Then the P11 remainder `Plan:`, `audit --follow`, `/usage`; carry-backs; the surfaces ADR; triage.
+1. Architect: `08-implementation-plan.md` gains ADR 0025's passes in the order of its Consequences,
+   each with its `session show` line and debug surface.
+2. Coder, the first of those passes: the `pre-push` refusal (companion C1) and the push scan.
+3. Triage: the `main` handoff and `/session land` ideas route through ADR 0025 rule 7.
+4. Owner: continue the live session (milestone 1: edit Broodforge from `broodforge/discord`); set the
+   live `instance.json` timeouts to 0; a real root outside Temp.
+5. Then the last-good cold start (architect; the fake-engine header is the owner's), the net-diff
+   finding, the P11 remainder `Plan:`, `audit --follow`, `/usage`; carry-backs; the surfaces ADR.
 
 ## Waiting on user
 
+- The `pre-push` line a session sees: "Broodforge: session <id> does not push. Commit in this tree;
+  Broodforge pushes at the handoff when the session ends." (then git's own error). Confirm or reword.
 - Wording: P12a and `/model` showing effort; "Never ends for inactivity."; a switch post naming who
-  switched; a plain-message refusal by direct message or in-channel; hook no-answer phrase.
-- Vision says a session stays open until a person ends it, but restarts interrupt (R-17): reword? The
-  two `Waits:` blocks the session wrote are the owner's to confirm.
+  switched; a plain-message refusal by direct message or in-channel; hook no-answer phrase; R-17
+  (restarts interrupt a session the vision says stays open); the session's two `Waits:` blocks.
 - Commit name and email (`privacy.identities`)? The `Question:` ideas of 2026-10-21.
 
 ## Open findings
 
-- `docs/findings/2026-10-17-net-diff-privacy-scan-let-named-commits-go-public.md` (rewrite done; resolve)
-- `docs/findings/2026-10-15-spike-login-claims-for-adr-0020.md`, `...-stream-and-process-...`, `...-hook-flow-...`
-  (PC rows hold, droplet open); `2026-10-15-spike-claims-for-adr-0022.md` (droplet, C37, key half);
-  `2026-10-16-prior-art-chat-front-ends-for-coding-agents.md` (relay decided; L1-L4 mine)
+- `docs/findings/2026-10-23-system-prompt-append-renders-once-per-turn-trailer-list-stale.md`,
+  `...-first-live-session-commits-reached-main-unreviewed.md` (both resolve in ADR 0025's passes)
+- `docs/findings/2026-10-17-net-diff-privacy-scan-let-named-commits-go-public.md` (rewrite done; resolve);
+  `2026-10-15-spike-*.md` (PC rows hold; droplet open); `2026-10-16-prior-art-chat-front-ends-for-coding-agents.md` (L1-L4 mine)
