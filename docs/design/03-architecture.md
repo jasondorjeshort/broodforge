@@ -30,21 +30,20 @@ names; everything else goes through `SessionService`. Host differences live in `
 | `config` | Loading, validation, last-good, `reload`, `config check` | `credentials` (id existence), `policy` (the model and effort values) |
 | `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control`; `credentials` (`credential init`, the reads' store fallback, the bot's handlers); `session` (`serve` builds the service and serves it); `discord` (`serve`'s adapter, the standalone `discord render`); `git` and `policy` (the worktree handlers) |
 
-`SessionService` is the boundary N-11 names: `start`, `submit`, `answer`, `setMode`, `interrupt`,
-`end`, `invite`, `status`, `subscribe(sessionId)`. The Discord adapter and the control socket call
-the same methods and read the same `SessionEvent` stream; a behaviour reachable from Discord only is
-a bug. N-26: each session's turn is its own engine process and goroutine, nothing in `session`
-awaits another session, and store writes are short transactions (ADR 0021): a stuck engine delays only its own session until the idle timeout.
+`SessionService` is the boundary N-11 names: `start`, `submit`, `answer`, `setMode`, `interrupt`, `end`, `invite`,
+`status`, `subscribe(sessionId)`. The Discord adapter and the control socket call the same methods and read the same
+`SessionEvent` stream; a behaviour reachable from Discord only is a bug. N-26: each session's turn is its own engine
+process and goroutine, nothing in `session` awaits another session, and store writes are short transactions (ADR 0021):
+a stuck engine delays only its own session until the idle timeout.
 
-Registration and participants (R-01 to R-04, R-13, R-25, N-18). `discord` owns the register
-command: one registration per Discord user id; registering again replaces name and email with an
-audit event (R-02). `session` owns participants: the driver is the starter, fixed for the session;
-a writer becomes a contributor on their first accepted message (R-13). Interrupt and end are
-permitted to the channel's `answer` list (owner decision 8 in 04); `setMode` is the driver's.
-`discord` looks up the roles held at that moment on every message and click (R-25, N-18), never
-writes one (R-04); the role check is `policy`'s pure function of the roles supplied and the
-channel's `start`, `contribute` or `answer` list, used by `discord` and `control` alike. An
-unregistered writer gets the register flow, an unpermitted one the refused flow (R-03). Inviting: 04.
+Registration and participants (R-01 to R-04, R-13, R-25, N-18). `discord` owns the register command: one registration
+per Discord user id; registering again replaces name and email with an audit event (R-02). `session` owns participants:
+the driver is the starter, fixed for the session; a writer becomes a contributor on their first accepted message (R-13).
+Interrupt and end are permitted to the channel's `answer` list (owner decision 8 in 04); `setMode` is the driver's.
+`discord` looks up the roles held at that moment on every message and click (R-25, N-18), never writes one (R-04); the
+role check is `policy`'s pure function of the roles supplied and the channel's `start`, `contribute` or `answer` list,
+used by `discord` and `control` alike. An unregistered writer gets the register flow, an unpermitted one the refused
+flow (R-03). Inviting: 04.
 
 Credential status (`usable`, `needs-login`, `removed`) is the store's record and nothing else:
 a subscription credential is created `needs-login`; an auth error in a `result` sets it;
@@ -139,13 +138,12 @@ with no `result` gets the `assistant` counts deduplicated by `messageId`, output
 interrupted (ADR 0020), its own record outside the baseline. Models that worked are the keys of
 `modelUsage`, or the distinct `model` values seen when interrupted.
 
-The command line is ADR 0020's; the stdin message is one stream-json `user` line with one text
-block; the system prompt append is per process; `--mcp-config` names `<bf>/share/empty/mcp.json`,
-an empty map shipped with Broodforge and reached through the existing `<bf>` bind (ADR 0022
-companion). The `fake` replays a fixture directory: `turn-<n>.jsonl` files of verbatim stream-json
-lines, an optional per-line delay in `fixture.json`, each `TurnRequest` received written as
-`received-<n>.json` for assertions; `interrupt()` ends the current file early with `exit` carrying
-`interrupted: true`. A recorded real-engine transcript is a fixture as captured (ADR 0020's spike).
+The command line is ADR 0020's; the stdin message is one stream-json `user` line with one text block; the system prompt
+append is per process; `--mcp-config` names `<bf>/share/empty/mcp.json`, an empty map shipped with Broodforge and
+reached through the existing `<bf>` bind (ADR 0022 companion). The `fake` replays a fixture directory: `turn-<n>.jsonl`
+files of verbatim stream-json lines, an optional per-line delay in `fixture.json`, each `TurnRequest` received written
+as `received-<n>.json` for assertions; `interrupt()` ends the current file early with `exit` carrying `interrupted:
+true`. A recorded real-engine transcript is a fixture as captured (ADR 0020's spike).
 
 ## The PreToolUse hook
 
@@ -187,44 +185,39 @@ is a new file plus `worktree forget` for the old rows.
       "mode": "prompt", "harness": "claude-code", "idleTimeoutMinutes": 60, "promptTimeoutMinutes": 5, "model": null, "effort": null } } }
 ```
 
-Rules: a role list holds group names from `roleGroups` or raw role ids; `"driver"` under `answer`
-means the driver only (R-25). A channel inherits `defaults` for a key it omits.
-`idleTimeoutMinutes` and `promptTimeoutMinutes` 0 (or absent from `defaults`) is no timeout, the
-default: a session never ends for inactivity, a prompt waits for its answer; a negative value is
-an error. `harness` is
-`claude-code` or `fake`; `handoff` is `pull-request` (default) or `push`; `venue.category` is
-the category id sessions are created under, `venue.summaryChannel` optional, also receiving each
-summary and transcript; `discord.mode` is `live` or `dry-run`; `engine.fakeFixtures` is the
-`fake`'s fixture directory. The panel message id is recorded per project channel in the store
-when `panel post <channel id>` runs: a project has several channels, and the bot never writes
-the owner's config files (ADR 0021). `credentials.keyFile` names the store key (ADR 0022; the default
-per host and the `BROODFORGE_KEY_FILE` override are the ADR's). `engine.version` must equal the
-version parsed from the binary's `--version` output (the leading dotted number of
-`2.1.296 (Claude Code)`), else a refusal naming both. A channel id in two project files is a
-`config check` error (R-07). Every credential id named must exist (ADR 0021).
+Rules: a role list holds group names from `roleGroups` or raw role ids; `"driver"` under `answer` means the driver only
+(R-25). A channel inherits `defaults` for a key it omits. `idleTimeoutMinutes` and `promptTimeoutMinutes` 0 (or absent
+from `defaults`) is no timeout, the default: a session never ends for inactivity, a prompt waits for its answer; a
+negative value is an error. `harness` is `claude-code` or `fake`; `handoff` is `pull-request` (default) or `push`;
+`venue.category` is the category id sessions are created under, `venue.summaryChannel` optional, also receiving each
+summary and transcript; `discord.mode` is `live` or `dry-run`; `engine.fakeFixtures` is the `fake`'s fixture directory.
+The panel message id is recorded per project channel in the store when `panel post <channel id>` runs: a project has
+several channels, and the bot never writes the owner's config files (ADR 0021). `credentials.keyFile` names the store
+key (ADR 0022; the default per host and the `BROODFORGE_KEY_FILE` override are the ADR's). `engine.version` must equal
+the version parsed from the binary's `--version` output (the leading dotted number of `2.1.296 (Claude Code)`), else a
+refusal naming both. A channel id in two project files is a `config check` error (R-07). Every credential id named must
+exist (ADR 0021).
 
 ## Git: trees, branches, attribution, handoff
 
 Session id: `s` plus the base-36 session row id, at least four digits (`s0001`), unique per
-instance. Branch: `broodforge/<instanceName>/<session id>` (two instances pushing one remote
-cannot collide; the instance name matches the project-id pattern); tree:
-`sessions/<session id>/tree`; the canonical's ref: `refs/sessions/<session id>` (ADR 0022); the
-remote branch equals the local one. Subagent worktrees are the engine's own, inside the clone; only the session branch is
-bundled, so subagent work reaches the push once merged or cherry-picked into it (R-31); unmerged
-subagent branches are listed in the end-of-session summary and removed with the tree.
-
+instance. Branch: `broodforge/<instanceName>/<session id>` (two instances pushing one remote cannot collide; the
+instance name matches the project-id pattern); tree: `sessions/<session id>/tree`; the canonical's ref:
+`refs/sessions/<session id>` (ADR 0022); the remote branch equals the local one. Subagent worktrees are the engine's
+own, inside the clone; only the session branch is bundled, so subagent work reaches the push once merged or
+cherry-picked into it (R-31); unmerged subagent branches are listed in the end-of-session summary and removed with the
+tree.
 Attribution (R-32, R-33). Author and committer of every commit: the driver's registration,
-through the four git identity variables (ADR 0022). Trailers, one `Co-Authored-By: <name>
-<email>` each, in this order: every other participant who wrote a message before the commit's
-committer time, in join order; then every model with usage in the session whose first turn
-started before that time (the usage row lands at the turn's end), by display name with `noreply@anthropic.com`. Models used by subagents are contributors
-too: `modelUsage` from the engine's result covers them (ADR 0020, Amendments), so every model with non-zero
-usage in the session gets a line (an Opus agent that ran a Haiku subagent yields both). The
-display name comes from the map in `policy` (model id prefix to name); an unmapped id is used
-verbatim. A model that only compacted is a co-author: the stream cannot tell compaction from
-work. Two helps, neither the enforcement: the system prompt append lists the exact trailer
-lines, and `worktree-create` sets `core.hooksPath` in the clone to a Broodforge-owned
-`commit-msg` hook that appends any line of `sessions/<id>/home/trailers` that is missing.
+through the four git identity variables (ADR 0022). Trailers, one `Co-Authored-By: <name> <email>` each, in this order:
+every other participant who wrote a message before the commit's committer time, in join order; then every model with
+usage in the session whose first turn started before that time (the usage row lands at the turn's end), by display name
+with `noreply@anthropic.com`. Models used by subagents are contributors too: `modelUsage` from the engine's result
+covers them (ADR 0020, Amendments), so every model with non-zero usage in the session gets a line (an Opus agent that
+ran a Haiku subagent yields both). The display name comes from the map in `policy` (model id prefix to name); an
+unmapped id is used verbatim. A model that only compacted is a co-author: the stream cannot tell compaction from work.
+Two helps, neither the enforcement: the system prompt append lists the exact trailer lines, and `worktree-create` sets
+`core.hooksPath` in the clone to a Broodforge-owned `commit-msg` hook that appends any line of the
+`trailers` file in the session's `home` directory under `sessions/<id>` that is missing.
 
 The enforcement is the bot's check at handoff (ADR 0022 companion, step 3): for each commit in
 `<base>..refs/sessions/<id>`, author and committer equal the driver and the trailer set computed
