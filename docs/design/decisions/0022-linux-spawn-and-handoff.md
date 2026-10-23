@@ -39,7 +39,8 @@ broodforge ALL=(broodforge-engine) NOPASSWD: /usr/bin/kill
 
 The kept list, generated from one array in code: `ANTHROPIC_API_KEY`, `CLAUDE_CONFIG_DIR`,
 `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`, `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`,
-`GIT_COMMITTER_EMAIL`, and every hook variable 03 names. No name on the kept list other than the
+`GIT_COMMITTER_EMAIL`, and every hook variable 03 names, `BROODFORGE_WORKFLOW` (the session's
+workflow copy, ADR 0025 rule 5, set only when something was copied) among them. No name on the kept list other than the
 two credential names contains `TOKEN`, `KEY`, `SECRET` or `PASSWORD`, so the scrub strips the
 credential from the engine's subprocesses and nothing else; a bot-side name such as
 `BROODFORGE_KEY_FILE` is never kept and is unaffected. Every call is `sudo -n`; a password prompt

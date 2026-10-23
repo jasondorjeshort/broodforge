@@ -243,8 +243,14 @@ func TestPolicyTurnAgainstBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	if req.Delivery.Kind != engine.DeliveryAPIKey || req.Delivery.CredentialID != "cred-a" || req.GitIdentity.Name != "Ada Example" ||
-		!strings.HasPrefix(req.Input, "From: Ada Example (driver)\n") || !strings.Contains(req.SystemPromptAppend, "one tool call at a time") {
+		!strings.HasPrefix(req.Input, "From: Ada Example (driver)\n") || req.SystemPromptFile != h.root+"/workflow/s0001/instructions.md" ||
+		req.AgentsFile != "" {
 		t.Errorf("received request: %+v", req)
+	}
+	// Without Config.Workflow the file is the header alone.
+	if b, err := os.ReadFile(req.SystemPromptFile); err != nil || !strings.Contains(string(b), "one tool call at a time") ||
+		!strings.HasPrefix(string(b), "This session is run by Broodforge.") || strings.Contains(string(b), "taken from") {
+		t.Errorf("instructions.md: %q %v", b, err)
 	}
 	names := map[string]string{}
 	for _, v := range req.HookEnv {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/jasondorjeshort/broodforge/internal/policy"
@@ -32,21 +33,44 @@ func reachMeaning(reach string) string {
 	return "change only this session's tree"
 }
 
-// SystemPromptAppend is the per-process system prompt append (03 Git, Attribution; ADR 0020):
-// who is speaking, one call at a time, the reach, and the exact trailer lines a commit carries.
-func SystemPromptAppend(id, projectName, reach, driverName string, trailers []string) string {
+// Header is what the header of a session's appended prompt states (ADR 0025 rule 1). The engine
+// renders the prompt once per conversation (until a compaction), so nothing here changes during
+// a session: no mode, no model, no trailer list (rule 10).
+type Header struct {
+	Session, ProjectName, Reach, DriverName string
+	// Copied is whether the project's instructions follow the header: false under inject none
+	// or when the default branch has neither CLAUDE.md nor .claude, and the taken-from line is
+	// then left out. Branch, Commit and Date are that line's: the default branch and the commit
+	// the copy was taken from, with its committer date.
+	Copied         bool
+	Branch, Commit string
+	Date           time.Time
+}
+
+// The header's two fixed sentences, the ADR's verbatim (rule 1, the owner's; rule 10, its first
+// letter capitalised to open a sentence).
+const (
+	headerPrecedence = "This session is run by Broodforge. Where the project's instructions below conflict with this header, " +
+		"this header wins; it never says how the project's work is done."
+	headerTrailerRule = "Every commit carries the Co-Authored-By lines Broodforge's commit-msg hook adds; never remove one."
+)
+
+// SystemPromptAppend is the header that opens the appended prompt, every line of it ending in a
+// newline and none blank, so the first blank line of instructions.md ends it (ReadHeader): the
+// precedence sentence, the session and project, the reach, the driver, one call at a time, the
+// trailer rule, and where the project's instructions were taken from. It is the one place the
+// header's text lives; `session show --header <id>` prints it as the session got it.
+func SystemPromptAppend(h Header) string {
 	var b strings.Builder
-	b.WriteString("You are working in Broodforge session " + id + " on " + projectName + ".\n")
-	b.WriteString("Reach: " + reach + " (" + reachMeaning(reach) + ").\n")
-	b.WriteString("Each message starts with a From: line naming its writer and their role; the driver is " + driverName + ".\n")
+	b.WriteString(headerPrecedence + "\n")
+	b.WriteString("You are working in Broodforge session " + h.Session + " on " + h.ProjectName + ".\n")
+	b.WriteString("Reach: " + h.Reach + " (" + reachMeaning(h.Reach) + ").\n")
+	b.WriteString("Each message starts with a From: line naming its writer and their role; the driver is " + h.DriverName + ".\n")
 	b.WriteString("Make one tool call at a time: calls made together are asked about one by one.\n")
-	if len(trailers) == 0 {
-		b.WriteString("Commits need no Co-Authored-By lines yet.\n")
-	} else {
-		b.WriteString("End every commit message with exactly these lines:\n")
-		for _, t := range trailers {
-			b.WriteString(t + "\n")
-		}
+	b.WriteString(headerTrailerRule + "\n")
+	if h.Copied {
+		b.WriteString("The project's instructions below were taken from " + h.Branch + " at " + h.Commit + " on " +
+			h.Date.UTC().Format(time.RFC3339) + ".\n")
 	}
 	return b.String()
 }

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jasondorjeshort/broodforge/internal/config"
 	"github.com/jasondorjeshort/broodforge/internal/control"
 	"github.com/jasondorjeshort/broodforge/internal/credentials"
 	"github.com/jasondorjeshort/broodforge/internal/git"
@@ -84,7 +85,10 @@ var sessionList = Command{
 var sessionShow = Command{
 	Name:  "session show",
 	Class: ClassRead,
-	Flags: []Flag{{Name: "id", Kind: FlagString, Value: "<session id>"}},
+	Flags: []Flag{
+		{Name: "header", Kind: FlagBool, Usage: "print only the header the session's prompt opens with (ADR 0025 rule 1)"},
+		{Name: "id", Kind: FlagString, Value: "<session id>"},
+	},
 	Local: runSessionShow,
 }
 
@@ -208,15 +212,40 @@ func runSessionList(_ context.Context, env *Env) error {
 	return env.Out.Result(out, session.ListColumns)
 }
 
-func runSessionShow(_ context.Context, env *Env) error {
+// runSessionShow is `session show` without a bot: the store's record, the review fact read
+// from the canonical the configuration names (left out when it cannot be loaded), and with
+// --header the copy's header.
+func runSessionShow(ctx context.Context, env *Env) error {
 	r, err := openStore(env)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
-	d, err := session.Show(r, env.String("id"))
+	id := env.String("id")
+	d, err := session.Show(r, id)
 	if err != nil {
 		return sessionError(err)
+	}
+	// The review fact needs the project's canonical: a configuration that does not load, or no
+	// longer holds the project, is `review: error: <code>`, the rest of the record still printed.
+	c, cerr := config.Load(env.Root, credentialExists)
+	switch {
+	case cerr != nil:
+		d.Review = session.ReviewFailed(CodeBadConfig, control.OneLine(cerr.Error()))
+	case c.Project(d.Project) == nil:
+		d.Review = session.ReviewFailed(CodeUnknownProject, "the configuration holds no project "+d.Project)
+	default:
+		p := c.Project(d.Project)
+		gs := git.Session{Root: env.Root, ID: id, Instance: c.Instance.InstanceName, Canonical: p.Repo.Canonical,
+			Remote: orDefault(p.Repo.Remote, "origin"), DefaultBranch: orDefault(p.Repo.DefaultBranch, "main")}
+		if d.Review, err = session.ReviewFact(ctx, r, gs); err != nil {
+			return sessionError(err)
+		}
+	}
+	if env.Bool("header") {
+		if d.Header, err = session.ReadHeader(filepath.ToSlash(env.Root), id); err != nil {
+			return sessionError(err)
+		}
 	}
 	out, err := encodeSession(d)
 	if err != nil {
@@ -230,7 +259,9 @@ func runSessionShow(_ context.Context, env *Env) error {
 // `model: <id or ->  effort: <level or ->`, `turns: <n>`, one `participants: <user id>
 // driver|contributor  <joined at>` per participant,
 // `worktree: <path>  <branch>  <state>` (or -), `pending: <tool use id>  <tool>  <target>  since
-// <time>  until <deadline>` (or -).
+// <time>  until <deadline>` (or -), then ADR 0025's `workflow: <commit> <date>` or `workflow:
+// none (...)` (or -), `hooks: <names>` (or -) and `review: <tool use id> after <commit>`,
+// `review: none since <commit>` (or -). With --header only the header, as the session got it.
 func renderSessionShow(env *Env, raw json.RawMessage) error {
 	var d session.Detail
 	if err := json.Unmarshal(raw, &d); err != nil {
@@ -239,6 +270,10 @@ func renderSessionShow(env *Env, raw json.RawMessage) error {
 	env.Out.SetToken(d.State)
 	if env.JSON {
 		return env.Out.Record(raw, nil)
+	}
+	if env.Bool("header") {
+		_, err := fmt.Fprint(env.Out.w, d.Header)
+		return err
 	}
 	lines := []string{
 		"session: " + strings.Join([]string{d.ID, d.State, d.Channel, d.Project, d.Driver, d.Mode, d.Reach, d.Harness}, "  "),
@@ -260,6 +295,8 @@ func renderSessionShow(env *Env, raw json.RawMessage) error {
 	} else {
 		lines = append(lines, "pending: -")
 	}
+	hooks := strings.Join(d.Hooks, ", ")
+	lines = append(lines, "workflow: "+orDash(deref(d.Workflow)), "hooks: "+orDash(hooks), "review: "+reviewLine(d.Review))
 	for _, l := range lines {
 		if _, err := fmt.Fprintln(env.Out.w, l); err != nil {
 			return err
@@ -405,12 +442,15 @@ func SessionHandlers(svc *session.Service) func(*control.Registry) {
 			}
 			return encodeWorktree(out)
 		})
-		reg.Handle("session.show", func(_ context.Context, call *control.Call) (json.RawMessage, error) {
-			var a struct{ ID string }
+		reg.Handle("session.show", func(ctx context.Context, call *control.Call) (json.RawMessage, error) {
+			var a struct {
+				ID     string
+				Header bool
+			}
 			if err := json.Unmarshal(call.Args, &a); err != nil {
 				return nil, control.NewError(control.CodeBadArgs, err.Error())
 			}
-			d, err := svc.Show(a.ID)
+			d, err := svc.Inspect(ctx, a.ID, a.Header)
 			if err != nil {
 				return nil, sessionError(err)
 			}
@@ -656,4 +696,19 @@ func runReachReport(_ context.Context, env *Env) error {
 		_, err = fmt.Fprintln(env.Out.w, binds)
 	}
 	return err
+}
+
+// reviewLine is the `review:` value (ADR 0025 rule 7): `<tool use id> after <commit>`, `none
+// since <commit>`, `error: <code>` when it cannot be read (the canonical moved, the configuration
+// does not load; --json has the message), or - once the session is handed off.
+func reviewLine(r *session.Review) string {
+	switch {
+	case r == nil:
+		return "-"
+	case r.Error != nil:
+		return "error: " + r.Error.Code
+	case r.ToolUseID != nil:
+		return *r.ToolUseID + " after " + r.Commit
+	}
+	return "none since " + r.Commit
 }

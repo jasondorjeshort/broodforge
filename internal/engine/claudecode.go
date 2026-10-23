@@ -49,12 +49,20 @@ var _ Engine = (*ClaudeCode)(nil)
 func (c *ClaudeCode) Name() string { return "claude-code" }
 
 // Args is ADR 0020's command line after the binary: the fixed flags, the empty MCP map, then
-// --resume, --model, --effort and --append-system-prompt when the request sets them. --effort
-// is the engine's own flag (`claude --help` on 2.1.309: low, medium, high, xhigh, max); the
-// session sends only a level policy.Efforts lists.
+// RequestArgs. --effort is the engine's own flag (`claude --help` on 2.1.309: low, medium, high,
+// xhigh, max); the session sends only a level policy.Efforts lists.
 func Args(req TurnRequest, mcpConfig string) []string {
 	args := []string{"-p", "--output-format", "stream-json", "--verbose", "--input-format", "stream-json",
 		"--permission-mode", "default", "--setting-sources", "user", "--strict-mcp-config", "--mcp-config", mcpConfig}
+	return append(args, RequestArgs(req)...)
+}
+
+// RequestArgs are the flags the request sets: --resume, --model, --effort,
+// --append-system-prompt-file and --agents, each when the request names it. The text form
+// --append-system-prompt is retired (ADR 0025 rule 5): the session's prompt is a file in its
+// workflow copy, passed on every process. The fake records these as received-<n>.json's `args`.
+func RequestArgs(req TurnRequest) []string {
+	var args []string
 	if req.EngineSessionID != "" {
 		args = append(args, "--resume", req.EngineSessionID)
 	}
@@ -64,8 +72,11 @@ func Args(req TurnRequest, mcpConfig string) []string {
 	if req.Effort != "" {
 		args = append(args, "--effort", req.Effort)
 	}
-	if req.SystemPromptAppend != "" {
-		args = append(args, "--append-system-prompt", req.SystemPromptAppend)
+	if req.SystemPromptFile != "" {
+		args = append(args, "--append-system-prompt-file", req.SystemPromptFile)
+	}
+	if req.AgentsFile != "" {
+		args = append(args, "--agents", req.AgentsFile)
 	}
 	return args
 }

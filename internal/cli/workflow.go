@@ -11,6 +11,7 @@ import (
 
 	"github.com/jasondorjeshort/broodforge/internal/config"
 	"github.com/jasondorjeshort/broodforge/internal/control"
+	"github.com/jasondorjeshort/broodforge/internal/session"
 	"github.com/jasondorjeshort/broodforge/internal/workflow"
 )
 
@@ -262,4 +263,48 @@ func runWorkflowProbe(ctx context.Context, env *Env) (err error) {
 		return control.NewError(workflow.CodeProbeFailed, control.OneLine(pf.Hook.Command+" needs "+pf.Word))
 	}
 	return perr
+}
+
+// sessionWorkflow is the session service's copy at start (ADR 0025 rules 5 and 6, the session
+// half): the copy rendered into the session's directory under workflow/, then, when hooks.json
+// has entries, the runtime probe where the children will run. A refusal removes the directory
+// when this call made it, and is a *session.WorkflowRefusal; a probe failure is
+// workflow-probe-failed: <command> needs <word>, which the starter alone sees.
+func sessionWorkflow(ctx context.Context, req session.WorkflowRequest) (session.WorkflowCopy, error) {
+	_, statErr := os.Stat(req.Dir)
+	made := os.IsNotExist(statErr)
+	refuse := func(err error) (session.WorkflowCopy, error) {
+		if made {
+			_ = os.RemoveAll(req.Dir)
+		}
+		var we *workflow.Error
+		var pf *workflow.ProbeFailure
+		switch {
+		case errors.As(err, &pf):
+			return session.WorkflowCopy{}, &session.WorkflowRefusal{Code: workflow.CodeProbeFailed,
+				Message: control.OneLine(pf.Hook.Command + " needs " + pf.Word)}
+		case errors.As(err, &we):
+			return session.WorkflowCopy{}, &session.WorkflowRefusal{Code: we.Code, Message: control.OneLine(we.Message)}
+		}
+		return session.WorkflowCopy{}, err
+	}
+	c, err := workflow.Render(ctx, workflow.Options{Canonical: req.Canonical, Branch: req.Branch, Inject: req.Key.Inject,
+		Hooks: req.Key.Hooks}, req.Dir)
+	if err != nil {
+		return refuse(err)
+	}
+	if len(c.Hooks) > 0 {
+		if _, err := workflow.Probe(ctx, c.Dir, c.Hooks); err != nil {
+			return refuse(err)
+		}
+	}
+	out := session.WorkflowCopy{Line: c.Line(), Copied: !c.None(), Branch: c.Branch, Commit: c.Commit, Date: c.Date,
+		Hooks: []string{}}
+	if len(c.Agents) > 0 {
+		out.Agents = c.Dir + "/" + workflow.AgentsFile
+	}
+	for _, h := range c.Hooks {
+		out.Hooks = append(out.Hooks, h.Name)
+	}
+	return out, nil
 }

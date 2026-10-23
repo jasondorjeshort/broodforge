@@ -91,6 +91,14 @@ type Detail struct {
 	Participants    []Participant `json:"participants"`
 	Worktree        *Worktree     `json:"worktree"`
 	Pending         *Pending      `json:"pending"`
+	// Workflow is the `workflow:` line's value and Hooks the `hooks:` names, from the
+	// session-started event (ADR 0025 rule 5); nil for a session started without a copy.
+	Workflow *string  `json:"workflow"`
+	Hooks    []string `json:"hooks"`
+	// Review is rule 7's fact (Inspect); nil when it was not read or cannot be.
+	Review *Review `json:"review"`
+	// Header is the header the session got, only for `session show --header`.
+	Header string `json:"header,omitempty"`
 }
 
 func optional(r *store.Row, i int) *string {
@@ -135,6 +143,13 @@ FROM session s WHERE id = ?`, []store.Value{store.Text(id)}, func(r *store.Row) 
 			d.Worktree = &Worktree{Path: r.Text(0), Branch: r.Text(1), State: r.Text(2)}
 			return nil
 		})
+	if err != nil {
+		return d, err
+	}
+	d.Workflow, d.Hooks, err = startedWorkflow(q, id)
+	if d.Hooks == nil {
+		d.Hooks = []string{}
+	}
 	return d, err
 }
 

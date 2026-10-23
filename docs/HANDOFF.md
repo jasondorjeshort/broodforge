@@ -1,15 +1,15 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-23, P17 pushed, by main session (rooted in the repo, hooks loaded)
+Updated: 2026-10-23, P19 pushed, by main session (rooted in the repo, hooks loaded)
 
 ## Now
 
 - ADR 0025 (`docs/design/decisions/0025-session-workflow-composition.md` and its companion) settles
   how a session composes the bot's and the repository's workflows; the owner answered its four calls
-  on 2026-10-23. On `main`: the `Agent` fix, the P15-P19 plan, P15 (no push from a session), P16
-  (the push scan), P17 (the workflow copy, key and probe), `6b25c6d`. P18 (the hook chain) is with
-  the coder; its C2 real turn waits on the owner's word.
+  and the not-started flow (ephemeral) on 2026-10-23. P15-P19 are built, reviewed and on `main`
+  (P19 the last, injection, the header, `session show`). Real turns owed, the owner's: P18 C2, P19
+  C5 and C6 (`docs/operator/2026-10-23-real-turns-c2-c5-c6.md`), after a `bin/` rebuild.
 - The live `privacy.allow` holds the two service accounts (owner's yes, 2026-10-23); the running bot
   is the pre-P16 binary, so rebuild `bin/` before the next `serve` or the strict loader refuses the key.
 - Until P17-P19 land a session sees none of the repository's rules: a reviewer read and the
@@ -17,8 +17,8 @@ Updated: 2026-10-23, P17 pushed, by main session (rooted in the repo, hooks load
 
 ## Next
 
-1. P18 commit, review, push; then P19 (`08-implementation-plan-session-workflow.md`; real turns
-   are the owner's). Then triage: the 2026-10-23 carry-back idea, the `tests/lint/` README row.
+1. Owner: rebuild `bin/`, serve, run the real turns (the operator entry); milestone 1 under the
+   project's rules. Then the first-live-session finding resolves. Triage: the two 2026-10-23 ideas.
 2. Triage: the `main` handoff and `/session land` ideas route through ADR 0025 rule 7.
 3. Owner: continue the live session (milestone 1: edit Broodforge from `broodforge/discord`); set the
    live `instance.json` timeouts to 0; a real root outside Temp.

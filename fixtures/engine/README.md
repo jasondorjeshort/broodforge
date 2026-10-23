@@ -2,10 +2,15 @@
 
 Recorded Claude Code stream-json turns, replayed by the fake engine. Each directory holds
 `turn-<n>.jsonl` (the engine's stdout, verbatim but for paths) and `fixture.json` (`claim`,
-`engineVersion`, `recorded`, and `turns: [{n, exit, engineSessionId}]`). All were recorded on the
-PC with engine 2.1.296, by the spike or by `engine record` (claim `recorded`); the import rewrote
-the PC home to `/home/user`, the spike root to `/home/user/bf-spike`, and the engine's project
-slugs to match, and changed nothing else.
+`engineVersion`, `recorded`, and `turns: [{n, exit, engineSessionId}]`). All but `subagent` were
+recorded on the PC with engine 2.1.296, by the spike or by `engine record` (claim `recorded`); the
+import rewrote the PC home to `/home/user`, the spike root to `/home/user/bf-spike`, and the
+engine's project slugs to match, and changed nothing else. `subagent` (claim `hand-written`) is
+written by hand in the stream's shape until a real subagent turn is recorded (ADR 0025, check C6).
+A hand-written fixture carries no `engineVersion` and no `recorded`: no engine produced it. Its
+shape is assumed, not observed: that a subagent's own lines carry `parent_tool_use_id`, and that
+its results carry `tool_result_meta` with `source: hook` (the bot's hook deciding a subagent's
+call), are unproven until the owner's C6 turn; replace it with that recording.
 `events-<n>.jsonl` is the parser's golden for `turn-<n>.jsonl`, one `EngineEvent` per line;
 `go test ./internal/engine/` compares them field by field, `-run TestGolden -update` rewrites them.
 
@@ -34,3 +39,4 @@ from the source path's `C:/Users/<user>` prefix. Read the result as `docs/design
 | `settings-b` | C26 | 1 | The same with `--setting-sources ""`. |
 | `recorded-read` | recorded | 1 | `engine record` through the owner's credential: a Read of `hello.txt` the hook allows, answer `hello`. |
 | `closing` | recorded | 1 | The closing turn, no tools: a pull-request title line, a blank line, a Markdown body. |
+| `subagent` | hand-written | 1 | The driver launches the `reviewer` through `Agent`; the subagent's `Read` and text carry `parent_tool_use_id`, then the `Agent` result: `session tail`'s indentation and `session show`'s `review:` line (ADR 0025). |

@@ -43,5 +43,6 @@ paths:
   the standalone engine commands start, `session`, for `serve`, which builds the session service
   and serves it, `discord`, for `serve`'s adapter and the standalone `discord render`, and `git`
   and `policy`, for the worktree handlers and the hidden `git-askpass` and `git-commit-msg`, and
-  `workflow`, for the `(file)` commands `workflow render` and `probe` and the handoff's path to a
-  session's copy; nothing else beyond what 03's `cli` row names.
+  `workflow`, for the `(file)` commands `workflow render` and `probe`, the handoff's path to a
+  session's copy, and `serve`'s copy and probe at session start (the session service's
+  `Config.Workflow`); nothing else beyond what 03's `cli` row names.

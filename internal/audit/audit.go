@@ -46,6 +46,9 @@ const (
 	KindEffortChanged        Kind = "effort-changed"
 	KindTimeoutChanged       Kind = "timeout-changed"
 	KindParticipantInvited   Kind = "participant-invited"
+	// KindSubagentResult is a subagent call's tool result (Agent, Task on an older pin), the row
+	// the review fact of ADR 0025 rule 7 counts.
+	KindSubagentResult Kind = "subagent-result"
 )
 
 // Phase marks an action outside the store: attempted before, done or failed after (ADR

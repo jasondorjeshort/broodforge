@@ -4,6 +4,7 @@ package session
 
 import (
 	"context"
+	"strings"
 	"sync"
 )
 
@@ -44,11 +45,28 @@ type Event struct {
 	Reason    string    `json:"reason,omitempty"`
 	Text      string    `json:"text,omitempty"`
 	Result    string    `json:"result,omitempty"`
+	// Parent is the subagent call a text, call, decision or result belongs to (the stream's
+	// parent_tool_use_id, internal/engine/parse.go), Depth how many such calls it is nested in;
+	// the summary is indented by Depth (Indent), so a subagent's calls sit under its Agent line.
+	Parent string `json:"parentToolUseId,omitempty"`
+	Depth  int    `json:"depth,omitempty"`
 	// The payloads the Discord renderer needs beyond the summary (P11): the header's facts on
 	// session-started, the footer's on turn-ended, the summary's on session-ended.
 	Start *StartInfo `json:"start,omitempty"`
 	Usage *TurnUsage `json:"usage,omitempty"`
 	End   *EndInfo   `json:"end,omitempty"`
+}
+
+// indentUnit is one level of a subagent's nesting in a summary (04, The turn loop: subagent
+// calls are indented under their Agent line).
+const indentUnit = "  "
+
+// Indent is s indented depth levels.
+func Indent(depth int, s string) string {
+	if depth <= 0 {
+		return s
+	}
+	return strings.Repeat(indentUnit, depth) + s
 }
 
 // StartInfo is what the venue's pinned header shows (04, Starting and the first message).

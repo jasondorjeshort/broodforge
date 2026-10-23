@@ -345,6 +345,7 @@ func startBot(env *Env) (*bot, error) {
 			return git.Create(ctx, b.backend, s)
 		},
 		RemoveTree: func(ctx context.Context, s git.Session) error { return git.Discard(ctx, b.backend, s) },
+		Workflow:   sessionWorkflow,
 		Store:      b.st, Audit: b.aud,
 	})
 	b.adapter.Attach(b.svc)
@@ -426,6 +427,7 @@ func (b *bot) channel(id string) (session.Channel, bool) {
 		return session.Channel{}, false
 	}
 	e := c.Effective(p, id)
+	w := p.WorkflowOrDefault()
 	deref := func(s *string) string {
 		if s == nil {
 			return ""
@@ -436,7 +438,8 @@ func (b *bot) channel(id string) (session.Channel, bool) {
 		Roles:       session.Roles{Start: e.Roles.Start, Contribute: e.Roles.Contribute, Answer: e.Roles.Answer},
 		IdleTimeout: time.Duration(e.IdleTimeoutMinutes) * time.Minute, PromptTimeout: time.Duration(e.PromptTimeoutMinutes) * time.Minute,
 		Model: deref(e.Model), Effort: deref(e.Effort),
-		Repo: session.Repo{Canonical: p.Repo.Canonical, Remote: p.Repo.Remote, DefaultBranch: p.Repo.DefaultBranch}}, true
+		Repo:     session.Repo{Canonical: p.Repo.Canonical, Remote: p.Repo.Remote, DefaultBranch: p.Repo.DefaultBranch},
+		Workflow: session.WorkflowKey{Inject: w.Inject, Hooks: w.Hooks}}, true
 }
 
 // engine is the session service's engine factory: the fake per session (its turn counter is

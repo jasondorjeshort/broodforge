@@ -19,17 +19,22 @@ type Engine interface {
 // TurnRequest is everything one turn needs. The spawn backend joins it with the spawn
 // package (P7); the fake records the rest as received-<n>.json.
 type TurnRequest struct {
-	SessionID          string      `json:"sessionId"`
-	EngineSessionID    string      `json:"engineSessionId"` // --resume when set
-	Cwd                string      `json:"cwd"`             // sessions/<id>/tree
-	Delivery           Delivery    `json:"delivery"`
-	GitIdentity        GitIdentity `json:"gitIdentity"` // the driver's, all four variables
-	HookEnv            []HookVar   `json:"hookEnv"`     // the BROODFORGE_* names of the hook contract
-	Input              string      `json:"input"`       // the From-prefixed blocks
-	Answer             *TurnAnswer `json:"answer"`
-	Model              string      `json:"model"`
-	Effort             string      `json:"effort"`
-	SystemPromptAppend string      `json:"systemPromptAppend"`
+	SessionID       string      `json:"sessionId"`
+	EngineSessionID string      `json:"engineSessionId"` // --resume when set
+	Cwd             string      `json:"cwd"`             // sessions/<id>/tree
+	Delivery        Delivery    `json:"delivery"`
+	GitIdentity     GitIdentity `json:"gitIdentity"` // the driver's, all four variables
+	HookEnv         []HookVar   `json:"hookEnv"`     // the BROODFORGE_* names of the hook contract
+	Input           string      `json:"input"`       // the From-prefixed blocks
+	Answer          *TurnAnswer `json:"answer"`
+	Model           string      `json:"model"`
+	Effort          string      `json:"effort"`
+	// SystemPromptFile is --append-system-prompt-file, passed on every process: the session's
+	// workflow copy's instructions.md, the header first (ADR 0025 rules 1 and 5). The engine
+	// renders it once per conversation, so the file holds nothing that changes in a session.
+	SystemPromptFile string `json:"systemPromptFile"`
+	// AgentsFile is --agents, the copy's agents.json; "" when the copy defines no agent.
+	AgentsFile string `json:"agentsFile"`
 }
 
 // Delivery is how the credential reaches the engine: Kind "config-dir" (Path) or "api-key"

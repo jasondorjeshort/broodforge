@@ -42,6 +42,7 @@ const (
 	CodeFailedPullRequest   = "handoff-failed-pull-request"
 	CodeNoCredential        = "no-git-credential"
 	CodeCommitMsg           = "commit-msg"
+	CodeSessionRef          = "session-ref" // refs/sessions/<id> cannot be read from the canonical
 )
 
 var sessionIDRE = regexp.MustCompile(`^s[0-9a-z]{4,}$`)

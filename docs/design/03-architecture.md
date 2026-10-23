@@ -29,7 +29,7 @@ names; everything else goes through `SessionService`. Host differences live in `
 | `spawn` | `SpawnBackend`: `same-account` and `linux-sudo-bwrap`; interrupt; `engine-entry`; preflight | the OS |
 | `backup` | `backup snapshot`, `verify`, `rehearse` (never scheduled by the bot) | `store` |
 | `config` | Loading, validation, last-good, `reload`, `config check` | `credentials` (id existence), `policy` (the model and effort values) |
-| `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control`; `credentials` (`credential init`, the reads' store fallback, the bot's handlers); `session` (`serve` builds the service and serves it); `discord` (`serve`'s adapter, the standalone `discord render`); `git` and `policy` (the worktree handlers); `workflow` (`workflow render` and `probe`, the handoff's copy path) |
+| `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control`; `credentials` (`credential init`, the reads' store fallback, the bot's handlers); `session` (`serve` builds the service and serves it); `discord` (`serve`'s adapter, the standalone `discord render`); `git` and `policy` (the worktree handlers); `workflow` (`workflow render` and `probe`, the handoff's copy path, `serve`'s session copy and probe at start) |
 
 `SessionService` is the boundary N-11 names: `start`, `submit`, `answer`, `setMode`, `interrupt`, `end`, `invite`,
 `status`, `subscribe(sessionId)`. The Discord adapter and the control socket call the same methods and read the same
@@ -105,7 +105,7 @@ type TurnRequest struct {
 	Input       string              // the From-prefixed blocks
 	Answer      *struct{ ToolUseID, Decision string } // Decision "allow" | "deny"
 	Model, Effort string            // per process (ADR 0020)
-	SystemPromptAppend string       // one call at a time, trailers, reach
+	SystemPromptFile, AgentsFile string // --append-system-prompt-file (always), --agents: the copy's (ADR 0025)
 	Spawn       SpawnBackend
 }
 type TurnHandle struct { Events <-chan EngineEvent; Interrupt func() error }

@@ -216,18 +216,25 @@ func (s *Service) startProcessLocked(l *live, input string, answer *engine.TurnA
 	if answer != nil && reason != "" {
 		env = append(env, engine.HookVar{Name: envAnswerReason, Value: reason})
 	}
+	// The copy, for the hook's chain: absent under inject none or when nothing was copied.
+	if l.wf.copied {
+		env = append(env, engine.HookVar{Name: envWorkflow, Value: l.wf.dir})
+	}
 	req := engine.TurnRequest{
-		SessionID:          l.id,
-		EngineSessionID:    l.engineSessionID,
-		Cwd:                l.tree,
-		Delivery:           l.delivery,
-		GitIdentity:        engine.GitIdentity{Name: l.driver.Name, Email: l.driver.Email},
-		HookEnv:            env,
-		Input:              input,
-		Answer:             answer,
-		Model:              l.turnModel,
-		Effort:             l.turnEffort,
-		SystemPromptAppend: SystemPromptAppend(l.id, l.ch.ProjectName, l.reach, l.driver.Name, lines),
+		SessionID:       l.id,
+		EngineSessionID: l.engineSessionID,
+		Cwd:             l.tree,
+		Delivery:        l.delivery,
+		GitIdentity:     engine.GitIdentity{Name: l.driver.Name, Email: l.driver.Email},
+		HookEnv:         env,
+		Input:           input,
+		Answer:          answer,
+		Model:           l.turnModel,
+		Effort:          l.turnEffort,
+		// The header and the project's instructions, written once at start (ADR 0025): the
+		// trailer lines reach commits through the trailers file and the commit-msg hook alone.
+		SystemPromptFile: l.wf.instructions,
+		AgentsFile:       l.wf.agents,
 	}
 	h, err := l.eng.StartTurn(req)
 	if err != nil {
@@ -283,6 +290,37 @@ func (s *Service) setState(id, state string) error {
 // the dropped rule (the calls of one message, C28).
 type call struct {
 	tool, target, message string
+	// agent is a subagent call's subagent_type (the review fact, ADR 0025 rule 7); parent and
+	// depth place a subagent's own calls under it (parent_tool_use_id).
+	agent  string
+	parent string
+	depth  int
+}
+
+// indent is s at the call's depth (session tail, 04's trace lines).
+func (c call) indent(s string) string { return Indent(c.depth, s) }
+
+// subagentType is a subagent call's input subagent_type, "" for any other tool.
+func subagentType(tool string, input json.RawMessage) string {
+	if !subagentTools[tool] {
+		return ""
+	}
+	var in struct {
+		SubagentType string `json:"subagent_type"`
+	}
+	_ = json.Unmarshal(input, &in)
+	return in.SubagentType
+}
+
+// depthUnder is the depth of a text or a call whose parent_tool_use_id is parent: one below
+// the parent call, 0 at the top; a parent the session has not seen counts as a top-level call.
+func (l *live) depthUnder(parent string) int {
+	if parent == "" {
+		return 0
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.calls[parent].depth + 1
 }
 
 // runProcess reads one engine process's events to the end (03 Data flow, steps 4 to 7) and
@@ -304,19 +342,23 @@ func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan s
 			if ev.Assistant == nil {
 				continue
 			}
+			parent := ev.Assistant.ParentToolUseID
+			depth := l.depthUnder(parent)
 			for _, b := range ev.Assistant.Blocks {
 				switch b.Kind {
 				case engine.BlockText:
 					if strings.TrimSpace(b.Text) != "" {
-						l.log.add(Event{Time: s.stamp(), Type: EventText, Turn: n, Summary: firstRunes(b.Text, summaryRunes), Text: b.Text})
+						l.log.add(Event{Time: s.stamp(), Type: EventText, Turn: n, Summary: Indent(depth, firstRunes(b.Text, summaryRunes)),
+							Text: b.Text, Parent: parent, Depth: depth})
 					}
 				case engine.BlockToolUse:
-					c := call{tool: b.Name, target: Target(b.Name, b.Input, l.tree), message: ev.Assistant.MessageID}
+					c := call{tool: b.Name, target: Target(b.Name, b.Input, l.tree), message: ev.Assistant.MessageID,
+						agent: subagentType(b.Name, b.Input), parent: parent, depth: depth}
 					l.mu.Lock()
 					l.calls[b.ID] = c
 					l.mu.Unlock()
 					l.log.add(Event{Time: s.stamp(), Type: EventToolCall, Turn: n, ToolUseID: b.ID, Tool: c.tool, Target: c.target,
-						Summary: TraceLine(c.tool, c.target)})
+						Summary: c.indent(TraceLine(c.tool, c.target)), Parent: parent, Depth: depth})
 				}
 			}
 		case engine.KindToolResult:
@@ -439,7 +481,7 @@ func (s *Service) deferLocked(l *live, n, k int, esid string, u engine.TurnUsage
 			dec = DecisionDeferred
 		}
 		l.log.add(Event{Time: stamp, Type: EventPermissionDecision, Turn: n, ToolUseID: id, Tool: dc.tool, Target: dc.target,
-			Decision: dec, DecidedBy: DecidedByPolicy, Summary: dec + " " + TraceLine(dc.tool, dc.target) + " (" + DecidedByPolicy + ")"})
+			Decision: dec, DecidedBy: DecidedByPolicy, Summary: dc.indent(dec + " " + TraceLine(dc.tool, dc.target) + " (" + DecidedByPolicy + ")")})
 	}
 	// Never is a year (effectiveTimeout): the deadline is always real.
 	until := store.FormatTime(now.Add(effectiveTimeout(l.promptTimeout)))
@@ -467,7 +509,7 @@ ON CONFLICT (session_id, request_id) DO UPDATE SET turn_seq = excluded.turn_seq,
 	}
 	_, err := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindPermissionDecision, Actor: actor, Session: l.id, Registration: user,
 		Details: details("turn", strconv.Itoa(n), "toolUseId", id, "tool", c.tool, "target", c.target,
-			"decision", decision, "decidedBy", decidedBy, "source", source, "reason", reason)})
+			"decision", decision, "decidedBy", decidedBy, "source", source, "reason", reason, "agent", c.agent)})
 	return err
 }
 
@@ -495,13 +537,14 @@ func (s *Service) toolResult(l *live, n int, tr engine.ToolResultEvent) {
 	delete(l.answers, tr.ToolUseID)
 	l.mu.Unlock()
 	now := s.stamp()
+	s.subagentResult(l, n, tr, c)
 	if answered {
 		line := TraceLine(c.tool, c.target)
 		if ans.trace != "" {
 			line += " -> " + ans.trace
 		}
 		l.log.add(Event{Time: now, Type: EventToolResult, Turn: n, ToolUseID: tr.ToolUseID, Tool: c.tool, Target: c.target,
-			IsError: tr.IsError, Summary: line})
+			IsError: tr.IsError, Summary: c.indent(line), Parent: c.parent, Depth: c.depth})
 		return
 	}
 	cl := Classify(tr, c.tool)
@@ -546,11 +589,11 @@ func (s *Service) toolResult(l *live, n int, tr engine.ToolResultEvent) {
 		} else {
 			l.log.add(Event{Time: now, Type: EventPermissionDecision, Turn: n, ToolUseID: tr.ToolUseID, Tool: c.tool,
 				Target: c.target, Decision: cl.Decision, DecidedBy: cl.DecidedBy, Reason: cl.Reason,
-				Summary: cl.Decision + " " + TraceLine(c.tool, c.target) + " (" + cl.DecidedBy + ")"})
+				Summary: c.indent(cl.Decision + " " + TraceLine(c.tool, c.target) + " (" + cl.DecidedBy + ")"), Parent: c.parent, Depth: c.depth})
 		}
 	}
 	l.log.add(Event{Time: now, Type: EventToolResult, Turn: n, ToolUseID: tr.ToolUseID, Tool: c.tool, Target: c.target,
-		IsError: tr.IsError, Summary: line})
+		IsError: tr.IsError, Summary: c.indent(line), Parent: c.parent, Depth: c.depth})
 }
 
 // usageRef names a process's usage records: harness_ref is `<session id>/<engine session
@@ -717,4 +760,27 @@ func exitOf(evs []engine.EngineEvent) string {
 		}
 	}
 	return ""
+}
+
+// subagentResult writes the subagent-result row of a subagent call's tool result (ADR 0025
+// rule 7, the review fact): which subagent, and whether its result was an error (a denial
+// included). It is written for every result of the subagent tool, a person's answer or not; a
+// call that never returns a result has none. A store failure is shown as toolResult shows one.
+func (s *Service) subagentResult(l *live, n int, tr engine.ToolResultEvent, c call) {
+	if !subagentTools[c.tool] {
+		return
+	}
+	result := subagentResultOK
+	if tr.IsError {
+		result = subagentResultError
+	}
+	err := s.cfg.Store.Write(func(tx *store.Tx) error {
+		_, err := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindSubagentResult, Actor: ActorInstance, Session: l.id,
+			Details: details("turn", strconv.Itoa(n), "toolUseId", tr.ToolUseID, "tool", c.tool, "agent", c.agent, "result", result)})
+		return err
+	})
+	if err != nil {
+		l.log.add(Event{Time: s.stamp(), Type: EventPermissionDecision, Turn: n, ToolUseID: tr.ToolUseID, Tool: c.tool,
+			Summary: "store: " + err.Error()})
+	}
 }

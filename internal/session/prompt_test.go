@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestTarget(t *testing.T) {
@@ -67,14 +68,34 @@ func TestBlocksAndPrompt(t *testing.T) {
 	if in != want {
 		t.Errorf("JoinBlocks = %q, want %q", in, want)
 	}
-	p := SystemPromptAppend("s0001", "Scratch", "code", "Ada Example", []string{"Co-Authored-By: Sam <sam@example.com>"})
-	for _, w := range []string{"session s0001 on Scratch", "Reach: code", "one tool call at a time",
-		"\nCo-Authored-By: Sam <sam@example.com>\n"} {
-		if !strings.Contains(p, w) {
-			t.Errorf("system prompt append lacks %q:\n%s", w, p)
-		}
+}
+
+// TestHeader: the header of ADR 0025 rule 1, whole: the owner's precedence sentence first,
+// verbatim, then the session's facts, one call at a time, rule 10's trailer rule with no list,
+// and the taken-from line; no blank line inside it (ReadHeader cuts at the first).
+func TestHeader(t *testing.T) {
+	date := time.Date(2026, 10, 23, 9, 30, 0, 0, time.UTC)
+	got := SystemPromptAppend(Header{Session: "s0001", ProjectName: "Scratch", Reach: "code", DriverName: "Ada Example",
+		Copied: true, Branch: "main", Commit: "0123456789abcdef0123456789abcdef01234567", Date: date})
+	want := "This session is run by Broodforge. Where the project's instructions below conflict with this header, this header wins; it never says how the project's work is done.\n" +
+		"You are working in Broodforge session s0001 on Scratch.\n" +
+		"Reach: code (change only this session's tree).\n" +
+		"Each message starts with a From: line naming its writer and their role; the driver is Ada Example.\n" +
+		"Make one tool call at a time: calls made together are asked about one by one.\n" +
+		"Every commit carries the Co-Authored-By lines Broodforge's commit-msg hook adds; never remove one.\n" +
+		"The project's instructions below were taken from main at 0123456789abcdef0123456789abcdef01234567 on 2026-10-23T09:30:00Z.\n"
+	if got != want {
+		t.Errorf("header\n got %q\nwant %q", got, want)
 	}
-	if p := SystemPromptAppend("s0001", "Scratch", "read-only", "Ada", nil); !strings.Contains(p, "no Co-Authored-By lines") {
-		t.Errorf("no trailers: %s", p)
+	// Nothing copied: no taken-from line; no list of trailers either way.
+	alone := SystemPromptAppend(Header{Session: "s0002", ProjectName: "Scratch", Reach: "read-only", DriverName: "Ada"})
+	if strings.Contains(alone, "taken from") || !strings.HasSuffix(alone, "never remove one.\n") ||
+		!strings.Contains(alone, "Reach: read-only (read the project, write nothing).\n") {
+		t.Errorf("header alone:\n%s", alone)
+	}
+	for _, h := range []string{got, alone} {
+		if strings.Contains(h, "\n\n") || strings.Contains(h, "Co-Authored-By: ") {
+			t.Errorf("a blank line or a trailer line in the header:\n%s", h)
+		}
 	}
 }

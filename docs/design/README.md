@@ -13,6 +13,7 @@ Planned documents (added as we go):
 | `03-architecture.md` | Components and boundaries, the per-turn data flow, the engine adapter, configuration format, git naming and attribution, the process model per host, failure modes |
 | `03-hook-contract.md` | Companion to 03: how the engine runs the PreToolUse hook and reads its exit codes, the hook environment, path checks, the policy table per reach and mode, the decision order |
 | `04-ux.md` | The Discord flows, venues, buttons and message wording, Ticket Tool as the reference; a proposal with every owner decision marked and collected at the end |
+| `04-ux-session-start.md` | Sibling of 04: the header the agent's prompt opens with (`session show --header`) and the not-started flow when a project hook's runtime is missing (ADR 0025) |
 | `05-debug-interface.md` | How agents drive, observe, and reproduce every feature from a terminal |
 | `05-debug-interface-discord.md` | Companion to 05: the Discord adapter's drive, observe, reproduce and isolation, including the `discord` commands |
 | `05-debug-interface-git.md` | Companion to 05: the git handoff's drive, observe, reproduce and isolation, including `worktree check\|bundle\|handoff`, the askpass helper and the commit-msg and pre-push hooks |

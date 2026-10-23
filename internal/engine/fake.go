@@ -153,7 +153,11 @@ func (f *Fake) StartTurn(req TurnRequest) (TurnHandle, error) {
 	if err != nil {
 		return TurnHandle{}, err
 	}
-	rec, err := json.MarshalIndent(req, "", "  ")
+	// The request as given, and the flags it sets on the real engine's command line.
+	rec, err := json.MarshalIndent(struct {
+		TurnRequest
+		Args []string `json:"args"`
+	}{req, nonNil(RequestArgs(req))}, "", "  ")
 	if err != nil {
 		return TurnHandle{}, err
 	}

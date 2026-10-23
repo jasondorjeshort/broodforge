@@ -3,6 +3,7 @@
 package engine
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -57,13 +58,13 @@ func TestFakeWritesReceived(t *testing.T) {
 	}
 	f.SetNextTurn(2)
 	req := TurnRequest{
-		SessionID:          "s0001",
-		EngineSessionID:    "e1",
-		Cwd:                "/tmp/tree",
-		Delivery:           Delivery{Kind: "api-key", CredentialID: "cred-scratch"},
-		HookEnv:            []HookVar{{Name: "BROODFORGE_MODE", Value: "prompt"}},
-		Answer:             &TurnAnswer{ToolUseID: "toolu_1", Decision: "allow"},
-		SystemPromptAppend: "one call at a time",
+		SessionID:        "s0001",
+		EngineSessionID:  "e1",
+		Cwd:              "/tmp/tree",
+		Delivery:         Delivery{Kind: "api-key", CredentialID: "cred-scratch"},
+		HookEnv:          []HookVar{{Name: "BROODFORGE_MODE", Value: "prompt"}},
+		Answer:           &TurnAnswer{ToolUseID: "toolu_1", Decision: "allow"},
+		SystemPromptFile: "/r/workflow/s0001/instructions.md",
 	}
 	h, err := f.StartTurn(req)
 	if err != nil {
@@ -78,15 +79,19 @@ func TestFakeWritesReceived(t *testing.T) {
 	if err := json.Unmarshal(b, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Answer == nil || *got.Answer != *req.Answer || got.Delivery != req.Delivery || got.SystemPromptAppend != req.SystemPromptAppend || len(got.HookEnv) != 1 {
+	if got.Answer == nil || *got.Answer != *req.Answer || got.Delivery != req.Delivery || got.SystemPromptFile != req.SystemPromptFile || len(got.HookEnv) != 1 {
 		t.Errorf("received-2.json: %s", b)
 	}
 	var keys map[string]json.RawMessage
 	_ = json.Unmarshal(b, &keys)
-	for _, k := range []string{"delivery", "hookEnv", "systemPromptAppend", "answer"} {
+	for _, k := range []string{"delivery", "hookEnv", "systemPromptFile", "answer", "args"} {
 		if _, ok := keys[k]; !ok {
 			t.Errorf("received-2.json has no %q key", k)
 		}
+	}
+	// args: the flags the request sets on the real engine (RequestArgs).
+	if want := `["--resume","e1","--append-system-prompt-file","/r/workflow/s0001/instructions.md"]`; compactJSON(keys["args"]) != want {
+		t.Errorf("args %s, want %s", keys["args"], want)
 	}
 }
 
@@ -219,4 +224,13 @@ func TestFakeReceivedDir(t *testing.T) {
 	if _, err := NewFake(fixturesRoot+"/basic", missing); !errors.Is(err, ErrReceivedDir) {
 		t.Errorf("missing received dir: %v, want ErrReceivedDir", err)
 	}
+}
+
+// compactJSON is raw without insignificant white space, "" when it does not parse.
+func compactJSON(raw json.RawMessage) string {
+	var b bytes.Buffer
+	if json.Compact(&b, raw) != nil {
+		return ""
+	}
+	return b.String()
 }

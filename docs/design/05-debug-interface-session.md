@@ -41,9 +41,16 @@ for whole minutes and else seconds (`90 seconds`). Never is a timer of a year, w
 `--credential` defaults to the driver's (`no-credential` without one; R-41: `credential-not-usable: <id> is <status>`); `--fixture` is a
 name under `engine.fakeFixtures` or a path, default `basic` (`unknown-fixture`; a broken
 `fixture.json` is `bad-fixture`). A start refused before its row writes `action-refused` and
-leaves nothing; one that fails later (the clone, the fake, the store) also removes the tree and
-`refs/sessions/<id>` and keeps the row as `ended`, outcome `refused: <code>`, so no id is reused;
-the refusal names the stage and keeps the git or fixture code. `session send <id> --as <user id>
+leaves nothing; one that fails later (the workflow copy, the clone, the fake, the store) also
+removes the copy, the tree and `refs/sessions/<id>` and keeps the row as `ended`, outcome
+`refused: <code>`, so no id is reused; the refusal names the stage and keeps the git, workflow or
+fixture code. The copy comes first (ADR 0025 rules 5 and 6): `workflow/<id>/` rendered from the
+canonical's default branch as `workflow render` does, then each `hooks.json` entry probed as
+`workflow probe` does; a missing runtime refuses before the clone with `error:
+workflow-probe-failed: <command> needs <word>`, exit 1, `action-refused` with reason `workflow`;
+through Discord (`discord inject click --custom-id bf:<channel>:start`) the starter alone gets
+the ephemeral `Could not start a session: <command> needs <word>.` and the outbox holds nothing
+for it (`session outbox - --channel <channel>` shows no post). `session send <id> --as <user id>
 [--roles <ids>] [--wait] [--tail] "<text>"` (or `-` for stdin) calls `SessionService.submit` and
 prints `turn  <n>  started|queued` (a message during a turn, or while it waits for an answer,
 waits for the next turn, one `From: <name> (<role>)` block each, 03); `--wait` returns at the
@@ -83,8 +90,27 @@ their first message (R-13), so no co-author line is owed for an invitation alone
 <started at>`. `session show <id>` prints `session: <id>  <state>  <channel>  <project>  <driver>  <mode>
 <reach>  <harness>`, `credential: <id>`, `engine-session: <id or ->`, `model: <id or ->  effort: <level or ->`, `turns: <n>`, the
 `participants:` lines, `worktree: <path>  <branch>  <state>` and `pending: -`, or while waiting
-`pending: <tool use id>  <tool>  <target>  since <time>  until <deadline>`. `session tail <id>
-[--follow] [--since <seq>] [--limit <n>|--all]` prints `<seq>  <time>  <type>  <summary>`.
+`pending: <tool use id>  <tool>  <target>  since <time>  until <deadline>`, then ADR 0025's
+lines: `workflow: <commit> <date>` or `workflow: none (inject none)` or `none (<branch> at
+<commit> has no CLAUDE.md or .claude)` (`-` for a session started without a copy), `hooks:
+<names>` (`hooks.json`'s, `-` for none), and `review: <tool use id> after <commit>` or `review:
+none since <commit>` (rule 7: `<commit>` is `refs/sessions/<id>`, the session's last commit as of
+the last bundle, which `worktree check` refreshes; the id is the newest `Agent` (or `Task`) call
+whose result's `subagent-result` audit row, written when the tool result comes and never at a
+person's answer, has `agent` `reviewer`, `result` `ok`, and a time after that commit's committer
+second: a reviewer allowed and then interrupted has no such row, an errored or denied one is
+`result` `error`; `-` once handed off, no ref left). A fact that cannot be read prints `review:
+error: <code>`, the rest of the record still printed and `--json`'s `review.error` holding the
+message: `session-ref` when the canonical cannot be read (moved, not a repository),
+`unknown-channel` when the bot's configuration no longer holds the session's channel, and without
+a bot `bad-config` or `unknown-project`. Without a bot the store, the configuration and the
+canonical give the same lines. `session show --header <id>` prints only the header the
+session's prompt opens with (`instructions.md` in its copy up to the first blank line;
+`no-header` without a copy). `session tail <id>
+[--follow] [--since <seq>] [--limit <n>|--all]` prints `<seq>  <time>  <type>  <summary>`; a
+subagent's `text`, `tool-call`, `permission-decision` and `tool-result` summaries are indented two
+spaces per level under their `Agent` line, from the stream's `parent_tool_use_id` (`--json`:
+`parentToolUseId`, `depth`).
 Types: `session-started` (04's header line, `Session <id> on <project>, branch <branch>, driver
 <name>.`), `participant-joined`, `participant-invited` (`<name> was invited.`), `message-queued`, `message-dropped` (`<cause>: <text>`),
 `turn-started` (the input's first 80 characters), `text` (its first 80), `tool-call` (04's trace
@@ -118,14 +144,20 @@ bot's memory (a store record is later), which `panel show <channel id>` prints b
 instance it lands in the outbox.
 Observe. `session show`, `session tail --json` (every field: tool, target, decision, decided by,
 reason, result), `audit --kind permission-decision --session <id>`, the fake's
-`sessions/<id>/fake/received-<n>.json` (the exact `TurnRequest`), `usage --session <id> --by turn
---json` (its `raw` holds the model's cumulative `modelUsage` and the delta recorded).
+`sessions/<id>/fake/received-<n>.json` (the exact `TurnRequest`, plus `args`, the flags it sets
+on the real engine: `--append-system-prompt-file <root>/workflow/<id>/instructions.md` always,
+`--agents <root>/workflow/<id>/agents.json` when the copy has agents, never
+`--append-system-prompt`; `hookEnv` holds `BROODFORGE_WORKFLOW` when something was copied),
+`usage --session <id> --by turn --json` (its `raw` holds the model's cumulative `modelUsage` and
+the delta recorded). A subagent's calls on the fake: `--fixture subagent`.
 Reproduce. A whole R-51 run in one line: `scratch run -- bash tests/repro/full-session.sh`:
-`serve &`, `status --wait 10 --expect ok`, `register 1001 ...`, the refused start, `session start
+the canonical given `fixtures/workflow/`'s files and both hook events (node on `PATH`), `serve
+&`, `status --wait 10 --expect ok`, `register 1001 ...`, the refused start, `session start
 --channel 100 --as 1001 --roles 10 --credential cred-scratch --mode policy --fixture basic`,
 `session send s0001 --as 1001 --wait "..."`, then `session tail` and `audit` checked line by
-line, `session reach-report`, `usage`, `config reload`, `worktree handoff s0001 --expect none`,
-`stop`; P11 adds `session outbox`.
+line, the request's flags, `session show`'s three workflow lines and `--header`, `session
+reach-report`, `usage`, `config reload`, `worktree handoff s0001 --expect none`, `stop`; P11
+adds `session outbox`.
 Isolation. All of it in the scratch root against the fake; the socket under the root.
 
 ## Prompt-mode defer and resume

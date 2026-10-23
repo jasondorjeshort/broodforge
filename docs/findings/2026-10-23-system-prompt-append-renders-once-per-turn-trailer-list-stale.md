@@ -1,6 +1,6 @@
 ---
 date: 2026-10-23
-status: open
+status: resolved (P19, ADR 0025)
 area: engine / sessions / system prompt
 ---
 
@@ -37,6 +37,9 @@ the model still answered ALPHA. The engine's `--help` adds "until the conversati
   lists the exact trailer lines; read per turn, that is wrong.
 - Not determined: whether the append is re-rendered at a compaction from the latest launch's flags
   or the first (the critic's note says the launch that follows; no probe covered it).
+
+Resolved by P19: the header built in `internal/session/prompt.go` holds no trailer list, so the
+engine gets it once and nothing in it goes stale; `03-architecture.md` was corrected under ADR 0025.
 
 ## Next
 

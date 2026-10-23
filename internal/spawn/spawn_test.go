@@ -193,12 +193,15 @@ func TestStartSubscription(t *testing.T) {
 	t.Setenv("BROODFORGE_KEY_FILE", "/k")
 	t.Setenv("GIT_DIR", "/bot/.git")
 	t.Setenv("GIT_WORK_TREE", "/bot")
+	t.Setenv("BROODFORGE_WORKFLOW", "/inherited/copy") // a surrounding session's, never handed on
 	tmp := t.TempDir()
 	cfg := filepath.ToSlash(filepath.Join(tmp, "harness", "cred-a"))
 	home := filepath.Join(tmp, "sessions", "s1", "home")
 	_, exit := run(t, s, Spec{Args: []string{"-p", "x"}, Cwd: tmp, Home: home,
 		Delivery: Delivery{Kind: DeliverConfigDir, ConfigDir: cfg},
-		Env:      []Var{{"BROODFORGE_SESSION", "s1"}, {"CLAUDE_CONFIG_DIR", "/spec-cannot-override"}}, Stdin: []byte("hello\n")})
+		// The session's copy (ADR 0025 rule 5) is in the environment array, the inherited one not.
+		Env:   []Var{{"BROODFORGE_SESSION", "s1"}, {"BROODFORGE_WORKFLOW", "/r/workflow/s1"}, {"CLAUDE_CONFIG_DIR", "/spec-cannot-override"}},
+		Stdin: []byte("hello\n")})
 	if exit.Code == nil || *exit.Code != 0 || exit.Interrupted {
 		t.Fatalf("exit %+v", exit)
 	}
@@ -206,7 +209,8 @@ func TestStartSubscription(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(r.Args, []string{"-p", "x"}) || r.Stdin != "hello\n" || r.Values["CLAUDE_CONFIG_DIR"] != cfg || r.Values["BROODFORGE_SESSION"] != "s1" {
+	if !slices.Equal(r.Args, []string{"-p", "x"}) || r.Stdin != "hello\n" || r.Values["CLAUDE_CONFIG_DIR"] != cfg || r.Values["BROODFORGE_SESSION"] != "s1" ||
+		r.Values["BROODFORGE_WORKFLOW"] != "/r/workflow/s1" {
 		t.Errorf("record %+v", r)
 	}
 	for _, name := range []string{"ANTHROPIC_API_KEY", "BROODFORGE_KEY_FILE", "GIT_DIR", "GIT_WORK_TREE"} {

@@ -175,7 +175,7 @@ then an agent that did not record reads every file with nested JSON decoded, con
 repository content survives, and reports in a few lines what is account-level or personal and no script can classify (the owner
 decides on that report, never by reading the files).
 Observe. `session tail --json` for the mapped events; the fixture's `received-<n>.json` for the exact `TurnRequest` the fake saw
-(delivery kind, hook variable names, `systemPromptAppend`, `answer`); `engine run --fake <dir> --prompt x | grep
+(delivery kind, hook variable names, `systemPromptFile`, `answer`, `args`); `engine run --fake <dir> --prompt x | grep
 '"type":"result"'` for the usage input.
 Reproduce. A failing parse is a fixture: copy the offending `turn-<n>.jsonl` into a new directory and run `engine run --fake <dir>
 --prompt x --expect result` (no `fixture.json`: every turn exits 0); a stream without a `result` exits 1, `error: expect: wanted

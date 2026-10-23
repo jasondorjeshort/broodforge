@@ -132,8 +132,15 @@ func TestArgsAndUserLine(t *testing.T) {
 	if got := Args(TurnRequest{}, "/bf/share/empty/mcp.json"); !slices.Equal(got, base) {
 		t.Errorf("Args\n got %q\nwant %q", got, base)
 	}
-	got := Args(TurnRequest{EngineSessionID: "s1", Model: "haiku", Effort: "high", SystemPromptAppend: "one call at a time"}, "/m")
-	if want := []string{"--resume", "s1", "--model", "haiku", "--effort", "high", "--append-system-prompt", "one call at a time"}; !slices.Equal(got[len(base):], want) {
+	got := Args(TurnRequest{EngineSessionID: "s1", Model: "haiku", Effort: "high", SystemPromptFile: "/r/workflow/s1/instructions.md",
+		AgentsFile: "/r/workflow/s1/agents.json"}, "/m")
+	if want := []string{"--resume", "s1", "--model", "haiku", "--effort", "high", "--append-system-prompt-file",
+		"/r/workflow/s1/instructions.md", "--agents", "/r/workflow/s1/agents.json"}; !slices.Equal(got[len(base):], want) {
+		t.Errorf("Args tail %q", got[len(base):])
+	}
+	// The file flag without agents: no --agents; the retired text flag never.
+	got = Args(TurnRequest{SystemPromptFile: "/i.md"}, "/m")
+	if want := []string{"--append-system-prompt-file", "/i.md"}; !slices.Equal(got[len(base):], want) || slices.Contains(got, "--append-system-prompt") {
 		t.Errorf("Args tail %q", got[len(base):])
 	}
 	if l := string(UserLine("a <b> & c")); l != `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"a <b> & c"}]}}`+"\n" {

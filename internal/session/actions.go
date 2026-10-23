@@ -178,7 +178,7 @@ func (s *Service) answerLocked(l *live, decision, decidedBy, actor, user, who, r
 	l.answers[p.ToolUseID] = answerRec{decision: dec, trace: trace}
 	l.log.add(Event{Time: s.stamp(), Type: EventPermissionDecision, Turn: l.turn, User: user, ToolUseID: p.ToolUseID,
 		Tool: c.tool, Target: c.target, Decision: dec, DecidedBy: decidedBy, Reason: reason,
-		Summary: dec + " " + TraceLine(c.tool, c.target) + " (" + decidedBy + ")"})
+		Summary: c.indent(dec + " " + TraceLine(c.tool, c.target) + " (" + decidedBy + ")")})
 	l.pending = nil
 	s.disarmPromptLocked(l)
 	hookReason := ""
@@ -221,7 +221,7 @@ func (s *Service) Interrupt(ctx context.Context, req ActRequest) (Event, error) 
 		}
 		l.log.add(Event{Time: s.stamp(), Type: EventPermissionDecision, Turn: n, User: req.As, ToolUseID: p.ToolUseID,
 			Tool: c.tool, Target: c.target, Decision: DecisionDeny, DecidedBy: decidedBy, Reason: ResultInterrupted,
-			Summary: DecisionDeny + " " + TraceLine(c.tool, c.target) + " (" + decidedBy + ")"})
+			Summary: c.indent(DecisionDeny + " " + TraceLine(c.tool, c.target) + " (" + decidedBy + ")")})
 		ended := s.endTurnLocked(l, n, nil, engine.TurnUsage{}, "")
 		ended.User = actorOf(req.As)
 		// settleLocked moves a turn that ran on: back to waiting for input, or the queued turn.
@@ -442,7 +442,7 @@ func (s *Service) discardLocked(l *live, actor, cause string) {
 		})
 		l.log.add(Event{Time: s.stamp(), Type: EventPermissionDecision, Turn: l.turn, ToolUseID: p.ToolUseID, Tool: c.tool,
 			Target: c.target, Decision: DecisionDropped, DecidedBy: DecidedByInstance, Reason: cause,
-			Summary: DecisionDropped + " " + TraceLine(c.tool, c.target) + " (" + DecidedByInstance + ")"})
+			Summary: c.indent(DecisionDropped + " " + TraceLine(c.tool, c.target) + " (" + DecidedByInstance + ")")})
 		ended := s.endTurnLocked(l, l.turn, nil, engine.TurnUsage{}, "")
 		ended.Summary = cause
 		l.log.add(ended)

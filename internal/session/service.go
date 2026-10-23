@@ -94,6 +94,7 @@ const (
 	envHookLog      = "BROODFORGE_HOOK_LOG"
 	envSessionAllow = "BROODFORGE_SESSION_ALLOW"
 	envAnswerReason = "BROODFORGE_ANSWER_REASON"
+	envWorkflow     = "BROODFORGE_WORKFLOW"
 )
 
 // worktreeActive is a worktree row's state while its session uses it (02-domain.md, Worktree).
@@ -121,6 +122,7 @@ type Channel struct {
 	IdleTimeout, PromptTimeout time.Duration
 	Model, Effort              string
 	Repo                       Repo
+	Workflow                   WorkflowKey
 }
 
 // EngineFactory returns the engine a new session runs on: harness "fake" replays fixture
@@ -155,6 +157,10 @@ type Config struct {
 	// Started, when set, is called with each new session's id once it is open, before any
 	// message can reach it: the Discord adapter follows its events from the first (P11).
 	Started func(id string)
+	// Workflow makes a session's copy of its project's workflow in req.Dir and probes the
+	// hooks it lists (ADR 0025 rules 5 and 6): serve's renders through the workflow package. A
+	// refusal is a *WorkflowRefusal. nil copies nothing: every session gets the header alone.
+	Workflow func(ctx context.Context, req WorkflowRequest) (WorkflowCopy, error)
 }
 
 // Service is SessionService (03-architecture.md, Components; N-11): start, submit, answer,
@@ -284,6 +290,7 @@ type live struct {
 	eng        engine.Engine
 	git        git.Session
 	tree, home string
+	wf         workflowState // the copy made at start; nothing in it changes during the session
 	// idleTimeout and promptTimeout are the session's, the channel's or a debug override; the
 	// timers are actions.go's, on the service's clock.
 	idleTimeout, promptTimeout time.Duration
@@ -470,11 +477,14 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, store.Int(n), store.Text(id), s
 		code, msg := "session-start", err.Error()
 		var se *Error
 		var ge *git.Error
+		var wr *WorkflowRefusal
 		switch {
 		case errors.As(err, &se):
 			code, msg = se.Code, se.Message
 		case errors.As(err, &ge):
 			code, msg = ge.Code, ge.Message
+		case errors.As(err, &wr):
+			code, msg = wr.Code, wr.Message
 		}
 		// The row stays, ended, so its id is never handed out again (ids are max(rowid) + 1 and
 		// no session row is ever deleted); open removed the tree and the ref.
@@ -519,13 +529,19 @@ const (
 	stageStore  = "store"
 )
 
-// open clones the tree, makes the session home, records the worktree and the session's
-// waiting state, and returns the live session. A failure after the clone removes the tree and
-// refs/sessions/<id> (RemoveTree), and the directories open made, so a failed start leaves
-// nothing behind; it returns the stage that failed.
+// open makes the workflow copy and probes its hooks (before the clone, so a refused probe
+// clones nothing), clones the tree, makes the session home, records the worktree and the
+// session's waiting state, and returns the live session. A failure after the clone removes the
+// tree and refs/sessions/<id> (RemoveTree), and the directories open made, so a failed start
+// leaves nothing behind; it returns the stage that failed.
 func (s *Service) open(ctx context.Context, ch Channel, gs git.Session, reg registration, credID string,
 	delivery engine.Delivery, mode, reach, fixture string, pick modelPick, req StartRequest) (*live, string, error) {
+	wf, err := s.makeWorkflow(ctx, ch, gs, reach, reg)
+	if err != nil {
+		return nil, stageWorkflow, err
+	}
 	if _, err := s.cfg.CreateTree(ctx, gs); err != nil {
+		_ = os.RemoveAll(filepath.FromSlash(wf.dir))
 		return nil, stageClone, err
 	}
 	dir := gs.Dir()
@@ -540,6 +556,7 @@ func (s *Service) open(ctx context.Context, ch Channel, gs git.Session, reg regi
 		_ = os.RemoveAll(filepath.FromSlash(home))
 		_ = os.RemoveAll(filepath.FromSlash(received))
 		_ = os.Remove(filepath.FromSlash(dir))
+		_ = os.RemoveAll(filepath.FromSlash(wf.dir))
 		return nil, stage, err
 	}
 	if err := os.MkdirAll(filepath.FromSlash(home), 0o750); err != nil {
@@ -561,7 +578,7 @@ func (s *Service) open(ctx context.Context, ch Channel, gs git.Session, reg regi
 		return fail(stageEngine, err)
 	}
 	l := &live{id: gs.ID, ch: ch, mode: mode, model: pick.model, reach: reach, driver: reg, credential: credID, delivery: delivery,
-		eng: eng, git: gs, tree: tree, home: home, idleTimeout: ch.IdleTimeout, promptTimeout: ch.PromptTimeout,
+		eng: eng, git: gs, tree: tree, home: home, wf: wf, idleTimeout: ch.IdleTimeout, promptTimeout: ch.PromptTimeout,
 		log: newEventLog(), state: StateWaitingForInput, participants: map[string]string{reg.User: RoleDriver}, calls: map[string]call{},
 		answers: map[string]answerRec{}, baselines: map[string]map[string]engine.ModelUsage{},
 		turnModels: map[string]int64{}, sessionModels: map[string]int64{}}
@@ -583,7 +600,8 @@ func (s *Service) open(ctx context.Context, ch Channel, gs git.Session, reg regi
 		}
 		_, err := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindSessionStarted, Actor: actorOf(req.As), Session: gs.ID,
 			Registration: reg.User, Details: details("channel", ch.ID, "project", ch.Project, "credential", credID,
-				"mode", mode, "model", pick.model, "effort", pick.effort, "reach", reach, "harness", ch.Harness, "branch", gs.Branch(), "tree", tree, "fixture", fixture)})
+				"mode", mode, "model", pick.model, "effort", pick.effort, "reach", reach, "harness", ch.Harness, "branch", gs.Branch(), "tree", tree, "fixture", fixture,
+				"workflow", wf.line, "hooks", strings.Join(wf.hooks, hooksSep))})
 		return err
 	})
 	if err != nil {
