@@ -54,7 +54,11 @@ has none; null is unset); the result is copied to the session row at start like 
 own), and the spawn reads the row, not the channel. `session model <id> <alias|model id>` and `session
 effort <id> low|medium|high|max` (the driver; from the next turn) print `model-changed  <next turn>
 <model id>` and `effort-changed  <next turn>  <level>`, write the audit kind of that name with `from`
-and `to`, and refuse a bad value as `bad-args` naming the accepted ones. `session interrupt <id>` (the `answer` list) stops the
+and `to`, and refuse a bad value as `bad-args` naming the accepted ones. `session timeout <id>
+never|<minutes>|<duration>` (the driver; effective now) sets the session's idle timeout (`never`,
+`off` or `0` is none; a bare number is minutes; else a Go duration of at least a minute) and
+prints `timeout-changed  <next turn>  <never or 04's words>`; audit `timeout-changed` with `from`
+and `to`; held in the bot's memory, not the row. `session interrupt <id>` (the `answer` list) stops the
 running turn and prints `turn-ended  <n>  interrupted` once it ended; while a call waits for an
 answer it denies the call with the reason `interrupted` and ends the turn without a resume (the
 default until the owner decides); otherwise `no-running-turn`. `session end <id>
@@ -83,7 +87,8 @@ line, `[<tool>] <target>`), `permission-decision` (`<decision> [<tool>] <target>
 by>)`), `tool-result` (the trace line, with 04's outcome after ` -> ` when the call was denied,
 blocked, bypassed or failed), `waiting-for-answer` (`<tool use id> [<tool>] <target>`),
 `mode-changed` (04's `From the next turn: asks first.` or `acts freely.`), `model-changed` and
-`effort-changed` (04's `From the next turn: Sonnet.`, `From the next turn: effort high.`), `turn-ended` (the stop
+`effort-changed` (04's `From the next turn: Sonnet.`, `From the next turn: effort high.`),
+`timeout-changed` (04's `Ends after <n> minutes without activity.` or `Never ends for inactivity.`), `turn-ended` (the stop
 reason, or `interrupted`), `handoff-refused`, `session-ended` (`Session <id> ended by <name>.`, or
 04's `Session <id> ended: no activity for <n> minutes.`), `session-interrupted`. A decision row's
 decider is `policy` (the hook answered from the table; also the `deferred` row, and the `dropped`
@@ -134,8 +139,9 @@ Owner 6); `--reason` on a deny is `BROODFORGE_ANSWER_REASON` (with an allow it i
 (`--prompt-timeout-seconds <n>` at start, else the channel's minutes) denies the pending call with
 the reason `the prompt timed out after <n> minutes|seconds`, decider `prompt-timeout`, and the
 turn finishes: the trace line `[<tool>] <target> -> denied: the prompt timed out after <n>
-minutes.` (04). The idle timeout (`--idle-timeout-seconds <n>`) runs from the last turn's end, or
-the start of a wait, and ends the session (`session-ended`, reason `idle` in `audit`); the two
+minutes.` (04). The idle timeout (`--idle-timeout-seconds <n>`, else the channel's minutes, 0
+being none; `session timeout` changes it) runs from the last turn's end, or the start of a wait,
+and ends the session (`session-ended`, reason `idle` in `audit`); the two
 timers are independent (R-53). Both run on the service's clock, which the tests replace
 (`session.ManualClock`). With the fixture `parallel`, the message's two Writes leave one
 `deferred` and one `dropped` row.

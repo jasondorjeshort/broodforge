@@ -599,7 +599,7 @@ func (s *Service) open(ctx context.Context, ch Channel, gs git.Session, reg regi
 		Summary: "Session " + gs.ID + " on " + ch.ProjectName + ", branch " + gs.Branch() + ", driver " + reg.Name + ".",
 		Start: &StartInfo{Channel: ch.ID, ProjectName: ch.ProjectName, Branch: gs.Branch(), Driver: reg.User, DriverName: reg.Name,
 			Mode: mode, ChannelMode: ch.Mode, Model: pick.model, ChannelModel: pick.channel, Effort: pick.effort, Reach: reach, Credential: credID, CredentialKind: kind,
-			IdleTimeout: humanDuration(l.idleTimeout), Answer: append([]string{}, ch.Roles.Answer...)}})
+			IdleTimeout: IdleText(l.idleTimeout), Answer: append([]string{}, ch.Roles.Answer...)}})
 	return l, "", nil
 }
 

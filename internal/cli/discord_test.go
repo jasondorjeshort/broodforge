@@ -87,7 +87,7 @@ func TestProofDiscordInject(t *testing.T) {
 	waitOutbox(t, run, "  delete  ")
 	want(t, run("discord", "inject", "click", "--custom-id", "bf:s0001:end", "--user", "1001", "--roles", "10"), 0, "none  s0001 ended\n", "")
 	out := waitOutbox(t, run, "  attach  ")
-	for _, w := range []string{"  channel  s0001  0  #s0001-ada\n", "  create  m2  364  Session s0001 on Scratch, branch ",
+	for _, w := range []string{"  channel  s0001  0  #s0001-ada\n", "  create  m2  351  Session s0001 on Scratch, branch ",
 		"  Working · turn 1 · 0:00\n", "  Session s0001 ended by Ada Example · 0 commits · nothing to push; the tree was removed.\n",
 		"  attach  m"} {
 		if !strings.Contains(out, w) {

@@ -84,7 +84,9 @@ func validateInstance(in *Instance, exists CredentialExists) []string {
 	}
 	d := &in.Defaults
 	idle, prompt := d.IdleTimeoutMinutes, d.PromptTimeoutMinutes
-	out = append(out, positiveRequired("defaults.idleTimeoutMinutes", idle)...)
+	if idle < 0 { // 0 or absent: sessions never end for inactivity
+		out = append(out, "defaults.idleTimeoutMinutes: "+strconv.Itoa(idle)+", want 0 (never) or a positive number")
+	}
 	out = append(out, positiveRequired("defaults.promptTimeoutMinutes", prompt)...)
 	out = append(out, oneOf("defaults.mode", d.Mode, ModePrompt, ModePolicy)...)
 	out = append(out, oneOf("defaults.harness", d.Harness, HarnessClaudeCode, HarnessFake)...)
@@ -155,7 +157,9 @@ func validateChannel(key, id string, ch Channel, groups map[string][]string, che
 	if ch.Effort != nil {
 		out = append(out, oneOf(key+".effort", *ch.Effort, policy.Efforts...)...)
 	}
-	out = append(out, positive(key+".idleTimeoutMinutes", ch.IdleTimeoutMinutes)...)
+	if v := ch.IdleTimeoutMinutes; v != nil && *v < 0 {
+		out = append(out, key+".idleTimeoutMinutes: "+strconv.Itoa(*v)+", want 0 (never) or a positive number")
+	}
 	out = append(out, positive(key+".promptTimeoutMinutes", ch.PromptTimeoutMinutes)...)
 	lists := []struct {
 		name   string

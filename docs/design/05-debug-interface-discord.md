@@ -155,3 +155,16 @@ Reproduce. P12a's Proof (`08-implementation-plan.md`): `"/session start model:so
 Isolation. Dry run; the fake records the flags and runs no model. Effort is the coder's check first
 (`internal/engine/claudecode.go`, `Args`): without an engine flag for it, the effort commands and
 column are left out of the pass and the docs' effort lines wait.
+
+## Idle timeout
+
+Drive. In a venue, `/session timeout <timeout>` (a free string, at most 20 characters; the
+driver's), read by `session.ParseIdleTimeout`: a bad value is `bad-args` with 04's `Not a
+timeout:` text before the service is called. The service side is `session timeout`
+(`05-debug-interface-session.md`); the renderer posts the event's summary and edits the pinned
+header on `timeout-changed`, whose sentence is `Ends after <n> without activity.` or `Never ends
+for inactivity.`
+Observe. `session outbox` (the header's `edit`), `audit --kind timeout-changed`.
+Reproduce. `discord inject command --channel s0001 --user 1001 --roles 10 "/session timeout 30"`,
+then `"/session timeout soon"` (refused `bad-args`).
+Isolation. Dry run.

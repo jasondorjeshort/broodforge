@@ -147,7 +147,7 @@ func (v *View) Handle(ev session.Event) {
 		}
 		v.create(modeChangedText(ev.Result, reach), nil)
 		v.hdr.apply(ev) // the next header edit shows it
-	case session.EventModelChanged, session.EventEffortChanged:
+	case session.EventModelChanged, session.EventEffortChanged, session.EventTimeoutChanged:
 		v.switched(ev)
 	case session.EventParticipantJoined:
 		v.create(ev.Summary, nil)
@@ -182,8 +182,8 @@ func (v *View) endButton() []Button {
 	return []Button{{Label: "End session", CustomID: CustomID{Kind: IDEnd, Session: v.id}.String(), Style: StyleDanger}}
 }
 
-// switched is a model or effort switch: 04's `From the next turn:` line, then the pinned
-// header edited in place.
+// switched is a model, effort or idle timeout switch: its line (04's `From the next turn:` for
+// model and effort), then the pinned header edited in place.
 func (v *View) switched(ev session.Event) {
 	v.hdr.apply(ev)
 	v.create(ev.Summary, nil)
@@ -192,16 +192,19 @@ func (v *View) switched(ev session.Event) {
 	}
 }
 
-// headerState is the session's mode, model and effort as the header shows them, from its
-// events: the start's, then each switch, so a header edited for one switch shows the others.
+// headerState is the session's mode, model, effort and idle timeout as the header shows them,
+// from its events: the start's, then each switch, so a header edited for one switch shows the
+// others.
 type headerState struct {
 	mode, modeWhy      string
 	model, why, effort string
+	idle               string // session.IdleText's words: "never", "60 minutes"
 }
 
 func (m *headerState) apply(ev session.Event) {
-	// Four types of many, so not a switch the exhaustive check would make list them all.
+	// Five types of many, so not a switch the exhaustive check would make list them all.
 	if ev.Type == session.EventSessionStarted && ev.Start != nil {
+		m.idle = ev.Start.IdleTimeout
 		m.mode, m.modeWhy = ev.Start.Mode, "this channel's default"
 		if ev.Start.Mode != ev.Start.ChannelMode {
 			m.modeWhy = "chosen at start" // not 04
@@ -219,6 +222,9 @@ func (m *headerState) apply(ev session.Event) {
 	}
 	if ev.Type == session.EventEffortChanged {
 		m.effort = ev.Result
+	}
+	if ev.Type == session.EventTimeoutChanged {
+		m.idle = ev.Result
 	}
 }
 

@@ -97,7 +97,7 @@ func Transcript(id string, events []session.Event, who func(user string) string)
 			}
 			blank()
 			line(footer(label, ev.Turn, t.Sub(turnStart), ev.Usage))
-		case session.EventModeChanged, session.EventModelChanged, session.EventEffortChanged, session.EventParticipantJoined, session.EventParticipantInvited,
+		case session.EventModeChanged, session.EventModelChanged, session.EventEffortChanged, session.EventTimeoutChanged, session.EventParticipantJoined, session.EventParticipantInvited,
 			session.EventMessageDropped, session.EventHandoffRefused, session.EventSessionInterrupted:
 			blank()
 			line("_" + ev.Time + "_ " + ev.Summary)

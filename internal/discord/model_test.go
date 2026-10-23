@@ -24,6 +24,7 @@ func TestParseSlashModel(t *testing.T) {
 		"/model sonnet":             {SlashModel, "sonnet"},
 		"/session model fable":      {SlashSessionModel, "fable"},
 		"/session effort high":      {SlashSessionEffort, "high"},
+		"/session timeout never":    {SlashSessionTimeout, "never"},
 		"/session mode acts-freely": {SlashSessionMode, "acts-freely"},
 	} {
 		s, err := ParseSlash(text)
@@ -64,6 +65,8 @@ func TestModelCommandsAndSlashOf(t *testing.T) {
 			SlashSessionModel, "haiku", nil},
 		{`{"id":"1","name":"session","type":1,"options":[{"name":"effort","type":1,"options":[{"name":"effort","type":3,"value":"low"}]}]}`,
 			SlashSessionEffort, "low", nil},
+		{`{"id":"1","name":"session","type":1,"options":[{"name":"timeout","type":1,"options":[{"name":"timeout","type":3,"value":"2h"}]}]}`,
+			SlashSessionTimeout, "2h", nil},
 		{`{"id":"1","name":"session","type":1,"options":[{"name":"start","type":1,"options":[{"name":"model","type":3,"value":"sonnet"}]}]}`,
 			SlashSessionStart, "", map[string]string{"model": "sonnet"}},
 	}

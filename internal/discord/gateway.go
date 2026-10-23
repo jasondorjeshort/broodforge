@@ -900,6 +900,8 @@ func slashOf(d dg.SlashCommandInteractionData) (Slash, string, bool) {
 			s.Kind, s.Args = SlashSessionModel, []string{opts["model"]}
 		case "effort":
 			s.Kind, s.Args = SlashSessionEffort, []string{opts["effort"]}
+		case "timeout":
+			s.Kind, s.Args = SlashSessionTimeout, []string{opts["timeout"]}
 		case "invite":
 			s.Kind, s.Options["user"] = SlashSessionInvite, opts["user"]
 		default:
@@ -911,7 +913,7 @@ func slashOf(d dg.SlashCommandInteractionData) (Slash, string, bool) {
 }
 
 // Commands are 04's slash commands as registered in the guild (Owner 1): /register,
-// /session start|stop|end|mode|model|effort|invite, /credential add|list|remove|default|login,
+// /session start|stop|end|mode|model|effort|timeout|invite, /credential add|list|remove|default|login,
 // /usage, /model. The model and effort options are choice lists of policy's aliases and levels.
 func Commands() []dg.ApplicationCommandCreate {
 	str := func(name, desc string, max int, choices ...string) dg.ApplicationCommandOptionString {
@@ -944,6 +946,8 @@ func Commands() []dg.ApplicationCommandCreate {
 				sub("mode", "switch from the next turn", str("mode", "asks first or acts freely", 0, "asks-first", "acts-freely")),
 				sub("model", "switch the model from the next turn", model),
 				sub("effort", "switch the effort from the next turn", str("effort", "the effort", 0, policy.Efforts...)),
+				sub("timeout", "end this session after this long without activity",
+					str("timeout", "never, minutes, or a duration such as 2h", 20)),
 				sub("invite", "let someone into this session", dg.ApplicationCommandOptionUser{Name: "user", Description: "who", Required: true}),
 			}},
 		dg.SlashCommandCreate{Name: "credential", Description: "Your Claude credentials",

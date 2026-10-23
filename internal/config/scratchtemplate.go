@@ -45,7 +45,7 @@ func ScratchTemplate(o ScratchOptions) (Instance, Project) {
 		Spawn:         Spawn{Backend: BackendSameAccount},
 		Paths:         Paths{Install: filepath.ToSlash(o.Install)},
 		RoleGroups:    map[string][]string{"trusted": {"10"}},
-		Defaults:      Defaults{IdleTimeoutMinutes: 60, PromptTimeoutMinutes: 5, Mode: ModePrompt, Harness: HarnessFake},
+		Defaults:      Defaults{IdleTimeoutMinutes: 0, PromptTimeoutMinutes: 5, Mode: ModePrompt, Harness: HarnessFake},
 	}
 	roles := Roles{Start: []string{"trusted"}, Contribute: []string{"trusted"}, Answer: []string{"trusted"}}
 	proj := Project{

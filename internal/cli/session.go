@@ -359,6 +359,17 @@ func SessionHandlers(svc *session.Service) func(*control.Registry) {
 			}
 			return encodeSession(sendLine{Kind: string(ev.Type), Turn: ev.Turn, Detail: ev.Result})
 		})
+		reg.Handle("session.timeout", func(_ context.Context, call *control.Call) (json.RawMessage, error) {
+			var a struct{ ID, Timeout, As, Roles string }
+			if err := json.Unmarshal(call.Args, &a); err != nil {
+				return nil, control.NewError(control.CodeBadArgs, err.Error())
+			}
+			ev, err := svc.SetIdleTimeout(session.TimeoutRequest{ActRequest: session.ActRequest{Session: a.ID, As: a.As, Roles: a.Roles}, Timeout: a.Timeout})
+			if err != nil {
+				return nil, sessionError(err)
+			}
+			return encodeSession(sendLine{Kind: string(ev.Type), Turn: ev.Turn, Detail: ev.Result})
+		})
 		reg.Handle("session.end", func(ctx context.Context, call *control.Call) (json.RawMessage, error) {
 			var a struct {
 				ID, As, Roles string
@@ -532,6 +543,18 @@ var sessionEffort = Command{
 	Columns: []string{"kind", "turn", "detail"},
 }
 
+// sessionTimeout is `broodforge session timeout <id> never|<minutes>|<duration>`: the driver's
+// switch of the idle timeout, effective now; prints `timeout-changed  <next turn>  <timeout>`.
+var sessionTimeout = Command{
+	Name:  "session timeout",
+	Class: ClassWrite,
+	Flags: append([]Flag{
+		{Name: "id", Kind: FlagString, Value: "<session id>"},
+		{Name: "timeout", Kind: FlagString, Value: "never|<minutes>|<duration>"},
+	}, actingFlags...),
+	Columns: []string{"kind", "turn", "detail"},
+}
+
 // sessionInvite is `broodforge session invite <id> --user <user id>`: the driver's; prints the
 // invited registration.
 var sessionInvite = Command{
@@ -571,13 +594,14 @@ var sessionReachReport = Command{
 }
 
 func init() {
-	commands = append(commands, &sessionAnswer, &sessionInterrupt, &sessionMode, &sessionModel, &sessionEffort, &sessionInvite, &sessionEnd,
-		&sessionReachReport)
+	commands = append(commands, &sessionAnswer, &sessionInterrupt, &sessionMode, &sessionModel, &sessionEffort, &sessionTimeout, &sessionInvite,
+		&sessionEnd, &sessionReachReport)
 	positionals[&sessionAnswer] = []string{"id", "decision"}
 	positionals[&sessionInterrupt] = []string{"id"}
 	positionals[&sessionMode] = []string{"id", "mode"}
 	positionals[&sessionModel] = []string{"id", "model"}
 	positionals[&sessionEffort] = []string{"id", "effort"}
+	positionals[&sessionTimeout] = []string{"id", "timeout"}
 	positionals[&sessionInvite] = []string{"id"}
 	required[&sessionInvite] = []string{"user"}
 	positionals[&sessionEnd] = []string{"id"}

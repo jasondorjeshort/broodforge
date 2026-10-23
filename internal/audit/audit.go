@@ -44,6 +44,7 @@ const (
 	KindModeChanged          Kind = "mode-changed"
 	KindModelChanged         Kind = "model-changed"
 	KindEffortChanged        Kind = "effort-changed"
+	KindTimeoutChanged       Kind = "timeout-changed"
 	KindParticipantInvited   Kind = "participant-invited"
 )
 

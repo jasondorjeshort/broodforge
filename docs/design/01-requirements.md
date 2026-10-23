@@ -48,7 +48,7 @@ How to read this doc:
 | R-12 | A user who holds a role the channel allows starts a session from that channel; how the start looks in Discord is settled in the UX doc with the owner. | v1 (Q 3) |
 | R-13 | A session has exactly one driver, the person who started it, and any number of contributors: other permitted users who write in the session or are invited into it. | v1 |
 | R-14 | Broodforge records which Discord person wrote each message in a session and hands that identity to the agent with the message, so the agent can tell people apart. | v1 |
-| R-15 | A session ends when its driver ends it, when its channel's idle timeout passes with no activity, or when the owner ends it from the host (choice). | v1 |
+| R-15 | A session ends when its driver ends it, when its idle timeout passes with no activity (the channel's, none by default; the driver may change it on the session), or when the owner ends it from the host (choice). | v1 |
 | R-16 | Several sessions can run at once, in different channels or in the same one, each in its own worktree (choice). | v1 |
 | R-17 | A session interrupted by a restart or crash of the bot is reported as interrupted in its channel and its worktree is left intact. | v1 |
 | R-18 | A session interrupted by a restart can be resumed with its conversation. | later |

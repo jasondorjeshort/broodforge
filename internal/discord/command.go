@@ -20,9 +20,10 @@ const (
 	SlashSessionInvite
 	SlashCredential
 	SlashUsage
-	SlashModel         // /model [<alias>], top-level, in a venue (P12a)
-	SlashSessionModel  // /session model <alias>
-	SlashSessionEffort // /session effort <level>
+	SlashModel          // /model [<alias>], top-level, in a venue (P12a)
+	SlashSessionModel   // /session model <alias>
+	SlashSessionEffort  // /session effort <level>
+	SlashSessionTimeout // /session timeout <never|minutes|duration>
 )
 
 // Slash is a parsed slash command: its kind, the words after the command name (a mode, a
@@ -49,6 +50,7 @@ var slashNames = []struct {
 	{"session mode", SlashSessionMode, nil},
 	{"session model", SlashSessionModel, nil},
 	{"session effort", SlashSessionEffort, nil},
+	{"session timeout", SlashSessionTimeout, nil},
 	{"session invite", SlashSessionInvite, []string{"user"}},
 	{"credential", SlashCredential, []string{"kind", "label", "id"}},
 	{"register", SlashRegister, []string{"name", "email"}},

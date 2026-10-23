@@ -437,6 +437,19 @@ func (a *Adapter) slash(ctx context.Context, in Inbound, sl Slash) (Reply, error
 			return Reply{}, a.venueRefusal(sess, err)
 		}
 		return none("effort from turn " + strconv.Itoa(ev.Turn) + ": " + effort), nil
+	case SlashSessionTimeout:
+		if err := needVenue(); err != nil {
+			return Reply{}, err
+		}
+		timeout := strings.Join(sl.Args, " ")
+		if _, ok := session.ParseIdleTimeout(timeout); !ok {
+			return Reply{}, a.refuse(in, "command", CodeBadArgs, "Not a timeout: "+timeout+". Give "+session.TimeoutText+".")
+		}
+		ev, err := a.svc.SetIdleTimeout(session.TimeoutRequest{ActRequest: act, Timeout: timeout})
+		if err != nil {
+			return Reply{}, a.venueRefusal(sess, err)
+		}
+		return none("idle timeout: " + ev.Result), nil
 	case SlashSessionStop:
 		if err := needVenue(); err != nil {
 			return Reply{}, err

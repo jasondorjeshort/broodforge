@@ -173,7 +173,7 @@ is a new file plus `worktree forget` for the old rows.
   "paths": { "install": "…" }, "audit": { "fileSink": null },
   "relay": { "loginByDirectMessage": false },
   "roleGroups": { "trusted": ["role id"], "members": ["role id"] },
-  "defaults": { "idleTimeoutMinutes": 60, "promptTimeoutMinutes": 5, "mode": "prompt", "harness": "claude-code" } }
+  "defaults": { "idleTimeoutMinutes": 0, "promptTimeoutMinutes": 5, "mode": "prompt", "harness": "claude-code" } }
 ```
 
 ```json
@@ -188,7 +188,9 @@ is a new file plus `worktree forget` for the old rows.
 ```
 
 Rules: a role list holds group names from `roleGroups` or raw role ids; `"driver"` under `answer`
-means the driver only (R-25). A channel inherits `defaults` for a key it omits. `harness` is
+means the driver only (R-25). A channel inherits `defaults` for a key it omits.
+`idleTimeoutMinutes` 0 (or absent from `defaults`) is no idle timeout, the default; a negative
+value is an error. `harness` is
 `claude-code` or `fake`; `handoff` is `pull-request` (default) or `push`; `venue.category` is
 the category id sessions are created under, `venue.summaryChannel` optional, also receiving each
 summary and transcript; `discord.mode` is `live` or `dry-run`; `engine.fakeFixtures` is the

@@ -191,8 +191,17 @@ func headerText(id string, st *session.StartInfo, m headerState) string {
 	return "Session " + id + " on " + st.ProjectName + ", branch " + st.Branch + ", driver " + st.DriverName + ".\n" +
 		"Mode: " + modeName(m.mode) + " (" + m.modeWhy + "). Credential: " + st.Credential + " (" + credentialKindName(st.CredentialKind) + ").\n" +
 		modelLine(m) + "\n" + // not 04: the line's place in the header
-		"Reach: " + st.Reach + ". Ends after " + st.IdleTimeout + " without activity. Who may answer prompts: " + roleList(st.Answer) + ".\n" +
+		"Reach: " + st.Reach + ". " + idleSentence(m.idle) + " Who may answer prompts: " + roleList(st.Answer) + ".\n" +
 		"Write what you want done. Everyone who writes here is handed to the agent by name."
+}
+
+// idleSentence is the header's idle timeout (04, Idle timeout): `Ends after 60 minutes without
+// activity.`, or for none `Never ends for inactivity.`
+func idleSentence(idle string) string {
+	if idle == "" || idle == "never" {
+		return "Never ends for inactivity."
+	}
+	return "Ends after " + idle + " without activity."
 }
 
 // workingHeader is the working message's first line (04, The turn loop).
