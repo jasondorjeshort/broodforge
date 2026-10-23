@@ -13,7 +13,7 @@ the amendments of 2026-10-16 in ADRs 0020 and 0022 are the decisions this text a
 ## How the engine runs it
 
 The engine runs `<install>/bin/broodforge hook pre-tool-use` for every tool call, a subagent's
-included (the engine's documented behaviour; no spike fixture holds a `Task` call), registered with an empty matcher and a `timeout` of thirty seconds (ten before C39;
+included (the engine's documented behaviour; no spike fixture holds a subagent launch call, which the pinned engine names `Agent`; `Task` is kept for an older pin), registered with an empty matcher and a `timeout` of thirty seconds (ten before C39;
 the hook does no I/O beyond stdin, the environment and one log line, so the bound is never
 reached by a healthy hook and the engine's fallback below is reached less often) in the bot-owned
 settings file that ADR 0022 (Decision) places on the engine's settings path, read-only to the
@@ -124,7 +124,7 @@ the engine's own default mode asks for `WebFetch` too). `deny` uses ADR 0020's t
 | Tool class | read-only reach | code reach |
 |---|---|---|
 | `Read`, `Glob`, `Grep`, `LS`, `NotebookRead` | `allow` under the tree or the canonical, else `deny` | `allow` under the tree or the canonical; elsewhere `allow` too, since Bash reads it anyway, except the credential paths above |
-| `TodoWrite`, `Task` | `allow` (a subagent's own calls fire the hook) | `allow` |
+| `TodoWrite`, `Agent` (`Task` on an older engine pin) | `allow` (a subagent's own calls fire the hook) | `allow` |
 | `WebFetch`, `WebSearch` | `web` | `web` |
 | `Edit`, `MultiEdit`, `Write`, `NotebookEdit` | `deny` | `ask` when the resolved path is under the tree, else `deny` |
 | `Bash` | `deny` | `ask` (the host is the boundary, ADR 0022; the PC's gap stands) |

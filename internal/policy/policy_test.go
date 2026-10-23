@@ -36,7 +36,7 @@ func TestTable(t *testing.T) {
 		add(tool, ReachCode, []Path{cred}, Deny, Deny)
 		add(tool, ReachReadOnly, []Path{cred}, Deny, Deny)
 	}
-	for _, tool := range []string{"TodoWrite", "Task"} {
+	for _, tool := range []string{"TodoWrite", "Agent", "Task"} {
 		add(tool, ReachReadOnly, nil, Allow, Allow)
 		add(tool, ReachCode, nil, Allow, Allow)
 	}
@@ -180,5 +180,13 @@ func TestResolveModelAndEfforts(t *testing.T) {
 	}
 	if !ParseEffort("max") || ParseEffort("xhigh") || ParseEffort("") {
 		t.Error("ParseEffort")
+	}
+}
+
+func TestAgentAndTaskBothClassifyAsAgent(t *testing.T) {
+	for _, tool := range []string{"Agent", "Task"} {
+		if got := ClassOf(tool); got != ClassAgent {
+			t.Errorf("ClassOf(%q) = %v, want ClassAgent", tool, got)
+		}
 	}
 }

@@ -208,7 +208,7 @@ func TestProofConfigReload(t *testing.T) {
 		t.Fatalf("start: %q %q", r.Stdout, r.Stderr)
 	}
 	want(t, run("session", "reach-report", "s0001"), 0,
-		"Read,Glob,Grep,LS,NotebookRead  allow  deny\nTodoWrite,Task  allow  allow\nWebFetch,WebSearch  web  web\nEdit,MultiEdit,Write,NotebookEdit  deny  deny\nBash  deny  deny\n*  deny  deny\nbinds: -\n", "")
+		"Read,Glob,Grep,LS,NotebookRead  allow  deny\nTodoWrite,Agent,Task  allow  allow\nWebFetch,WebSearch  web  web\nEdit,MultiEdit,Write,NotebookEdit  deny  deny\nBash  deny  deny\n*  deny  deny\nbinds: -\n", "")
 	want(t, run("stop"), 0, "stopped  1\n", "")
 	if code := <-exit; code != 0 {
 		t.Errorf("serve exited %d", code)

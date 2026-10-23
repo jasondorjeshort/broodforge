@@ -70,7 +70,7 @@ type Class int
 
 const (
 	ClassRead  Class = iota // Read, Glob, Grep, LS, NotebookRead
-	ClassAgent              // TodoWrite, Task
+	ClassAgent              // TodoWrite, Agent, Task
 	ClassWeb                // WebFetch, WebSearch
 	ClassEdit               // Edit, MultiEdit, Write, NotebookEdit
 	ClassBash               // Bash
@@ -82,7 +82,7 @@ func ClassOf(tool string) Class {
 	switch tool {
 	case "Read", "Glob", "Grep", "LS", "NotebookRead":
 		return ClassRead
-	case "TodoWrite", "Task":
+	case "TodoWrite", "Agent", "Task":
 		return ClassAgent
 	case "WebFetch", "WebSearch":
 		return ClassWeb
@@ -348,7 +348,7 @@ type ClassRow struct {
 func ClassRows() []ClassRow {
 	return []ClassRow{
 		{ClassRead, []string{"Read", "Glob", "Grep", "LS", "NotebookRead"}},
-		{ClassAgent, []string{"TodoWrite", "Task"}},
+		{ClassAgent, []string{"TodoWrite", "Agent", "Task"}},
 		{ClassWeb, []string{"WebFetch", "WebSearch"}},
 		{ClassEdit, []string{"Edit", "MultiEdit", "Write", "NotebookEdit"}},
 		{ClassBash, []string{"Bash"}},
