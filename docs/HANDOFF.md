@@ -1,7 +1,7 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-23, after the first live session's review, by main session (rooted in the repo, hooks loaded)
+Updated: 2026-10-23, after the review's defect fixes, by main session (rooted in the repo, hooks loaded)
 
 ## Now
 
@@ -20,8 +20,8 @@ Updated: 2026-10-23, after the first live session's review, by main session (roo
    live `instance.json` timeouts to 0; a real root outside Temp, eventually.
 2. Architect: a proposal for the two workflows in a session (the ideas of 2026-10-23: sessions load
    none of the project's rules; engine `auto` permission mode; landing on `main`).
-3. Tester: one pass on the review's open defects (minutes overflow, read after unlock, doc gaps, env
-   test, a config error starting on last-good); then the net-diff finding and the other `Plan:` items.
+3. Review defects fixed, unpushed (9a65371, aadfec2). Next: the last-good cold start (architect;
+   the fake-engine header is the owner's), the net-diff finding, the other `Plan:` items.
 4. Then the P11 remainder `Plan:`, `audit --follow`, `/usage`; carry-backs; the surfaces ADR; triage.
 
 ## Waiting on user

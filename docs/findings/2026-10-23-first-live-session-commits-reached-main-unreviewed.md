@@ -60,7 +60,9 @@ Not held:
 
 ## Next
 
-- Items 3 to 5 and 8 to 9: one tester pass (the coordinator briefs it).
+- Items 3, 4, 5, 10 and 11: fixed and reviewed in 9a65371 and aadfec2 (with the owner's
+  decision of 2026-10-23: every timeout is capped at a year with a notice, and never is a
+  one-year timer). Item 2: ff5b45f. Items 8 and 9: the handoff of 53fcc18.
 - Items 6 and 7 are the owner's.
 - The design question behind items 1 and 2 is the idea named in the settings-source finding
   (`docs/ideas/2026-10-23-sessions-load-none-of-the-projects-instructions-agents-or-hooks.md`), a
