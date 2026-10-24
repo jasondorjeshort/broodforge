@@ -27,7 +27,11 @@ bin/broodforge --root <root> engine run --real --credential <id> --workflow test
 3. Read the header: `bin/broodforge --root <root> session show --header <id>`. It holds no trailer
    list. Ask the driver for a one-line commit, then `bin/broodforge --root <root> worktree check <id>`
    (clean).
-4. C6: ask the driver to launch the `reviewer` to review HEAD. It took when
+   Steps 4 and 5 were first run in session s0008; its evidence and what is still unread are in
+   `docs/findings/2026-10-23-subagents-in-a-session-end-before-writing.md`.
+4. C6: switch the session to policy mode first (`/session mode acts-freely`): in prompt mode the
+   reviewer's first deferred Bash ends it with no output (the finding above). Then ask the driver to
+   launch the `reviewer` to review HEAD. It took when
    `session tail <id> --all` shows the reviewer's calls indented under `[Agent]`,
    `bin/broodforge --root <root> --json audit --kind permission-decision --session <id>` gives those
    tool_use ids with `"source":"hook"`, and `session show <id>` prints `review: toolu_... after <sha>`.

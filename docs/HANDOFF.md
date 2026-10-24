@@ -35,6 +35,6 @@ Updated: 2026-10-23, P19 pushed, by main session (rooted in the repo, hooks load
 
 ## Open findings
 
-- `docs/findings/2026-10-23-system-prompt-append-renders-once-per-turn-trailer-list-stale.md`,
-  `...-first-live-session-commits-reached-main-unreviewed.md` (both resolve in ADR 0025's passes)
+- `docs/findings/2026-10-23-system-prompt-append-renders-once-per-turn-trailer-list-stale.md`, `...-first-live-session-commits-reached-main-unreviewed.md` (both resolve in ADR 0025's passes);
+  `...-subagents-in-a-session-end-before-writing.md` (s0008: a deferred call ends a subagent; triage)
 - `docs/findings/2026-10-17-net-diff-privacy-scan-let-named-commits-go-public.md` (resolve); `2026-10-15-spike-*.md` (droplet open); `2026-10-16-prior-art-chat-front-ends-for-coding-agents.md` (L1-L4 mine)
