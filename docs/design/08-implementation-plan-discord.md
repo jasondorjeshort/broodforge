@@ -152,7 +152,7 @@ line `held  <ids>` or `held  -`; `Config.Commits` from the worktree service; on 
 `Config.Commits`); `internal/discord/text.go` (`interruptedNoticeText(commits *int, missing bool)`: 04's text,
 `1 commit`, `Its tree is kept.`, `Its tree is missing.`; `handoffRefusedHeldText`; `interruptedRefusalText`, 04's
 `interrupted refusal` row; `summaryText`'s two drafted lines for `tree-missing` and `none` after an earlier
-handoff, 04's Ending a session, marked `not 04`); `internal/discord/render.go`
+handoff, held by 04 (Ending a session, owner-approved 2026-10-24)); `internal/discord/render.go`
 (`EventSessionInterrupted` with `Start`: the held opening, closed, the notice; without `Start` as today;
 `headerState.apply` takes `Start` from it too); `internal/discord/transcript.go` (the heading from a
 `session-interrupted` carrying `start`); `internal/discord/adapter.go` (`venueRefusal` reads the state through

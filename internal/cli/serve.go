@@ -344,31 +344,63 @@ func startBot(env *Env) (*bot, error) {
 		Engine: b.engine, CreateTree: func(ctx context.Context, s git.Session) (string, error) {
 			return git.Create(ctx, b.backend, s)
 		},
-		RemoveTree: func(ctx context.Context, s git.Session) error { return git.Discard(ctx, b.backend, s) },
-		Workflow:   sessionWorkflow,
-		Store:      b.st, Audit: b.aud,
+		RemoveTree:  func(ctx context.Context, s git.Session) error { return git.Discard(ctx, b.backend, s) },
+		Workflow:    sessionWorkflow,
+		Commits:     b.wt.Commits,
+		ProjectRepo: b.projectRepo,
+		Store:       b.st, Audit: b.aud,
 	})
 	b.adapter.Attach(b.svc)
+
+	// (7) continued: every interrupted session held in memory, so end reaches it (ADR 0026). Its
+	// View's notice waits in the coalescer, which starts below.
+	held, err := b.svc.LoadInterrupted(context.Background())
+	if err != nil {
+		b.adapter.Close()
+		return fail(stepReconcile, err)
+	}
+	heldLine := "-"
+	if len(held) > 0 {
+		heldLine = strings.Join(held, " ")
+	}
+	fmt.Fprintln(env.Stderr, "held  "+heldLine)
 
 	// (8) The control socket.
 	reg := control.NewRegistry()
 	b.register(reg)
 	if b.srv, err = control.Listen(b.addr, reg); err != nil {
+		b.adapter.Close()
 		return fail(stepControl, err)
 	}
-	b.adapter.Run()
-
-	// (9) The Discord gateway, and (10) the start-up report to the notice channel.
+	var open func(context.Context) error
 	if b.gateway != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		err := b.gateway.Open(ctx)
-		cancel()
-		if err != nil {
-			b.close()
-			return nil, stepError(stepDiscord, err)
-		}
+		open = b.gateway.Open
+	}
+	if err := openDiscord(open, b.adapter.Run); err != nil {
+		b.close()
+		return nil, stepError(stepDiscord, err)
 	}
 	return b, nil
+}
+
+// openDiscord is startup steps 9 and 10 and the coalescer's start, in ADR 0026's order: a dry
+// run (open nil) starts the coalescer at once; a live instance opens the gateway first (the
+// commands, the sweep binding the venues of earlier runs, the connection, the start-up report)
+// and starts the coalescer only after, so a held session's notice is never sent to a venue the
+// gateway does not know yet. A failed open starts nothing.
+func openDiscord(open func(context.Context) error, run func()) error {
+	if open == nil {
+		run()
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	err := open(ctx)
+	cancel()
+	if err != nil {
+		return err
+	}
+	run()
+	return nil
 }
 
 // newGateway builds the live gateway: the bot token from the credential store, the ids from
@@ -438,8 +470,20 @@ func (b *bot) channel(id string) (session.Channel, bool) {
 		Roles:       session.Roles{Start: e.Roles.Start, Contribute: e.Roles.Contribute, Answer: e.Roles.Answer},
 		IdleTimeout: time.Duration(e.IdleTimeoutMinutes) * time.Minute, PromptTimeout: time.Duration(e.PromptTimeoutMinutes) * time.Minute,
 		Model: deref(e.Model), Effort: deref(e.Effort),
-		Repo:     session.Repo{Canonical: p.Repo.Canonical, Remote: p.Repo.Remote, DefaultBranch: p.Repo.DefaultBranch},
+		Repo: session.Repo{Canonical: p.Repo.Canonical, Remote: p.Repo.Remote, DefaultBranch: p.Repo.DefaultBranch,
+			Handoff: p.HandoffOrDefault()},
 		Workflow: session.WorkflowKey{Inject: w.Inject, Hooks: w.Hooks}}, true
+}
+
+// projectRepo is a configured project's repository and handoff mode, for a held session whose
+// channel may have left the configuration (session.Config.ProjectRepo).
+func (b *bot) projectRepo(id string) (session.Repo, bool) {
+	p := b.config().Project(id)
+	if p == nil {
+		return session.Repo{}, false
+	}
+	return session.Repo{Canonical: p.Repo.Canonical, Remote: p.Repo.Remote, DefaultBranch: p.Repo.DefaultBranch,
+		Handoff: p.HandoffOrDefault()}, true
 }
 
 // engine is the session service's engine factory: the fake per session (its turn counter is

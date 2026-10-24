@@ -37,6 +37,9 @@ func (LinuxSudoBwrap) WorktreeCreate(Worktree) error { return held() }
 // WorktreeBundle refuses: held.
 func (LinuxSudoBwrap) WorktreeBundle(Worktree) (Bundle, error) { return Bundle{}, held() }
 
+// WorktreeCommits refuses: held.
+func (LinuxSudoBwrap) WorktreeCommits(Worktree) (int, error) { return 0, held() }
+
 // WorktreeRemove refuses: held.
 func (LinuxSudoBwrap) WorktreeRemove(string) error { return held() }
 

@@ -30,7 +30,7 @@ func Reconcile(st *store.Store, aud *audit.Writer, root string, now time.Time) (
 					return err
 				}
 				_, err := aud.Append(tx, audit.Event{Kind: audit.KindSessionInterrupted, Actor: ActorInstance, Session: f.Subject,
-					Details: details("reason", "reconciliation", "state", f.Detail)})
+					Details: details("reason", InterruptedReconciliation, "state", f.Detail)})
 				return err
 			})
 		case store.FindingMissing:

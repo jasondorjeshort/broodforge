@@ -21,6 +21,7 @@ import (
 
 type harness struct {
 	svc   *Service
+	cfg   Config // the service's, for a restart on the same store (TestHeld)
 	st    *store.Store
 	root  string
 	clock *ManualClock
@@ -79,10 +80,12 @@ func newHarness(t *testing.T, fixtureDir string, dryRun bool) *harness {
 	}
 	clock := NewManualClock(time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC))
 	h := &harness{st: st, root: root, clock: clock}
-	h.svc = New(Config{
+	h.cfg = Config{
 		Root: root, Instance: "test", DryRun: dryRun, Groups: func() map[string][]string { return map[string][]string{"trusted": {"10"}} },
-		Channel:  func(id string) (Channel, bool) { ch, ok := channels[id]; return ch, ok },
-		Fixtures: fx,
+		Channel: func(id string) (Channel, bool) { ch, ok := channels[id]; return ch, ok },
+		// Project p's repository, as serve reads it from the configuration (a held session's).
+		ProjectRepo: func(id string) (Repo, bool) { return repo, id == "p" },
+		Fixtures:    fx,
 		Engine: func(harness, fixture, received string) (engine.Engine, error) {
 			if fixtureDir != "" {
 				fixture = fixtureDir
@@ -108,7 +111,8 @@ func newHarness(t *testing.T, fixtureDir string, dryRun bool) *harness {
 			return os.RemoveAll(filepath.FromSlash(s.Dir() + "/tree"))
 		},
 		Store: st, Audit: audit.NewWriter(nil), Clock: clock,
-	})
+	}
+	h.svc = New(h.cfg)
 	return h
 }
 

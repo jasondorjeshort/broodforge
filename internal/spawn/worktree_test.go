@@ -53,6 +53,13 @@ func TestWorktreeCreateBundleRemove(t *testing.T) {
 	}
 	gittest.Commit(t, gittest.Driver, nil, tree, "a.txt", "a\n", "one")
 	gittest.Commit(t, gittest.Driver, nil, tree, "b.txt", "b\n", "two")
+	// The count alone writes no bundle (ADR 0026: a held session's notice).
+	if n, err := s.WorktreeCommits(w); err != nil || n != 2 {
+		t.Fatalf("commits: %d %v", n, err)
+	}
+	if _, err := os.Stat(w.BundlePath()); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("WorktreeCommits wrote a bundle: %v", err)
+	}
 	b, err = s.WorktreeBundle(w)
 	if err != nil || b.Commits != 2 || b.Path != w.BundlePath() {
 		t.Fatalf("bundle: %+v %v", b, err)
@@ -71,6 +78,9 @@ func TestWorktreeCreateBundleRemove(t *testing.T) {
 	}
 	if err := s.WorktreeRemove(w.Session); err != nil {
 		t.Errorf("second remove: %v", err)
+	}
+	if _, err := s.WorktreeCommits(w); err == nil {
+		t.Error("commits of a removed tree: no error")
 	}
 }
 
@@ -103,6 +113,9 @@ func TestWorktreeRefusesOtherDirectories(t *testing.T) {
 		if _, err := s.WorktreeBundle(w2); err == nil {
 			t.Errorf("bundle %q: no refusal", dir)
 		}
+		if _, err := s.WorktreeCommits(w2); err == nil {
+			t.Errorf("commits %q: no refusal", dir)
+		}
 	}
 }
 
@@ -116,6 +129,9 @@ func TestHeldBackendRefusesWorktrees(t *testing.T) {
 	}
 	if err := b.WorktreeRemove(""); err == nil {
 		t.Error("remove: no refusal")
+	}
+	if _, err := b.WorktreeCommits(Worktree{}); err == nil || !strings.Contains(err.Error(), "held") {
+		t.Errorf("commits: %v", err)
 	}
 }
 

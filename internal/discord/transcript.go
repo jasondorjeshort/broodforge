@@ -101,8 +101,23 @@ func Transcript(id string, events []session.Event, who func(user string) string)
 			}
 			blank()
 			line(footer(label, ev.Turn, t.Sub(turnStart), ev.Usage))
+		case session.EventSessionInterrupted:
+			if ev.Start != nil && start == nil {
+				// A held session's opening after a restart (ADR 0026): the heading and the restart
+				// line, what the bot saw before it being gone with the old process.
+				start = ev.Start
+				line("# Session " + id)
+				blank()
+				line("Session " + id + " on " + start.ProjectName + ", branch " + start.Branch + ", driver " + start.DriverName + ".")
+				line("Mode: " + modeName(start.Mode) + ". Reach: " + start.Reach + ". Credential: " + start.Credential + ".")
+				blank()
+				line("_" + ev.Time + "_ " + interruptedNoticeText(start.Commits, start.TreeMissing))
+				break
+			}
+			blank()
+			line("_" + ev.Time + "_ " + ev.Summary)
 		case session.EventModeChanged, session.EventModelChanged, session.EventEffortChanged, session.EventTimeoutChanged, session.EventParticipantJoined, session.EventParticipantInvited,
-			session.EventMessageDropped, session.EventHandoffRefused, session.EventSessionInterrupted:
+			session.EventMessageDropped, session.EventHandoffRefused:
 			blank()
 			line("_" + ev.Time + "_ " + ev.Summary)
 		case session.EventSessionEnded:

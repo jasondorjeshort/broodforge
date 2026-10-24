@@ -29,7 +29,7 @@ import (
 // The live gateway without Discord (P12): a fake of restAPI records every call with its disgo
 // request body, a real session service runs the fake engine, and the adapter's coalescer runs
 // on a manual clock the test steps. What only a guild proves is listed in
-// 05-debug-interface-discord.md.
+// 05-debug-interface-discord-live.md.
 
 const (
 	testApp   = "4000"
@@ -282,6 +282,14 @@ func delayedBasic(t *testing.T, delay time.Duration) string {
 
 func newLiveHarness(t *testing.T, leftovers ...dg.GuildChannel) *liveHarness {
 	t.Helper()
+	return newLiveHarnessHeld(t, nil, leftovers...)
+}
+
+// newLiveHarnessHeld is newLiveHarness as serve starts after a restart (ADR 0026): held writes the
+// store's earlier rows (and what an earlier run left under the root), then the service holds
+// every interrupted session before prepare's sweep, and the coalescer starts after it.
+func newLiveHarnessHeld(t *testing.T, held func(root string, tx *store.Tx) error, leftovers ...dg.GuildChannel) *liveHarness {
+	t.Helper()
 	root := filepath.ToSlash(t.TempDir())
 	st, err := store.Create(root)
 	if err != nil {
@@ -330,6 +338,14 @@ VALUES ('cred-x', 'api-key', 'anthropic', NULL, 'x', 'usable', '2026-10-21T00:00
 		t.Fatal(err)
 	}
 	h.a.live.Store(h.g)
+	if held != nil {
+		if err := st.Write(func(tx *store.Tx) error { return held(root, tx) }); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := h.svc.LoadInterrupted(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := h.g.prepare(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -594,6 +610,71 @@ func TestLiveSession(t *testing.T) {
 	h.until("the venue deleted", h.saw("DeleteChannel", func(c restCall) bool { return c.args[0] == venueID }))
 	if _, ok := h.rest.find("DeleteChannel", func(c restCall) bool { return c.args[0] == "7777" }); ok {
 		t.Error("an unknown session's channel was deleted")
+	}
+}
+
+// TestLiveHeld: after a restart an interrupted session is held before the sweep (ADR 0026); the
+// sweep binds its venue, then the coalescer sends the notice there, with no `has no venue`
+// warning; a typed switch and a venue message get the interrupted refusal, and End session hands
+// it off: the summary in the venue and the lobby, the transcript opening with the restart.
+func TestLiveHeld(t *testing.T) {
+	const venueID = "7400"
+	h := newLiveHarnessHeld(t, func(root string, tx *store.Tx) error {
+		// The tree the earlier run cloned is still there.
+		if err := os.MkdirAll(filepath.Join(root, "sessions", "s0001", "tree"), 0o750); err != nil {
+			return err
+		}
+		for _, q := range []string{
+			`INSERT INTO registration (user_id, git_name, git_email, display_name, registered_at) VALUES ('1001', 'Ada Example', 'ada@example.com', '', '2026-10-21T00:00:00Z')`,
+			`INSERT INTO session (rowid, id, channel_id, project_id, driver_id, state, harness, credential_id, mode, reach, started_at, ended_at)
+VALUES (1, 's0001', '100', 'p', '1001', 'interrupted', 'fake', 'cred-x', 'policy', 'code', '2026-10-21T11:00:00Z', '2026-10-21T11:30:00Z')`,
+			`INSERT INTO participant (session_id, user_id, role, joined_at) VALUES ('s0001', '1001', 'driver', '2026-10-21T11:00:00Z')`,
+		} {
+			if _, err := tx.Exec(q); err != nil {
+				return err
+			}
+		}
+		return nil
+	}, textChannel(sf(venueID), "s0001-ada", "test:s0001", sf(testCat)))
+	h.until("the notice", h.saw("CreateMessage", func(c restCall) bool {
+		return c.args[0] == venueID && strings.HasPrefix(content(c), "Broodforge restarted; this session was interrupted. Its tree is kept. ")
+	}))
+	if strings.Contains(h.log.String(), "has no venue") {
+		t.Errorf("a post went out before the sweep bound the venue: %s", h.log.String())
+	}
+	if _, ok := h.rest.find("CreateGuildChannel", nil); ok {
+		t.Errorf("a venue was created for a held session\n%s", h.rest.dump())
+	}
+
+	// /session model in the venue and a plain message: the interrupted refusal, not `has ended`.
+	h.g.onInteraction(interaction(t, slashJSON("21", venueID,
+		`{"id":"1","name":"session","type":1,"options":[{"name":"model","type":1,"options":[{"name":"model","type":3,"value":"sonnet"}]}]}`)))
+	if c, ok := h.rest.find("UpdateInteractionResponse", func(c restCall) bool { return c.args[1] == "tok-21" }); !ok ||
+		!strings.Contains(c.body, interruptedRefusalText) {
+		t.Errorf("/session model on a held session: %+v\n%s", c, h.rest.dump())
+	}
+	g := sf(testGuild)
+	h.g.onMessage(dg.Message{ID: sf("61"), ChannelID: sf(venueID), GuildID: &g, Author: dg.User{ID: sf("1001")}, Content: "hi",
+		Member: &dg.Member{RoleIDs: []snowflake.ID{sf("10")}}})
+	if c, ok := h.rest.find("CreateMessage", func(c restCall) bool { return c.args[0] == "6000" }); !ok || content(c) != interruptedRefusalText {
+		t.Errorf("a venue message on a held session: %+v", c)
+	}
+
+	// End session from the header the old process pinned.
+	h.g.onInteraction(interaction(t, `{"id":"22","application_id":"`+testApp+`","type":3,"token":"tok-22","version":1,"guild_id":"`+testGuild+
+		`","channel":{"id":"`+venueID+`","type":0,"guild_id":"`+testGuild+`","name":"c"},"member":{"user":{"id":"1001","username":"ada"},"roles":["10"]},`+
+		`"message":{"id":"1","channel_id":"`+venueID+`","author":{"id":"5000"}},"data":{"custom_id":"bf:s0001:end","component_type":2}}`))
+	h.until("the summary in the venue", h.saw("CreateMessage", func(c restCall) bool {
+		return c.args[0] == venueID && strings.HasPrefix(content(c), "Session s0001 ended by Ada Example")
+	}))
+	h.until("the transcript", h.saw("UpdateMessage", func(c restCall) bool {
+		return c.args[0] == testLobby && len(c.args) > 2 && c.args[2] == "file:s0001.md"
+	}))
+	if d, _ := h.svc.Show("s0001"); d.State != session.StateEnded {
+		t.Errorf("after End session: %s", d.State)
+	}
+	if strings.Contains(h.log.String(), "warning:") {
+		t.Errorf("warnings: %s", h.log.String())
 	}
 }
 

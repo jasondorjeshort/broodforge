@@ -96,8 +96,28 @@ func driverOnlyText(name, what string) string {
 }
 
 // sessionEndedText answers what reaches session-closed (End session, a switch or a pick, a venue
-// message) on a session that is ending, ended or interrupted (04-ux-session-controls.md, The header's menus).
+// message) on a session that is ending or ended (04-ux-session-controls.md, The header's menus).
 const sessionEndedText = "This session has ended."
+
+// interruptedRefusalText answers session-closed on an interrupted session, a plain message or any
+// action but end (04, Failure flows: interrupted refusal; ADR 0026, the owner's wording).
+const interruptedRefusalText = "This session was interrupted by a restart. /session end hands off its work."
+
+// interruptedNoticeText is the venue's notice after a restart (04, Failure flows: interrupted
+// (R-17); 03 Startup 10): the tree's commits, `1 commit` in the singular, `Its tree is kept.`
+// when the count could not be read, `Its tree is missing.` when the tree is gone (owner-approved
+// 2026-10-24).
+func interruptedNoticeText(commits *int, missing bool) string {
+	tree := "Its tree is kept."
+	switch {
+	case missing:
+		tree = "Its tree is missing."
+	case commits != nil:
+		tree = "Its tree is kept with " + plural(*commits, "commit", "commits") + "."
+	}
+	return "Broodforge restarted; this session was interrupted. " + tree +
+		" Resuming the conversation is not supported yet; /session end hands off what exists, or start a new session."
+}
 
 // The header's select menus (04-ux-session-controls.md, The header's menus): the placeholder of
 // a menu with nothing set echoes the header's line, and the mode menu's options are Owner 7's
@@ -367,6 +387,11 @@ func handoffRefusedText(message string) string {
 	return "Not handed off: " + strings.TrimSuffix(message, ".") + ". Ask the agent to amend them, then end the session again."
 }
 
+// handoffRefusedHeldText is 04's handoff-refused flow on an interrupted session: the same first
+// sentences, then the owner's retry, which the event's text already ends with
+// (session.HeldHandoffSentence; owner-approved 2026-10-24).
+func handoffRefusedHeldText(text string) string { return "Not handed off: " + text }
+
 // handoffFailedText is 04's handoff-failed flow; not 04: the refusal code as the one line.
 func handoffFailedText(id, code string, commits int) string {
 	return "Push rejected by the remote: " + code + ". Your " + plural(commits, "commit is", "commits are") +
@@ -399,11 +424,20 @@ func summaryText(id string, end *session.EndInfo, ended time.Time) string {
 		lines = append(lines, "Branch "+end.Branch+" -> pull request "+pullNumber(end.URL)+end.URL)
 	case end.Outcome == "pushed":
 		lines = append(lines, "Branch "+end.Branch+" -> pushed") // not 04
+	case end.Outcome == session.OutcomeTreeMissing:
+		// 04, Ending a session: a held session's tree gone, its commits still on the host.
+		lines = append(lines, "Branch "+end.Branch+" -> not handed off: its tree is missing on the host; the owner can recover refs/sessions/"+
+			id+" from the canonical.")
+	case end.Outcome == "none" && end.Commits == session.CommitsUnknown:
+		// 04, Ending a session: the owner's worktree handoff ran earlier and pushed nothing.
+		lines = append(lines, "Branch "+end.Branch+" -> handed off earlier on the host; nothing more to push.")
 	default:
 		lines = append(lines, "Branch "+end.Branch+" -> not handed off ("+end.Outcome+")") // not 04
 	}
-	lines = append(lines, "Commits: "+strconv.Itoa(end.Commits)) // not 04: 04 lists each commit's hash and subject
-	co := "none"                                                 // not 04
+	if end.Commits != session.CommitsUnknown { // an escape's count is not known: no line
+		lines = append(lines, "Commits: "+strconv.Itoa(end.Commits)) // not 04: 04 lists each commit's hash and subject
+	}
+	co := "none" // not 04
 	if len(end.CoAuthors) > 0 {
 		co = strings.Join(end.CoAuthors, ", ")
 	}

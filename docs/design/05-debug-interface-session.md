@@ -103,9 +103,11 @@ timer, no new turn). Two escapes, checked in this order before any handoff, so a
 ended: `refs/sessions/<id>` gone from the canonical (a `worktree handoff <id>` finished earlier: it removes the
 tree and deletes the ref) runs nothing and ends with the outcome that handoff recorded, read from the row's
 `end_outcome`, a URL mapped to `pull-request` with the URL, a branch name to `pushed` with the branch, null
-(a `none` handoff) to `none`, the commit count unknown; else the ref present but the tree gone (the worktree
-row `removed` or its path absent) runs no handoff and ends with `tree-missing`, the ref left in the canonical
-for the owner. Ending (end, idle, `stop`) while a call waits records it `dropped`, decider `instance`,
+(a `none` handoff) to `none`, the commit count unknown; else the tree gone (the worktree row `removed` or its
+path absent), the ref present or the canonical unreadable, runs no handoff and ends with `tree-missing`, the
+ref left in the canonical for the owner. The canonical is the session's project's, as the handoff's, so a
+session whose channel left the configuration is checked against it. An escape's line prints the project's
+remote and `-` for the commits, `commits: null` in `--json` (unknown; `EndInfo.Commits` is -1). Ending (end, idle, `stop`) while a call waits records it `dropped`, decider `instance`,
 with the cause (`the session ended`, `the session ended: no activity`, `the bot stopped`), and
 ends its turn (`turn-ended`, result `interrupted`); each queued message is dropped with a
 `message-dropped` event and an `action-refused` row. The closing turn that
@@ -199,7 +201,7 @@ the canonical given `fixtures/workflow/`'s files and both hook events (node on `
 line, the request's flags, `session show`'s three workflow lines and `--header`, `session
 reach-report`, `usage`, `config reload`, `worktree handoff s0001 --expect none`, `stop`; P11
 adds `session outbox`. A restart, then `end`: `scratch run -- bash tests/repro/restart-end.sh`
-[no-check: written by P12c] (`05-debug-interface-discord-live.md`, Inbound log and held sessions).
+(`05-debug-interface-discord-live.md`, Inbound log and held sessions).
 Isolation. All of it in the scratch root against the fake; the socket under the root.
 
 ## Prompt-mode defer and resume

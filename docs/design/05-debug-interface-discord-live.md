@@ -92,7 +92,9 @@ the venue, 03's startup step 10, from the event's `start.commits`: `Its tree is 
 commit` in the singular), `Its tree is kept.` when the count is null, and `Its tree is missing.` when the
 service found the ref present but the tree gone (the worktree row `removed` or its path absent); a session
 whose ref is gone too was handed off already and reads `Its tree is kept.` with no count. The summary of an
-end by either escape carries 04's drafted line (Ending a session) from `EndInfo`'s outcome, branch and URL. The
+end by either escape carries 04's drafted line (Ending a session) from `EndInfo`'s outcome, branch and URL, and
+`EndInfo.Commits` -1 (`session.CommitsUnknown`: the escape's count is unknown), which tells a `none` handed off
+earlier from a `none` handoff with no commits and leaves out the summary's `Commits:` line. The
 transcript (`Transcript`) and the header state a bare `/model` reads (`headerOf`) take their start facts from
 a `session-interrupted` event carrying `start` as they do from `session-started`, so a held session's
 transcript opens with its heading and the restart line. On `session-ended` the summary, the lobby's copy with
@@ -101,7 +103,7 @@ after the restart.
 Observe. The stderr lines; `audit --kind action-refused` (every service refusal, reason the code);
 `session tail <id>` on a held session (`session-interrupted  restart` first); `session outbox <id>`
 (the notice's `create`, then after `end` the summary and the lobby's `attach`).
-Reproduce. `scratch run -- bash tests/repro/restart-end.sh` [no-check: written by P12c, extended by P12d]:
+Reproduce. `scratch run -- bash tests/repro/restart-end.sh` (P12c; P12d extends it):
 `serve`, a start, one turn, a commit in the tree with the Haiku co-author trailer, `stop`, `serve` again
 (its stderr `held  s0001`); `session tail s0001` shows `session-interrupted  restart`, `session outbox s0001`
 the notice with `1 commit`, `session transcript s0001` the heading and the restart line; `discord inject

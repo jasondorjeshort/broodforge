@@ -226,6 +226,82 @@ var testStart = &session.StartInfo{Channel: "100", ProjectName: "Broodforge", Br
 	DriverName: "Jason", Mode: "prompt", ChannelMode: "prompt", Reach: "code", Credential: "cred-7k2m",
 	CredentialKind: "subscription", IdleTimeout: "60 minutes", Answer: []string{"driver"}}
 
+// TestViewHeld: a held session's opening after a restart (ADR 0026) posts 04's notice in the
+// venue, no venue and no header; its refused handoff names the owner's retry; its end by an escape
+// carries 04's drafted line and no Commits line; its transcript opens with the heading.
+func TestViewHeld(t *testing.T) {
+	two, one := 2, 1
+	for _, c := range []struct {
+		commits *int
+		missing bool
+		tree    string
+	}{
+		{&two, false, "Its tree is kept with 2 commits."},
+		{&one, false, "Its tree is kept with 1 commit."},
+		{nil, false, "Its tree is kept."},
+		{nil, true, "Its tree is missing."},
+	} {
+		want := "Broodforge restarted; this session was interrupted. " + c.tree +
+			" Resuming the conversation is not supported yet; /session end hands off what exists, or start a new session."
+		if got := interruptedNoticeText(c.commits, c.missing); got != want {
+			t.Errorf("notice\n got %s\nwant %s", got, want)
+		}
+	}
+
+	v, posts := newTestView()
+	start := *testStart
+	start.Commits = &one
+	v.Handle(ev(session.EventSessionInterrupted, 0, func(e *session.Event) { e.Summary, e.Start = session.InterruptedRestart, &start }))
+	if len(*posts) != 1 || (*posts)[0].Op != OpCreate || (*posts)[0].Channel != "s0001" ||
+		!strings.HasPrefix((*posts)[0].Body, "Broodforge restarted; this session was interrupted. Its tree is kept with 1 commit.") {
+		t.Fatalf("the held opening posted %+v", *posts)
+	}
+	if v.Lobby() != "100" || v.hdr.mode != "prompt" {
+		t.Errorf("the held opening's facts: lobby %q, header %+v", v.Lobby(), v.hdr)
+	}
+	v.Resync()
+	if len(*posts) != 1 {
+		t.Errorf("a re-sync of a held session's header posted %+v", (*posts)[1:])
+	}
+	v.Handle(ev(session.EventHandoffRefused, time.Second, func(e *session.Event) {
+		e.Text = "1 commit lacks the required attribution. " + session.HeldHandoffSentence("s0001")
+	}))
+	if got, want := (*posts)[1].Body, "Not handed off: 1 commit lacks the required attribution. The session was interrupted, so no agent "+
+		"can amend them; the owner can fix the tree and retry with broodforge worktree handoff s0001."; got != want {
+		t.Errorf("held refusal\n got %s\nwant %s", got, want)
+	}
+	v.Handle(ev(session.EventSessionEnded, time.Minute, func(e *session.Event) {
+		e.End = &session.EndInfo{By: "Jason", Reason: "end", StartedAt: "2026-10-16T09:00:00Z", Turns: 5, Branch: "broodforge/pc/s0001",
+			Outcome: session.OutcomeTreeMissing, Commits: session.CommitsUnknown, Author: "Jason"}
+	}))
+	summary := (*posts)[2].Body
+	if !strings.Contains(summary, "\nBranch broodforge/pc/s0001 -> not handed off: its tree is missing on the host; the owner can recover "+
+		"refs/sessions/s0001 from the canonical.\n") || strings.Contains(summary, "Commits:") {
+		t.Errorf("tree-missing summary:\n%s", summary)
+	}
+	for _, p := range *posts {
+		if p.Op == OpEdit || p.Op == OpChannel {
+			t.Errorf("a held session posted %s %s", p.Op, p.MessageID)
+		}
+	}
+	earlier := summaryText("s0001", &session.EndInfo{By: "Jason", Turns: 1, Branch: "broodforge/pc/s0001", Outcome: "none",
+		Commits: session.CommitsUnknown}, time.Now())
+	if !strings.Contains(earlier, "\nBranch broodforge/pc/s0001 -> handed off earlier on the host; nothing more to push.\n") {
+		t.Errorf("none handed off earlier:\n%s", earlier)
+	}
+	if got := summaryText("s0001", &session.EndInfo{By: "Jason", Outcome: "none"}, time.Now()); got != "Session s0001 ended by Jason · 0 commits · nothing to push; the tree was removed." {
+		t.Errorf("a none handoff: %s", got)
+	}
+	tr := Transcript("s0001", v.events, mention)
+	if !strings.HasPrefix(tr, "# Session s0001\n\nSession s0001 on Broodforge, branch broodforge/pc/s0001, driver Jason.\n") ||
+		!strings.Contains(tr, "Z_ Broodforge restarted; this session was interrupted. Its tree is kept with 1 commit.") {
+		t.Errorf("transcript:\n%s", tr)
+	}
+	if m := headerOf(v.events); m.mode != "prompt" || m.idle != "60 minutes" {
+		t.Errorf("headerOf a held session: %+v", m)
+	}
+}
+
 // TestViewHeaderAndTurn: 04's header, the working message, the delete-and-replace with the
 // footer last, and the prompt's buttons and answer.
 func TestViewHeaderAndTurn(t *testing.T) {

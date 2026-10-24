@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -108,9 +109,11 @@ type Roles struct {
 	Start, Contribute, Answer []string
 }
 
-// Repo is the project's canonical checkout.
+// Repo is the project's canonical checkout and its handoff mode (push or pull-request; "" reads
+// as the project's default).
 type Repo struct {
 	Canonical, Remote, DefaultBranch string
+	Handoff                          string
 }
 
 // Channel is one configured channel as the bot sees it, defaults merged in: the caller
@@ -161,6 +164,15 @@ type Config struct {
 	// hooks it lists (ADR 0025 rules 5 and 6): serve's renders through the workflow package. A
 	// refusal is a *WorkflowRefusal. nil copies nothing: every session gets the header alone.
 	Workflow func(ctx context.Context, req WorkflowRequest) (WorkflowCopy, error)
+	// Commits is a session tree's commit count over its base, read through the spawn backend
+	// (git.Commits, serve's from the worktree service), for a held session's notice (ADR 0026).
+	// nil, or an error, leaves the count unknown.
+	Commits func(ctx context.Context, id string) (*int, error)
+	// ProjectRepo looks a configured project's repository up by project id: a held session's
+	// git.Session comes from its project, as the handoff's does, so a session whose channel left
+	// the configuration still finds its canonical (ADR 0026). nil, or a project not found, falls
+	// back to the channel's.
+	ProjectRepo func(project string) (Repo, bool)
 }
 
 // Service is SessionService (03-architecture.md, Components; N-11): start, submit, answer,
@@ -295,6 +307,9 @@ type live struct {
 	// timers are actions.go's, on the service's clock.
 	idleTimeout, promptTimeout time.Duration
 	log                        *eventLog
+	// held is a session LoadInterrupted loaded from an interrupted row after a restart (ADR
+	// 0026): no engine, no timers, and end the one action it takes.
+	held bool
 
 	mu              sync.Mutex
 	state           string
@@ -502,7 +517,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, store.Int(n), store.Text(id), s
 	stopping := s.closing.Load()
 	s.mu.Unlock()
 	if stopping {
-		_, _ = s.interruptSession(l, "shutdown")
+		_, _ = s.interruptSession(l, InterruptedShutdown)
 		return Started{}, &Error{CodeShuttingDown, id + " was interrupted: the bot is stopping"}
 	}
 	l.mu.Lock()
@@ -645,7 +660,7 @@ func (s *Service) Shutdown(ctx context.Context) ([]string, error) {
 	}
 	var marked []string
 	for _, l := range lives {
-		ok, err := s.interruptSession(l, "shutdown")
+		ok, err := s.interruptSession(l, InterruptedShutdown)
 		if err != nil {
 			return marked, err
 		}
@@ -706,6 +721,158 @@ func (s *Service) interruptSession(l *live, reason string) (bool, error) {
 	l.log.add(Event{Time: now, Type: EventSessionInterrupted, Summary: reason})
 	l.log.close()
 	return true, nil
+}
+
+// heldRow is an interrupted session row as LoadInterrupted reads it.
+type heldRow struct {
+	id, channel, project, driver, harness, credential string
+	mode, reach, model, effort, startedAt, esid       string
+}
+
+// LoadInterrupted holds every interrupted session in memory (ADR 0026; 03 Startup 7, after
+// reconciliation and before the control socket listens), so end reaches it after a restart:
+// the row's facts, its channel from the configuration (one no longer configured keeps the row's
+// ids, the answer list `driver` and the other lists empty), the driver's registration, the
+// tree, the git.Session, the stored turn count and usage sums, no engine and no timers. Its
+// event log opens with session-interrupted, summary restart, carrying the header's facts and the
+// tree's commit count; then the Started hook runs for it. It writes no row and no audit event,
+// and returns the ids held.
+func (s *Service) LoadInterrupted(ctx context.Context) ([]string, error) {
+	var rows []heldRow
+	err := s.cfg.Store.Query(`SELECT id, channel_id, project_id, driver_id, harness, credential_id, mode, reach,
+    coalesce(model, ''), coalesce(effort, ''), started_at, coalesce(engine_session_id, '')
+FROM session WHERE state = ? ORDER BY rowid`, []store.Value{store.Text(StateInterrupted)}, func(r *store.Row) error {
+		rows = append(rows, heldRow{id: r.Text(0), channel: r.Text(1), project: r.Text(2), driver: r.Text(3), harness: r.Text(4),
+			credential: r.Text(5), mode: r.Text(6), reach: r.Text(7), model: r.Text(8), effort: r.Text(9), startedAt: r.Text(10),
+			esid: r.Text(11)})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	ids := []string{}
+	for _, r := range rows {
+		l, err := s.heldSession(ctx, r)
+		if err != nil {
+			return ids, err
+		}
+		s.mu.Lock()
+		s.live[r.id] = l
+		s.mu.Unlock()
+		if s.cfg.Started != nil {
+			s.cfg.Started(r.id)
+		}
+		ids = append(ids, r.id)
+	}
+	return ids, nil
+}
+
+// heldSession builds one held entry from its row and the store's other records.
+func (s *Service) heldSession(ctx context.Context, r heldRow) (*live, error) {
+	ch, ok := s.cfg.Channel(r.channel)
+	if !ok {
+		// The driver alone may end it: an empty list permits nobody.
+		ch = Channel{ID: r.channel, Project: r.project, ProjectName: r.project, Reach: r.reach, Mode: r.mode, Harness: r.harness,
+			Roles: Roles{Answer: []string{policy.RoleDriver}}}
+	}
+	reg, found, err := s.registration(r.driver)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		reg = registration{User: r.driver, Name: r.driver}
+	}
+	repo := ch.Repo
+	if s.cfg.ProjectRepo != nil {
+		if pr, ok := s.cfg.ProjectRepo(r.project); ok {
+			repo = pr
+		}
+	}
+	ch.Repo = repo
+	gs := git.Session{Root: s.cfg.Root, ID: r.id, Instance: s.cfg.Instance, Canonical: repo.Canonical,
+		Remote: orDefault(repo.Remote, "origin"), DefaultBranch: orDefault(repo.DefaultBranch, "main")}
+	l := &live{id: r.id, ch: ch, mode: r.mode, model: r.model, reach: r.reach, driver: reg, credential: r.credential, git: gs,
+		tree: gs.Dir() + "/tree", home: gs.Dir() + "/home", idleTimeout: ch.IdleTimeout, promptTimeout: ch.PromptTimeout,
+		log: newEventLog(), held: true, state: StateInterrupted, engineSessionID: r.esid, startedAt: r.startedAt,
+		participants: map[string]string{}, calls: map[string]call{}, answers: map[string]answerRec{},
+		baselines: map[string]map[string]engine.ModelUsage{}, turnModels: map[string]int64{}, sessionModels: map[string]int64{}}
+	treeState := ""
+	q := s.cfg.Store
+	if err := q.Query("SELECT path, state FROM worktree WHERE session_id = ? AND parent_path IS NULL ORDER BY created_at LIMIT 1",
+		[]store.Value{store.Text(r.id)}, func(row *store.Row) error {
+			l.tree, treeState = row.Text(0), row.Text(1)
+			return nil
+		}); err != nil {
+		return nil, err
+	}
+	if err := q.Query("SELECT count(*) FROM turn WHERE session_id = ?", []store.Value{store.Text(r.id)}, func(row *store.Row) error {
+		l.turn = int(row.Int(0))
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if err := q.Query("SELECT user_id, role FROM participant WHERE session_id = ?", []store.Value{store.Text(r.id)},
+		func(row *store.Row) error {
+			l.participants[row.Text(0)] = row.Text(1)
+			return nil
+		}); err != nil {
+		return nil, err
+	}
+	// The summary's counts, as countUsageLocked keeps them: in is input plus cache reads and writes.
+	if err := q.Query(`SELECT model, sum(input_tokens + cache_read_tokens + cache_write_tokens), sum(output_tokens)
+FROM usage_record WHERE session_id = ? GROUP BY model`, []store.Value{store.Text(r.id)}, func(row *store.Row) error {
+		in, out := row.Int(1), row.Int(2)
+		l.sessIn += in
+		l.sessOut += out
+		l.sessionModels[row.Text(0)] += in + out
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	commits, missing := s.heldCommits(ctx, l, treeState)
+	kind := credentials.KindSubscription
+	if c, err := credentials.Show(q, r.credential); err == nil && c.Kind == credentials.KindAPIKey {
+		kind = credentials.KindAPIKey
+	}
+	chModel, _ := policy.ResolveModel(ch.Model)
+	l.log.add(Event{Time: s.stamp(), Type: EventSessionInterrupted, Summary: InterruptedRestart,
+		Start: &StartInfo{Channel: ch.ID, ProjectName: ch.ProjectName, Branch: gs.Branch(), Driver: reg.User, DriverName: reg.Name,
+			Mode: r.mode, ChannelMode: ch.Mode, Model: r.model, ChannelModel: chModel, Effort: r.effort, Reach: r.reach,
+			Credential: r.credential, CredentialKind: kind, IdleTimeout: IdleText(ch.IdleTimeout),
+			Answer: append([]string{}, ch.Roles.Answer...), Commits: commits, TreeMissing: missing}})
+	return l, nil
+}
+
+// heldCommits is a held session's commit count for its notice and whether its tree is missing:
+// with the ref gone (handed off already) the count is unknown; else, the ref present or the
+// canonical unreadable, a gone tree (its row removed, or the path absent) is missing and the
+// count unknown, as end's escape will find it; else Config.Commits', nil when it cannot be read.
+func (s *Service) heldCommits(ctx context.Context, l *live, treeState string) (*int, bool) {
+	_, _, ref, err := git.SessionTip(ctx, l.git)
+	if err == nil && !ref {
+		return nil, false
+	}
+	if treeGone(l.tree, treeState) {
+		return nil, true
+	}
+	if s.cfg.Commits == nil {
+		return nil, false
+	}
+	n, err := s.cfg.Commits(ctx, l.id)
+	if err != nil {
+		return nil, false
+	}
+	return n, false
+}
+
+// treeGone is whether a session's tree is gone: its worktree row says removed, or the path is
+// absent.
+func treeGone(tree, state string) bool {
+	if state == store.WorktreeRemoved {
+		return true
+	}
+	_, err := os.Stat(filepath.FromSlash(tree))
+	return errors.Is(err, fs.ErrNotExist)
 }
 
 // Counts are status's session line (05 Bot lifecycle).

@@ -121,6 +121,15 @@ func (s *Service) switchOpenLocked(l *live, act ActRequest, action string) error
 	return nil
 }
 
+// openCheck is switchOpenLocked taking l.mu itself: the closed check answer, interrupt, invite
+// and timeout run first of all their checks (ADR 0026), so nothing but end acts on a held
+// session and a closed session's refusal is session-closed whoever asks.
+func (s *Service) openCheck(l *live, act ActRequest, action string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return s.switchOpenLocked(l, act, action)
+}
+
 // Answer is SessionService.answer: the pending call's decision, by a participant the channel
 // lets answer, then the turn resumes (03 Data flow, Prompt mode). allow-session also adds the
 // tool to BROODFORGE_SESSION_ALLOW for the session's later calls (04, Owner 6).
@@ -137,6 +146,9 @@ func (s *Service) Answer(ctx context.Context, req AnswerRequest) (Submitted, err
 	}
 	l, who, err := s.acting(req.ActRequest)
 	if err != nil {
+		return Submitted{}, err
+	}
+	if err := s.openCheck(l, req.ActRequest, "answer"); err != nil {
 		return Submitted{}, err
 	}
 	if err := s.checkAnswerList(l, req.ActRequest, "answer"); err != nil {
@@ -210,6 +222,9 @@ func (s *Service) answerLocked(l *live, decision, decidedBy, actor, user, who, r
 func (s *Service) Interrupt(ctx context.Context, req ActRequest) (Event, error) {
 	l, _, err := s.acting(req)
 	if err != nil {
+		return Event{}, err
+	}
+	if err := s.openCheck(l, req, "interrupt"); err != nil {
 		return Event{}, err
 	}
 	if err := s.checkAnswerList(l, req, "interrupt"); err != nil {
@@ -324,6 +339,9 @@ func (s *Service) Invite(req InviteRequest) (Registration, error) {
 	if err != nil {
 		return Registration{}, err
 	}
+	if err := s.openCheck(l, req.ActRequest, "invite"); err != nil {
+		return Registration{}, err
+	}
 	if err := s.checkDriver(l, req.ActRequest, "invite"); err != nil {
 		return Registration{}, err
 	}
@@ -352,7 +370,9 @@ type EndRequest struct {
 // End is SessionService.end (03, End of session): a running turn is interrupted, a pending
 // call dropped, then the handoff. A refused handoff (bundle, verify, fetch, attribution) keeps
 // the session open, waiting for input, so the driver can have the commits amended; anything
-// else ends it, a failed push keeping the tree.
+// else ends it, a failed push keeping the tree. On a held interrupted session (ADR 0026) it is
+// the one action accepted: the escapes first (heldEscape), else the same handoff, a refusal
+// returning the session to interrupted.
 func (s *Service) End(ctx context.Context, req EndRequest) (git.Outcome, error) {
 	l, who, err := s.acting(req.ActRequest)
 	if err != nil {
@@ -376,9 +396,15 @@ const noGen = -1
 func (s *Service) end(ctx context.Context, l *live, actor, who, reason, summary string, idleGen int) (git.Outcome, error) {
 	l.mu.Lock()
 	switch l.state {
-	case StateEnded, StateInterrupted, StateEnding:
+	case StateEnded, StateEnding:
 		l.mu.Unlock()
 		return git.Outcome{}, &Error{CodeSessionClosed, l.id + " is " + l.state}
+	case StateInterrupted:
+		// Only a held session is ended, and never by the idle timer, which it does not run.
+		if !l.held || idleGen != noGen {
+			l.mu.Unlock()
+			return git.Outcome{}, &Error{CodeSessionClosed, l.id + " is " + l.state}
+		}
 	}
 	// The idle timer's end is checked under the same lock it acts in: a message or an answer
 	// since the tick (a new generation, or a turn running) means there was activity after all.
@@ -406,10 +432,27 @@ func (s *Service) end(ctx context.Context, l *live, actor, who, reason, summary 
 		}
 	}
 	var out git.Outcome
+	if before == StateInterrupted {
+		if esc, ok := s.heldEscape(ctx, l); ok {
+			s.closeSession(l, actor, reason, before, esc.Outcome, summary, esc, who)
+			return esc, nil
+		}
+	}
 	if s.cfg.Handoff != nil {
 		out, err := s.cfg.Handoff(ctx, l.id)
 		if err != nil {
 			var ge *git.Error
+			if errors.As(err, &ge) && strings.HasPrefix(ge.Code, CodeHandoffState) && before == StateInterrupted {
+				// Refused on a held session: back to interrupted, no timer, no new turn; no agent
+				// can amend the commits, so 04's sentence names the owner's retry.
+				l.mu.Lock()
+				l.state = StateInterrupted
+				_ = s.setState(l.id, StateInterrupted)
+				text := strings.TrimSuffix(ge.Message, ".") + ". " + HeldHandoffSentence(l.id)
+				l.log.add(Event{Time: s.stamp(), Type: EventHandoffRefused, Result: ge.Code, Summary: firstRunes(ge.Message, summaryRunes), Text: text})
+				l.mu.Unlock()
+				return out, err
+			}
 			if errors.As(err, &ge) && strings.HasPrefix(ge.Code, CodeHandoffState) {
 				// Refused: the session stays open; the driver may amend and end again. An idle
 				// end tries once: the timer waits for the next activity, not the next period.
@@ -432,6 +475,60 @@ func (s *Service) end(ctx context.Context, l *live, actor, who, reason, summary 
 	out.Outcome = git.OutcomeNone
 	s.closeSession(l, actor, reason, before, out.Outcome, summary, out, who)
 	return out, nil
+}
+
+// OutcomeTreeMissing is the end of a held session whose tree is gone while refs/sessions/<id> is
+// still in the canonical: no handoff, the ref left for the owner (ADR 0026).
+const OutcomeTreeMissing = "tree-missing"
+
+// HeldHandoffSentence ends a refused handoff's text on a held session (04, Failure flows:
+// handoff-refused, interrupted session; owner-approved 2026-10-24).
+func HeldHandoffSentence(id string) string {
+	return "The session was interrupted, so no agent can amend them; the owner can fix the tree and retry with broodforge worktree handoff " + id + "."
+}
+
+// heldEscape is end's two escapes on a held session, in 05's order, so every held session can be
+// ended (ADR 0026): refs/sessions/<id> gone from the canonical (a worktree handoff finished
+// earlier) ends with the outcome that handoff recorded in end_outcome, a URL as pull-request with
+// the URL, a branch as pushed, null as none; else the tree gone ends tree-missing, the ref
+// present or the canonical unreadable (a handoff would refuse the bundle on every attempt).
+// Neither runs a handoff; the commit count is unknown, the remote and the mode the project's.
+// false when neither applies: then the handoff runs and reports what it finds.
+func (s *Service) heldEscape(ctx context.Context, l *live) (git.Outcome, bool) {
+	mode := l.ch.Repo.Handoff
+	_, _, ref, err := git.SessionTip(ctx, l.git)
+	if err == nil && !ref {
+		var stored *string
+		if err := s.cfg.Store.Query("SELECT end_outcome FROM session WHERE id = ?", []store.Value{store.Text(l.id)},
+			func(r *store.Row) error {
+				if !r.IsNull(0) {
+					v := r.Text(0)
+					stored = &v
+				}
+				return nil
+			}); err != nil {
+			return git.Outcome{}, false
+		}
+		out := git.Outcome{Outcome: git.OutcomeNone, Mode: mode, Remote: l.git.Remote, Commits: CommitsUnknown}
+		switch {
+		case stored == nil:
+		case strings.Contains(*stored, "://"):
+			// The handoff records a URL in pull-request mode and the branch in push mode.
+			out.Outcome, out.Mode, out.URL = git.OutcomePullRequest, git.ModePullRequest, stored
+		default:
+			out.Outcome, out.Mode = git.OutcomePushed, git.ModePush
+		}
+		return out, true
+	}
+	state := ""
+	if err := s.cfg.Store.Query("SELECT state FROM worktree WHERE session_id = ? AND parent_path IS NULL ORDER BY created_at LIMIT 1",
+		[]store.Value{store.Text(l.id)}, func(r *store.Row) error { state = r.Text(0); return nil }); err != nil {
+		return git.Outcome{}, false
+	}
+	if treeGone(l.tree, state) {
+		return git.Outcome{Outcome: OutcomeTreeMissing, Mode: mode, Remote: l.git.Remote, Commits: CommitsUnknown}, true
+	}
+	return git.Outcome{}, false
 }
 
 // endCause is the reason a dropped call or message names.

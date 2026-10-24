@@ -166,18 +166,11 @@ func (s *SameAccount) WorktreeCreate(w Worktree) error {
 // create`); a session with no commits since the base writes nothing, removes a stale bundle and
 // reports zero.
 func (s *SameAccount) WorktreeBundle(w Worktree) (Bundle, error) {
-	if err := checkWorktree(w); err != nil {
-		return Bundle{}, err
-	}
-	tree, rng := w.Tree(), w.Base+"..refs/heads/"+w.Branch
-	out, err := runGit(CodeBundle, "-C", tree, "rev-list", "--count", rng)
+	n, err := s.WorktreeCommits(w)
 	if err != nil {
 		return Bundle{}, err
 	}
-	n, err := strconv.Atoi(strings.TrimSpace(out))
-	if err != nil {
-		return Bundle{}, &Error{CodeBundle, "rev-list --count: " + err.Error()}
-	}
+	tree, rng := w.Tree(), commitRange(w)
 	path := w.BundlePath()
 	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return Bundle{}, &Error{CodeBundle, err.Error()}
@@ -189,6 +182,27 @@ func (s *SameAccount) WorktreeBundle(w Worktree) (Bundle, error) {
 		return Bundle{}, err
 	}
 	return Bundle{Path: path, Commits: n}, nil
+}
+
+// commitRange is the session's commits since the base, <base>..refs/heads/<branch>.
+func commitRange(w Worktree) string { return w.Base + "..refs/heads/" + w.Branch }
+
+// WorktreeCommits counts the session's commits since the base (`git -C <sess>/tree rev-list
+// --count <base>..<branch>`), the count WorktreeBundle bundles, and writes nothing: a held
+// session's notice reads it after a restart (ADR 0026). A tree that is gone is an error.
+func (s *SameAccount) WorktreeCommits(w Worktree) (int, error) {
+	if err := checkWorktree(w); err != nil {
+		return 0, err
+	}
+	out, err := runGit(CodeBundle, "-C", w.Tree(), "rev-list", "--count", commitRange(w))
+	if err != nil {
+		return 0, err
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(out))
+	if err != nil {
+		return 0, &Error{CodeBundle, "rev-list --count: " + err.Error()}
+	}
+	return n, nil
 }
 
 // prePushHook is the hook under HooksDir that refuses every push from a session tree (ADR 0025,

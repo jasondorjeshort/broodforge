@@ -22,6 +22,7 @@ import (
 type View struct {
 	mu     sync.Mutex
 	closed bool // session-ended or session-interrupted handled: the header keeps no components
+	held   bool // opened by a held session's session-interrupted (ADR 0026): no header of its own
 
 	id     string
 	venue  string // the private channel; in a dry run its id is the session id
@@ -184,11 +185,19 @@ func (v *View) Handle(ev session.Event) {
 		if msg == "" {
 			msg = ev.Summary
 		}
+		if v.held {
+			v.create(handoffRefusedHeldText(msg), nil)
+			break
+		}
 		v.create(handoffRefusedText(msg), nil)
 	case session.EventSessionEnded:
 		v.sessionEnded(ev, t)
 	case session.EventSessionInterrupted:
-		// A restart's interruption posts nothing in 04; the header is not re-synced after it.
+		if ev.Start != nil {
+			v.heldOpening(ev)
+			break
+		}
+		// The bot stopping posts nothing in 04; the header is not re-synced after it.
 		v.closed = true
 	case session.EventMessageQueued, session.EventMessageDropped, session.EventParticipantInvited:
 		// The hourglass on a queued message is the gateway's (it holds the message's Discord
@@ -220,6 +229,16 @@ func (v *View) started(ev session.Event) {
 	v.header = v.newID()
 	v.post(Post{Op: OpCreate, MessageID: v.header, Pinned: true, Body: headerText(v.id, v.start, v.hdr), Buttons: v.endButton(),
 		Selects: headerSelects(v.id, v.hdr)})
+}
+
+// heldOpening is a held session's first event after a restart (ADR 0026): the start facts,
+// lobby and venue (a dry run's is the session id; live, the sweep bound the channel), the View
+// closed, since the pinned header's message id went with the old process (its menus and End
+// session stay: point 6), and 04's interrupted notice in the venue (03 Startup 10).
+func (v *View) heldOpening(ev session.Event) {
+	v.start, v.lobby, v.closed, v.held = ev.Start, ev.Start.Channel, true, true
+	v.hdr.apply(ev)
+	v.create(interruptedNoticeText(ev.Start.Commits, ev.Start.TreeMissing), nil)
 }
 
 // editHeader edits the pinned header in place from the current state, with its menus and the
@@ -295,8 +314,9 @@ type headerState struct {
 }
 
 func (m *headerState) apply(ev session.Event) {
-	// Five types of many, so not a switch the exhaustive check would make list them all.
-	if ev.Type == session.EventSessionStarted && ev.Start != nil {
+	// Five types of many, so not a switch the exhaustive check would make list them all. A held
+	// session's session-interrupted carries the start facts as session-started does (ADR 0026).
+	if (ev.Type == session.EventSessionStarted || ev.Type == session.EventSessionInterrupted) && ev.Start != nil {
 		m.idle = ev.Start.IdleTimeout
 		m.mode, m.modeWhy = ev.Start.Mode, "this channel's default"
 		if ev.Start.Mode != ev.Start.ChannelMode {

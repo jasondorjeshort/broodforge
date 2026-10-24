@@ -56,10 +56,12 @@ type Backend interface {
 	// MCPConfig is the empty MCP map every engine process names (ADR 0022 companion).
 	MCPConfig() string
 	// WorktreeCreate clones the canonical into the session's tree on the session branch;
-	// WorktreeBundle writes the session's bundle of its commits since the base; WorktreeRemove
-	// deletes the tree and the bundle (worktree.go; ADR 0022 companion).
+	// WorktreeBundle writes the session's bundle of its commits since the base; WorktreeCommits
+	// counts those commits without writing the bundle (a held session's notice, ADR 0026);
+	// WorktreeRemove deletes the tree and the bundle (worktree.go; ADR 0022 companion).
 	WorktreeCreate(w Worktree) error
 	WorktreeBundle(w Worktree) (Bundle, error)
+	WorktreeCommits(w Worktree) (int, error)
 	WorktreeRemove(session string) error
 	// WorktreePrePush reads the session tree's core.hooksPath through git, as the other
 	// worktree operations run it, and reports whether it is HooksDir with its pre-push hook

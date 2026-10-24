@@ -24,11 +24,12 @@ import (
 	"github.com/jasondorjeshort/broodforge/internal/session"
 )
 
-// The live gateway (P12; 03 Startup 9 and 10; 05-debug-interface-discord.md): disgo's gateway
-// client for the events and its REST client for every call, behind the handlers `discord
-// inject` drives and the sink a dry run writes to the outbox. Every post still goes through the
-// mask and the coalescer, lands in the outbox (so `session outbox` reads a live instance too),
-// and is then sent by send. Resume, reconnects and the per-route rate limits are disgo's.
+// The live gateway (P12; 03 Startup 9 and 10; 05-debug-interface-discord-live.md): disgo's
+// gateway client for the events and its REST client for every call, behind the handlers
+// `discord inject` drives and the sink a dry run writes to the outbox. Every post still goes
+// through the mask and the coalescer, lands in the outbox (so `session outbox` reads a live
+// instance too), and is then sent by send. Resume, reconnects and the per-route rate limits are
+// disgo's.
 
 // restAPI is every REST call the live adapter makes, in one place: the surface a swap to
 // arikawa must cover (ADR 0023). disgo's rest.Rest satisfies it; the tests' fake records.

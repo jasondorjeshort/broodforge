@@ -199,7 +199,7 @@ type bundleResult struct {
 	Commits int    `json:"commits"`
 }
 
-func encodeWorktree[T hookLine | commitLine | privacyLine | attributionResult | bundleResult | git.Outcome](v T) (json.RawMessage, error) {
+func encodeWorktree[T hookLine | commitLine | privacyLine | attributionResult | bundleResult | git.Outcome | endLine](v T) (json.RawMessage, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)
@@ -548,6 +548,21 @@ func (s *WorktreeService) config() *config.Config {
 		return s.Current()
 	}
 	return s.Config
+}
+
+// Commits is session id's commit count over its base, read through the backend from its tree
+// without a bundle (git.Commits): the session service's Config.Commits, a held session's notice
+// after a restart (ADR 0026).
+func (s *WorktreeService) Commits(ctx context.Context, id string) (*int, error) {
+	sess, err := s.load(id)
+	if err != nil {
+		return nil, err
+	}
+	n, err := git.Commits(ctx, s.Backend, sess.git)
+	if err != nil {
+		return nil, err
+	}
+	return &n, nil
 }
 
 // Handoff is the handoff of session id as `worktree handoff` runs it, for the end of session

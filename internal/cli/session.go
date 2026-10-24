@@ -440,7 +440,7 @@ func SessionHandlers(svc *session.Service) func(*control.Registry) {
 				}
 				return nil, sessionError(err)
 			}
-			return encodeWorktree(out)
+			return encodeWorktree(endLineOf(out))
 		})
 		reg.Handle("session.show", func(ctx context.Context, call *control.Call) (json.RawMessage, error) {
 			var a struct {
@@ -634,6 +634,31 @@ var sessionEnd = Command{
 	}, actingFlags...),
 	EventColumns: commitColumns,
 	Columns:      []string{"outcome", "remote", "refspec", "commits", "url", "request"},
+}
+
+// endLine is session end's line: the handoff's outcome as `worktree handoff` prints it, its
+// commits null (`-` on the text line) when one of end's escapes ended a held session and the
+// count is unknown (ADR 0026; git.Outcome's -1, session.CommitsUnknown).
+type endLine struct {
+	Outcome     string           `json:"outcome"`
+	Mode        string           `json:"mode"`
+	Remote      string           `json:"remote"`
+	Refspec     string           `json:"refspec,omitempty"`
+	Commits     *int             `json:"commits"`
+	URL         *string          `json:"url"`
+	Request     *git.PullRequest `json:"request"`
+	Removed     bool             `json:"removed"`
+	RemoveError string           `json:"removeError,omitempty"`
+}
+
+func endLineOf(o git.Outcome) endLine {
+	l := endLine{Outcome: o.Outcome, Mode: o.Mode, Remote: o.Remote, Refspec: o.Refspec, URL: o.URL, Request: o.Request,
+		Removed: o.Removed, RemoveError: o.RemoveError}
+	if o.Commits != session.CommitsUnknown {
+		n := o.Commits
+		l.Commits = &n
+	}
+	return l
 }
 
 // sessionReachReport is `broodforge session reach-report <id>`: the policy table's column for

@@ -105,6 +105,10 @@ func (s *Service) SetIdleTimeout(req TimeoutRequest) (Event, error) {
 	if err != nil {
 		return Event{}, err
 	}
+	// The closed check before the driver's (ADR 0026): a closed session refuses whoever asks.
+	if err := s.openCheck(l, req.ActRequest, "timeout"); err != nil {
+		return Event{}, err
+	}
 	if err := s.checkDriver(l, req.ActRequest, "timeout"); err != nil {
 		return Event{}, err
 	}

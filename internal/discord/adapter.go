@@ -394,6 +394,10 @@ func (a *Adapter) venueRefusal(sess string, err error) error {
 	case session.CodeUnregistered:
 		return refusal(se.Code, notRegisteredText)
 	case session.CodeSessionClosed:
+		// The state from the session's row, not the refusal's text (ADR 0026, point 5).
+		if d, err := a.svc.Show(sess); err == nil && d.State == session.StateInterrupted {
+			return refusal(se.Code, interruptedRefusalText)
+		}
 		return refusal(se.Code, sessionEndedText)
 	case session.CodeRefused:
 		if strings.HasPrefix(se.Message, "contribute ") {
@@ -719,7 +723,7 @@ func (a *Adapter) Transcript(id string) (string, error) {
 	}
 	v := NewView(id, ViewConfig{Name: a.name})
 	for _, ev := range evs {
-		if ev.Type == session.EventSessionStarted {
+		if ev.Type == session.EventSessionStarted || (ev.Type == session.EventSessionInterrupted && ev.Start != nil) {
 			v.start = ev.Start
 		}
 	}

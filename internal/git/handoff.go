@@ -72,6 +72,34 @@ func BundleStep(ctx context.Context, b spawn.Backend, s Session) (spawn.Bundle, 
 	return bundle, base, nil
 }
 
+// Commits is the session's commit count over its base, read through the backend from its tree
+// (spawn's WorktreeCommits) without writing a bundle: a held session's notice after a restart
+// (ADR 0026). A canonical without refs/sessions/<id> is already-handed-off, as BundleStep's; a
+// canonical that cannot be read is session-ref (SessionTip's).
+func Commits(ctx context.Context, b spawn.Backend, s Session) (int, error) {
+	_, _, found, err := SessionTip(ctx, s)
+	if err != nil {
+		return 0, err
+	}
+	if !found {
+		return 0, &Error{Code: CodeAlreadyHandedOff,
+			Message: s.Canonical + " holds no " + SessionRef(s.ID) + ": the session was handed off or never started"}
+	}
+	base, err := Base(ctx, s)
+	if err != nil {
+		return 0, err
+	}
+	n, err := b.WorktreeCommits(s.Worktree(base))
+	if err != nil {
+		var se *spawn.Error
+		if errors.As(err, &se) {
+			return 0, &Error{Code: CodeRefusedBundle, Message: se.Message}
+		}
+		return 0, err
+	}
+	return n, nil
+}
+
 // Collect runs steps 1 to 3 (ADR 0022 companion, Handoff at session end): worktree-bundle,
 // then in the canonical `git bundle verify` and `git fetch <bundle>
 // +<session branch>:refs/sessions/<id>`, then Check. The fetch is forced because the driver may

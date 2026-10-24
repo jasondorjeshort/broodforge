@@ -86,7 +86,21 @@ type StartInfo struct {
 	CredentialKind string   `json:"credentialKind"`
 	IdleTimeout    string   `json:"idleTimeout"` // 04's words: "60 minutes", "90 seconds" or "never"
 	Answer         []string `json:"answer"`
+	// Commits and TreeMissing are set on a held session's opening session-interrupted only
+	// (ADR 0026): the tree's commit count over its base, nil when it cannot be read, and whether
+	// the tree is gone while refs/sessions/<id> is still in the canonical. The notice reads both.
+	Commits     *int `json:"commits,omitempty"`
+	TreeMissing bool `json:"treeMissing,omitempty"`
 }
+
+// The summaries of a session-interrupted event, its reason (05-debug-interface-session.md):
+// the bot stopping, reconciliation at start for a session never held in memory, and a held
+// session's first event after a restart (ADR 0026).
+const (
+	InterruptedShutdown       = "shutdown"
+	InterruptedReconciliation = "reconciliation"
+	InterruptedRestart        = "restart"
+)
 
 // TurnUsage is a turn's footer (04, The turn loop): the turn's tokens over every engine process
 // it ran (in counts cache reads and writes), the session's so far, the model and the mode the
@@ -103,7 +117,9 @@ type TurnUsage struct {
 	Exit       string `json:"exit,omitempty"`
 }
 
-// EndInfo is the summary's facts (04, Ending a session).
+// EndInfo is the summary's facts (04, Ending a session). Commits is the count handed off, or
+// CommitsUnknown when a held session ends by one of end's escapes (ADR 0026), whose commits were
+// handed off earlier or not at all.
 type EndInfo struct {
 	By        string   `json:"by"` // who ended it, by name; "" for the idle timeout
 	Reason    string   `json:"reason"`
@@ -119,6 +135,9 @@ type EndInfo struct {
 	Author    string   `json:"author"`
 	CoAuthors []string `json:"coAuthors"`
 }
+
+// CommitsUnknown is EndInfo.Commits for an end by an escape: the count is not known.
+const CommitsUnknown = -1
 
 // eventLog is one session's events in memory: appended by the session's own goroutines,
 // read by any number of followers. A follower never blocks the writer and never misses an

@@ -395,6 +395,35 @@ func TestHandoffTwiceIsAlreadyHandedOff(t *testing.T) {
 	}
 }
 
+// TestCommits: the tree's count over its base, no bundle written; a handed-off session (ref
+// gone) is already-handed-off (ADR 0026, a held session's notice).
+func TestCommits(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	if n, err := git.Commits(ctx, f.backend, f.sess); err != nil || n != 0 {
+		t.Fatalf("before a commit: %d %v", n, err)
+	}
+	gittest.Commit(t, gittest.Driver, nil, f.tree, "a.txt", "a\n", msg("one", opus))
+	if n, err := git.Commits(ctx, f.backend, f.sess); err != nil || n != 1 {
+		t.Fatalf("after one: %d %v", n, err)
+	}
+	if exists(filepath.Join(f.sess.Dir(), "out.bundle")) {
+		t.Error("Commits wrote a bundle")
+	}
+	if _, err := f.handoff(git.ModePush).Run(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	var ge *git.Error
+	if _, err := git.Commits(ctx, f.backend, f.sess); !errors.As(err, &ge) || ge.Code != git.CodeAlreadyHandedOff {
+		t.Errorf("after the handoff: %v", err)
+	}
+	moved := f.sess
+	moved.Canonical = filepath.ToSlash(filepath.Join(f.root, "moved"))
+	if _, err := git.Commits(ctx, f.backend, moved); !errors.As(err, &ge) || ge.Code != git.CodeSessionRef {
+		t.Errorf("an unreadable canonical: %v", err)
+	}
+}
+
 func TestAskpassAnswersOnlyUsernameAndPassword(t *testing.T) {
 	lookup := func(string) (string, bool) { return "tok", true }
 	for _, p := range []string{"Are you sure you want to continue connecting (yes/no)? ", "Enter passphrase for key 'k': ", ""} {
