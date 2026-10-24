@@ -73,8 +73,8 @@ may switch (R-28); state; started and ended times; the outcome of the end-of-ses
 pushed branch name or a pull-request URL). States: starting, waiting for input, running a turn,
 waiting for a permission answer, ending, ended, interrupted. Relations: one worktree; one
 backend; participants; turns in order; permission decisions; usage records; audit events; the
-commits it made. Model and effort change mid-way from the next turn (answered: 04, Model and
-effort, 2026-10-22). Open: changing harness mid-way; outliving its venue (deleted by hand).
+commits it made. Model and effort change mid-way from the next turn (answered:
+`04-ux-session-controls.md`, Model and effort, 2026-10-22). Open: changing harness mid-way; outliving its venue (deleted by hand).
 
 ## Participant, driver and contributor
 
@@ -121,7 +121,8 @@ list of capabilities is the harness-adapter proposal's to fix.
 A backend is one harness with one credential; it is what a session actually runs on. Identity:
 the pair. It is not stored on its own: a user has a default (the credential, with the harness it
 implies), a channel has a default harness, and a session records the pair it used. Model and
-effort belong to the session, defaulted by the channel (answered: 04, Model and effort, 2026-10-22).
+effort belong to the session, defaulted by the channel (answered: `04-ux-session-controls.md`, Model and
+effort, 2026-10-22).
 
 ## Worktree
 

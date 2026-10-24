@@ -203,7 +203,7 @@ The vision's open questions, with the requirements they touch:
    2026-10-14 in `04-ux.md`.
 4. The author rule when several people drove: R-33. Answered 2026-10-14 in `04-ux.md`.
 5. Mode, model and effort switching from Discord: R-28, R-29. Answered 2026-10-14 in `04-ux.md`;
-   R-29 promoted to `v1` on 2026-10-22, after the first live run (04, Model and effort).
+   R-29 promoted to `v1` on 2026-10-22, after the first live run (`04-ux-session-controls.md`, Model and effort).
 
 Also the owner's, because they decide what is spent: the cap thresholds of R-46, when it comes.
 

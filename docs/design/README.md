@@ -14,6 +14,7 @@ Planned documents (added as we go):
 | `03-hook-contract.md` | Companion to 03: how the engine runs the PreToolUse hook and reads its exit codes, the hook environment, path checks, the policy table per reach and mode, the decision order |
 | `04-ux.md` | The Discord flows, venues, buttons and message wording, Ticket Tool as the reference; a proposal with every owner decision marked and collected at the end |
 | `04-ux-session-start.md` | Sibling of 04: the header the agent's prompt opens with (`session show --header`) and the not-started flow when a project hook's runtime is missing (ADR 0025) |
+| `04-ux-session-controls.md` | Sibling of 04: the driver's switches in the venue (policy mode, model and effort, the idle timeout) and the pinned header's three select menus for model, effort and mode |
 | `05-debug-interface.md` | How agents drive, observe, and reproduce every feature from a terminal |
 | `05-debug-interface-discord.md` | Companion to 05: the Discord adapter's drive, observe, reproduce and isolation, including the `discord` commands |
 | `05-debug-interface-git.md` | Companion to 05: the git handoff's drive, observe, reproduce and isolation, including `worktree check\|bundle\|handoff`, the askpass helper and the commit-msg and pre-push hooks |
@@ -23,6 +24,7 @@ Planned documents (added as we go):
 | `07-spike-plan.md` | The spike that tests claims C25 to C39 of ADRs 0020 and 0022 before application code: per claim the host, the owner step first, the commands, the evidence, the fallback; the throwaway `spike/` code and the fixtures kept; cost; exit criterion |
 | `07-spike-droplet.md` | Companion to 07: the droplet half of the spike: packages and layout under the instance root, the bwrap route for setup and hook mode, and the claims that need the two users (C30 to C35, C38, C29, the droplet repeats of C27 and C39) |
 | `08-implementation-plan.md` | The ordered coder passes for `cmd/` and `internal/`, from the toolchain to the held Linux backend: per pass what it implements, the files, the proof command, dependencies, size, and whether the owner sees its output; the facts the findings hold that the design docs do not |
+| `08-implementation-plan-discord.md` | Companion to 08: the Discord passes P11 to P12b (the dry-run renderer and outbox, the live gateway, model and effort from Discord, the header's select menus), under 08's conventions |
 | `08-implementation-plan-session-workflow.md` | Companion to 08: the passes P15 to P19 that follow ADR 0025 (the session never pushes, the push scan, the workflow copy and probe, the hook child chain, injection in a session), under 08's conventions |
 | `proposals/` | Draft proposals for major choices; each gets a critic pass before becoming an ADR |
 | `decisions/` | Architecture decision records (ADRs), one per decision |

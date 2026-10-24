@@ -22,8 +22,8 @@ writes to the outbox; `broodforge discord render --events <jsonl> [--clock fake]
 `SessionEvent`s into the renderer alone and prints the outbox lines with the virtual time of each
 create or edit, so the one-per-second coalescer (R-21) is observable without waiting. Inbound
 without Discord: `broodforge discord inject message --channel <id> --user <id> --roles <ids>
-"<text>"` and `discord inject click --custom-id <id> --user <id> --roles <ids>` (any custom id
-of 03: an answer, `stop`, `end` or `start`), and `discord inject command` for a slash command,
+"<text>"` and `discord inject click --custom-id <id> [--value <v>] --user <id> --roles <ids>` (any custom id
+of 03: an answer, `stop`, `end`, `start`, or a header menu's with its pick as `--value`), and `discord inject command` for a slash command,
 run the adapter's own handlers (command parsing, the
 key-paste scan, role check, custom-id parsing) with the roles given in place of a guild lookup;
 all are refused on a live instance.
@@ -76,7 +76,8 @@ Observe. `session outbox <id> [--channel <id>] [--follow] [--since <seq>] [--lim
 <message id>  <length>  <first line>`: `channel` creates the venue (`#s0001-<first name>`),
 `delete` is 04's delete-and-replace (the final content is created first, then the working
 messages deleted), `attach` puts `<id>.md` on the project channel's summary. Times are UTC to
-the millisecond. `--json` adds the body, the buttons with their custom ids, `pinned` and
+the millisecond. `--json` adds the body, the buttons with their custom ids, the header's select menus
+(`selects`, The header's menus below), `pinned` and
 `payload`, the request body disgo builds for it (`MessageCreate` or `MessageUpdate`); the control
 wire escapes `<` and `>` in `--json` output as JSON's unicode escapes (backslash, `u003c`),
 so match a mention or an arrow in text mode. `--channel <id>` shows every post to one channel,
@@ -147,14 +148,76 @@ Efforts: low, medium, high, max.`) before any turn starts; nothing unknown reach
 service side (`SetModel`, `SetEffort`, the events, the session row) is `05-debug-interface-session.md`'s.
 The header's parenthesis is `this channel's default`, `chosen at start` or `from turn <n>`; `Model:
 the engine's own.` when nothing set it; `Effort:` only once set; the renderer edits the pinned
-header in place on a `model-changed` or `effort-changed` event.
+header in place on a `model-changed`, `effort-changed` or, from P12b, `mode-changed` event.
 Observe. `session show`, `session tail`, `session outbox` (an `edit` of the header's message id),
 `audit --kind model-changed`, the fake's `received-<n>.json` (`model`, `effort` of the `TurnRequest`).
-Reproduce. P12a's Proof (`08-implementation-plan.md`): `"/session start model:sonnet"` on `--channel
+Reproduce. P12a's Proof (`08-implementation-plan-discord.md`): `"/session start model:sonnet"` on `--channel
 100`, then `"/model fable"` and `"/model gpt"` (refused `bad-args`) on `--channel s0001`.
 Isolation. Dry run; the fake records the flags and runs no model. Effort is the coder's check first
 (`internal/engine/claudecode.go`, `Args`): without an engine flag for it, the effort commands and
 column are left out of the pass and the docs' effort lines wait.
+
+## The header's menus (P12b)
+
+Drive. The header's three select menus (`04-ux-session-controls.md`, The header's menus) carry the custom
+ids `bf:<session id>:model`, `bf:<session id>:effort` and `bf:<session id>:mode`, 03's forms parsed by the
+one function; the value picked travels in the interaction's `values`, never in the id. Option values are what
+the slash commands' choice lists take: a model alias, a level of `policy.Efforts`, `asks-first` or
+`acts-freely`. The model menu's default is the alias of the map entry the session's model belongs to (a
+dated id belongs to its prefix's entry, as `policy.ModelDisplayName` reads it); an id no entry matches marks
+none and sets the `Model: <id>` placeholder. From a terminal: `discord inject click --custom-id
+bf:s0001:model --value sonnet --user 1001 --roles 10`; `--value` is the one value picked, required with a
+menu's id and `bad-args` with a button's. The handler is the slash command's branch (`SetModel`, `SetEffort`,
+`SetMode`, shared with `slash`), so the reply is the same `none  model from turn <n>: <id>` (`effort from
+turn`, `mode from turn` likewise); a value policy does not know, which inject can send and Discord cannot, is
+`bad-args` with 04's `Not a model:` or `Not an effort:` text, a mode value outside the two `bad-args`; a picker
+who is not the driver gets the service's refusal (`model needs the driver, <name>`), audited `action-refused`.
+The adapter's own refusals of a pick (`bad-args`, a bad custom id) are audited with the action `click`, the
+route the input came by, as every component refusal is (`start` for the panel's button); the shared function
+takes the route's action name, so the typed form keeps `command`. The service's refusals name the operation
+(`model`, `effort`, `mode`) on either route, as `checkDriver` writes them. A pick on a session that is ending,
+ended or interrupted is the service's `session-closed` refusal (`05-debug-interface-session.md`, Session
+lifecycle), which the adapter answers with 04's `This session has ended.`; nothing is re-sent.
+After a refused pick on a live session the header is edited unchanged, so the picker's client drops the pick:
+the adapter keeps a `views` map, session id to `View`, from `SessionStarted` until that session's follow
+returns (the end or the interruption rendered; the entry deleted under the adapter's lock before `Done`), and
+calls `View.Resync()`, which under the View's own lock, the one `Handle` holds, posts an `OpEdit` of the header
+from the View's `start` and `hdr`, the menus from `headerSelects` and the `End session` button, through the
+View's `post` (the mask, then the coalescer); a View that has handled `session-ended` or
+`session-interrupted` does nothing. Why: `Handle` and `Resync` share one lock, so the re-sync either precedes
+the end's edit in the coalescer's queue, where the end's components-free edit merges over it, or sees the
+ended flag and is skipped; built outside the View from `svc.Events`, as `/model`'s query is, a late re-sync
+could put the menus and the button back on an ended header. Live, a pick is a component
+interaction whose data is a string select's `Values`: acknowledged with the deferred update a button gets,
+the refusal as the ephemeral follow-up; a successful pick posts nothing of its own, since the event's `From
+the next turn:` line and the header edit are the renderer's. Every header create and edit carries the three
+menus from `headerState`, and a `mode-changed` event edits the header as a `model-changed` does; the
+`session-ended` event edits the header once more with no components at all, and the coalescer's merge of an
+edit into a queued create or edit copies `Selects` with `Body` and `Buttons`, so a switch inside the start's
+second and an end inside a switch's second both show the later components. Two client behaviours are
+assumed, not observed: that an edit whose components equal the shown ones resets a picker's displayed
+choice, and that picking the option already marked default sends an interaction at all; both are the owner's
+step under `serve --discord live` (Isolation).
+Observe. `session outbox <id> --json`: the header's `create` and each `edit` carry `selects` (each with
+`customId`, `placeholder` and `options` of `label`, `value`, `default`), and `payload` the action rows disgo
+builds (one per menu, then the button row); after the end, the header's last `edit` has neither
+`selects` nor `buttons`. `session tail` (`model-changed`, `effort-changed`, `mode-changed`); `audit --kind
+model-changed|effort-changed|mode-changed`; `audit --kind action-refused` for a refused pick. `discord render
+--events` replays a switch event into the header's edit as before, the menus visible in a `--json` outbox only.
+Reproduce. `go test ./internal/discord -run 'TestSelect|TestCoalesceSelects|TestLive'`: a recorded
+string-select interaction fed to `onInteraction` against the fake `restAPI`, asserting the deferred update,
+then the header's `UpdateMessage` with the new default; for a non-driver, the ephemeral follow-up and an
+`UpdateMessage` of the unchanged header; a `Resync` and a `session-ended` on one View in either order, the
+header's last edit without components; the coalescer's two merges (a switch's edit into the queued create,
+the end's edit into a queued switch's edit); `tests/repro/full-session.sh` reads the header's `selects` from
+`session outbox --json`. An ended session's refusal: P12b's Proof (`08-implementation-plan-discord.md`).
+Isolation. Dry run. A real menu renders only under `serve --discord live`, where the owner picks and an agent
+reads `session outbox --json` and `session tail`. The owner's step there, once: a non-driver picks a model and
+says whether the menu returns to the true value after the unchanged edit; the driver picks the option already
+shown and the agent reads `session tail` for a `model-changed` (an interaction arrived) or nothing. A reset
+that fails makes the re-sync two edits a second apart, one with no components and one with them back, which
+re-creates them; a default pick that sends nothing changes no code, and 04's "a switch like any other" then
+describes what never arrives. Either result is a finding, and the assumption lines above are then rewritten.
 
 ## Idle timeout
 

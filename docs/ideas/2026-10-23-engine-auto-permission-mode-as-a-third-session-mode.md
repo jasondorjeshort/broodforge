@@ -16,7 +16,7 @@ A session has two permission modes today: `prompt` ("asks first": every call the
 not settle goes to Discord as an Allow/Deny prompt) and `policy` ("acts freely": Broodforge answers
 the prompts itself, inside the channel's reach). Both run the engine as `--permission-mode default`
 (`internal/engine/claudecode.go`, `Args`; `internal/policy`, `ModePrompt` and `ModePolicy`;
-`04-ux.md`, Policy mode). The owner wants the middle: the engine's own `auto` mode, where the
+`04-ux-session-controls.md`, Policy mode). The owner wants the middle: the engine's own `auto` mode, where the
 engine's classifier reviews the actions and only the risky ones ask.
 
 What exists. The pinned engine (2.1.309) lists `auto` among the `--permission-mode` choices, next to

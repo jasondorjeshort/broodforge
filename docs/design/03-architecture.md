@@ -88,9 +88,9 @@ the hook again and gets it. Other clicks are refused; no click in the prompt tim
 Parallel calls (ADR 0020, C28, observed for a deferred pair): the engine defers each, ends the turn
 naming only the last, and drops the rest; the model re-issues them after the resume, one prompt and
 one process each. The `tool-use` ids of that message with no result and not in `deferred` get rows `dropped`; 04 says so.
-Button custom ids, parsed by one function in `discord`:
-`bf:<session id>:<tool_use_id>:<allow|deny|allow-session>` for a permission answer,
-`bf:<session id>:stop`, `bf:<session id>:end`, and `bf:<channel id>:start` on the panel.
+Custom ids (buttons and the header's select menus), parsed by one function in `discord`:
+`bf:<session id>:<tool_use_id>:<allow|deny|allow-session>` for a permission answer, `bf:<session id>:stop`, `bf:<session id>:end`,
+`bf:<channel id>:start` on the panel, and `bf:<session id>:model|effort|mode` on the header's menus (the pick is the interaction's value, never in the id).
 
 ## The engine adapter
 

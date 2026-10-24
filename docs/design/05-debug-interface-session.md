@@ -64,7 +64,11 @@ has none; null is unset); the result is copied to the session row at start like 
 own), and the spawn reads the row, not the channel. `session model <id> <alias|model id>` and `session
 effort <id> low|medium|high|max` (the driver; from the next turn) print `model-changed  <next turn>
 <model id>` and `effort-changed  <next turn>  <level>`, write the audit kind of that name with `from`
-and `to`, and refuse a bad value as `bad-args` naming the accepted ones. `session timeout <id>
+and `to`, and refuse a bad value as `bad-args` naming the accepted ones. `session mode`, `session model`
+and `session effort` on a session that is ending, ended or interrupted (the service keeps an ended session
+in memory until the bot stops) are `error: session-closed: <id> is <state>`, exit 1, audited
+`action-refused` with the reason `closed`, and write nothing: no row change, no `*-changed` audit row, no
+event (P12b; before it the three wrote all of them on an ended session). `session timeout <id>
 never|<minutes>|<duration>` (the driver; effective now) sets the session's idle timeout (`never`,
 `off` or `0` is never; a bare number is minutes; else a Go duration of at least a minute such as
 `1h30m15s`, which reads `5415 seconds`; above a year is capped, and the summary adds

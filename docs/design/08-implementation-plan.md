@@ -228,48 +228,11 @@ show` printing `pending:` while waiting and the prompt timeout's deny in `audit`
 leaves one `dropped` row there; `usage --session s0001 --by turn --json` equals the fixture's
 deltas. Depends on: P2 to P9.
 
-## P11. Discord dry-run: renderer, coalescer, outbox, transcript, panel (medium; owner sees)
+## P11, P12, P12a, P12b. The Discord adapter
 
-Implements: `04-ux.md` (every screen and text); `03-architecture.md` (`discord` row; Data flow steps
-1 and 6); ADR 0023 (Libraries: Discord); `05-debug-interface-discord.md` (The Discord adapter; `session
-outbox`, `transcript`, `panel`). Files: `internal/discord/` (03's `discord` row without the gateway:
-renderer, coalescer with the injectable clock and a global budget of 50 requests per second per bot
-beneath the per-session one, mask, custom ids, command parsing, `inject`; disgo's types appear here
-and nowhere else); `internal/cli/{discord,panel}.go`; `tests/discord/burst.jsonl`; the two repro
-scripts of P10 gain their `session outbox` checks (the buttons post, the timeout trace line). Proof:
-`discord render --events tests/discord/burst.jsonl --clock fake --expect 'edits<=1/s'`; `discord
-inject message --channel 100 --user 1001 --roles 10 "sk-ant-..."` yields the refusal and an
-`action-refused` event with no key text; a scratch session shows 04's working message, footer,
-buttons post and summary in `session outbox`, which the owner reads. Depends on: P10.
-
-## P12. Discord live: gateway, commands, buttons, venues, the relay (medium; owner sees; needs his guild)
-
-Implements: `04-ux.md` (Registration through Starting; Credentials); `03-architecture.md` (Startup 9
-and 10; Failure modes, `discord` row); `05-debug-interface-discord.md` (The Discord adapter: `check`, `serve
---discord live`; `credential login --relay`, off by default). Files: `internal/discord/gateway.go`
-(the disgo client pinned in `go.mod`, slash commands, interactions, the private-channel venue, the
-notice channel, the DM relay; resume and the rate limiter are disgo's; the REST calls used are
-listed in one place in this file, the surface a swap to arikawa must cover); `discord check` in
-`internal/cli/discord.go`; `internal/deps/deps.go` deleted. Proof: `discord check --guild <id>`
-lists every configured channel `present`, `perms:ok`; `serve --discord live` on a scratch-shaped
-root with the fake: the owner registers, starts, sends, clicks Allow and ends from Discord while an
-agent reads `session tail` and `audit`; with P7's real engine this is the vision's first usable
-version. Depends on: P11; the bot token and a test guild.
-
-## P12a. Model and effort from Discord (small; owner sees the header line and replies)
-
-Implements: R-29; `04-ux.md` (Model and effort); `05-debug-interface-discord.md` (Model and effort);
-`05-debug-interface-session.md` (`session start --model`, `session model|effort`, the `model:` line).
-Files: `internal/policy/roles.go` (fable; aliases); `internal/store/migrations/0002-session-model.sql`
-[no-check: written in this pass] (`model`, `effort`); `internal/audit/audit.go`; `internal/session/`
-(`StartRequest.Model`, `SetModel`, `SetEffort`, the spawn); `internal/discord/` and `internal/cli/session.go`
-(commands, choice lists, `/model`, wording, the header edit); `internal/engine/claudecode.go` only if the
-pinned engine has an effort flag (the coder checks first; without it, effort, commands and column, is out
-of this pass). Proof: `session start --channel 100 --as 1001 --roles 10 --credential cred-scratch --model
-sonnet`; `session show s0001` prints `model: claude-sonnet-5-5`; `discord inject command --channel s0001
---user 1001 --roles 10 "/model"` prints the `Model:` line; `"/model fable"` yields `model-changed` in
-`session tail`, an `edit` of the pinned header in `session outbox` and `claude-fable-5-1` in the next
-`received-<n>.json`; `"/model gpt"` is `bad-args` plus `action-refused`. Depends on: P12.
+Moved by topic to `08-implementation-plan-discord.md`: the dry-run renderer and outbox (P11), the live
+gateway (P12), model and effort from Discord (P12a) and the header's menus (P12b). P13 depends on P12 as
+before.
 
 ## P13. The Windows instance (medium; owner steps)
 
