@@ -7,8 +7,8 @@ Updated: 2026-10-24, s000a post-mortem, by main session (rooted in the repo, hoo
 
 - s000a's P12b commits are on `main` (through c8154a3), cherry-picked from its tree: its End click was
   refused (Discord's id check took digits only; s000a is the first base-36 id with a letter), so its handoff
-  never ran. The fix is on main; the live bot needs a stop, `bin/` rebuild and restart to get it. s000a is
-  still open to the bot (owner's call to end it; its handoff then pushes a duplicate session branch).
+  never ran. The fix is live. The restart interrupted s000a, and after a restart an interrupted session
+  cannot be ended at all (its own finding, against 03 Shutdown); its code is all on main, its tree kept.
 - Owner approved 2026-10-24: `xhigh`, the driver-only text, "This session has ended." for every
   closed-session refusal (settles the plain-message refusal), the header menus (judge live).
 
@@ -34,5 +34,6 @@ Updated: 2026-10-24, s000a post-mortem, by main session (rooted in the repo, hoo
 
 ## Open findings
 
+- `docs/findings/2026-10-24-interrupted-session-cannot-be-ended-after-a-restart.md` (architect: its fix shape)
 - `docs/findings/2026-10-24-s000a-post-mortem-*.md` (Next 1), `2026-10-24-background-subagents-*.md`, `2026-10-24-session-friction-*.md`; `2026-10-23-subagents-in-a-session-end-before-writing.md` (Next 2), `...-first-live-*.md` (6-7 owner's)
 - `docs/findings/2026-10-17-net-diff-privacy-scan-let-named-commits-go-public.md` (resolve); `2026-10-15-spike-*.md` (droplet open); `2026-10-16-prior-art-chat-front-ends-for-coding-agents.md` (L1-L4 mine)
