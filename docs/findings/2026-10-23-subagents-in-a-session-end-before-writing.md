@@ -32,7 +32,7 @@ and 5 of `docs/operator/2026-10-23-real-turns-c2-c5-c6.md` as this session's wor
   file. The report handed back was the agent's first sentence only ("I'll start by reading ...").
   The background run's output file was empty (0 bytes), so the last call cannot be seen.
 - Foreground and background ended alike, so the end of the coordinator's turn (a process per turn)
-  is not the cause.
+  is not the cause. (A different loss, policy mode: `2026-10-24-background-subagents-die-when-the-turn-ends.md`.)
 - A `reviewer` launched in the foreground to review this finding's commit (read-only tools: Read,
   Glob, Grep, Bash; told to report, not edit) ended after 2 tool calls in about 4 seconds, its
   report `(Subagent completed but returned no output.)`. It never wrote, so a deferred `Write`
