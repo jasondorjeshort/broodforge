@@ -6,7 +6,11 @@ related: [2026-10-14-ux-choices-that-could-become-options.md, 2026-10-22-discord
 
 # The engine's `auto` permission mode as a third session mode
 
-Priority: medium (owner, 2026-10-23, while starting to build Broodforge inside Broodforge).
+Priority: the next wave (owner, 2026-10-23, in session s0008; first set medium the same day, while
+starting to build Broodforge inside Broodforge): `auto` must be settable as the
+default for new sessions (instance `defaults.mode` and a channel's `mode`) and switchable inside a
+running session (the owner suggested `/session permissions auto` or similar; today's switch is
+`/session mode`, so whether `auto` joins it or a new command is added is the owner's wording call).
 
 A session has two permission modes today: `prompt` ("asks first": every call the reach table does
 not settle goes to Discord as an Allow/Deny prompt) and `policy` ("acts freely": Broodforge answers
@@ -31,6 +35,9 @@ Discord through the same prompt path as `prompt` mode.
 
 ## Open
 
+- A prompt in prompt mode currently ends any subagent whose call it defers
+  (`../findings/2026-10-23-subagents-in-a-session-end-before-writing.md`); the classifier's prompts
+  under `auto` would take the same path, so `auto` inherits that problem until it is fixed.
 - Does `auto` work under `-p --input-format stream-json` here, and what does the stream show when
   the classifier defers or refuses? (Probe on the PC first; the droplet row follows P14.)
 - Where the hook and the classifier disagree: the hook's deny is final (C39); does an `auto`
