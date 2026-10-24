@@ -84,7 +84,7 @@ outbox_has "$id" '  edit  m[0-9]*  [0-9]*  Allowed by Ada Example$' || fail "the
 # A 3 s timeout can fire before the coalescer posts the second prompt; it is then created
 # answered (an edit merges into a queued create), so either op counts.
 outbox_has "$id" '  \(create\|edit\)  m[0-9]*  [0-9]*  No answer; denied$' || fail "the timed-out prompt does not say No answer; denied"
-outbox_has "$id" '\[Write\] [^"]*bye\.txt -[^ ]* denied: the prompt timed out after 3 seconds\.\\n.*\\nDone · turn 2 · ' --json ||
+outbox_has "$id" '\[Write\] [^"]*bye\.txt -[^ ]* denied: the prompt timed out after 3 seconds\.\\n.*\\nIdle · turn 2 · ' --json ||
 	fail "session outbox has no timeout trace line in turn 2's final message"
 "$bf" session outbox "$id" --all
 

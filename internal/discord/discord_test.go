@@ -3,7 +3,6 @@
 package discord
 
 import (
-	"bufio"
 	"encoding/json"
 	"os"
 	"strconv"
@@ -114,8 +113,16 @@ func TestTextFormats(t *testing.T) {
 		t.Errorf("modelShort = %s", got)
 	}
 	u := &session.TurnUsage{In: 48200, Out: 1100, SessionIn: 212000, Model: "claude-opus-5-5", Mode: "prompt"}
-	if got, want := footer(labelDone, 3, 102*time.Second, u), "Done · turn 3 · 1:42 · 48.2k in / 1.1k out · session 212k · Opus · asks first"; got != want {
+	if got, want := footer(idleLabel(false), 3, 102*time.Second, u), "Idle · turn 3 · 1:42 · 48.2k in / 1.1k out · session 212k · Opus · asks first"; got != want {
 		t.Errorf("footer\n got %s\nwant %s", got, want)
+	}
+	if got, want := footer(idleLabel(true), 5, 621*time.Second, u), "Idle · ended on a tool call, no closing message · turn 5 · 10:21 · 48.2k in / 1.1k out · session 212k · Opus · asks first"; got != want {
+		t.Errorf("footer ended on a call\n got %s\nwant %s", got, want)
+	}
+	for step, want := range map[string]string{"": "Working · turn 5 · 0:00", stepRunning("Bash"): "Working · turn 5 · 0:00 · running Bash", stepWriting: "Working · turn 5 · 0:00 · writing"} {
+		if got := workingHeader(5, 0, step); got != want {
+			t.Errorf("workingHeader(%q) = %s, want %s", step, got, want)
+		}
 	}
 	u = &session.TurnUsage{In: 31000, OutUnknown: true, SessionIn: 195000, Model: "claude-opus-5-5", Mode: "prompt"}
 	if got, want := footer(labelStopped, 3, 48*time.Second, u), "Stopped · turn 3 · 0:48 · 31.0k in / out unknown · session 195k · Opus · asks first"; got != want {
@@ -273,7 +280,7 @@ func TestViewHeaderAndTurn(t *testing.T) {
 		}
 	}
 	want := "Let me look at how the config loader reads the file.\n[Read] src/config/load.ts\n[Bash] npm install left-pad\n" +
-		"Done · turn 3 · 1:41 · 48.2k in / 1.1k out · session 212k · Opus · asks first"
+		"Idle · ended on a tool call, no closing message · turn 3 · 1:41 · 48.2k in / 1.1k out · session 212k · Opus · asks first"
 	if final.Body != want {
 		t.Errorf("final\n got %q\nwant %q", final.Body, want)
 	}
@@ -308,23 +315,7 @@ func TestViewOverflow(t *testing.T) {
 
 // TestReplayBurst: tests/discord/burst.jsonl keeps every session to one create or edit a second.
 func TestReplayBurst(t *testing.T) {
-	f, err := os.Open("../../tests/discord/burst.jsonl")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	var events []ReplayEvent
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		if line := sc.Text(); line != "" && !strings.HasPrefix(line, "#") {
-			var e ReplayEvent
-			if err := json.Unmarshal([]byte(line), &e); err != nil {
-				t.Fatal(err)
-			}
-			events = append(events, e)
-		}
-	}
-	res := Replay(events, true)
+	res := Replay(readReplay(t, "../../tests/discord/burst.jsonl"), true)
 	if res.MaxPerSession != 1 || res.MaxPerBot > GlobalBudget {
 		t.Errorf("per session %d, per bot %d", res.MaxPerSession, res.MaxPerBot)
 	}
@@ -333,12 +324,176 @@ func TestReplayBurst(t *testing.T) {
 		if strings.Contains(p.Body, KeyPrefix) {
 			t.Errorf("an unmasked key in %s", p.MessageID)
 		}
-		if strings.Contains(p.Body, "\nDone · turn 1 · ") {
+		if strings.Contains(p.Body, "\nIdle · turn 1 · ") {
 			finals++
 		}
 	}
 	if finals != 2 {
 		t.Errorf("%d final messages, want 2", finals)
+	}
+}
+
+func readReplay(t *testing.T, path string) []ReplayEvent {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var events []ReplayEvent
+	for _, line := range strings.Split(string(b), "\n") {
+		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
+			var e ReplayEvent
+			if err := json.Unmarshal([]byte(line), &e); err != nil {
+				t.Fatal(err)
+			}
+			events = append(events, e)
+		}
+	}
+	return events
+}
+
+// TestReplayTurnEnd: tests/discord/turn-end.jsonl. The working header names the step (a call
+// outstanding by its tool, the agent's text as writing, none between steps), and a completed
+// turn's footer says Idle, with `ended on a tool call, no closing message` when its last entry
+// is a call (owner, 2026-10-24).
+func TestReplayTurnEnd(t *testing.T) {
+	res := Replay(readReplay(t, "../../tests/discord/turn-end.jsonl"), true)
+	heads := map[string][]string{}
+	finals := map[string]string{}
+	for _, p := range res.Posts {
+		first, _, _ := strings.Cut(p.Body, "\n")
+		switch {
+		case p.Op != OpCreate && p.Op != OpEdit:
+		case strings.HasPrefix(first, "Working"):
+			heads[p.Session] = append(heads[p.Session], first)
+		case strings.Contains(p.Body, "\nIdle · "):
+			finals[p.Session] = p.Body
+		}
+	}
+	for id, want := range map[string][]string{
+		"s0001": {"Working · turn 1 · 0:00", "Working · turn 1 · 0:02 · writing", "Working · turn 1 · 0:04 · running Grep",
+			"Working · turn 1 · 0:06", "Working · turn 1 · 0:08 · running Grep", "Working · turn 1 · 0:10"},
+		"s0002": {"Working · turn 1 · 0:00", "Working · turn 1 · 0:02 · running Bash", "Working · turn 1 · 0:04",
+			"Working · turn 1 · 0:06 · writing"},
+	} {
+		if got := strings.Join(heads[id], "\n"); got != strings.Join(want, "\n") {
+			t.Errorf("%s working headers\n got %q\nwant %q", id, heads[id], want)
+		}
+	}
+	for id, want := range map[string]string{
+		"s0001": "I will look for the callers.\n[Grep] load( in internal/\n[Grep] Load( in cmd/\n" +
+			"Idle · ended on a tool call, no closing message · turn 1 · 0:12 · 12.0k in / 3.0k out · session 12.0k · Opus · asks first",
+		"s0002": "[Bash] go test ./...\nAll tests pass.\nIdle · turn 1 · 0:08 · 21.4k in / 610 out · session 21.4k · Haiku · acts freely",
+	} {
+		if finals[id] != want {
+			t.Errorf("%s final\n got %q\nwant %q", id, finals[id], want)
+		}
+	}
+}
+
+// TestViewStep: parallel calls show the newest still running, a turn without entries ends
+// plain Idle, and the transcript's footer follows the view's.
+func TestViewStep(t *testing.T) {
+	v, posts := newTestView()
+	last := func() string {
+		first, _, _ := strings.Cut((*posts)[len(*posts)-1].Body, "\n")
+		return first
+	}
+	v.Handle(ev(session.EventSessionStarted, 0, func(e *session.Event) { e.Start = testStart }))
+	v.Handle(ev(session.EventTurnStarted, 0, func(e *session.Event) { e.Turn = 2 }))
+	if got := last(); got != "Working · turn 2 · 0:00" {
+		t.Errorf("turn start: %s", got)
+	}
+	v.Handle(ev(session.EventToolCall, time.Second, func(e *session.Event) {
+		e.Turn, e.ToolUseID, e.Tool, e.Summary = 2, "a", "Read", "[Read] a.go"
+	}))
+	v.Handle(ev(session.EventToolCall, time.Second, func(e *session.Event) {
+		e.Turn, e.ToolUseID, e.Tool, e.Summary = 2, "b", "Grep", "[Grep] x in ."
+	}))
+	if got := last(); got != "Working · turn 2 · 0:01 · running Grep" {
+		t.Errorf("two calls: %s", got)
+	}
+	v.Handle(ev(session.EventToolResult, 2*time.Second, func(e *session.Event) { e.ToolUseID, e.Summary = "b", "[Grep] x in ." }))
+	if got := last(); got != "Working · turn 2 · 0:02 · running Read" {
+		t.Errorf("one call left: %s", got)
+	}
+	v.Handle(ev(session.EventToolResult, 3*time.Second, func(e *session.Event) { e.ToolUseID, e.Summary = "a", "[Read] a.go" }))
+	if got := last(); got != "Working · turn 2 · 0:03" {
+		t.Errorf("no call left: %s", got)
+	}
+	v.Handle(ev(session.EventTurnEnded, 4*time.Second, func(e *session.Event) { e.Turn, e.Result = 2, session.ResultCompleted }))
+	v.Handle(ev(session.EventTurnStarted, 5*time.Second, func(e *session.Event) { e.Turn = 3 }))
+	v.Handle(ev(session.EventTurnEnded, 6*time.Second, func(e *session.Event) { e.Turn, e.Result = 3, session.ResultCompleted }))
+	var footers []string
+	for _, p := range *posts {
+		if p.Op == OpCreate && strings.Contains(p.Body, "Idle · ") {
+			lines := strings.Split(p.Body, "\n")
+			footers = append(footers, lines[len(lines)-1])
+		}
+	}
+	want := []string{"Idle · ended on a tool call, no closing message · turn 2 · 0:04 · 0 in / 0 out · session 0 · asks first",
+		"Idle · turn 3 · 0:01 · 0 in / 0 out · session 0 · asks first"}
+	if strings.Join(footers, "\n") != strings.Join(want, "\n") {
+		t.Errorf("footers\n got %q\nwant %q", footers, want)
+	}
+	tr := Transcript("s0001", v.events, mention)
+	for _, w := range want {
+		if !strings.Contains(tr, "\n"+w+"\n") {
+			t.Errorf("transcript lacks %q:\n%s", w, tr)
+		}
+	}
+
+	// Calls that never get a result do not stay running, and the newest step wins.
+	call := func(id, tool, parent string) session.Event {
+		return ev(session.EventToolCall, time.Second, func(e *session.Event) {
+			e.Turn, e.ToolUseID, e.Tool, e.Parent, e.Summary = 1, id, tool, parent, "["+tool+"] "+id
+		})
+	}
+	result := func(id string) session.Event {
+		return ev(session.EventToolResult, 2*time.Second, func(e *session.Event) { e.Turn, e.ToolUseID, e.Summary = 1, id, "[x] "+id })
+	}
+	decided := func(id, decision, by string) session.Event {
+		return ev(session.EventPermissionDecision, time.Second, func(e *session.Event) {
+			e.Turn, e.ToolUseID, e.Decision, e.DecidedBy = 1, id, decision, by
+			if by == session.DecidedByParticipant {
+				e.User = "1001"
+			}
+		})
+	}
+	text := ev(session.EventText, 2*time.Second, func(e *session.Event) { e.Turn, e.Text = 1, "Next." })
+	waiting := ev(session.EventWaitingForAnswer, time.Second, func(e *session.Event) {
+		e.Turn, e.ToolUseID, e.Tool, e.Target = 1, "b", "Bash", "npm test"
+	})
+	for name, c := range map[string]struct {
+		events []session.Event
+		want   string
+	}{
+		// The engine kept the message's last call (C28): the other is dropped and never has a result.
+		"dropped parallel call": {[]session.Event{call("a", "Read", ""), call("b", "Bash", ""),
+			decided("a", session.DecisionDropped, session.DecidedByPolicy), decided("b", session.DecisionDeferred, session.DecidedByPolicy),
+			waiting, decided("b", session.DecisionAllow, session.DecidedByParticipant), result("b")}, "Working · turn 1 · 0:02"},
+		"orphaned child": {[]session.Event{call("ag", "Agent", ""), call("c", "Bash", "ag"), call("d", "Read", "c"), result("ag")},
+			"Working · turn 1 · 0:02"},
+		"text after a stale call":  {[]session.Event{call("a", "Read", ""), text}, "Working · turn 1 · 0:02 · writing"},
+		"call after text":          {[]session.Event{call("a", "Read", ""), text, call("b", "Grep", "")}, "Working · turn 1 · 0:01 · running Grep"},
+		"result for an unknown id": {[]session.Event{result("zz")}, "Working · turn 1 · 0:02"},
+		"newest call without tool": {[]session.Event{call("a", "Read", ""), call("b", "", "")}, "Working · turn 1 · 0:01"},
+	} {
+		v, posts := newTestView()
+		v.Handle(ev(session.EventSessionStarted, 0, func(e *session.Event) { e.Start = testStart }))
+		v.Handle(ev(session.EventTurnStarted, 0, func(e *session.Event) { e.Turn = 1 }))
+		for _, e := range c.events {
+			v.Handle(e)
+		}
+		got := ""
+		for _, p := range *posts {
+			if first, _, _ := strings.Cut(p.Body, "\n"); strings.HasPrefix(first, "Working") {
+				got = first
+			}
+		}
+		if got != c.want {
+			t.Errorf("%s: header %q, want %q", name, got, c.want)
+		}
 	}
 }
 

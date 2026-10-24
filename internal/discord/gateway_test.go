@@ -545,7 +545,7 @@ func TestLiveSession(t *testing.T) {
 		t.Errorf("hourglass: %+v\n%s", c, h.rest.dump())
 	}
 	h.until("turn 1's footer", h.saw("CreateMessage", func(c restCall) bool {
-		return c.args[0] == venueID && strings.Contains(c.body, "Done · turn 1")
+		return c.args[0] == venueID && strings.Contains(c.body, "Idle · turn 1")
 	}))
 	h.until("a working message deleted", h.saw("DeleteMessage", func(c restCall) bool { return c.args[0] == venueID }))
 

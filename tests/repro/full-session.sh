@@ -89,7 +89,7 @@ outbox_has() {
 	done
 	return 1
 }
-outbox_has "$id" '\\nDone · turn 1 · [0-9:]* · [0-9.k]* in / [0-9.k]* out · session [0-9.k]* · Haiku · acts freely"' ||
+outbox_has "$id" '\\nIdle · turn 1 · [0-9:]* · [0-9.k]* in / [0-9.k]* out · session [0-9.k]* · Haiku · acts freely"' ||
 	fail "session outbox has no final message ending in the footer"
 outbox=$("$bf" session outbox "$id" --all)
 printf '%s\n' "$outbox"

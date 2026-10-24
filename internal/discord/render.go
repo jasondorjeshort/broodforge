@@ -34,7 +34,11 @@ type View struct {
 	segStart  int     // the first entry of the current engine process
 	parts     []part  // the current process's working messages; only the last is edited
 	allParts  []string
-	waiting   bool // the process ended waiting for an answer
+	waiting   bool       // the process ended waiting for an answer
+	open      []openCall // the turn's tool calls without a result yet, oldest first
+	steps     int        // the turn's text and call events so far, numbering them
+	lastCall  int        // the number of the turn's newest call, 0 before one
+	lastText  int        // the number of the turn's newest text, 0 before one
 
 	prompt      string // the open prompt's message id
 	promptCall  string
@@ -47,6 +51,10 @@ type entry struct {
 	call string // tool use id; "" for a text line
 	text string
 }
+
+// openCall is a tool call the working header can name while it runs; parent is the subagent
+// call it was made in, "" for the agent's own.
+type openCall struct{ id, tool, parent string }
 
 type part struct {
 	msg   string
@@ -117,15 +125,21 @@ func (v *View) Handle(ev session.Event) {
 	case session.EventTurnStarted:
 		v.turn, v.turnStart = ev.Turn, t
 		v.entries, v.segStart, v.parts, v.allParts, v.waiting, v.dropped = nil, 0, nil, nil, false, 0
+		v.open, v.steps, v.lastCall, v.lastText = nil, 0, 0, 0
 		v.bypass = map[string]session.Event{}
 		v.working(t)
 	case session.EventText:
 		for _, l := range splitLines(ev.Text) {
 			v.entries = append(v.entries, entry{text: l})
 		}
+		v.steps++
+		v.lastText = v.steps
 		v.working(t)
 	case session.EventToolCall:
 		v.entries = append(v.entries, entry{call: ev.ToolUseID, text: firstOf(splitLines(ev.Summary))})
+		v.steps++
+		v.lastCall = v.steps
+		v.open = append(v.open, openCall{id: ev.ToolUseID, tool: ev.Tool, parent: ev.Parent})
 		v.working(t)
 	case session.EventToolResult:
 		line := ev.Summary
@@ -133,8 +147,12 @@ func (v *View) Handle(ev session.Event) {
 			line = session.BypassLine(session.TraceLine(ev.Tool, ev.Target), d.Decision == session.DecisionAllow, d.DecidedBy)
 		}
 		v.result(ev.ToolUseID, firstOf(splitLines(line)))
+		v.closeCall(ev.ToolUseID)
 		v.working(t)
 	case session.EventPermissionDecision:
+		if ev.Decision == session.DecisionDropped {
+			v.closeCall(ev.ToolUseID) // a dropped call never gets a result
+		}
 		v.decision(ev)
 	case session.EventWaitingForAnswer:
 		v.wait(ev, t)
@@ -287,6 +305,50 @@ func (v *View) lines(from, to int) []string {
 	return out
 }
 
+// closeCall drops a call that has its result, or was dropped, from the open ones, and with it
+// every open call made inside it: a subagent's call left without a result when its Agent call
+// returned is over too.
+func (v *View) closeCall(id string) {
+	keep := v.open[:0]
+	var inside []string
+	for _, c := range v.open {
+		switch {
+		case c.id == id:
+		case c.parent == id:
+			inside = append(inside, c.id)
+		default:
+			keep = append(keep, c)
+		}
+	}
+	v.open = keep
+	for _, c := range inside {
+		v.closeCall(c)
+	}
+}
+
+// step is the working header's current step (owner, 2026-10-24), the newest step winning:
+// `writing` when the agent's text is newer than every call; else the newest open call's tool
+// while one runs (a subagent's call inside its Agent call, the Agent call again once that
+// returns); else none, at the turn's start or once every call has its result or was dropped
+// and nothing newer came (the agent is between steps, and no step is shown rather than one
+// that has finished). A newest open call without a tool name shows none, not an older call.
+func (v *View) step() string {
+	if v.lastText > v.lastCall {
+		return stepWriting
+	}
+	if n := len(v.open); n > 0 && v.open[n-1].tool != "" {
+		return stepRunning(v.open[n-1].tool)
+	}
+	return ""
+}
+
+// endedOnCall is whether the turn's last entry is a tool call or its result rather than the
+// agent's text; a turn without entries did not.
+func (v *View) endedOnCall() bool {
+	n := len(v.entries)
+	return n > 0 && v.entries[n-1].call != ""
+}
+
 func runes(s string) int { return len([]rune(s)) }
 
 func stopButton(id string) []Button {
@@ -300,7 +362,7 @@ func (v *View) working(t time.Time) {
 	if v.turn == 0 {
 		return
 	}
-	head := workingHeader(v.turn, t.Sub(v.turnStart))
+	head := workingHeader(v.turn, t.Sub(v.turnStart), v.step())
 	if v.waiting || len(v.parts) == 0 {
 		v.waiting = false
 		id := v.create(head, stopButton(v.id))
@@ -374,7 +436,7 @@ func (v *View) wait(ev session.Event, t time.Time) {
 func (v *View) ended(ev session.Event, t time.Time) {
 	elapsed := t.Sub(v.turnStart)
 	lines := v.lines(0, len(v.entries))
-	label := labelDone
+	label := idleLabel(v.endedOnCall())
 	switch {
 	case ev.Result == session.ResultCompleted:
 	case ev.Result == session.ResultError:
@@ -405,6 +467,7 @@ func (v *View) ended(ev session.Event, t time.Time) {
 		v.post(Post{Op: OpDelete, MessageID: id})
 	}
 	v.entries, v.parts, v.allParts, v.segStart, v.waiting = nil, nil, nil, 0, false
+	v.open, v.steps, v.lastCall, v.lastText = nil, 0, 0, 0
 	v.turn = 0
 }
 

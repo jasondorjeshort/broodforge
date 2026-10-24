@@ -26,6 +26,7 @@ func Transcript(id string, events []session.Event, who func(user string) string)
 	var start *session.StartInfo
 	var turnStart time.Time
 	var queued []string // times of messages waiting for the next turn
+	onCall := false     // the turn's last step is a tool call or its result (the view's footer)
 	for _, ev := range events {
 		t := parseTime(ev.Time)
 		switch ev.Type {
@@ -41,7 +42,7 @@ func Transcript(id string, events []session.Event, who func(user string) string)
 		case session.EventMessageQueued:
 			queued = append(queued, ev.Time)
 		case session.EventTurnStarted:
-			turnStart = t
+			turnStart, onCall = t, false
 			blank()
 			line("## Turn " + strconv.Itoa(ev.Turn) + " · " + ev.Time)
 			blocks := splitBlocks(ev.Text)
@@ -65,10 +66,12 @@ func Transcript(id string, events []session.Event, who func(user string) string)
 			}
 			blank()
 		case session.EventText:
+			onCall = false
 			blank()
 			line(ev.Text)
 			blank()
 		case session.EventToolCall:
+			onCall = true
 			line("- `" + ev.Summary + "`")
 		case session.EventPermissionDecision:
 			by := ev.DecidedBy
@@ -81,13 +84,14 @@ func Transcript(id string, events []session.Event, who func(user string) string)
 			}
 			line("  - " + ev.Decision + " (" + by + ")" + reason)
 		case session.EventToolResult:
+			onCall = true
 			if strings.Contains(ev.Summary, " -> ") {
 				line("  - `" + ev.Summary + "`")
 			}
 		case session.EventWaitingForAnswer:
 			line("- waiting for an answer: `" + session.TraceLine(ev.Tool, ev.Target) + "`")
 		case session.EventTurnEnded:
-			label := labelDone
+			label := idleLabel(onCall)
 			switch {
 			case ev.Result == session.ResultCompleted:
 			case ev.Result == session.ResultError || (ev.User == "" && ev.Summary == session.ResultInterrupted):

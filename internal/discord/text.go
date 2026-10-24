@@ -204,10 +204,21 @@ func idleSentence(idle string) string {
 	return "Ends after " + idle + " without activity."
 }
 
-// workingHeader is the working message's first line (04, The turn loop).
-func workingHeader(turn int, elapsed time.Duration) string {
-	return "Working · turn " + strconv.Itoa(turn) + " · " + clock(elapsed)
+// workingHeader is the working message's first line (04, The turn loop): the current step
+// after the clock, `running Bash` or `writing`, once the turn has one (owner, 2026-10-24).
+func workingHeader(turn int, elapsed time.Duration, step string) string {
+	head := "Working · turn " + strconv.Itoa(turn) + " · " + clock(elapsed)
+	if step != "" {
+		head += " · " + step
+	}
+	return head
 }
+
+// The working header's steps (04, The turn loop; owner, 2026-10-24): a tool call outstanding,
+// named by its tool, or the agent's text.
+const stepWriting = "writing"
+
+func stepRunning(tool string) string { return "running " + tool }
 
 // waitingHeader replaces it on a working message frozen while a call waits for an answer.
 // not 04.
@@ -215,12 +226,22 @@ func waitingHeader(turn int, elapsed time.Duration) string {
 	return "Waiting for an answer · turn " + strconv.Itoa(turn) + " · " + clock(elapsed)
 }
 
-// Footer labels: 04's Done and Stopped; not 04: Failed, for a turn that ended in an error.
+// Footer labels: 04's Idle (owner, 2026-10-24; was Done) and Stopped; not 04: Failed, for a
+// turn that ended in an error.
 const (
-	labelDone    = "Done"
+	labelIdle    = "Idle"
 	labelStopped = "Stopped"
 	labelFailed  = "Failed"
 )
+
+// idleLabel is a completed turn's label: `Idle`, and when the turn's last step was a tool call
+// or its result, `Idle · ended on a tool call, no closing message` (04; owner, 2026-10-24).
+func idleLabel(endedOnCall bool) string {
+	if endedOnCall {
+		return labelIdle + " · ended on a tool call, no closing message"
+	}
+	return labelIdle
+}
 
 // footer is a turn's last line (04, The turn loop; Owner 5).
 func footer(label string, turn int, elapsed time.Duration, u *session.TurnUsage) string {
