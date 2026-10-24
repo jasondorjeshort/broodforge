@@ -46,6 +46,7 @@ type Bundle struct {
 	Commits int
 }
 
+// sessionDirName is git.ValidSessionID's form; git imports spawn, so spawn keeps this one copy.
 var sessionDirName = regexp.MustCompile(`^s[0-9a-z]{4,}$`)
 
 // checkSessionDir refuses anything but an absolute <root>/sessions/s<id> written in its clean

@@ -622,6 +622,42 @@ VALUES ('s0002', '100', 'p', '1001', 'ended', 'fake', 'cred-x', 'policy', 'code'
 	h.until("the ended venue deleted", h.saw("DeleteChannel", func(c restCall) bool { return c.args[0] == "7100" }))
 }
 
+// TestSweepTakesBase36IDs: a session id with a letter (s000a, the first after s0009) is a
+// session id to the sweep: an open one's venue is bound again, an ended one's deleted.
+func TestSweepTakesBase36IDs(t *testing.T) {
+	h := newLiveHarness(t)
+	if err := h.st.Write(func(tx *store.Tx) error {
+		for _, q := range []string{
+			`INSERT INTO registration (user_id, git_name, git_email, display_name, registered_at) VALUES ('1001', 'A', 'a@example.com', '', '2026-10-21T00:00:00Z')`,
+			`INSERT INTO session (id, channel_id, project_id, driver_id, state, harness, credential_id, mode, reach, started_at)
+VALUES ('s000a', '100', 'p', '1001', 'waiting-for-input', 'fake', 'cred-x', 'policy', 'code', '2026-10-21T11:00:00Z')`,
+			`INSERT INTO session (id, channel_id, project_id, driver_id, state, harness, credential_id, mode, reach, started_at, ended_at)
+VALUES ('s000b', '100', 'p', '1001', 'ended', 'fake', 'cred-x', 'policy', 'code', '2026-10-21T11:00:00Z', '2026-10-21T11:00:00Z')`,
+		} {
+			if _, err := tx.Exec(q); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.rest.channels = []dg.GuildChannel{
+		textChannel(sf("7400"), "s000a-a", "test:s000a", sf(testCat)),
+		textChannel(sf("7401"), "s000b-a", "test:s000b", sf(testCat)),
+	}
+	if err := h.g.sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if ch := h.a.venueChannel("s000a", time.Second); ch != "7400" {
+		t.Errorf("s000a's venue bound to %q, want 7400\n%s", ch, h.log.String())
+	}
+	h.until("s000b's venue deleted", h.saw("DeleteChannel", func(c restCall) bool { return c.args[0] == "7401" }))
+	if _, ok := h.rest.find("DeleteChannel", func(c restCall) bool { return c.args[0] == "7400" }); ok {
+		t.Error("the open session's venue was deleted")
+	}
+}
+
 // TestRefusalWithoutDMs: a writer who takes no direct messages gets the refusal in the
 // channel, mentioning them.
 func TestRefusalWithoutDMs(t *testing.T) {

@@ -54,8 +54,14 @@ func TestMask(t *testing.T) {
 }
 
 func TestCustomID(t *testing.T) {
+	// Session ids are `s` plus base 36: s000a is the first with a letter, s00zz has letters
+	// in both last places, and s10000 is one past four base-36 digits (szzzz) (03, Git); every
+	// session form takes them.
 	for _, s := range []string{"bf:s0001:toolu_01Nm:allow", "bf:s0001:toolu_01Nm:deny", "bf:s0001:toolu_01Nm:allow-session",
-		"bf:s0001:stop", "bf:s0001:end", "bf:100:start", "bf:s0001:model", "bf:s0001:effort", "bf:s0001:mode"} {
+		"bf:s0001:stop", "bf:s0001:end", "bf:100:start", "bf:s0001:model", "bf:s0001:effort", "bf:s0001:mode",
+		"bf:s000a:toolu_01Nm:allow", "bf:s000a:toolu_01Nm:deny", "bf:s000a:toolu_01Nm:allow-session",
+		"bf:s000a:stop", "bf:s000a:end", "bf:s000a:model", "bf:s000a:effort", "bf:s000a:mode",
+		"bf:s00zz:end", "bf:s10000:stop"} {
 		id, err := ParseCustomID(s)
 		if err != nil {
 			t.Errorf("ParseCustomID(%q): %v", s, err)
@@ -69,7 +75,8 @@ func TestCustomID(t *testing.T) {
 		}
 	}
 	for _, s := range []string{"", "bf", "bf:s0001", "xx:s0001:stop", "bf:s0001:toolu:maybe", "bf:100:stop", "bf:s0001:start",
-		"bf:s0001:a:b:allow", "bf:s1:end", "bf:100:model", "bf:s1:effort", "bf:s0001:Mode", "bf:s0001:model:high"} {
+		"bf:s0001:a:b:allow", "bf:s1:end", "bf:100:model", "bf:s1:effort", "bf:s0001:Mode", "bf:s0001:model:high",
+		"bf:s00a:end", "bf:s000A:end", "bf:S000a:stop", "bf:s000-:mode", "bf:s000a:toolu:maybe", "bf:abcd:start"} {
 		if _, err := ParseCustomID(s); err == nil {
 			t.Errorf("ParseCustomID(%q) accepted", s)
 		}

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+
+	"github.com/jasondorjeshort/broodforge/internal/session"
 )
 
 // CustomIDKind is what a button or a header menu does (03-architecture.md, Data flow: Custom ids).
@@ -45,7 +47,6 @@ const (
 )
 
 var (
-	sessionIDRE = regexp.MustCompile(`^s[0-9]{4,}$`)
 	channelIDRE = regexp.MustCompile(`^[0-9]{1,20}$`)
 	toolUseRE   = regexp.MustCompile(`^[A-Za-z0-9_\-]{1,64}$`)
 )
@@ -57,7 +58,8 @@ var sessionKinds = map[string]CustomIDKind{"stop": IDStop, "end": IDEnd, "model"
 var ErrBadCustomID = errors.New("not a Broodforge custom id")
 
 // ParseCustomID reads a button's or menu's custom id; anything not in 03's forms is
-// ErrBadCustomID.
+// ErrBadCustomID. A session id's form is session.ValidSessionID's (`s` and base-36 digits);
+// never a copy here.
 func ParseCustomID(s string) (CustomID, error) {
 	parts := strings.Split(s, ":")
 	if len(parts) < 3 || parts[0] != "bf" {
@@ -70,7 +72,7 @@ func ParseCustomID(s string) (CustomID, error) {
 		default:
 			return CustomID{}, ErrBadCustomID
 		}
-		if !sessionIDRE.MatchString(id.Session) || !toolUseRE.MatchString(id.ToolUseID) {
+		if !session.ValidSessionID(id.Session) || !toolUseRE.MatchString(id.ToolUseID) {
 			return CustomID{}, ErrBadCustomID
 		}
 		return id, nil
@@ -79,7 +81,7 @@ func ParseCustomID(s string) (CustomID, error) {
 		return CustomID{}, ErrBadCustomID
 	}
 	if kind, ok := sessionKinds[parts[2]]; ok {
-		if !sessionIDRE.MatchString(parts[1]) {
+		if !session.ValidSessionID(parts[1]) {
 			return CustomID{}, ErrBadCustomID
 		}
 		return CustomID{Kind: kind, Session: parts[1]}, nil

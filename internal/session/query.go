@@ -3,8 +3,14 @@
 package session
 
 import (
+	"github.com/jasondorjeshort/broodforge/internal/git"
 	"github.com/jasondorjeshort/broodforge/internal/store"
 )
+
+// ValidSessionID reports whether id has a session id's form, `s` and at least four base-36
+// digits (03-architecture.md, Git). It is git's one definition, re-exported for the packages
+// that reach sessions only through this one (discord).
+func ValidSessionID(id string) bool { return git.ValidSessionID(id) }
 
 // The reads below take any store.Querier: the bot's writer, or the CLI's read-only store when
 // no bot runs (ADR 0021), so both print the same records.

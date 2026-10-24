@@ -365,7 +365,7 @@ func (g *Gateway) sweep(ctx context.Context) error {
 			continue
 		}
 		id, ok := strings.CutPrefix(*tc.Topic(), g.cfg.Instance+":")
-		if !ok || g.cfg.Instance == "" || !sessionIDRE.MatchString(id) {
+		if !ok || g.cfg.Instance == "" || !session.ValidSessionID(id) {
 			continue
 		}
 		marked[id] = append(marked[id], ch.ID())
