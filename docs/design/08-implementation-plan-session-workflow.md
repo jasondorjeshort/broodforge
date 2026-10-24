@@ -140,7 +140,8 @@ it and ten seconds; the missing command the cannot-start text; read-only reach a
 test runs this repository's `.claude/hooks/git-guard.js` and `post-edit.js` as children on the PC,
 each under ten seconds, the whole hook under thirty (C3). Then, on the owner's word, one real turn
 through `engine run --real --workflow tests/hook/chain --cwd <tmp tree>` asking for an edit: the
-`PostToolUse` child's context appears in the transcript and the stream (C2). Closes C2, C3. Does
+`PostToolUse` child's context appears in the transcript and the stream (C2). Closes C2, C3. C2 held
+on the owner's real turn, 2026-10-23 (C3 was already closed by the timed chain test above). Does
 not: run any event but the two; take `allow`, `ask`, `defer` or `updatedInput`; merge anything into
 the engine's hook list; wire a session (P19). Depends on: P6, P7, P17.
 
@@ -175,5 +176,8 @@ not-started line, `audit` the `action-refused` row; the fake's `full-session.sh`
 the owner's word, in this repository's channel with the real engine: the driver launches
 `reviewer` and `session tail` shows its calls indented with `decided by hook` (C6); an agent given
 `tools: Read` fails to write (C5); after a commit and `worktree check`, `session show` prints
-`review: <tool_use_id> after <commit>`. Closes C5, C6. Does not: land on `main` (the ideas wait on
-this pass); add `--plugin-dir`; change the chain. Depends on: P10, P12, P17, P18.
+`review: <tool_use_id> after <commit>`. Closes C5, C6. C6 held on the owner's real turn, 2026-10-23;
+C5: the reviewer (tools: omit Write) made no Write call and said so, 2026-10-23 — prompt-level
+compliance only, not isolated from enforcement; still not the `tools: Read`-alone case. Does not:
+land on `main` (the ideas wait on this pass); add `--plugin-dir`; change the chain. Depends on:
+P10, P12, P17, P18.

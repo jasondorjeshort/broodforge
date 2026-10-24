@@ -54,11 +54,11 @@ Replace the proposal's V12, V16 to V18 and V20; each row names the pass that clo
 | Id | Check | Closed by |
 |---|---|---|
 | C1 (V12) | A push from a tree with the `pre-push` hook refuses with the line and exit 1, for `git push origin` and for a push naming the canonical's path, git's own line after it. | The `pre-push` pass, a throwaway clone on the PC; the droplet repeat in P14. |
-| C2 (V16) | A `PostToolUse` hook's `additionalContext` reaches the model, an exit-2 child's stderr reaches it, neither blocks. | The chain pass: the engine's hooks documentation first, then its first real turn. |
+| C2 (V16) | A `PostToolUse` hook's `additionalContext` reaches the model, an exit-2 child's stderr reaches it, neither blocks. | The chain pass: the engine's hooks documentation first, then its first real turn; verified 2026-10-23: the owner's real turn through `engine run --real --workflow tests/hook/chain` showed both outcomes reaching the model and `hook.log` carrying both `"outcome":"context"` lines, neither a deny. |
 | C3 (V17) | The base's `git-guard` and `post-edit` under Node on the PC finish within ten seconds each, the bot's hook with both within thirty. | The chain pass, timed in its tests. |
 | C4 (V18) | The merge route (a deciding hook beside a rewriting one): whether the input is re-judged. | Not needed by the decision; run only if the chain is ever abandoned (the proposal's reversal conditions). |
-| C5 (V20) | The `tools` field of an `--agents` definition restricts the subagent. | The loaders pass; until then the field is passed through and not relied on. |
-| C6 (V13) | The bot's own hook fires for a subagent's call in a live session. | The first injected session's audit (a `permission decision` row with `agent_type`). |
+| C5 (V20) | The `tools` field of an `--agents` definition restricts the subagent. | The loaders pass; until then the field is passed through and not relied on; verified 2026-10-23: in a live session the `reviewer` (whose `tools:` line omits Write, and whose own prompt says so) made no Write call and reported having none; this is prompt-level compliance, not yet separated from engine-level enforcement — consistent with this row's "passed through and not relied on." Not the `tools: Read`-alone companion case, which this repository still lacks. |
+| C6 (V13) | The bot's own hook fires for a subagent's call in a live session. | The first injected session's audit (a `permission decision` row with `agent_type`); verified 2026-10-23: a live session's audit showed the `reviewer` Agent call and a nested call both decided `"source":"hook"`, and `session show` printed the `review:` line after the commit (before a later amend folded the review's own fixes in). |
 
 ## Build order
 
