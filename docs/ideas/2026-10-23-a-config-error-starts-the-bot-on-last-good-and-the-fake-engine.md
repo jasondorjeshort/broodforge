@@ -1,7 +1,6 @@
 ---
 date: 2026-10-23
 kind: bug
-related: [2026-10-23-sessions-load-none-of-the-projects-instructions-agents-or-hooks.md]
 ---
 
 # A config error restarts the bot on the last-good config, and nobody is told

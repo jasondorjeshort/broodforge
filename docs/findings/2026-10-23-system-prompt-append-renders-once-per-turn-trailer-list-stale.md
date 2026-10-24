@@ -2,6 +2,7 @@
 date: 2026-10-23
 status: resolved (P19, ADR 0025)
 area: engine / sessions / system prompt
+promoted_to: docs/design/decisions/0025-session-workflow-composition.md
 ---
 
 # The engine keeps the first launch's system prompt, so the per-turn trailer list is stale from turn two
@@ -40,9 +41,3 @@ the model still answered ALPHA. The engine's `--help` adds "until the conversati
 
 Resolved by P19: the header built in `internal/session/prompt.go` holds no trailer list, so the
 engine gets it once and nothing in it goes stale; `03-architecture.md` was corrected under ADR 0025.
-
-## Next
-
-ADR 0025 decides where the trailer list lives: the turn's `From:` block, or the `commit-msg` hook
-(the `trailers` file in the session's home) alone. `03-architecture.md` is corrected under that
-ADR. Resolve this finding when the ADR lands and the code follows.

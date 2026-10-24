@@ -64,6 +64,9 @@ Not held:
   decision of 2026-10-23: every timeout is capped at a year with a notice, and never is a
   one-year timer). Item 2: ff5b45f. Items 8 and 9: the handoff of 53fcc18.
 - Items 6 and 7 are the owner's.
-- The design question behind items 1 and 2 is the idea named in the settings-source finding
-  (`docs/ideas/2026-10-23-sessions-load-none-of-the-projects-instructions-agents-or-hooks.md`), a
-  proposal, not this finding.
+- Item 1, a second data point: s0008's commit went to its session branch and was landed on `main`
+  by cherry-pick after a review (3aaf308). The in-session review ran because the driver asked
+  for it; the session then rewrote and amended the finding after the reviewer finished, and
+  `session show s0008` reports `review: -`. So the review step did not hold of itself.
+  The finding stays open for items 6 and 7.
+- The design question behind items 1 and 2 was decided in ADR 0025 and built in P15-P19.

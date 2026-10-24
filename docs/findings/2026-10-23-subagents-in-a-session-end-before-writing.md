@@ -51,17 +51,17 @@ and 5 of `docs/operator/2026-10-23-real-turns-c2-c5-c6.md` as this session's wor
 - In the probes an allow and a deny returned to the subagent and it carried on; a defer ended it.
   The four earlier runs fit that pattern (each would have reached a Bash or a Write in the tree
   early) but their last calls are not seen, so for them it is unconfirmed.
-- The last probe's allow has two explanations: the switch to policy mode, or a session allow of
-  `Write` given by the driver at an earlier prompt (`internal/policy/policy.go`, the session-allow
-  branch in `Decide`). The mode is not visible from inside the session; `audit`'s `mode-changed`
-  row would settle it (not yet read).
+- The last probe's allow has two possible causes: the switch to policy mode, or a session allow of
+  `Write` given by the driver at an earlier prompt. The mode is not visible from inside the
+  session; the code order settles it (below).
 - After the last probe, a `reviewer` of this commit ran 21 calls, Bash included, over about four
   minutes and returned a full report: the first subagent in this session to use Bash and finish.
-- The likely mechanism: in prompt mode the deferral ends the engine turn, and the subagent is not
-  resumed when the driver resumes. The coordinator's own deferred calls (an `Edit` to
-  `docs/ideas/`, a `Bash` commit) did run after their prompts. Not yet observed: the deferral
-  itself in `session tail` and `audit`, and whether the prompt for the subagent's call ever
-  reached Discord.
+- What ended: only the subagent. Its Agent result is `ok` with no output, while the engine turn
+  went on: after the in-tree probes the audit shows no `turn-ended` and no `waiting-for-answer`
+  for turn 8, the coordinator wrote text and ran the next probe, and the turn ended later (below).
+  The engine returned no top-level deferred result for the subagent's call. The coordinator's own
+  deferred calls (an `Edit` to `docs/ideas/`, a `Bash` commit) did run after their prompts. The
+  audit shows no prompt for the subagent's call; the hook log shows the hook's answer (below).
 - The coordinator's own deferred calls end its turn too: in prompt mode, after a prompted `Edit`,
   `Write` or `Bash`, the coordinator's next input was the bare line `Continue from where you left
   off.` instead of the call's context, and it had to re-establish where it was. Work survives
@@ -94,15 +94,59 @@ and 5 of `docs/operator/2026-10-23-real-turns-c2-c5-c6.md` as this session's wor
   `--permission-mode default` (`internal/engine/claudecode.go`). The driver's direction is in
   `docs/ideas/2026-10-23-engine-auto-permission-mode-as-a-third-session-mode.md`.
 
+### Read from the audit (`session show`, `session tail --all`, `audit --kind permission-decision,mode-changed`)
+
+| Probe (turn) | Time | Decision row | Prompt / resume | Mode |
+|---|---|---|---|---|
+| runner Bash `git log` (8) | 01:56:01 | none: `tool-call` only (says nothing of the hook, below) | no `waiting-for-answer`, no participant row | prompt |
+| tester Write in tree (8) | 01:56:08 | none: `tool-call` only (says nothing of the hook, below) | no `waiting-for-answer`, no participant row | prompt |
+| tester Write outside tree (8) | 01:56:21 | deny, source hook, decided by policy | none needed | prompt |
+| tester Write in tree after the switch (9) | 02:00:46 | allow, source hook, decided by policy | none needed | policy |
+
+- Every probe's `subagent-result` row says `ok`, within 0 to 2 seconds of its call, so the audit
+  records the subagent ending, not failing. The allowed Read probe has an `allow` row.
+- The coordinator's own deferred calls (turns 3, 4, 6, 8) each show `deferred` (policy),
+  `waiting-for-answer`, then `allow` decided by the participant with the call's tool-use id. The
+  two in-tree probes have none of the three. The audit cannot say whether the hook ran for them
+  or what it returned: the bot writes a deferred row only from the engine's `deferred_tool_use`
+  result (`deferLocked`, `internal/session/turn.go`) and an allow or deny row only when a
+  hook-decided call's result arrives (`toolResult`), and the hook process writes no audit row.
+  The hook log answers it (below).
+- `mode-changed` prompt to policy, 02:00:16 by the driver: 3 minutes 53 seconds after the last
+  prompt-mode probe (01:56:23) and 30 seconds before the policy-mode Write. It is the only mode
+  row in the session.
+- Session allow: the audit cannot tell `allow` from `allow-session` (`actions.go` records
+  `DecisionAllow` for both), and a participant did allow the coordinator's Write at turn 4. What
+  ties the last probe to the mode is the code order: `internal/policy/policy.go` (around lines
+  297-300) returns Allow for an `ask` cell in policy mode before the session allow list is
+  checked, so in policy mode the Write is allowed whether or not `Write` was session-allowed.
+
+### Read from the hook log (`sessions/s0008/home/hook.log` under the root)
+
+One JSON row per hook decision, times in UTC (the same clock as the times above). A row has no
+field naming the agent, so a subagent's call is placed by its time after the `Agent` row.
+
+| Probe | Log time | Row |
+|---|---|---|
+| runner Bash `git log` | 01:56:01 | `git-guard.js` PreToolUse passed; then `cell: ask`, `decision: defer` |
+| tester Write in tree | 01:56:09 | `cell: ask`, `decision: defer` |
+| tester Write outside tree | 01:56:21 | `cell: deny`, `decision: deny` |
+| tester Write in tree, policy mode | 02:00:46 | `cell: ask`, `decision: allow`; `post-edit.js` PostToolUse passed |
+
+- The hook ran for both in-tree probes in prompt mode and returned `defer`, which matches the
+  reach table's inference. The hook log has no later row for either tool-use id: no resolving
+  allow, unlike the coordinator's deferred `Edit` calls (01:56:36 defer, 01:57:04 allow).
+
 ## Next
 
-- Confirm the mechanism from outside the session: `session tail s0008` and `audit` for the probe
-  calls (was a `defer` returned, was a prompt posted, what did the resume carry), the
-  `mode-changed` row, and whether a session allow of `Write` was in force
-  (`BROODFORGE_SESSION_ALLOW`). If the mode explains the last probe, prompt mode cannot host
-  subagents until a deferred subagent call resumes; that is a design question for the architect,
-  it bears on `auto` too (its classifier prompts would take the same path), and until it is
-  answered a session that delegates runs in policy mode.
+- The hook's `defer` for a subagent's call is now seen (Result, "Read from the hook log"); the
+  audit shows no deferred row and no prompt, and the subagent ends while the engine turn goes on.
+  Still open: why the engine returns no top-level `deferred_tool_use` result for a subagent's
+  deferred call, so the bot never posts a prompt (the engine, or the bot's handling of a call
+  whose tool-use id belongs to a subagent), and a design answer for the
+  architect: prompt mode cannot host subagents until such a call resumes; it bears on `auto` too
+  (its classifier prompts would take the same path), and until it is answered a session that
+  delegates runs in policy mode.
 - Decide whether `SendMessage` and `Skill` belong in `code` reach (the policy table,
   `03-hook-contract.md`); option D for skills needs the `Skill` row as well as its droplet row.
 - Decide whether the copy takes the files `CLAUDE.md` imports outside `.claude/`, or the handoff

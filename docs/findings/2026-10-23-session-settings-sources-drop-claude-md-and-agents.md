@@ -2,6 +2,7 @@
 date: 2026-10-23
 status: resolved
 area: engine / sessions
+promoted_to: docs/design/decisions/0025-session-workflow-composition.md
 ---
 
 # Session settings sources drop the project's CLAUDE.md and agents
@@ -40,5 +41,4 @@ had no delegation, review, cap or role rules and used no subagent (see
 
 ## Next
 
-Resolved as a fact; the design is open. See the idea
-`docs/ideas/2026-10-23-sessions-load-none-of-the-projects-instructions-agents-or-hooks.md`.
+Decided in ADR 0025 and built in P15-P19 (`61cccdc`); the idea file is deleted.
