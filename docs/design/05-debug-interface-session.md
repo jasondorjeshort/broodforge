@@ -69,10 +69,20 @@ and `session effort` on a session that is ending, ended or interrupted (the serv
 in memory until the bot stops) are `error: session-closed: <id> is <state>`, exit 1, whoever asks: the closed
 check comes before the driver check, so a non-driver gets this, not the driver refusal. That refusal is audited
 `action-refused` with the reason `closed` and writes nothing else: no row change, no `*-changed` audit row, no
-event (P12b; before it the three wrote all of them on an ended session). The audit row holds only for a session
-still in memory. After a restart the session is not held, `acting` falls through to the store's state and
-refuses `session-closed: <id> is <state>` with no audit row; while the bot is shutting down the answer is
-`shutting-down`. `session timeout <id>
+event (P12b; before it the three wrote all of them on an ended session). The same closed check, first of all
+checks, refuses `send`, `answer`, `interrupt`, `timeout` and `invite` on a session that is ending, ended or
+interrupted (ADR 0026; before it an answer and an interrupt were `no-pending` and `no-running-turn` there).
+Every refusal the service returns to an action (`start`, `send`, `answer`, `interrupt`, `end`, `mode`,
+`model`, `effort`, `timeout`, `invite`, `register`) is audited `action-refused`, the reason its code (`closed`,
+`unknown-session`, `shutting-down`, `no-pending`, `not-pending`, `no-running-turn`, `bad-args`,
+`unknown-fixture`, `bad-kind`), the session column the id the request named, the actor `--as` or `host`; the
+row is written where the action is refused (`acting`, `Submit`'s own lookup, `end`'s own closed branch for a
+session still in memory), never inside the lookup the
+reads share, so a refused read (`tail`, `show`, `transcript`, a bare `/model`) writes no row; the idle timer
+finding its own end void (activity since the tick) is not anyone's action and writes none either. The bot
+holds every `interrupted` session from start-up (below, Held sessions), so after a restart an ended session
+alone is unheld and refused `session-closed: <id> is ended` from the store's state; while the bot is shutting
+down the answer is `shutting-down`. `session timeout <id>
 never|<minutes>|<duration>` (the driver; effective now) sets the session's idle timeout (`never`,
 `off` or `0` is never; a bare number is minutes; else a Go duration of at least a minute such as
 `1h30m15s`, which reads `5415 seconds`; above a year is capped, and the summary adds
@@ -86,7 +96,16 @@ default until the owner decides); otherwise `no-running-turn`. `session end <id>
 then the handoff, printing its line as `worktree handoff` does; a refused handoff
 (`handoff-refused-*`, its failing commits streamed first) keeps the session open, waiting for
 input (after an idle end the idle timer waits for the next activity: one attempt); anything else
-ends it. Ending (end, idle, `stop`) while a call waits records it `dropped`, decider `instance`,
+ends it. On a held interrupted session `end` is the one action accepted: the same sequence, the
+`session-ended` row's `state` `interrupted`, the summary `Session <id> ended by <name>.`; a refused
+handoff returns it to `interrupted` (the `handoff-refused` event with 04's interrupted-session text, no
+timer, no new turn). Two escapes, checked in this order before any handoff, so a held session can always be
+ended: `refs/sessions/<id>` gone from the canonical (a `worktree handoff <id>` finished earlier: it removes the
+tree and deletes the ref) runs nothing and ends with the outcome that handoff recorded, read from the row's
+`end_outcome`, a URL mapped to `pull-request` with the URL, a branch name to `pushed` with the branch, null
+(a `none` handoff) to `none`, the commit count unknown; else the ref present but the tree gone (the worktree
+row `removed` or its path absent) runs no handoff and ends with `tree-missing`, the ref left in the canonical
+for the owner. Ending (end, idle, `stop`) while a call waits records it `dropped`, decider `instance`,
 with the cause (`the session ended`, `the session ended: no activity`, `the bot stopped`), and
 ends its turn (`turn-ended`, result `interrupted`); each queued message is dropped with a
 `message-dropped` event and an `action-refused` row. The closing turn that
@@ -139,8 +158,22 @@ usage is one record per model, written with the turn row before `turn-ended` (N-
 `modelUsage` minus the engine session's last result, or for a process without a result the
 deduplicated assistant counts, no output, flagged interrupted and never a baseline (S2);
 `harness_ref` is `<session id>/<engine session id>/<turn>.<process>/<model>`. The events are the bot's, in
-memory: without the bot `tail` is `not-running`, and a session an earlier run held is
-`session-closed`. `session reach-report <id>` prints one `<tools>  <cell under the tree or
+memory: without the bot `tail` is `not-running`, and a session an earlier run ended is
+`session-closed`; a `session-interrupted` event's summary is its reason, `shutdown` (the bot stopping),
+`reconciliation` (never in memory) or `restart` (a held session's first event, below).
+Held sessions (ADR 0026). At start-up, after reconciliation and before the socket listens, the
+service loads every `interrupted` row into memory as a held session (`Service.LoadInterrupted`): channel
+from the configuration (one no longer configured leaves the row's channel and project ids with the
+`answer` list `driver` and the other lists empty, so the driver alone may end it: an empty list permits
+nobody), mode, reach, model, effort, credential and `started_at` from the row, the driver's registration
+(the user id as the name when none), the worktree row's tree and the `git.Session` the branch and handoff
+name (root, id, instance, the channel's repository), `turns:` from the `turn` table and the summary's
+tokens, models and co-authors from `usage_record` and `participant`, no engine, no timers, state
+`interrupted`; its event log opens with `session-interrupted`, summary `restart`, `start` the header's
+facts plus `commits`, the tree's commit count over its base read through the spawn backend
+(`WorktreeCommits`; null when it cannot be read), so `session tail <id>` prints that one line and what
+follows; then the `Started` hook runs for it, which in a dry run binds its venue again. Loading writes
+no row and no audit event; `serve` prints `held  <ids>` before `serving`. `session reach-report <id>` prints one `<tools>  <cell under the tree or
 canonical>  <cell elsewhere>` line per row of the policy table for the session's reach (`*` for
 every other tool), then `binds: -`, the empty bind list until P14; `--json` both; `--expect` the
 reach. P11 (the renderer, `05-debug-interface-discord.md`, which has the detail): `session outbox
@@ -165,7 +198,8 @@ the canonical given `fixtures/workflow/`'s files and both hook events (node on `
 `session send s0001 --as 1001 --wait "..."`, then `session tail` and `audit` checked line by
 line, the request's flags, `session show`'s three workflow lines and `--header`, `session
 reach-report`, `usage`, `config reload`, `worktree handoff s0001 --expect none`, `stop`; P11
-adds `session outbox`.
+adds `session outbox`. A restart, then `end`: `scratch run -- bash tests/repro/restart-end.sh`
+[no-check: written by P12c] (`05-debug-interface-discord-live.md`, Inbound log and held sessions).
 Isolation. All of it in the scratch root against the fake; the socket under the root.
 
 ## Prompt-mode defer and resume

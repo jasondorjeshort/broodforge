@@ -9,10 +9,12 @@ Updated: 2026-10-24, s000a post-mortem, by main session (rooted in the repo, hoo
   refused (Discord's id check took digits only; s000a is the first base-36 id with a letter), so its handoff
   never ran. The fix is live. The restart interrupted s000a, and after a restart an interrupted session
   cannot be ended at all (its own finding, against 03 Shutdown); its code is all on main, its tree kept.
-- Owner approved 2026-10-24: `xhigh`, the driver-only text, "This session has ended." for every
-  closed-session refusal (settles the plain-message refusal), the header menus (judge live).
+- Owner approved 2026-10-24: `xhigh`, the driver-only text, "This session has ended." for ended
+  sessions, the header menus (judge live); ADR 0026's texts as its 04 rows mark.
 
 ## Next
+
+0. P12c then P12d (ADR 0026, `08-implementation-plan-discord.md`): coder; End s000a after P12c.
 
 1. The s000a post-mortem's Next (R-35 for open sessions, the credential carve-out, foreground
    subagents, the pusher's `gcc` PATH, 86 hook-test failures); rewrite the closing-message idea.
@@ -28,10 +30,8 @@ Updated: 2026-10-24, s000a post-mortem, by main session (rooted in the repo, hoo
 ## Waiting on user
 
 - The `pre-push` line (P15) and its no-id form "this tree does not push" (s000a lost 19 min to it).
-- Wording: P12a and `/model` showing effort; "Never ends for inactivity."; a switch post naming who
-  switched; hook no-answer phrase; R-17; the session's `Waits:` blocks.
+- Wording: P12a and `/model` showing effort; "Never ends for inactivity."; a switch post naming who switched; hook no-answer phrase; R-17; the session's `Waits:` blocks.
 - Commit name and email (`privacy.identities`)? The `Question:` ideas of 2026-10-21.
-
 ## Open findings
 
 - `docs/findings/2026-10-24-interrupted-session-cannot-be-ended-after-a-restart.md` (architect: its fix shape)

@@ -15,7 +15,7 @@ write a proposal, and continue it when it stops?
 ## What was tried
 
 The driver asked for the engine's `auto` permission mode to be planned for the next wave. The
-coordinator made three `architect` launches and one continuation, briefed to write proposal 0026
+coordinator made three `architect` launches and one continuation, briefed to write proposal 0027 (then numbered 0026; ADR 0026 took the number on 2026-10-24)
 (no code, no commit):
 
 1. Background launch. The `architect` said the `proposal` skill was not registered and ended.
@@ -151,4 +151,4 @@ field naming the agent, so a subagent's call is placed by its time after the `Ag
   `03-hook-contract.md`); option D for skills needs the `Skill` row as well as its droplet row.
 - Decide whether the copy takes the files `CLAUDE.md` imports outside `.claude/`, or the handoff
   reaches a session another way.
-- Proposal 0026 for `auto` is still unwritten; it is the next wave's first architect brief.
+- Proposal 0027 for `auto` (0026 went to the held-sessions ADR) is still unwritten; it is the next wave's first architect brief.

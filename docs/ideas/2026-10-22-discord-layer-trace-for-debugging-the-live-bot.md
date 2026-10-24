@@ -24,6 +24,12 @@ Why not a second bot that sees everything: it cannot see ephemeral replies (`/re
 go to the owning application, nor the gateway and REST errors inside the bot's own connection. The
 in-app hook shows all of those.
 
+2026-10-24 (architect): ADR 0026 and pass P12d (`docs/design/08-implementation-plan-discord.md`) build
+the inbound half of this, always on, not debug-only: one stderr line per inbound message, command, click
+and modal with its route and outcome, never text or a raw custom id (`05-debug-interface-discord-live.md`,
+Inbound log and held sessions). Still open here: a line per REST call and its status, gateway reconnects
+and rate limits, and reading the lines over the control pipe (`trace tail --follow`).
+
 ## Open
 
 - Redaction: a modal submission carries an API key and an interaction carries message text; the trace

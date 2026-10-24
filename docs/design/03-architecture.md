@@ -255,7 +255,7 @@ environment variable (ADR 0021); (2) `config/` or last-good (ADR 0021), parsed a
 then a probe of step 8's address: anything but nothing listening refuses `start-control` before any write, so a second
 bot never reconciles the first's sessions; (3) the key file the config names or `BROODFORGE_KEY_FILE`, the credential
 store, then the config's credential ids against it (ADR 0022); (4) `data/store.sqlite` and migrations; (5) the engine
-binary and version; (6) `spawn preflight`; (7) reconciliation (ADR 0021); (8) the control socket; (9) the Discord
+binary and version; (6) `spawn preflight`; (7) reconciliation (ADR 0021), then every interrupted session held in memory so `end` reaches it (ADR 0026); (8) the control socket; (9) the Discord
 gateway; (10) the interrupted notice in each interrupted session's venue, the start-up report to the notice channel if set.
 
 Signals and leftovers. The spawn backend starts every engine (the `sudo` child on Linux) detached

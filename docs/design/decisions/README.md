@@ -16,6 +16,7 @@ Hatchery's own records are in `../../hatchery/decisions/`, never edited here (AD
 | `0024-decanted-from-hatchery.md` | Provenance: the `Hatchery base:` line, the licence, the departure table of base-owned files this project edits |
 | `0025-session-workflow-composition.md` | The bot's contract as a precedence header over the repository's workflow injected from a per-session copy of the canonical's default branch; repository hooks as deny-only children of the bot's hook; no push from a session; a push-time scan; the PC keeps an outside gate |
 | `0025-refusals-and-checks.md` | Companion to 0025: the copy procedure, the runtime probe, the refusal texts with their lifts, the open checks and the pass that closes each |
+| `0026-interrupted-sessions-held-after-a-restart.md` | Interrupted sessions loaded into memory at start so `end` works on them; every service refusal audited; one stderr line per inbound Discord event; every interaction acknowledged; the interrupted wording |
 
 Template:
 

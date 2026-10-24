@@ -228,11 +228,11 @@ show` printing `pending:` while waiting and the prompt timeout's deny in `audit`
 leaves one `dropped` row there; `usage --session s0001 --by turn --json` equals the fixture's
 deltas. Depends on: P2 to P9.
 
-## P11, P12, P12a, P12b. The Discord adapter
+## P11, P12, P12a, P12b, P12c, P12d. The Discord adapter
 
 Moved by topic to `08-implementation-plan-discord.md`: the dry-run renderer and outbox (P11), the live
-gateway (P12), model and effort from Discord (P12a) and the header's menus (P12b). P13 depends on P12 as
-before.
+gateway (P12), model and effort from Discord (P12a), the header's menus (P12b), the held interrupted
+sessions (P12c) and the audited refusals with the inbound log (P12d), both ADR 0026. P13 depends on P12 as before.
 
 ## P13. The Windows instance (medium; owner steps)
 

@@ -21,12 +21,12 @@ that widens a live session), the hidden probe `control echo`. Sections below giv
 
 Drive. `broodforge serve [--discord live|dry-run]` runs the bot in the foreground through 03's
 startup steps, prints each configuration warning (`warning: <file>: <what>`, as `config check`
-does) to stderr, and prints `serving  <socket>` once the socket listens; a failed step is
+does) to stderr, then `held  <ids>` for the interrupted sessions it holds (ADR 0026; `-` for none), and prints `serving  <socket>` once the socket listens; a failed step is
 `error: start-<step>: <reason>`, exit 1 (`root`, `config`, `discord`, `credentials`, `store`, `engine`,
 `preflight`, `reconcile`, `control`); the flag overrides the config key for this run. Live needs
 `discord.applicationId`, `guildId` and `botCredentialId` (a `bot-token` credential whose value
 has a bot token's shape, checked before anything connects) and opens the gateway after the
-socket (`05-debug-interface-discord.md`); any of it failing is `start-discord`. With only `fake`
+socket (`05-debug-interface-discord-live.md`); any of it failing is `start-discord`. With only `fake`
 channels, steps 5 and 6 skip the engine checks. `broodforge status [--wait <seconds>] [--expect ok|last-good]` waits for the
 socket to answer and prints, in order: `config: ok` or `config: last-good from <time>`, `discord:
 live|dry-run connected|disconnected` (dry-run is always connected), `sessions: <open> open,

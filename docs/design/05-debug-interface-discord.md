@@ -96,42 +96,13 @@ Reproduce. Both repro scripts of `05-debug-interface-session.md` read the outbox
 turn 2's timeout trace line.
 Isolation. All in memory in the bot; a dry run sends nothing anywhere.
 
-## The live gateway (P12)
+## The live gateway (P12), the held sessions (P12c) and the inbound log (P12d)
 
-`internal/discord/gateway.go` puts disgo's gateway client (intents Guilds, GuildMessages and the
-privileged MessageContent, no DMs) and its REST client behind the same handlers and sink. The
-REST calls it makes are the `restAPI` interface at the top of that file, the surface a swap to
-arikawa covers; resume, reconnects and the per-route limits are disgo's.
-Drive. `serve --discord live` on a root whose `discord` keys are set: after the control socket it
-checks the application behind the token against `discord.applicationId` and the
-message-content intent, registers 04's slash commands in `discord.guildId` (`/register`,
-top-level `/model`, `/session start|stop|end|mode|model|effort|timeout|invite`, `/credential add|list|remove|default|login`, `/usage`),
-binds the venues of earlier runs under each `venue.category` (a text channel whose topic is
-`<instanceName>:<session id>`, the mark every venue is created with: an open or interrupted
-session's is bound again, an ended one's is deleted ten minutes after its end; a channel
-without the mark or whose session the store does not know is left alone, and when two carry
-one session's mark neither is bound or deleted and a warning names them), connects, and
-posts 04's start-up report to the notice channel. Every post still passes the mask and the
-coalescer and lands in the outbox first, then goes out as its REST call: `channel` creates the
-private venue under the project's category with that topic (@everyone denied view; the bot,
-Manage Channels included, the driver and the channel's `contribute` and `answer` roles allowed), a pinned create is pinned, `attach` adds the
-transcript file to the summary; ten minutes after a session's last post the venue is deleted
-on the adapter's clock. A message in a venue or lobby runs `discord inject message`'s handler:
-a pasted key is deleted where the bot may (an edited message gets the key scan alone), a queued message gets an hourglass reaction, and a
-reply or refusal goes to the writer by direct message (Discord has no ephemeral reply to a
-message), in the channel with a mention when they take none. A slash command or a click is
-deferred, then answered ephemerally (a click's answer is a follow-up); `/credential add
-kind:api-key` answers with the modal, whose submission stores the key and answers `Stored
-<id> (API key, ends in ...<last four>).`. `status` shows `discord: live connected` while the
-gateway session is ready.
-Observe. `session outbox` (a live instance's too); `status`; `audit --kind action-refused`;
-warnings on the bot's stderr as `warning: discord: <what>: <error>`, one per failed call.
-Reproduce. `go test ./internal/discord -run 'TestLive|TestSweep|TestCheck'`: a fake of
-`restAPI` records every call with its disgo request body while a real session service runs
-the fake engine; a guild bug is first a recorded interaction or message JSON fed to
-`onInteraction` or `onMessage` there.
-Isolation. Only `serve --discord live` and `discord check` connect, both to the guild
-configured or given; a value without a bot token's shape is refused before any connection.
+Moved by topic to `05-debug-interface-discord-live.md`: `serve --discord live` (the application check,
+the slash commands, the venue sweep, the start-up report, each post as its REST call, the direct-message
+reply, the deferred interaction answers, the API-key modal), the `restAPI` surface, the live tests; the
+held interrupted sessions' notice, summary and end (P12c); and one stderr line per inbound event with its
+outcome and the acknowledgement of every interaction (P12d), all ADR 0026.
 
 ## Model and effort (P12a)
 
@@ -179,13 +150,15 @@ route the input came by, as every component refusal is (`start` for the panel's 
 takes the route's action name, so the typed form keeps `command`. The service's refusals name the operation
 (`model`, `effort`, `mode`) on either route, as `checkDriver` writes them. A pick on a session that is ending,
 ended or interrupted is the service's `session-closed` refusal (`05-debug-interface-session.md`, Session
-lifecycle), which the adapter answers with 04's `This session has ended.`; nothing is re-sent. `venueRefusal`
-maps every `session-closed` to that text, so the reply covers what reaches that code: `End session`, the
-switches and a venue message (an answer and `Stop` on such a session are `no-pending` and `no-running-turn`
-before any closed check; after a restart, `acting` finds no live session and every action is `session-closed`).
-The service checks closed before the driver, so a non-driver's pick on such a session gets this text, not the
-driver-only refusal. `inject click` prints it as `error: session-closed: This
-session has ended.`, while the typed `session mode|model|effort` keeps the service's `s0001 is ended`.
+lifecycle), which the adapter answers in 04's words; nothing is re-sent. `venueRefusal` maps every
+`session-closed` by the session's state, read from its row (`svc.Show`), never parsed from the refusal's text:
+`ending` and `ended` to `This session has ended.`, `interrupted` to 04's `interrupted refusal` row (ADR 0026);
+the reply covers what reaches that code: `End session` (on an ending or ended session only: on a held
+interrupted one it ends the session), the switches, a venue message, an answer, `Stop` and `/session invite`,
+since the service checks closed before every other check. A non-driver's pick on such a session gets this
+text, not the driver-only refusal. `inject click` prints it as `error: session-closed: This
+session has ended.` (or the interrupted text), while the typed `session mode|model|effort` keeps the
+service's `s0001 is ended`.
 After a refused pick on a live session the header is edited unchanged, so the picker's client drops the pick:
 the adapter keeps a `views` map, session id to `View`, from `SessionStarted` until that session's follow
 returns (the end or the interruption rendered; the entry deleted under the adapter's lock before `Done`), and

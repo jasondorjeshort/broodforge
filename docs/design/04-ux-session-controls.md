@@ -80,11 +80,11 @@ an unchanged edit does not reset the picker's screen the fallback is two edits a
 without the menus and the second with them back, which re-creates the components. When the session ends, the
 header is edited once more with every menu and the `End session` button removed; its text stays as the record.
 A pick that still arrives (a client that had not refreshed, in the minutes before the venue is deleted) is
-refused by the session itself, as the typed switches (`/session mode|model|effort`, `/model <alias>`) are once a
-session is ending, ended or interrupted: the ephemeral `This session has ended.`, no post, no header edit,
-nothing written to the session. The closed check comes before the driver check, so a pick by someone who is not
-the driver gets this reply too, not the driver refusal. The same reply answers the other venue actions that
-reach the session's closed refusal: `End session` and a venue message. An answer and `Stop` on such a session
-are refused for lack of a pending call or a running turn (`no-pending`, `no-running-turn`) before any closed
-check; after a restart, when the bot no longer holds the session, every action is answered `This session has
-ended.`
+refused by the session itself, as the typed switches (`/session mode|model|effort`, `/model <alias>`), a venue
+message, an answer, `Stop` and `/session invite` are once a session is ending or ended: the ephemeral `This
+session has ended.`, no post, no header edit, nothing written to the session but the refusal's audit row. The
+closed check comes before every other check (the driver's, a pending call's, a running turn's), so a pick by
+someone who is not the driver gets this reply too, not the driver refusal. After a restart the bot holds every
+interrupted session (ADR 0026) and its header keeps its menus and `End session` (owner-approved 2026-10-24): the button and `/session end`
+hand the session off, and every other action, a pick included, is refused with 04's `interrupted refusal`
+row, `This session was interrupted by a restart. /session end hands off its work.`

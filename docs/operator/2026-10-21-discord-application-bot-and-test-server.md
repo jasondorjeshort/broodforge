@@ -4,8 +4,8 @@
 channel and a category for sessions, give the bot its token through the credential store, and
 run `discord check`.** It waits on the owner because it needs his Discord account, the bot
 token only he may see, and clicks in the Developer Portal and the Discord client. The step and
-its reasoning are owned by `docs/design/05-debug-interface-discord.md` (The Discord adapter; The
-live gateway) and `docs/design/03-architecture.md` (Configuration).
+its reasoning are owned by `docs/design/05-debug-interface-discord.md` (The Discord adapter),
+`docs/design/05-debug-interface-discord-live.md` (The live gateway) and `docs/design/03-architecture.md` (Configuration).
 
 Runs as: the owner, in a browser for the portal and in the Discord client, then Git Bash in
 `<repo>` on the PC with `bin/broodforge` built (`CGO_ENABLED=0 go build -o bin/ ./cmd/broodforge`).
