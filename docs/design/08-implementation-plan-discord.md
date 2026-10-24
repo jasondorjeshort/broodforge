@@ -83,7 +83,8 @@ three functions both routes share, each taking the route's audit action; after a
 ids`); `internal/discord/gateway.go` (`onInteraction`: a `StringSelectMenuInteractionData`'s `Values` into
 `Inbound.Values`; the ack, follow-up and `restAPI` unchanged; the same comment fix);
 `internal/discord/text.go` and `internal/policy/roles.go` (the comments citing 04's Policy mode, Model and
-effort and Idle timeout now name `04-ux-session-controls.md`; no code change); `internal/cli/discord.go`
+effort and Idle timeout now name `04-ux-session-controls.md`; `policy.Efforts` gains `xhigh` between `high`
+and `max`, per the owner); `internal/cli/discord.go`
 (`inject click --value <v>`); `tests/repro/full-session.sh` (the header's `selects`). Proof: on a scratch root,
 whose channel `100` sets no `model`, after `register 1001 --name "Ada Example" --email ada@example.com` and
 `session start --channel 100 --as 1001 --roles 10 --credential cred-scratch --mode policy --fixture basic`
@@ -92,16 +93,18 @@ effort, mode, the first two with no `default` and 04's placeholders, the mode's 
 the `End session` button; `discord inject click --custom-id bf:s0001:effort --value high --user 1001 --roles
 10` prints `none  effort from turn <n>: high`, `session tail` gains `effort-changed`, and the header's next
 `edit` marks `high` default with the model menu unchanged; `register 1002 --name "Bob Example" --email
-bob@example.com`, then the same click `--user 1002 --roles 10` exits 1 with `error: refused: effort needs the
-driver, Ada Example`, `audit --kind action-refused` holds the row with the action `effort`, and the outbox
+bob@example.com`, then the same click `--user 1002 --roles 10` exits 1 with `error: refused: Only the driver,
+Ada Example, can change the effort.`, `audit --kind action-refused` holds the row with the action `effort` and
+the service's own text `effort needs the driver, Ada Example`, and the outbox
 holds an `edit` of the header equal in body, selects and buttons to the one before it; `--value turbo` is
 `bad-args` with 04's `Not an effort:` text and an `action-refused` row with the action `click`; a menu id
 without `--value`, and `--value` with `bf:s0001:end`, are `bad-args`; `--custom-id bf:s0001:mode --value
 asks-first` posts the mode switch's text and the header's `edit` marks `asks-first`; after `session end
 s0001` the header's last `edit` has no `selects` and no `buttons`, the same mode click `--user 1001` exits 1
-with `error: session-closed: s0001 is ended`, `audit --kind action-refused` holds it with the reason `closed`,
-`audit --kind mode-changed` and the outbox gain nothing, and `session mode s0001 prompt --as 1001` and
-`session model s0001 opus --as 1001` are refused the same; `go test ./internal/discord -run
+with `error: session-closed: This session has ended.`, `audit --kind action-refused` holds it with the reason
+`closed` and the service's text `s0001 is ended`, `audit --kind mode-changed` and the outbox gain nothing, and
+the typed `session mode s0001 prompt --as 1001` and `session model s0001 opus --as 1001` are refused with the
+service's text, `error: session-closed: s0001 is ended`; `go test ./internal/discord -run
 'TestSelect|TestCoalesceSelects|TestLive'` and `go test ./internal/session -run TestSwitchClosed` pass: the
 select test feeding a recorded string-select interaction to `onInteraction` and seeing the deferred update,
 then an `UpdateMessage` of the header with one action row per menu and the button row, and for a non-driver
@@ -113,5 +116,5 @@ three setters on an ended session, the row, the audit and the events unchanged. 
 returns to the true value; the driver picks the option already shown and an agent reads `session tail` for a
 `model-changed`; both results go in a finding, and a reset that fails turns the re-sync into two edits
 (`05-debug-interface-discord.md`, The header's menus). Does not: touch the engine's permission mode; add an
-audit kind or an event type; add a level to `policy.Efforts` (the owner's open question); add a label row, an
+audit kind or an event type; add a label row, an
 embed or a second message. Depends on: P12a.

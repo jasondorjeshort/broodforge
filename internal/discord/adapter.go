@@ -26,6 +26,18 @@ const (
 	CodeUnknownChan  = session.CodeUnknownChannel
 )
 
+// The mode values /session mode and the mode menu take (04-ux-session-controls.md, Policy mode).
+const (
+	modeAsksFirst  = "asks-first"
+	modeActsFreely = "acts-freely"
+)
+
+// The audit actions of the two routes a switch comes by: a typed command, a menu pick.
+const (
+	actionCommand = "command"
+	actionClick   = "click"
+)
+
 // Config is what the adapter needs from the bot.
 type Config struct {
 	// Config is the configuration as loaded now (the panel's project and role list).
@@ -82,6 +94,9 @@ type Adapter struct {
 	ready   map[string]chan struct{}
 	ended   map[string]bool // sessions whose session-ended event the renderer saw
 	panels  map[string]Panel
+	// views is each followed session's View, from SessionStarted until its follow returns (the
+	// end or the interruption rendered), for a refused pick's Resync.
+	views map[string]*View
 }
 
 // Panel is a project channel's panel message (04, The project channel and the panel).
@@ -101,7 +116,8 @@ func New(cfg Config) *Adapter {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a := &Adapter{cfg: cfg, Outbox: NewOutbox(), ctx: ctx, cancel: cancel, venues: map[string]string{},
-		venueOf: map[string]string{}, ready: map[string]chan struct{}{}, ended: map[string]bool{}, panels: map[string]Panel{}}
+		venueOf: map[string]string{}, ready: map[string]chan struct{}{}, ended: map[string]bool{}, panels: map[string]Panel{},
+		views: map[string]*View{}}
 	a.co = NewCoalescer(func(now time.Time, p Post) {
 		p = a.Outbox.add(now, p)
 		if g := a.live.Load(); g != nil {
@@ -212,6 +228,9 @@ func (a *Adapter) SessionStarted(id string) {
 		a.bindVenue(id, id) // a dry run's venue is the session id; live, the gateway binds it
 	}
 	v := NewView(id, ViewConfig{NewID: a.newID, Name: a.name, Offer: a.co.Offer})
+	a.mu.Lock()
+	a.views[id] = v
+	a.mu.Unlock()
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
@@ -224,8 +243,18 @@ func (a *Adapter) SessionStarted(id string) {
 			v.Handle(ev)
 			return false, nil
 		})
+		a.mu.Lock()
+		delete(a.views, id)
+		a.mu.Unlock()
 		a.co.Done(id)
 	}()
+}
+
+// viewOf is the session's View while its follow runs, nil otherwise.
+func (a *Adapter) viewOf(id string) *View {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.views[id]
 }
 
 func (a *Adapter) sessionOf(channel string) string {
@@ -235,13 +264,15 @@ func (a *Adapter) sessionOf(channel string) string {
 }
 
 // Inbound is one message or click as `discord inject` gives it: the roles stand in for the
-// guild lookup at the moment of the action (N-18).
+// guild lookup at the moment of the action (N-18). Values is a select menu's pick (one value);
+// a button has none.
 type Inbound struct {
 	Channel  string
 	User     string
 	Roles    []string
 	Text     string
 	CustomID string
+	Values   []string
 }
 
 // Reply is what the bot answers: `ephemeral` with the text only the writer sees, or `none`
@@ -362,6 +393,8 @@ func (a *Adapter) venueRefusal(sess string, err error) error {
 	switch se.Code {
 	case session.CodeUnregistered:
 		return refusal(se.Code, notRegisteredText)
+	case session.CodeSessionClosed:
+		return refusal(se.Code, sessionEndedText)
 	case session.CodeRefused:
 		if strings.HasPrefix(se.Message, "contribute ") {
 			lobby := ""
@@ -418,25 +451,17 @@ func (a *Adapter) slash(ctx context.Context, in Inbound, sl Slash) (Reply, error
 			}
 			return ephemeral(modelQueryText(headerOf(evs))), nil
 		}
-		return a.setModel(in, act, sl)
+		return a.setModel(in, act, strings.Join(sl.Args, " "), actionCommand)
 	case SlashSessionModel:
 		if err := needVenue(); err != nil {
 			return Reply{}, err
 		}
-		return a.setModel(in, act, sl)
+		return a.setModel(in, act, strings.Join(sl.Args, " "), actionCommand)
 	case SlashSessionEffort:
 		if err := needVenue(); err != nil {
 			return Reply{}, err
 		}
-		effort := strings.Join(sl.Args, " ")
-		if !policy.ParseEffort(effort) {
-			return Reply{}, a.refuse(in, "command", CodeBadArgs, notAnEffortText(effort))
-		}
-		ev, err := a.svc.SetEffort(session.EffortRequest{ActRequest: act, Effort: effort})
-		if err != nil {
-			return Reply{}, a.venueRefusal(sess, err)
-		}
-		return none("effort from turn " + strconv.Itoa(ev.Turn) + ": " + effort), nil
+		return a.setEffort(in, act, strings.Join(sl.Args, " "), actionCommand)
 	case SlashSessionTimeout:
 		if err := needVenue(); err != nil {
 			return Reply{}, err
@@ -471,23 +496,7 @@ func (a *Adapter) slash(ctx context.Context, in Inbound, sl Slash) (Reply, error
 		if err := needVenue(); err != nil {
 			return Reply{}, err
 		}
-		mode := ""
-		if len(sl.Args) == 1 {
-			switch sl.Args[0] {
-			case "asks-first":
-				mode = policy.ModePrompt.String()
-			case "acts-freely":
-				mode = policy.ModePolicy.String()
-			}
-		}
-		if mode == "" {
-			return Reply{}, a.refuse(in, "command", CodeBadArgs, "/session mode takes asks-first or acts-freely")
-		}
-		ev, err := a.svc.SetMode(session.ModeRequest{ActRequest: act, Mode: mode})
-		if err != nil {
-			return Reply{}, a.venueRefusal(sess, err)
-		}
-		return none("mode from turn " + strconv.Itoa(ev.Turn) + ": " + mode), nil
+		return a.setMode(in, act, strings.Join(sl.Args, " "), actionCommand)
 	case SlashSessionInvite:
 		if err := needVenue(); err != nil {
 			return Reply{}, err
@@ -508,8 +517,9 @@ func (a *Adapter) slash(ctx context.Context, in Inbound, sl Slash) (Reply, error
 	return Reply{}, a.refuse(in, "command", CodeNotBuilt, "/"+sl.Name+" is not built in the dry-run adapter yet")
 }
 
-// Click is a button press (03 Data flow, Button custom ids): the custom id parsed by the one
-// function, then the service's answer, interrupt, end or start for the presser.
+// Click is a button press or a header menu's pick (03-architecture.md, Data flow: Custom ids):
+// the custom id parsed by the one function, then the service's answer, interrupt, end, start or
+// switch for the presser.
 func (a *Adapter) Click(ctx context.Context, in Inbound) (Reply, error) {
 	if !a.cfg.DryRun {
 		return Reply{}, a.refuse(in, "click", CodeLiveInstance, "discord inject is for a dry-run instance")
@@ -525,8 +535,22 @@ func (a *Adapter) click(ctx context.Context, in Inbound) (Reply, error) {
 		return Reply{}, a.refuse(in, "click", CodeBadArgs, "a custom id of "+strconv.Itoa(len(in.CustomID))+
 			" bytes starting "+strconv.Quote(idPrefix(in.CustomID))+" is "+err.Error())
 	}
+	// A menu's pick carries exactly one value (Discord's min and max are one); a button none.
+	// not 04: both texts.
+	if cid.IsMenu() && len(in.Values) != 1 {
+		return Reply{}, a.refuse(in, actionClick, CodeBadArgs, "a pick of "+cid.String()+" carries one value, not "+strconv.Itoa(len(in.Values)))
+	}
+	if !cid.IsMenu() && len(in.Values) != 0 {
+		return Reply{}, a.refuse(in, actionClick, CodeBadArgs, cid.String()+" is a button and carries no value")
+	}
 	act := session.ActRequest{Session: cid.Session, As: in.User, Roles: heldRoles(in.Roles)}
 	switch cid.Kind {
+	case IDModel:
+		return a.setModel(in, act, in.Values[0], actionClick)
+	case IDEffort:
+		return a.setEffort(in, act, in.Values[0], actionClick)
+	case IDMode:
+		return a.setMode(in, act, in.Values[0], actionClick)
 	case IDAnswer:
 		sub, err := a.svc.Answer(ctx, session.AnswerRequest{ActRequest: act, ToolUseID: cid.ToolUseID, Decision: cid.Decision})
 		if err != nil {
@@ -550,19 +574,71 @@ func (a *Adapter) click(ctx context.Context, in Inbound) (Reply, error) {
 	return Reply{}, a.refuse(in, "click", CodeBadArgs, "unknown custom id")
 }
 
-// setModel is /model <alias> and /session model <alias>: a value policy does not know is
+// setModel is /model <alias>, /session model <alias> and the model menu's pick, action naming
+// the route for the audit row of the adapter's own refusal: a value policy does not know is
 // refused before the service sees it (04's `Not a model:`); the venue's `From the next turn:`
 // line and the header edit come from the model-changed event.
-func (a *Adapter) setModel(in Inbound, act session.ActRequest, sl Slash) (Reply, error) {
-	value := strings.Join(sl.Args, " ")
+func (a *Adapter) setModel(in Inbound, act session.ActRequest, value, action string) (Reply, error) {
 	if _, ok := policy.ResolveModel(value); !ok {
-		return Reply{}, a.refuse(in, "command", CodeBadArgs, notAModelText(value))
+		return Reply{}, a.refuse(in, action, CodeBadArgs, notAModelText(value))
 	}
 	ev, err := a.svc.SetModel(session.ModelRequest{ActRequest: act, Model: value})
 	if err != nil {
-		return Reply{}, a.venueRefusal(act.Session, err)
+		return Reply{}, a.switchRefusal(act.Session, "model", action, err)
 	}
 	return none("model from turn " + strconv.Itoa(ev.Turn) + ": " + ev.Result), nil
+}
+
+// setEffort is /session effort <level> and the effort menu's pick, as setModel.
+func (a *Adapter) setEffort(in Inbound, act session.ActRequest, value, action string) (Reply, error) {
+	if !policy.ParseEffort(value) {
+		return Reply{}, a.refuse(in, action, CodeBadArgs, notAnEffortText(value))
+	}
+	ev, err := a.svc.SetEffort(session.EffortRequest{ActRequest: act, Effort: value})
+	if err != nil {
+		return Reply{}, a.switchRefusal(act.Session, "effort", action, err)
+	}
+	return none("effort from turn " + strconv.Itoa(ev.Turn) + ": " + value), nil
+}
+
+// setMode is /session mode asks-first|acts-freely and the mode menu's pick, as setModel.
+func (a *Adapter) setMode(in Inbound, act session.ActRequest, value, action string) (Reply, error) {
+	mode := ""
+	switch value {
+	case modeAsksFirst:
+		mode = policy.ModePrompt.String()
+	case modeActsFreely:
+		mode = policy.ModePolicy.String()
+	}
+	if mode == "" {
+		return Reply{}, a.refuse(in, action, CodeBadArgs, "/session mode takes asks-first or acts-freely")
+	}
+	ev, err := a.svc.SetMode(session.ModeRequest{ActRequest: act, Mode: mode})
+	if err != nil {
+		return Reply{}, a.switchRefusal(act.Session, "mode", action, err)
+	}
+	return none("mode from turn " + strconv.Itoa(ev.Turn) + ": " + mode), nil
+}
+
+// switchRefusal is a switch the service refused, in 04's words: the driver-only refusal as the
+// owner worded it, the rest as venueRefusal has them. After a refused pick on a session still
+// open, the header is posted again unchanged, so the picker's menu returns to the true value
+// (05-debug-interface-discord.md, The header's menus); a closed session's header is left alone.
+func (a *Adapter) switchRefusal(sess, what, action string, err error) error {
+	var se *session.Error
+	isSession := errors.As(err, &se)
+	if action == actionClick && (!isSession || se.Code != session.CodeSessionClosed) {
+		if v := a.viewOf(sess); v != nil {
+			v.Resync()
+		}
+	}
+	if isSession && se.Code == session.CodeRefused {
+		// checkDriver's refusal is `<what> needs the driver, <name>`.
+		if name, ok := strings.CutPrefix(se.Message, what+" needs the driver, "); ok {
+			return refusal(se.Code, driverOnlyText(name, what))
+		}
+	}
+	return a.venueRefusal(sess, err)
 }
 
 // start is the panel's button and /session start [model:<alias>] (04, The project channel and

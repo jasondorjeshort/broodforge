@@ -8,7 +8,7 @@
 #
 # It drives the bot through the CLI and reads the outcome through `session tail` and `audit`
 # only: a refused start, one policy-mode turn against fixtures/engine/basic, the reach report,
-# its usage, `config reload`, the handoff and `stop`. The scratch canonical first gets
+# its usage, `config reload`, the handoff and `stop`; `session outbox --json` gives the header's menus. The scratch canonical first gets
 # fixtures/workflow/'s CLAUDE.md and .claude on main and the project both hook events (ADR 0025),
 # so the session starts with the workflow injected: the fake's request carries the file flag and
 # --agents, `session show` its workflow:, hooks: and review: lines and --header the header. The
@@ -100,6 +100,24 @@ for want in \
 	'  delete  m[0-9]*  0  -$'; do
 	grep -q -- "$want" <<<"$outbox" || fail "session outbox has no line matching: $want"
 done
+
+# The header's menus (P12b; 05-debug-interface-discord.md, The header's menus): the pinned create
+# carries model, effort and mode in that order; channel 100 sets no model and the start no effort,
+# so only mode, started acts-freely, marks a default; disgo's payload has one row per menu, then
+# the End session row.
+header=$("$bf" --json session outbox "$id" --all | grep -m 1 '"pinned":true') || fail "session outbox has no pinned header"
+menus=${header%%,\"pinned\":*}
+menus=${menus#*\"selects\":}
+grep -q -- "^\[{\"customId\":\"bf:$id:model\",\"placeholder\":\"Model: the engine.s own\",\"options\":\[{\"label\":\"Opus\",\"value\":\"opus\"}" <<<"$menus" ||
+	fail "the header's first menu is not the model's with its placeholder: $menus"
+grep -q -- "},{\"customId\":\"bf:$id:effort\",\"placeholder\":\"Effort: the engine.s own\",\"options\":\[{\"label\":\"low\",\"value\":\"low\"}" <<<"$menus" ||
+	fail "the header's second menu is not the effort's with its placeholder: $menus"
+grep -q -- "},{\"customId\":\"bf:$id:mode\",\"options\":\[{\"label\":\"asks first\",\"value\":\"asks-first\"},{\"label\":\"acts freely (within reach)\",\"value\":\"acts-freely\",\"default\":true}\]}\]$" <<<"$menus" ||
+	fail "the header's last menu is not the mode's marking acts-freely: $menus"
+[ "$(grep -o '"default":true' <<<"$menus" | wc -l)" = 1 ] || fail "a menu other than mode marks a default: $menus"
+rows=$(grep -o '"custom_id":"[^"]*"' <<<"${header#*\"payload\":}" | tr '\n' ' ')
+[ "$rows" = "\"custom_id\":\"bf:$id:model\" \"custom_id\":\"bf:$id:effort\" \"custom_id\":\"bf:$id:mode\" \"custom_id\":\"bf:$id:end\" " ] ||
+	fail "the header's payload rows are not model, effort, mode, End session: $rows"
 
 audit=$("$bf" audit --all)
 printf '%s\n' "$audit"

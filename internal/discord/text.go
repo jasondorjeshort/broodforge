@@ -39,9 +39,10 @@ func modeName(mode string) string {
 // policy does not know is shown as it is.
 func modelShort(id string) string { return session.ModelShort(id) }
 
-// modelLine is the header's model line (04, Model and effort): `Model: Opus (this channel's
-// default). Effort: high.`, the parenthesis `this channel's default`, `chosen at start` or
-// `from turn <n>`; `Model: the engine's own.` when nothing set one; `Effort:` only once set.
+// modelLine is the header's model line (04-ux-session-controls.md, Model and effort): `Model:
+// Opus (this channel's default). Effort: high.`, the parenthesis `this channel's default`,
+// `chosen at start` or `from turn <n>`; `Model: the engine's own.` when nothing set one;
+// `Effort:` only once set.
 func modelLine(m headerState) string {
 	line := modelPart(m)
 	if m.effort != "" {
@@ -85,6 +86,32 @@ func notAModelText(v string) string {
 func notAnEffortText(v string) string {
 	return "Not an effort: " + echo(v) + ". Efforts: " + session.EffortsText() + "."
 }
+
+// driverOnlyText refuses a switch of the model, effort or mode by someone who is not the
+// driver, on the slash command and the menu pick alike (04-ux-session-controls.md, The header's
+// menus; the owner's wording, 2026-10-24). what is "model", "effort" or "mode". The service's
+// own refusal, which the CLI prints and the audit row keeps, is `<what> needs the driver, <name>`.
+func driverOnlyText(name, what string) string {
+	return "Only the driver, " + name + ", can change the " + what + "."
+}
+
+// sessionEndedText answers what reaches session-closed (End session, a switch or a pick, a venue
+// message) on a session that is ending, ended or interrupted (04-ux-session-controls.md, The header's menus).
+const sessionEndedText = "This session has ended."
+
+// The header's select menus (04-ux-session-controls.md, The header's menus): the placeholder of
+// a menu with nothing set echoes the header's line, and the mode menu's options are Owner 7's
+// names.
+const (
+	modelEngineOwnPlaceholder  = "Model: the engine's own"
+	effortEngineOwnPlaceholder = "Effort: the engine's own"
+	modeAsksFirstLabel         = "asks first"
+	modeActsFreelyLabel        = "acts freely (within reach)"
+)
+
+// modelPlaceholder is the model menu's placeholder for a model the map does not name: the
+// header's words, `Model: <id>`.
+func modelPlaceholder(id string) string { return "Model: " + id }
 
 // tokens is a token count as 04 writes it: 950, 48.2k, 212k, 1.2M.
 func tokens(n int64) string {
@@ -195,8 +222,8 @@ func headerText(id string, st *session.StartInfo, m headerState) string {
 		"Write what you want done. Everyone who writes here is handed to the agent by name."
 }
 
-// idleSentence is the header's idle timeout (04, Idle timeout): `Ends after 60 minutes without
-// activity.`, or for none `Never ends for inactivity.`
+// idleSentence is the header's idle timeout (04-ux-session-controls.md, Idle timeout): `Ends
+// after 60 minutes without activity.`, or for none `Never ends for inactivity.`
 func idleSentence(idle string) string {
 	if idle == "" || idle == "never" {
 		return "Never ends for inactivity."
@@ -326,7 +353,8 @@ func answeredText(ev session.Event, by, trace string) string {
 	return first + "\n" + trace
 }
 
-// modeChangedText is the mode switch's post (04, Policy mode); not 04: the asks-first form.
+// modeChangedText is the mode switch's post (04-ux-session-controls.md, Policy mode); not 04:
+// the asks-first form.
 func modeChangedText(mode, reach string) string {
 	if mode == policy.ModePolicy.String() {
 		return "From the next turn: acts freely. Broodforge answers permission prompts itself, inside this\nchannel's reach (" + reach + "). Switch back with /session mode asks-first."

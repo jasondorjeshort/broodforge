@@ -49,7 +49,7 @@ var _ Engine = (*ClaudeCode)(nil)
 func (c *ClaudeCode) Name() string { return "claude-code" }
 
 // Args is ADR 0020's command line after the binary: the fixed flags, the empty MCP map, then
-// RequestArgs. --effort is the engine's own flag (`claude --help` on 2.1.309: low, medium, high,
+// RequestArgs. --effort is the engine's own flag (`claude --help` on 2.1.310: low, medium, high,
 // xhigh, max); the session sends only a level policy.Efforts lists.
 func Args(req TurnRequest, mcpConfig string) []string {
 	args := []string{"-p", "--output-format", "stream-json", "--verbose", "--input-format", "stream-json",

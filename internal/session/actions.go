@@ -109,6 +109,18 @@ func (s *Service) checkDriver(l *live, req ActRequest, action string) error {
 	return s.refuse(req.As, l.id, action, "driver", &Error{CodeRefused, action + " needs the driver, " + l.driver.Name})
 }
 
+// switchOpenLocked is the check mode's, model's and effort's switches share
+// (05-debug-interface-session.md, Session lifecycle): a session that is ending, ended or
+// interrupted refuses them with end's code and text, audited with the reason closed, and the
+// caller writes nothing. l.mu is held, so the state read is the one the write would follow.
+func (s *Service) switchOpenLocked(l *live, act ActRequest, action string) error {
+	switch l.state {
+	case StateEnding, StateEnded, StateInterrupted:
+		return s.refuse(actorOf(act.As), l.id, action, "closed", &Error{CodeSessionClosed, l.id + " is " + l.state})
+	}
+	return nil
+}
+
 // Answer is SessionService.answer: the pending call's decision, by a participant the channel
 // lets answer, then the turn resumes (03 Data flow, Prompt mode). allow-session also adds the
 // tool to BROODFORGE_SESSION_ALLOW for the session's later calls (04, Owner 6).
@@ -268,11 +280,14 @@ func (s *Service) SetMode(req ModeRequest) (Event, error) {
 	if err != nil {
 		return Event{}, err
 	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if err := s.switchOpenLocked(l, req.ActRequest, "mode"); err != nil {
+		return Event{}, err
+	}
 	if err := s.checkDriver(l, req.ActRequest, "mode"); err != nil {
 		return Event{}, err
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	from := l.mode
 	err = s.cfg.Store.Write(func(tx *store.Tx) error {
 		if _, err := tx.Exec("UPDATE session SET mode = ? WHERE id = ?", store.Text(req.Mode), store.Text(l.id)); err != nil {
@@ -286,7 +301,7 @@ func (s *Service) SetMode(req ModeRequest) (Event, error) {
 		return Event{}, err
 	}
 	l.mode = req.Mode
-	// 04, Policy mode: the names people see are `asks first` and `acts freely`.
+	// 04-ux-session-controls.md, Policy mode: the names people see are `asks first` and `acts freely`.
 	shown := "asks first"
 	if req.Mode == policy.ModePolicy.String() {
 		shown = "acts freely"

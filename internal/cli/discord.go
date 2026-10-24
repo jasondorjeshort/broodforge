@@ -175,9 +175,21 @@ func encodeDiscord[T discord.Post | discord.Reply | discord.Panel | []discord.Po
 	return bytes.TrimSpace(b.Bytes()), nil
 }
 
+// injectRequest is `discord.inject`'s wire arguments. Values is a header menu's pick, from
+// `click --value <v>`; the adapter refuses a menu's id without one and a button's with one.
+type injectRequest struct {
+	Kind     string   `json:"kind"`
+	Channel  string   `json:"channel"`
+	User     string   `json:"user"`
+	Roles    string   `json:"roles"`
+	Text     string   `json:"text"`
+	CustomID string   `json:"customId"`
+	Values   []string `json:"values,omitempty"`
+}
+
 // runDiscordInject parses `discord inject message --channel <id> --user <id> --roles <ids>
-// "<text>"` or `discord inject click --custom-id <id> --user <id> --roles <ids>` and sends it
-// to the bot, which runs the adapter's handlers (refused on a live instance).
+// "<text>"` or `discord inject click --custom-id <id> [--value <v>] --user <id> --roles <ids>`
+// and sends it to the bot, which runs the adapter's handlers (refused on a live instance).
 func runDiscordInject(ctx context.Context, env *Env) error {
 	args := env.Strings(injectArgs)
 	if len(args) == 0 || (args[0] != "message" && args[0] != "click" && args[0] != "command") {
@@ -190,6 +202,7 @@ func runDiscordInject(ctx context.Context, env *Env) error {
 	user := fs.String("user", "", "")
 	roles := fs.String("roles", "", "")
 	customID := fs.String("custom-id", "", "")
+	value := fs.String("value", "", "")
 	var texts []string
 	rest := args[1:]
 	for {
@@ -209,9 +222,14 @@ func runDiscordInject(ctx context.Context, env *Env) error {
 		return &usageError{"discord inject " + kind + ": --channel <id> and one \"<text>\" are required"}
 	case kind == "click" && (*customID == "" || len(texts) != 0):
 		return &usageError{"discord inject click: --custom-id <id> is required and takes no text"}
+	case kind != "click" && *value != "":
+		return &usageError{"discord inject " + kind + ": --value goes with click"}
 	}
-	req, err := json.Marshal(map[string]string{"kind": kind, "channel": *channel, "user": *user, "roles": *roles,
-		"text": strings.Join(texts, ""), "customId": *customID})
+	r := injectRequest{Kind: kind, Channel: *channel, User: *user, Roles: *roles, Text: strings.Join(texts, ""), CustomID: *customID}
+	if *value != "" {
+		r.Values = []string{*value}
+	}
+	req, err := json.Marshal(r)
 	if err != nil {
 		return err
 	}
@@ -261,11 +279,12 @@ func renderTranscript(env *Env, raw json.RawMessage) error {
 func DiscordHandlers(a *discord.Adapter, svc *session.Service) func(*control.Registry) {
 	return func(reg *control.Registry) {
 		reg.Handle("discord.inject", func(ctx context.Context, call *control.Call) (json.RawMessage, error) {
-			var r struct{ Kind, Channel, User, Roles, Text, CustomID string }
+			var r injectRequest
 			if err := json.Unmarshal(call.Args, &r); err != nil {
 				return nil, control.NewError(control.CodeBadArgs, err.Error())
 			}
-			in := discord.Inbound{Channel: r.Channel, User: r.User, Roles: splitList(r.Roles), Text: r.Text, CustomID: r.CustomID}
+			in := discord.Inbound{Channel: r.Channel, User: r.User, Roles: splitList(r.Roles), Text: r.Text, CustomID: r.CustomID,
+				Values: r.Values}
 			var rep discord.Reply
 			var err error
 			switch r.Kind {

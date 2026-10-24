@@ -132,9 +132,13 @@ func TestProofDiscordModel(t *testing.T) {
 	want(t, inject("1001", "/model fable"), 0, "none  model from turn 1: claude-fable-5-1\n", "")
 	want(t, inject("1001", "/session effort max"), 0, "none  effort from turn 1: max\n", "")
 	want(t, inject("1001", "/model gpt"), 1, "", "error: bad-args: Not a model: gpt. Models: opus, sonnet, haiku, fable.\n")
-	want(t, inject("1001", "/session effort xhigh"), 1, "", "error: bad-args: Not an effort: xhigh. Efforts: low, medium, high, max.\n")
+	want(t, inject("1001", "/session effort turbo"), 1, "", "error: bad-args: Not an effort: turbo. Efforts: low, medium, high, xhigh, max.\n")
 	run("discord", "inject", "command", "--channel", "100", "--user", "1002", "/register name:Sam Example email:sam@example.com")
 	want(t, run("session", "model", "s0001", "opus", "--as", "1002"), 1, "", "error: refused: model needs the driver, Ada Example\n")
+	// In Discord the same refusal is the owner's wording (04-ux-session-controls.md, The header's menus).
+	want(t, inject("1002", "/model opus"), 1, "", "error: refused: Only the driver, Ada Example, can change the model.\n")
+	want(t, inject("1002", "/session effort high"), 1, "", "error: refused: Only the driver, Ada Example, can change the effort.\n")
+	want(t, inject("1002", "/session mode acts-freely"), 1, "", "error: refused: Only the driver, Ada Example, can change the mode.\n")
 	if r := run("session", "tail", "s0001"); !strings.Contains(r.Stdout, "  model-changed  From the next turn: Fable.\n") ||
 		!strings.Contains(r.Stdout, "  effort-changed  From the next turn: effort max.\n") {
 		t.Errorf("tail:\n%s", r.Stdout)

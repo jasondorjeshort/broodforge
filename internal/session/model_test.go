@@ -6,6 +6,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/jasondorjeshort/broodforge/internal/store"
 )
 
 // TestModelAndEffort: P12a's service side. A start's --model is resolved and copied to the
@@ -45,8 +47,9 @@ func TestModelAndEffort(t *testing.T) {
 			t.Errorf("model %q: %v", bad, err)
 		}
 	}
-	if _, err := h.svc.SetEffort(EffortRequest{ActRequest: act, Effort: "xhigh"}); code(err) != CodeBadArgs {
-		t.Errorf("effort xhigh: %v", err)
+	if _, err := h.svc.SetEffort(EffortRequest{ActRequest: act, Effort: "turbo"}); code(err) != CodeBadArgs ||
+		!strings.Contains(err.Error(), "want low, medium, high, xhigh, max") {
+		t.Errorf("effort turbo: %v", err)
 	}
 	e, err := h.svc.SetModel(ModelRequest{ActRequest: act, Model: "fable"})
 	if err != nil || e.Type != EventModelChanged || e.Turn != 1 || e.Result != "claude-fable-5-1" || e.Summary != "From the next turn: Fable." {
@@ -82,6 +85,86 @@ func TestModelAndEffort(t *testing.T) {
 	waitFor(t, h.svc, "s0001", 0, isType(EventTurnEnded, 2))
 	if req := received(t, h.root, "s0001", 2); req.Model != "claude-opus-5-5" || req.Effort != "" {
 		t.Errorf("turn 2 ran with model %q effort %q", req.Model, req.Effort)
+	}
+}
+
+// TestSwitchClosed: P12b. On an ended session the three switches are session-closed with end's
+// text, each audited action-refused with the reason closed, and nothing is written: the row, the
+// *-changed audit rows and the events stay as they were.
+func TestSwitchClosed(t *testing.T) {
+	h := newHarness(t, "", true)
+	ctx := context.Background()
+	if _, err := h.svc.Start(ctx, StartRequest{Channel: "100", As: "1001", Model: "sonnet"}); err != nil {
+		t.Fatal(err)
+	}
+	act := ActRequest{Session: "s0001", As: "1001"}
+	if _, err := h.svc.End(ctx, EndRequest{ActRequest: act}); err != nil {
+		t.Fatal(err)
+	}
+	row := func() string {
+		var s string
+		if err := h.st.Query("SELECT coalesce(model, '-') || ' ' || coalesce(effort, '-') || ' ' || mode FROM session WHERE id = 's0001'", nil,
+			func(r *store.Row) error { s = r.Text(0); return nil }); err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	before, _ := h.svc.Events("s0001", 0)
+	rowBefore := row()
+	for name, call := range map[string]func() (Event, error){
+		"mode":   func() (Event, error) { return h.svc.SetMode(ModeRequest{ActRequest: act, Mode: "prompt"}) },
+		"model":  func() (Event, error) { return h.svc.SetModel(ModelRequest{ActRequest: act, Model: "opus"}) },
+		"effort": func() (Event, error) { return h.svc.SetEffort(EffortRequest{ActRequest: act, Effort: "high"}) },
+	} {
+		if _, err := call(); code(err) != CodeSessionClosed || err.Error() != "session-closed: s0001 is ended" {
+			t.Errorf("%s on an ended session: %v", name, err)
+		}
+	}
+	if got := row(); got != rowBefore {
+		t.Errorf("the row changed: %q, was %q", got, rowBefore)
+	}
+	if n := count(t, h.st, `SELECT count(*) FROM audit_event WHERE kind IN ('mode-changed', 'model-changed', 'effort-changed')`); n != 0 {
+		t.Errorf("%d *-changed audit rows", n)
+	}
+	for _, action := range []string{"mode", "model", "effort"} {
+		if n := count(t, h.st, `SELECT count(*) FROM audit_event WHERE kind = 'action-refused' AND session_id = 's0001' AND details = '{"action":"`+
+			action+`","message":"s0001 is ended","reason":"closed"}'`); n != 1 {
+			t.Errorf("%d action-refused rows for %s, want 1", n, action)
+		}
+	}
+	if after, _ := h.svc.Events("s0001", 0); len(after) != len(before) {
+		t.Errorf("%d events after the refusals, %d before", len(after), len(before))
+	}
+}
+
+// TestSwitchClosedByNonDriver: P12b. The closed check comes before the driver check, so a
+// non-driver's late switch on an ended session is session-closed, audited with the reason
+// closed and never with the reason driver.
+func TestSwitchClosedByNonDriver(t *testing.T) {
+	h := newHarness(t, "", true)
+	ctx := context.Background()
+	if _, err := h.svc.Start(ctx, StartRequest{Channel: "100", As: "1001", Model: "sonnet"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.svc.End(ctx, EndRequest{ActRequest: ActRequest{Session: "s0001", As: "1001"}}); err != nil {
+		t.Fatal(err)
+	}
+	other := ActRequest{Session: "s0001", As: "1002"}
+	for name, call := range map[string]func() (Event, error){
+		"mode":   func() (Event, error) { return h.svc.SetMode(ModeRequest{ActRequest: other, Mode: "prompt"}) },
+		"model":  func() (Event, error) { return h.svc.SetModel(ModelRequest{ActRequest: other, Model: "opus"}) },
+		"effort": func() (Event, error) { return h.svc.SetEffort(EffortRequest{ActRequest: other, Effort: "high"}) },
+	} {
+		if _, err := call(); code(err) != CodeSessionClosed || err.Error() != "session-closed: s0001 is ended" {
+			t.Errorf("%s by a non-driver on an ended session: %v", name, err)
+		}
+		if n := count(t, h.st, `SELECT count(*) FROM audit_event WHERE kind = 'action-refused' AND session_id = 's0001' AND details = '{"action":"`+
+			name+`","message":"s0001 is ended","reason":"closed"}'`); n != 1 {
+			t.Errorf("%d closed action-refused rows for %s, want 1", n, name)
+		}
+	}
+	if n := count(t, h.st, `SELECT count(*) FROM audit_event WHERE kind = 'action-refused' AND details LIKE '%"reason":"driver"%'`); n != 0 {
+		t.Errorf("%d driver refusals on an ended session", n)
 	}
 }
 

@@ -178,7 +178,11 @@ func TestResolveModelAndEfforts(t *testing.T) {
 	if ModelDisplayName("claude-fable-5-1") != "Claude Fable 5.1" {
 		t.Error("fable has no display name")
 	}
-	if !ParseEffort("max") || ParseEffort("xhigh") || ParseEffort("") {
+	// The engine's order (`claude --help`), xhigh between high and max.
+	if got := strings.Join(Efforts, ","); got != "low,medium,high,xhigh,max" {
+		t.Errorf("efforts %s", got)
+	}
+	if !ParseEffort("max") || !ParseEffort("xhigh") || ParseEffort("turbo") || ParseEffort("XHIGH") || ParseEffort("") {
 		t.Error("ParseEffort")
 	}
 }

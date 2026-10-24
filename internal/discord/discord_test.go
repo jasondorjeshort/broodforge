@@ -55,7 +55,7 @@ func TestMask(t *testing.T) {
 
 func TestCustomID(t *testing.T) {
 	for _, s := range []string{"bf:s0001:toolu_01Nm:allow", "bf:s0001:toolu_01Nm:deny", "bf:s0001:toolu_01Nm:allow-session",
-		"bf:s0001:stop", "bf:s0001:end", "bf:100:start"} {
+		"bf:s0001:stop", "bf:s0001:end", "bf:100:start", "bf:s0001:model", "bf:s0001:effort", "bf:s0001:mode"} {
 		id, err := ParseCustomID(s)
 		if err != nil {
 			t.Errorf("ParseCustomID(%q): %v", s, err)
@@ -64,9 +64,12 @@ func TestCustomID(t *testing.T) {
 		if id.String() != s {
 			t.Errorf("round trip %q -> %q", s, id.String())
 		}
+		if menu := strings.HasSuffix(s, ":model") || strings.HasSuffix(s, ":effort") || strings.HasSuffix(s, ":mode"); id.IsMenu() != menu {
+			t.Errorf("%q IsMenu %v", s, id.IsMenu())
+		}
 	}
 	for _, s := range []string{"", "bf", "bf:s0001", "xx:s0001:stop", "bf:s0001:toolu:maybe", "bf:100:stop", "bf:s0001:start",
-		"bf:s0001:a:b:allow", "bf:s1:end"} {
+		"bf:s0001:a:b:allow", "bf:s1:end", "bf:100:model", "bf:s1:effort", "bf:s0001:Mode", "bf:s0001:model:high"} {
 		if _, err := ParseCustomID(s); err == nil {
 			t.Errorf("ParseCustomID(%q) accepted", s)
 		}

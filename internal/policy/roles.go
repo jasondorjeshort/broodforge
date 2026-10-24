@@ -43,7 +43,7 @@ func Permitted(held, list []string, groups map[string][]string, isDriver bool) b
 
 // models maps a model id prefix to the display name the trailers use (03-architecture.md,
 // Attribution). The longest matching prefix wins; an id no prefix matches is used verbatim.
-// The order is the alias list's (04, Model and effort): an alias is the lowercase second word
+// The order is the alias list's (04-ux-session-controls.md, Model and effort): an alias is the lowercase second word
 // of a display name, and the first entry with that word owns it.
 var models = []struct{ id, name string }{
 	{"claude-opus-5-5", "Claude Opus 5.5"},
@@ -117,9 +117,10 @@ func ResolveModel(v string) (string, bool) {
 	return "", false
 }
 
-// Efforts are the effort levels a session may set, in order (04, Model and effort): a subset
-// of the pinned engine's --effort list (`claude --help`: low, medium, high, xhigh, max).
-var Efforts = []string{"low", "medium", "high", "max"}
+// Efforts are the effort levels a session may set, in order (04-ux-session-controls.md, Model
+// and effort): the pinned engine's --effort list (`claude --help`: low, medium, high, xhigh,
+// max), in its order; xhigh was added by the owner, 2026-10-24.
+var Efforts = []string{"low", "medium", "high", "xhigh", "max"}
 
 // ParseEffort reports whether v is one of Efforts.
 func ParseEffort(v string) bool {

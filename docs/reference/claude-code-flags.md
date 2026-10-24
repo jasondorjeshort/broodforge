@@ -1,6 +1,6 @@
 ---
-verified: 2026-10-23
-source: observed (`claude --help` on Claude Code 2.1.309, the owner's PC)
+verified: 2026-10-24
+source: observed (`claude --help` on Claude Code 2.1.310, the owner's PC)
 ---
 
 # Claude Code command-line flags the engine adapter passes
@@ -11,7 +11,8 @@ The engine adapter builds one command line per engine process (`internal/engine/
 - `--model <model>`: the model for the process. Takes an alias or a full model id. Broodforge
   passes only an id from `policy`'s model map (`internal/policy/roles.go`, `ResolveModel`).
 - `--effort <level>`: the effort level for the process. The engine lists `low`, `medium`, `high`,
-  `xhigh`, `max`. Broodforge passes only `policy.Efforts` (`low`, `medium`, `high`, `max`).
+  `xhigh`, `max` (2.1.310). Broodforge passes only `policy.Efforts`, which is the engine's whole list
+  in its order (`low`, `medium`, `high`, `xhigh`, `max`).
 - `--resume <id>`: continues an engine session, so a model or effort switch keeps the context
   (ADR 0020).
 - `--append-system-prompt-file <file>`: the file's text appended to the default system prompt.

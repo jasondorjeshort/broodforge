@@ -585,14 +585,14 @@ var sessionModel = Command{
 	Columns: []string{"kind", "turn", "detail"},
 }
 
-// sessionEffort is `broodforge session effort <id> low|medium|high|max`: the driver's switch,
+// sessionEffort is `broodforge session effort <id> low|medium|high|xhigh|max`: the driver's switch,
 // from the next turn; prints `effort-changed  <next turn>  <level>`.
 var sessionEffort = Command{
 	Name:  "session effort",
 	Class: ClassWrite,
 	Flags: append([]Flag{
 		{Name: "id", Kind: FlagString, Value: "<session id>"},
-		{Name: "effort", Kind: FlagString, Value: "low|medium|high|max"},
+		{Name: "effort", Kind: FlagString, Value: "low|medium|high|xhigh|max"},
 	}, actingFlags...),
 	Columns: []string{"kind", "turn", "detail"},
 }

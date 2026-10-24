@@ -137,14 +137,14 @@ configured or given; a value without a bot token's shape is refused before any c
 
 Drive. Registered with 04's commands: `/session start model:<alias>` (optional) in a project channel;
 in a venue `/model [<alias>]` (top-level; `not-a-venue` elsewhere), `/session model <alias>` and
-`/session effort low|medium|high|max`, `model` and `effort` as Discord choice lists; setting is the
+`/session effort low|medium|high|xhigh|max`, `model` and `effort` as Discord choice lists; setting is the
 driver's, `/model` alone anyone's there (`ephemeral  <04's Model: line>`). An alias is the lowercase
 second word of a display name in `policy`'s model map (`opus`, `sonnet`, `haiku`, `fable`; the map
 gains `claude-fable-5-1` = `Claude Fable 5.1`) and resolves to that entry's id, the value the engine's
 `--model` gets; the typed form (`discord inject command --channel s0001 --user 1001 --roles 10
 "/model sonnet"`; a venue message starting with `/` is text for the agent) also takes a full id
 the map holds, bare or with a date suffix (`-20261001`), passed as typed. Anything else is `bad-args` with 04's `Not a model:` text (or `Not an effort: <value>.
-Efforts: low, medium, high, max.`) before any turn starts; nothing unknown reaches the engine. The
+Efforts: low, medium, high, xhigh, max.`) before any turn starts; nothing unknown reaches the engine. The
 service side (`SetModel`, `SetEffort`, the events, the session row) is `05-debug-interface-session.md`'s.
 The header's parenthesis is `this channel's default`, `chosen at start` or `from turn <n>`; `Model:
 the engine's own.` when nothing set it; `Effort:` only once set; the renderer edits the pinned
@@ -171,13 +171,21 @@ menu's id and `bad-args` with a button's. The handler is the slash command's bra
 `SetMode`, shared with `slash`), so the reply is the same `none  model from turn <n>: <id>` (`effort from
 turn`, `mode from turn` likewise); a value policy does not know, which inject can send and Discord cannot, is
 `bad-args` with 04's `Not a model:` or `Not an effort:` text, a mode value outside the two `bad-args`; a picker
-who is not the driver gets the service's refusal (`model needs the driver, <name>`), audited `action-refused`.
+who is not the driver gets 04's `Only the driver, <name>, can change the model.` (`effort`, `mode` likewise), as a
+typed `/model`, `/session model|effort|mode` does, while the service's own `model needs the driver, <name>` stays
+the CLI's text and the audit row's `message`, audited `action-refused`.
 The adapter's own refusals of a pick (`bad-args`, a bad custom id) are audited with the action `click`, the
 route the input came by, as every component refusal is (`start` for the panel's button); the shared function
 takes the route's action name, so the typed form keeps `command`. The service's refusals name the operation
 (`model`, `effort`, `mode`) on either route, as `checkDriver` writes them. A pick on a session that is ending,
 ended or interrupted is the service's `session-closed` refusal (`05-debug-interface-session.md`, Session
-lifecycle), which the adapter answers with 04's `This session has ended.`; nothing is re-sent.
+lifecycle), which the adapter answers with 04's `This session has ended.`; nothing is re-sent. `venueRefusal`
+maps every `session-closed` to that text, so the reply covers what reaches that code: `End session`, the
+switches and a venue message (an answer and `Stop` on such a session are `no-pending` and `no-running-turn`
+before any closed check; after a restart, `acting` finds no live session and every action is `session-closed`).
+The service checks closed before the driver, so a non-driver's pick on such a session gets this text, not the
+driver-only refusal. `inject click` prints it as `error: session-closed: This
+session has ended.`, while the typed `session mode|model|effort` keeps the service's `s0001 is ended`.
 After a refused pick on a live session the header is edited unchanged, so the picker's client drops the pick:
 the adapter keeps a `views` map, session id to `View`, from `SessionStarted` until that session's follow
 returns (the end or the interruption rendered; the entry deleted under the adapter's lock before `Done`), and

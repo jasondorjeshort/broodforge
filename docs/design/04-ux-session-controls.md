@@ -25,9 +25,12 @@ A switch is a per-process flag; context survives it (`--resume`, ADR 0020). Owne
 reversed 2026-10-22, after the first live run (R-29): the driver picks at start, `/session start
 model:opus|sonnet|haiku|fable` (else the channel's `model`), and switches in the venue from the next turn, like mode.
 `/model` alone replies `Model: Opus (this channel's default). Switch with /model opus, sonnet, haiku or fable.`; `/model
-sonnet` (or `/session model sonnet`) and `/session effort low|medium|high|max` post `From the next turn: Sonnet.` or
+sonnet` (or `/session model sonnet`) and `/session effort low|medium|high|xhigh|max` post `From the next turn: Sonnet.` or
 `From the next turn: effort high.`; else `Not a model: <value>. Models: opus, sonnet, haiku, fable.` The header gains
-`Model: Opus (this channel's default). Effort: high.`, edited on a switch. Rules: `05-debug-interface-discord.md`.
+`Model: Opus (this channel's default). Effort: high.`, edited on a switch. A switch of the model, the effort or the mode
+by anyone but the driver, typed or picked from the header's menus, is refused ephemerally in the owner's words
+(2026-10-24): `Only the driver, <name>, can change the model.`, `... can change the effort.`, `... can change the
+mode.`; the CLI keeps the service's `model needs the driver, <name>`. Rules: `05-debug-interface-discord.md`.
 
 ## Idle timeout
 
@@ -69,7 +72,8 @@ does; nothing is swallowed, and the header edit is what puts the picker's menu b
 sends an interaction at all for a pick of the option already marked is assumed, not observed; the owner's
 step under `serve --discord live` settles it (`05-debug-interface-discord.md`, The header's menus).
 
-A pick by someone without the right gets the slash command's ephemeral refusal and posts nothing in the venue.
+A pick by someone without the right gets the slash command's ephemeral refusal (`Only the driver, <name>, can change
+the model.`, Model and effort above) and posts nothing in the venue.
 Discord is assumed to keep a pick on the picker's own screen until the message is edited, so the bot then edits
 the header again, unchanged, and every screen shows the true value; the same owner's step observes it, and if
 an unchanged edit does not reset the picker's screen the fallback is two edits a second apart, the first
@@ -78,4 +82,9 @@ header is edited once more with every menu and the `End session` button removed;
 A pick that still arrives (a client that had not refreshed, in the minutes before the venue is deleted) is
 refused by the session itself, as the typed switches (`/session mode|model|effort`, `/model <alias>`) are once a
 session is ending, ended or interrupted: the ephemeral `This session has ended.`, no post, no header edit,
-nothing written to the session.
+nothing written to the session. The closed check comes before the driver check, so a pick by someone who is not
+the driver gets this reply too, not the driver refusal. The same reply answers the other venue actions that
+reach the session's closed refusal: `End session` and a venue message. An answer and `Stop` on such a session
+are refused for lack of a pending call or a running turn (`no-pending`, `no-running-turn`) before any closed
+check; after a restart, when the bot no longer holds the session, every action is answered `This session has
+ended.`

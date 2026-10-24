@@ -43,6 +43,22 @@ type Button struct {
 	Style    string `json:"style"`
 }
 
+// Select is one of the header's select menus (04-ux-session-controls.md, The header's menus): a
+// string select of one value, its own action row above the button row. Placeholder is "" for a
+// menu with an option marked default.
+type Select struct {
+	CustomID    string   `json:"customId"`
+	Placeholder string   `json:"placeholder,omitempty"`
+	Options     []Option `json:"options"`
+}
+
+// Option is one option of a Select; Default marks the current value.
+type Option struct {
+	Label   string `json:"label"`
+	Value   string `json:"value"`
+	Default bool   `json:"default,omitempty"`
+}
+
 // Post is one outbox line: `<seq>  <time>  <op>  <message id>  <length>  <first line>`, --json
 // every field. Payload is the request body the gateway would send for it, as disgo builds it
 // (a MessageCreate or a MessageUpdate), so a dry run shows what P12 sends. Message ids are the
@@ -58,6 +74,7 @@ type Post struct {
 	First     string          `json:"first,omitempty"`
 	Body      string          `json:"body,omitempty"`
 	Buttons   []Button        `json:"buttons,omitempty"`
+	Selects   []Select        `json:"selects,omitempty"`
 	Pinned    bool            `json:"pinned,omitempty"`
 	File      string          `json:"file,omitempty"`
 	Payload   json.RawMessage `json:"payload,omitempty"`
@@ -103,21 +120,37 @@ func payload(p Post) json.RawMessage {
 	return b
 }
 
-// messageCreate is a create post's body: the content, the buttons as one action row, and user
-// mentions only (a prompt's mention of the driver buzzes; no role or everyone ping).
+// messageCreate is a create post's body: the content, one action row per select menu in the
+// post's order, the buttons as one action row under them, and user mentions only (a prompt's
+// mention of the driver buzzes; no role or everyone ping).
 func messageCreate(p Post) dg.MessageCreate {
-	return dg.MessageCreate{Content: p.Body, Components: buttonRows(p.Buttons),
+	return dg.MessageCreate{Content: p.Body, Components: componentRows(p),
 		AllowedMentions: &dg.AllowedMentions{Parse: []dg.AllowedMentionType{dg.AllowedMentionTypeUsers}}}
 }
 
-// messageUpdate is an edit post's body: the content and the buttons, an empty list removing them.
+// messageUpdate is an edit post's body: the content and the components, an empty list removing
+// them.
 func messageUpdate(p Post) dg.MessageUpdate {
 	content := p.Body
-	rows := buttonRows(p.Buttons)
+	rows := componentRows(p)
 	if rows == nil {
 		rows = []dg.LayoutComponent{}
 	}
 	return dg.MessageUpdate{Content: &content, Components: &rows}
+}
+
+// componentRows are a post's action rows: each select menu its own (min_values and max_values
+// left at Discord's one), then the button row.
+func componentRows(p Post) []dg.LayoutComponent {
+	var rows []dg.LayoutComponent
+	for _, s := range p.Selects {
+		opts := make([]dg.StringSelectMenuOption, len(s.Options))
+		for i, o := range s.Options {
+			opts[i] = dg.NewStringSelectMenuOption(o.Label, o.Value).WithDefault(o.Default)
+		}
+		rows = append(rows, dg.NewActionRow(dg.NewStringSelectMenu(s.CustomID, s.Placeholder, opts...)))
+	}
+	return append(rows, buttonRows(p.Buttons)...)
 }
 
 func buttonRows(buttons []Button) []dg.LayoutComponent {

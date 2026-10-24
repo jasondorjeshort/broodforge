@@ -5,8 +5,10 @@ package discord
 import (
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/jasondorjeshort/broodforge/internal/policy"
 	"github.com/jasondorjeshort/broodforge/internal/session"
 )
 
@@ -15,7 +17,12 @@ import (
 // place, a delete-and-replace at the turn's end with the footer, the permission prompt with
 // its buttons, the mode switch, and the summary with the transcript. It is fed by one
 // goroutine; its posts go to offer, which the coalescer paces. Every body passes the mask.
+// Handle and Resync hold mu, so a re-sync of the header either precedes the end's edit in the
+// coalescer's queue or sees closed and does nothing (P12b).
 type View struct {
+	mu     sync.Mutex
+	closed bool // session-ended or session-interrupted handled: the header keeps no components
+
 	id     string
 	venue  string // the private channel; in a dry run its id is the session id
 	lobby  string // the project channel
@@ -117,6 +124,8 @@ func (v *View) who(user string) string {
 
 // Handle renders one event.
 func (v *View) Handle(ev session.Event) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	v.events = append(v.events, ev)
 	t := parseTime(ev.Time)
 	switch ev.Type {
@@ -163,8 +172,9 @@ func (v *View) Handle(ev session.Event) {
 		if v.start != nil {
 			reach = v.start.Reach
 		}
+		v.hdr.apply(ev)
 		v.create(modeChangedText(ev.Result, reach), nil)
-		v.hdr.apply(ev) // the next header edit shows it
+		v.editHeader()
 	case session.EventModelChanged, session.EventEffortChanged, session.EventTimeoutChanged:
 		v.switched(ev)
 	case session.EventParticipantJoined:
@@ -177,11 +187,26 @@ func (v *View) Handle(ev session.Event) {
 		v.create(handoffRefusedText(msg), nil)
 	case session.EventSessionEnded:
 		v.sessionEnded(ev, t)
-	case session.EventMessageQueued, session.EventMessageDropped, session.EventParticipantInvited,
-		session.EventSessionInterrupted:
+	case session.EventSessionInterrupted:
+		// A restart's interruption posts nothing in 04; the header is not re-synced after it.
+		v.closed = true
+	case session.EventMessageQueued, session.EventMessageDropped, session.EventParticipantInvited:
 		// The hourglass on a queued message is the gateway's (it holds the message's Discord
-		// id); a dropped message, an invitation and a restart's interruption post nothing in 04.
+		// id); a dropped message and an invitation post nothing in 04.
 	}
+}
+
+// Resync posts the pinned header again as the View's own state has it, menus and End session
+// included, so a refused pick drops off the picker's screen (05-debug-interface-discord.md, The
+// header's menus). Once the View has handled session-ended or session-interrupted it does
+// nothing, so a late re-sync never puts the components back on an ended header.
+func (v *View) Resync() {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.closed {
+		return
+	}
+	v.editHeader()
 }
 
 func (v *View) started(ev session.Event) {
@@ -193,7 +218,18 @@ func (v *View) started(ev session.Event) {
 	v.post(Post{Op: OpChannel, MessageID: v.venue, First: "#" + venueName(v.id, v.start.DriverName)})
 	v.hdr.apply(session.Event{Type: session.EventSessionStarted, Start: v.start}) // v.start, never nil
 	v.header = v.newID()
-	v.post(Post{Op: OpCreate, MessageID: v.header, Pinned: true, Body: headerText(v.id, v.start, v.hdr), Buttons: v.endButton()})
+	v.post(Post{Op: OpCreate, MessageID: v.header, Pinned: true, Body: headerText(v.id, v.start, v.hdr), Buttons: v.endButton(),
+		Selects: headerSelects(v.id, v.hdr)})
+}
+
+// editHeader edits the pinned header in place from the current state, with its menus and the
+// End session button; nothing before the header exists.
+func (v *View) editHeader() {
+	if v.header == "" || v.start == nil {
+		return
+	}
+	v.post(Post{Op: OpEdit, MessageID: v.header, Body: headerText(v.id, v.start, v.hdr), Buttons: v.endButton(),
+		Selects: headerSelects(v.id, v.hdr)})
 }
 
 func (v *View) endButton() []Button {
@@ -205,9 +241,48 @@ func (v *View) endButton() []Button {
 func (v *View) switched(ev session.Event) {
 	v.hdr.apply(ev)
 	v.create(ev.Summary, nil)
-	if v.header != "" && v.start != nil {
-		v.post(Post{Op: OpEdit, MessageID: v.header, Body: headerText(v.id, v.start, v.hdr), Buttons: v.endButton()})
+	v.editHeader()
+}
+
+// headerSelects are the header's three menus in the order model, effort, mode
+// (04-ux-session-controls.md, The header's menus), each marking the current value as its
+// default; a menu with nothing marked shows the placeholder 04 gives it.
+func headerSelects(id string, m headerState) []Select {
+	model := Select{CustomID: CustomID{Kind: IDModel, Session: id}.String()}
+	for _, alias := range policy.ModelAliases() {
+		aliasID, _ := policy.ResolveModel(alias)
+		// A dated id belongs to its prefix's entry, as ModelDisplayName reads it.
+		def := m.model != "" && policy.ModelDisplayName(m.model) == policy.ModelDisplayName(aliasID)
+		model.Options = append(model.Options, Option{Label: session.ModelShort(aliasID), Value: alias, Default: def})
 	}
+	if !anyDefault(model.Options) {
+		model.Placeholder = modelEngineOwnPlaceholder
+		if m.model != "" {
+			model.Placeholder = modelPlaceholder(m.model)
+		}
+	}
+	effort := Select{CustomID: CustomID{Kind: IDEffort, Session: id}.String()}
+	for _, level := range policy.Efforts {
+		effort.Options = append(effort.Options, Option{Label: level, Value: level, Default: m.effort == level})
+	}
+	if !anyDefault(effort.Options) {
+		effort.Placeholder = effortEngineOwnPlaceholder
+	}
+	acts := m.mode == policy.ModePolicy.String()
+	mode := Select{CustomID: CustomID{Kind: IDMode, Session: id}.String(), Options: []Option{
+		{Label: modeAsksFirstLabel, Value: modeAsksFirst, Default: !acts},
+		{Label: modeActsFreelyLabel, Value: modeActsFreely, Default: acts},
+	}}
+	return []Select{model, effort, mode}
+}
+
+func anyDefault(opts []Option) bool {
+	for _, o := range opts {
+		if o.Default {
+			return true
+		}
+	}
+	return false
 }
 
 // headerState is the session's mode, model, effort and idle timeout as the header shows them,
@@ -499,6 +574,11 @@ func (v *View) sessionEnded(ev session.Event, t time.Time) {
 	end := ev.End
 	if end == nil {
 		end = &session.EndInfo{Outcome: ev.Result}
+	}
+	// The header once more, without its menus and End session; its text stays as the record.
+	v.closed = true
+	if v.header != "" && v.start != nil {
+		v.post(Post{Op: OpEdit, MessageID: v.header, Body: headerText(v.id, v.start, v.hdr)})
 	}
 	if end.Reason == "idle" {
 		v.create(ev.Summary, nil)

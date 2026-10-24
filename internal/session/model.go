@@ -29,7 +29,7 @@ type modelPick struct {
 // ModelsText names the models a person may give: `opus, sonnet, haiku, fable`.
 func ModelsText() string { return strings.Join(policy.ModelAliases(), ", ") }
 
-// EffortsText names the efforts: `low, medium, high, max`.
+// EffortsText names the efforts: `low, medium, high, xhigh, max`.
 func EffortsText() string { return strings.Join(policy.Efforts, ", ") }
 
 // ModelShort is a model's short name as 04 writes it, `Sonnet` for claude-sonnet-5-5; an id
@@ -106,19 +106,22 @@ func (s *Service) SetEffort(req EffortRequest) (Event, error) {
 		"From the next turn: effort "+req.Effort+".")
 }
 
-// setColumn is SetModel's and SetEffort's write: the driver only, the row and the audit event
-// (`from`, `to`) in one transaction, then the event with the next turn's number. column is
-// "model" or "effort", never input.
+// setColumn is SetModel's and SetEffort's write: the driver only, an open session only, the row
+// and the audit event (`from`, `to`) in one transaction, then the event with the next turn's
+// number. column is "model" or "effort", never input.
 func (s *Service) setColumn(act ActRequest, column, value string, kind audit.Kind, typ EventType, summary string) (Event, error) {
 	l, _, err := s.acting(act)
 	if err != nil {
 		return Event{}, err
 	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if err := s.switchOpenLocked(l, act, column); err != nil {
+		return Event{}, err
+	}
 	if err := s.checkDriver(l, act, column); err != nil {
 		return Event{}, err
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	err = s.cfg.Store.Write(func(tx *store.Tx) error {
 		from := ""
 		if err := tx.Query("SELECT coalesce("+column+", '') FROM session WHERE id = ?", []store.Value{store.Text(l.id)},

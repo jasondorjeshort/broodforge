@@ -48,7 +48,8 @@ func TestModelCommandsAndSlashOf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range []string{`"name":"model","description":"This session's model`, `"name":"effort"`, `"value":"fable"`, `"value":"max"`} {
+	for _, s := range []string{`"name":"model","description":"This session's model`, `"name":"effort"`, `"value":"fable"`,
+		`"choices":[{"name":"low","value":"low"},{"name":"medium","value":"medium"},{"name":"high","value":"high"},{"name":"xhigh","value":"xhigh"},{"name":"max","value":"max"}]`} {
 		if !strings.Contains(string(b), s) {
 			t.Errorf("commands lack %s: %s", s, b)
 		}
@@ -99,8 +100,21 @@ func TestModelTexts(t *testing.T) {
 	if got, want := notAModelText("gpt"), "Not a model: gpt. Models: opus, sonnet, haiku, fable."; got != want {
 		t.Errorf("not a model %s", got)
 	}
-	if got, want := notAnEffortText("turbo"), "Not an effort: turbo. Efforts: low, medium, high, max."; got != want {
+	if got, want := notAnEffortText("turbo"), "Not an effort: turbo. Efforts: low, medium, high, xhigh, max."; got != want {
 		t.Errorf("not an effort %s", got)
+	}
+	// The owner's wording for a switch by someone who is not the driver (2026-10-24).
+	for what, want := range map[string]string{
+		"model":  "Only the driver, Ada Example, can change the model.",
+		"effort": "Only the driver, Ada Example, can change the effort.",
+		"mode":   "Only the driver, Ada Example, can change the mode.",
+	} {
+		if got := driverOnlyText("Ada Example", what); got != want {
+			t.Errorf("driver only %s: %s", what, got)
+		}
+	}
+	if sessionEndedText != "This session has ended." {
+		t.Errorf("ended: %s", sessionEndedText)
 	}
 	if got := notAModelText(strings.Repeat("x", 100)); len([]rune(got)) > 100 {
 		t.Errorf("a long value is repeated whole: %s", got)

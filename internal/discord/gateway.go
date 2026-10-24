@@ -747,8 +747,8 @@ func replyText(rep Reply, err error) (string, error) {
 	return "", nil
 }
 
-// onInteraction answers a slash command, a button or the API-key modal (03 Data flow, Button
-// custom ids) through the adapter's handlers. Every answer is deferred first (Discord wants one
+// onInteraction answers a slash command, a button, a header menu's pick or the API-key modal
+// (03-architecture.md, Data flow: Custom ids) through the adapter's handlers. Every answer is deferred first (Discord wants one
 // within three seconds; a start clones a repository), except the API-key form, which must be
 // the first answer.
 func (g *Gateway) onInteraction(i dg.Interaction) {
@@ -799,6 +799,9 @@ func (g *Gateway) onInteraction(i dg.Interaction) {
 			return
 		}
 		in.CustomID = ci.Data.CustomID()
+		if sel, ok := ci.Data.(dg.StringSelectMenuInteractionData); ok {
+			in.Values = sel.Values // a header menu's pick (P12b)
+		}
 		g.ack(i, opt, dg.InteractionResponseTypeDeferredUpdateMessage)
 		rep, err := g.a.click(g.ctx, in)
 		text, err := replyText(rep, err)

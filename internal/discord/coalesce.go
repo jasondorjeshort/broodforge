@@ -21,7 +21,7 @@ const (
 
 // Coalescer holds every session's posts until the limits let them out. Nothing is dropped: an
 // edit to a message already queued merges into the queued create or edit (the latest content
-// wins), a delete drops the message's queued edits, and every other post keeps its place.
+// and components win), a delete drops the message's queued edits, and every other post keeps its place.
 // Time comes from the caller (Flush, NextAt), so a test or `discord render --clock fake` steps
 // a virtual clock and Run steps the injectable one.
 type Coalescer struct {
@@ -70,7 +70,9 @@ func (c *Coalescer) Offer(p Post) {
 	case OpEdit:
 		for _, held := range q.posts {
 			if held.MessageID == p.MessageID && (held.Op == OpCreate || held.Op == OpEdit) {
-				held.Body, held.Buttons = p.Body, p.Buttons
+				// The later components win with the content: a switch's menus over the start's,
+				// an end's none over a switch's (05-debug-interface-discord.md, The header's menus).
+				held.Body, held.Buttons, held.Selects = p.Body, p.Buttons, p.Selects
 				c.mu.Unlock()
 				return
 			}

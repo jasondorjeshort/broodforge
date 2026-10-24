@@ -187,9 +187,10 @@ func TestProblems(t *testing.T) {
 			[]string{"unknown key workflow.hook"}},
 		{"channel model alias and effort", minimalInstance, proj(`"reach":"code"`, `"reach":"code","model":"opus","effort":"high"`), "", nil},
 		{"channel model id and null effort", minimalInstance, proj(`"reach":"code"`, `"reach":"code","model":"claude-haiku-5-5-20261001","effort":null`), "", nil},
-		{"channel model and effort", minimalInstance, proj(`"reach":"code"`, `"reach":"code","model":"claude-opus-4-1-20250805","effort":"xhigh"`), "p",
+		{"channel effort xhigh", minimalInstance, proj(`"reach":"code"`, `"reach":"code","effort":"xhigh"`), "", nil},
+		{"channel model and effort", minimalInstance, proj(`"reach":"code"`, `"reach":"code","model":"claude-opus-4-1-20250805","effort":"turbo"`), "p",
 			[]string{`channels.100.model: "claude-opus-4-1-20250805", want opus, sonnet, haiku, fable or a model id they name`,
-				`channels.100.effort: "xhigh", want low or medium or high or max`}},
+				`channels.100.effort: "turbo", want low or medium or high or xhigh or max`}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
