@@ -53,6 +53,8 @@ type fakeRest struct {
 	channels []dg.GuildChannel
 	roles    []dg.Role
 	noDM     bool
+	// memberRoles are the roles GetMember answers for any member (setup_test.go).
+	memberRoles []snowflake.ID
 }
 
 func js(b []byte, err error) string {
@@ -115,7 +117,7 @@ func (f *fakeRest) GetGuild(g snowflake.ID, _ bool, _ ...rest.RequestOpt) (*dg.R
 }
 func (f *fakeRest) GetMember(g, u snowflake.ID, _ ...rest.RequestOpt) (*dg.Member, error) {
 	f.record("GetMember", "", g.String(), u.String())
-	return &dg.Member{User: dg.User{ID: u}}, nil
+	return &dg.Member{User: dg.User{ID: u}, RoleIDs: f.memberRoles}, nil
 }
 func (f *fakeRest) GetGuildChannels(g snowflake.ID, _ ...rest.RequestOpt) ([]dg.GuildChannel, error) {
 	f.record("GetGuildChannels", "", g.String())

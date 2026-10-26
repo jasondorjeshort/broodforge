@@ -34,15 +34,14 @@ import (
 // restAPI is every REST call the live adapter makes, in one place: the surface a swap to
 // arikawa must cover (ADR 0023). disgo's rest.Rest satisfies it; the tests' fake records.
 type restAPI interface {
-	// The start, and `discord check`: the bot's application, the guild, its roles and channels,
-	// the bot's member, the guild's slash commands.
-	GetBotApplicationInfo(opts ...rest.RequestOpt) (*dg.Application, error)
-	GetGuild(guildID snowflake.ID, withCounts bool, opts ...rest.RequestOpt) (*dg.RestGuild, error)
-	GetMember(guildID snowflake.ID, userID snowflake.ID, opts ...rest.RequestOpt) (*dg.Member, error)
-	GetGuildChannels(guildID snowflake.ID, opts ...rest.RequestOpt) ([]dg.GuildChannel, error)
+	// The start, `discord check` and `broodforge setup` (setup.go): the bot's application and
+	// its flags, the bot's guilds, the guild, its roles and channels, the bot's member, creating
+	// a channel (a session's venue too) and a role, assigning a role.
+	setupREST
+	// The guild's slash commands.
 	SetGuildCommands(applicationID snowflake.ID, guildID snowflake.ID, commands []dg.ApplicationCommandCreate, opts ...rest.RequestOpt) ([]dg.ApplicationCommand, error)
-	// Venues: a session's private channel, deleted ten minutes after its summary (04).
-	CreateGuildChannel(guildID snowflake.ID, guildChannelCreate dg.GuildChannelCreate, opts ...rest.RequestOpt) (dg.GuildChannel, error)
+	// Venues: a session's private channel (created through setupREST), deleted ten minutes
+	// after its summary (04).
 	DeleteChannel(channelID snowflake.ID, opts ...rest.RequestOpt) error
 	// Posts: the outbox's create, edit, delete and attach, the pinned header and panel, the
 	// hourglass on a queued message, and deleting a pasted key.

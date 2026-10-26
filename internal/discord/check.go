@@ -59,7 +59,7 @@ func Check(ctx context.Context, token, guild string, channels []CheckChannel) (C
 	return check(ctx, rest.New(client), guild, channels)
 }
 
-func check(ctx context.Context, r restAPI, guild string, channels []CheckChannel) (CheckResult, error) {
+func check(ctx context.Context, r setupREST, guild string, channels []CheckChannel) (CheckResult, error) {
 	gid, err := snowflake.Parse(guild)
 	if err != nil {
 		return CheckResult{}, fmt.Errorf("guild %q is not a Discord id", guild)

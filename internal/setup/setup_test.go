@@ -19,6 +19,7 @@ import (
 
 	"github.com/jasondorjeshort/broodforge/internal/config"
 	"github.com/jasondorjeshort/broodforge/internal/control"
+	"github.com/jasondorjeshort/broodforge/internal/discord"
 	"github.com/jasondorjeshort/broodforge/internal/git/gittest"
 	"github.com/jasondorjeshort/broodforge/internal/setup"
 	"github.com/jasondorjeshort/broodforge/internal/spawn/spawntest"
@@ -64,6 +65,8 @@ type fixture struct {
 	instance string
 	repo     string
 	engine   string // "" leaves the engine off PATH
+	// fake is the scripted Discord the five Discord steps call; nil leaves them out.
+	fake *discord.FakeSetup
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -85,7 +88,7 @@ func newFixture(t *testing.T) *fixture {
 }
 
 func (f *fixture) env(stdin io.Reader, stdout io.Writer) setup.Env {
-	return setup.Env{
+	env := setup.Env{
 		Stdin: stdin, Stdout: stdout, Stderr: io.Discard,
 		LookupEnv: func(k string) (string, bool) {
 			if k == "ProgramData" {
@@ -108,6 +111,10 @@ func (f *fixture) env(stdin io.Reader, stdout io.Writer) setup.Env {
 			return []setup.Echo{{OK: true, Text: "config check  ok  1  0"}, {OK: true, Text: "spawn preflight  ok  backend  same-account"}}
 		},
 	}
+	if f.fake != nil {
+		env.Discord = f.fake.API
+	}
+	return env
 }
 
 func (f *fixture) opts(mod ...func(*setup.Options)) setup.Options {
@@ -187,8 +194,8 @@ func TestSteps(t *testing.T) {
 		t.Fatalf("lines:\n%s\nwant %v", out, want)
 	}
 	for _, s := range discordSteps {
-		if !strings.Contains(out, "skip  "+s+"  not built\n") {
-			t.Errorf("no `skip  %s  not built`:\n%s", s, out)
+		if !strings.Contains(out, "skip  "+s+"  no Discord\n") {
+			t.Errorf("no `skip  %s  no Discord`:\n%s", s, out)
 		}
 	}
 	c2, err := config.Load(f.root, config.AnyCredential)

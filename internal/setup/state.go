@@ -39,6 +39,13 @@ type State struct {
 	repoURL       string // the repository URL, when given or asked
 	wroteDefaults bool   // the config step wrote the defaults keys in this run
 	fixed         []string
+
+	// The Discord steps: the role question's answer once asked or given (nil: not yet), the
+	// steps that wrote a config key in this run (a passing line after a poll is then ok).
+	createRole  *bool
+	channelsYes *bool // the channels question's answer once asked
+	wrote       map[string]bool
+	liveNote    string // the role line's note once discord.mode was switched
 }
 
 // DefaultRoot is the root with no --root: %ProgramData%\Broodforge\<instance> where the

@@ -32,30 +32,23 @@ const (
 	textNext          = "the bot is running. In Discord: /register, then /credential add kind:subscription; then here: broodforge setup login <credential id>"
 )
 
-// Steps is the run in the companion's order. The Discord steps print `skip  <step>  not built`
-// until the Discord pass registers them.
+// Steps is the run in the companion's order; the Discord steps are in discord.go.
 func Steps() []Step {
 	return []Step{
 		{"root", stepRoot},
 		{"config", stepConfig},
 		{"key", stepKey},
 		{"engine", stepEngine},
-		{"token", notBuilt("token")},
-		{"application", notBuilt("application")},
-		{"guild", notBuilt("guild")},
-		{"channels", notBuilt("channels")},
-		{"role", notBuilt("role")},
+		{"token", stepToken},
+		{"application", stepApplication},
+		{"guild", stepGuild},
+		{"channels", stepChannels},
+		{"role", stepRole},
 		{"git-credential", stepGitCredential},
 		{"project", stepProject},
 		{"defaults", stepDefaults},
 		{"check", stepCheck},
 		{"next", stepNext},
-	}
-}
-
-func notBuilt(name string) func(context.Context, *State) (Line, error) {
-	return func(context.Context, *State) (Line, error) {
-		return Line{Result: ResultSkip, Step: name, Detail: "not built"}, nil
 	}
 }
 
@@ -793,14 +786,15 @@ func stepDefaults(_ context.Context, s *State) (Line, error) {
 	return skip(step, have), nil
 }
 
-// stepCheck runs `config check` and `spawn preflight` in process and echoes each line; the
-// Discord pass adds `discord check`.
+// stepCheck runs `config check`, `spawn preflight` and `discord check` in process and echoes
+// each line.
 func stepCheck(ctx context.Context, s *State) (Line, error) {
 	const step = "check"
-	if s.env.Checks == nil {
-		return skip(step, "not run"), nil
+	var echoes []Echo
+	if s.env.Checks != nil {
+		echoes = s.env.Checks(ctx, s.root)
 	}
-	echoes := s.env.Checks(ctx, s.root)
+	echoes = append(echoes, s.discordEchoes(ctx)...)
 	if len(echoes) == 0 {
 		return skip(step, "not run"), nil
 	}

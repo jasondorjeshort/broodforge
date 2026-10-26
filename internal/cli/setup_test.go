@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -16,7 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jasondorjeshort/broodforge/internal/cli"
 	"github.com/jasondorjeshort/broodforge/internal/cli/clitest"
+	"github.com/jasondorjeshort/broodforge/internal/discord"
 	"github.com/jasondorjeshort/broodforge/internal/git/gittest"
 	"github.com/jasondorjeshort/broodforge/internal/spawn/spawntest"
 )
@@ -56,9 +59,56 @@ func newSetupWorld(t *testing.T) *setupWorld {
 	if _, err := rand.Read(r[:]); err != nil {
 		t.Fatal(err)
 	}
+	script := filepath.Join(dir, "discord.json")
+	if err := os.WriteFile(script, fakeDiscordScript(t), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	return &setupWorld{dir: dir, repo: remote, instance: "t-" + hex.EncodeToString(r[:]),
 		env: []string{"PATH=" + stub + string(os.PathListSeparator) + os.Getenv("PATH"), spawntest.Env + "=1",
-			"ProgramData=" + filepath.Join(dir, "programdata")}}
+			"ProgramData=" + filepath.Join(dir, "programdata"), cli.FakeDiscordEnv + "=" + script}}
+}
+
+// fakeToken is the bot token the scripted Discord accepts.
+const fakeToken = "NTAwMA.abcd.abcdefghijklmnopqrstuvwxyz"
+
+// fakeDiscordScript is the P22 Proof's scripted Discord: an application whose bot is in no
+// server until the invite's poll, joining with Manage Roles, which the owner removes on the poll
+// after the removal fix. Every root of the test shares it, so a later root finds by name what
+// the first created.
+func fakeDiscordScript(t *testing.T) []byte {
+	t.Helper()
+	b, err := json.Marshal(discord.FakeScript{Token: fakeToken, Application: discord.FakeApp{ID: "4000", BotID: "5000"},
+		Invite: &discord.FakeGuild{ID: "3000", Name: "Test", OwnerID: "6000",
+			Roles: []discord.FakeRole{{ID: "3000", Name: "@everyone"},
+				{ID: "5001", Name: "Broodforge", Position: 2, Permissions: discord.PermissionBits | discord.PermManageRoles}},
+			BotRoles: []string{"5001"}, DropManageRolesAfter: 1},
+		JoinAfter: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// runIn is run with stdin.
+func (w *setupWorld) runIn(t *testing.T, stdin string, args ...string) clitest.Result {
+	t.Helper()
+	cmd := exec.Command(clitest.Binary(t), args...)
+	cmd.Env = clitest.Environ(w.env)
+	cmd.Stdin = strings.NewReader(stdin)
+	var stdout, stderr strings.Builder
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
+	r := clitest.Result{Stdout: stdout.String(), Stderr: stderr.String()}
+	var ee *exec.ExitError
+	switch {
+	case err == nil:
+	case errors.As(err, &ee):
+		r.Code = ee.ExitCode()
+	default:
+		t.Fatalf("run broodforge %q: %v", args, err)
+	}
+	t.Logf("$ broodforge %s <stdin\nexit %d\nstdout: %q\nstderr: %q", strings.Join(args, " "), r.Code, r.Stdout, r.Stderr)
+	return r
 }
 
 func (w *setupWorld) root(n string) string { return filepath.ToSlash(filepath.Join(w.dir, n, "root")) }
@@ -106,17 +156,22 @@ func TestProofSetup(t *testing.T) {
 	r1 := w.seeded(t, "1")
 	full := []string{"setup", "--yes", "--root", r1, "--instance", w.instance, "--repo", w.repo, "--wait", "1"}
 
-	// A fresh run: ok for every step but the Discord ones and the deferred git credential.
-	r := w.run(t, full...)
+	// A fresh run, the token on stdin: ok for every step but the deferred git credential; the
+	// invite and the Manage Roles removal print their fix, then ok once the poll passes.
+	r := w.runIn(t, fakeToken+"\n", full...)
 	if r.Code != 0 {
 		t.Fatalf("setup exit %d\n%s%s", r.Code, r.Stdout, r.Stderr)
+	}
+	if !strings.Contains(r.Stderr, "waiting for the bot to join\n") || strings.Contains(r.Stdout+r.Stderr, fakeToken) {
+		t.Errorf("stderr %q", r.Stderr)
 	}
 	for _, c := range firstColumns(r.Stdout) {
 		step := strings.SplitN(c, " ", 2)[1]
 		switch {
+		case c == "fix guild" || c == "fix role":
 		case strings.Contains(" token application guild channels role ", " "+step+" "):
-			if !strings.Contains(r.Stdout, "skip  "+step+"  not built\n") {
-				t.Errorf("%s is not `skip  not built`", step)
+			if c != "ok "+step {
+				t.Errorf("%s, want ok", c)
 			}
 		case step == "git-credential":
 			if c != "skip git-credential" {
@@ -145,10 +200,10 @@ func TestProofSetup(t *testing.T) {
 		t.Errorf("the rerun changed config/")
 	}
 
-	// --check on an empty root: fix for every step but the Discord ones, nothing created.
+	// --check on an empty root: fix for every step, nothing created.
 	r2 := w.root("2")
 	r = w.run(t, "setup", "--check", "--root", r2, "--instance", w.instance)
-	if r.Code != 1 || !strings.HasPrefix(r.Stderr, "error: check-failed: root config key engine git-credential project defaults check next") {
+	if r.Code != 1 || !strings.HasPrefix(r.Stderr, "error: check-failed: root config key engine token application guild channels role git-credential project defaults check next") {
 		t.Errorf("--check on an empty root: exit %d %s\n%s", r.Code, r.Stderr, r.Stdout)
 	}
 	if _, err := os.Stat(filepath.Dir(r2)); !os.IsNotExist(err) {
@@ -185,6 +240,8 @@ func TestProofSetup(t *testing.T) {
 	r5 := w.seeded(t, "5")
 	paused := exec.Command(clitest.Binary(t), "setup", "--root", r5, "--instance", w.instance, "--repo", w.repo, "--wait", "1")
 	paused.Env = clitest.Environ(w.env)
+	var pausedErr strings.Builder
+	paused.Stderr = &pausedErr
 	stdin, err := paused.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -219,12 +276,13 @@ func TestProofSetup(t *testing.T) {
 	_ = stdin.Close()
 	for range lines {
 	}
-	if err := paused.Wait(); err != nil {
-		t.Errorf("the paused setup: %v", err)
+	// Off a terminal without --yes stdin is read for the key alone: the token step refuses.
+	if err := paused.Wait(); err == nil || !strings.Contains(pausedErr.String(), "error: needs-input-token: pass the bot token on stdin with --yes\n") {
+		t.Errorf("the paused setup: %v %q", err, pausedErr.String())
 	}
 
 	// --json: one object per line, the key in the key object only.
-	r = w.run(t, "setup", "--json", "--yes", "--root", w.seeded(t, "6"), "--instance", w.instance, "--repo", w.repo, "--wait", "1")
+	r = w.runIn(t, fakeToken, "setup", "--json", "--yes", "--root", w.seeded(t, "6"), "--instance", w.instance, "--repo", w.repo, "--wait", "1")
 	if r.Code != 0 {
 		t.Fatalf("--json exit %d %s", r.Code, r.Stderr)
 	}

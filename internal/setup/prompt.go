@@ -104,6 +104,29 @@ func (p *prompter) Confirm(step, text string) (bool, error) {
 	return strings.EqualFold(line, "y") || strings.EqualFold(line, "yes"), nil
 }
 
+// YesNo asks a question whose text shows its own [Y/n] or [y/N]: --yes takes def; off a
+// terminal it is refused needs-input-<step> naming flag; an empty answer is def.
+func (p *prompter) YesNo(step, flag, text string, def bool) (bool, error) {
+	if p.yes {
+		return def, nil
+	}
+	if !p.tty {
+		return false, needsInput(step, flag)
+	}
+	fmt.Fprint(p.out, text+" ")
+	line, err := p.in.line()
+	if err != nil && !errors.Is(err, io.EOF) {
+		return false, err
+	}
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return true, nil
+	case "n", "no":
+		return false, nil
+	}
+	return def, nil
+}
+
 // All reads the rest of stdin, one trailing newline dropped: `setup git-credential`'s value off
 // a terminal.
 func (p *prompter) All() (string, error) {

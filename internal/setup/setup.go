@@ -4,7 +4,7 @@
 // the ordered steps that make an instance from nothing, each printing one `ok`, `skip` or `fix`
 // line, a fix that needs a hand polled to --wait, the prompts and their flags, the rerun rule
 // per key, and the single-writer bind of the control address for the run's lifetime. The
-// Discord steps print `skip  <step>  not built` until the Discord pass registers them.
+// Discord steps (discord.go) call Discord through discord.SetupAPI.
 package setup
 
 import (
@@ -17,7 +17,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jasondorjeshort/broodforge/internal/config"
 	"github.com/jasondorjeshort/broodforge/internal/control"
+	"github.com/jasondorjeshort/broodforge/internal/discord"
 	"github.com/jasondorjeshort/broodforge/internal/store"
 )
 
@@ -56,6 +58,9 @@ type Line struct {
 	Wait bool
 	// After runs once the line is printed: the key step's pause.
 	After func() error
+	// Note is printed on stderr after a waiting fix, before the poll: "waiting for the bot to
+	// join".
+	Note string
 }
 
 // Step is one step of the run; Run returns the step's line, and a refusal ends the run. A
@@ -74,6 +79,7 @@ const (
 	CodeCheckFailed  = "check-failed"
 	CodeNoConfig     = "no-config"
 	CodeNotBuilt     = "not-built"
+	CodeLiveInstance = "live-instance"
 )
 
 func needsInput(step, flag string) error {
@@ -97,6 +103,12 @@ type Options struct {
 	Yes      bool
 	JSON     bool
 	Wait     time.Duration // the bound on every poll; 0 is unbounded
+	// The Discord steps' flags: --guild, --channels and --create-role ("yes", "no" or "" for
+	// the question), --role ("" is Trusted).
+	Guild      string
+	Channels   string
+	CreateRole string
+	Role       string
 }
 
 // Echo is one line of a command the check step runs in process (config check, spawn
@@ -138,6 +150,13 @@ type Env struct {
 	Checks func(ctx context.Context, root string) []Echo
 	// Install is paths.install for a new instance file: the directory holding bin/ and share/.
 	Install string
+	// Discord builds the Discord calls over a bot token, for one step: discord.NewSetupAPI, or
+	// the scripted fake's API. nil leaves Discord out of the run: the five Discord steps print
+	// `skip  <step>  no Discord`, for the tests of the other steps.
+	Discord func(token string) (discord.SetupAPI, error)
+	// FakeDiscord marks Discord as the scripted fake (BROODFORGE_SETUP_FAKE_DISCORD): refused
+	// live-instance on a live root, and discord.mode is left dry-run.
+	FakeDiscord bool
 }
 
 // pollEvery is how often a waiting fix is tried again.
@@ -162,6 +181,16 @@ func Run(ctx context.Context, o Options, env Env) error {
 		prompt: &prompter{in: newLineReader(env.Stdin), out: env.Stderr, tty: env.TTY, yes: o.Yes, echoOff: env.EchoOff}}
 	if err := s.resolve(); err != nil {
 		return err
+	}
+	if env.FakeDiscord {
+		// An instance file that cannot be read cannot show the root is not live: refused.
+		inst, err := s.instanceDoc()
+		if err != nil {
+			return toControl(err)
+		}
+		if inst != nil && inst.String("discord", "mode") == config.DiscordLive {
+			return control.NewError(CodeLiveInstance, "the scripted Discord (BROODFORGE_SETUP_FAKE_DISCORD) is refused on a live instance")
+		}
 	}
 	if !s.check {
 		// The root's configured name may differ from --instance: a bot under that name owns
@@ -230,6 +259,9 @@ func (s *State) runStep(ctx context.Context, st Step) error {
 	if line.Result == ResultFix && !s.check {
 		if !line.Wait {
 			return control.NewError("refused-"+st.Name, line.Detail)
+		}
+		if line.Note != "" && s.env.Stderr != nil && !s.opt.JSON { // --json: stderr is the wire object only
+			fmt.Fprintln(s.env.Stderr, line.Note)
 		}
 		if line, err = s.poll(ctx, st, line); err != nil {
 			return err

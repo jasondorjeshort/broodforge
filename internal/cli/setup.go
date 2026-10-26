@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jasondorjeshort/broodforge/internal/control"
+	"github.com/jasondorjeshort/broodforge/internal/discord"
 	"github.com/jasondorjeshort/broodforge/internal/setup"
 )
 
@@ -73,12 +74,27 @@ func runSetup(ctx context.Context, env *Env) error {
 	}
 	o := setup.Options{Root: env.Root, Instance: env.String("instance"), Repo: env.String("repo"),
 		Project: env.String("project"), Step: step, Check: env.Bool("check"), Yes: env.Bool("yes"), JSON: env.JSON,
-		Wait: time.Duration(env.Int("wait")) * time.Second}
+		Wait: time.Duration(env.Int("wait")) * time.Second, Guild: env.String("guild"), Channels: env.String("channels"),
+		CreateRole: env.String("create-role"), Role: env.String("role")}
 	// paths.install is written empty: the binary's parent directory, as the template says, never
 	// a checkout or temporary directory the binary happened to run from.
-	return setup.Run(ctx, o, setup.Env{Stdin: env.Stdin, Stdout: env.Out.w, Stderr: env.Stderr, TTY: tty, EchoOff: echoOff,
-		LookupEnv: os.LookupEnv, LookPath: exec.LookPath, Checks: setupChecks})
+	se := setup.Env{Stdin: env.Stdin, Stdout: env.Out.w, Stderr: env.Stderr, TTY: tty, EchoOff: echoOff,
+		LookupEnv: os.LookupEnv, LookPath: exec.LookPath, Checks: setupChecks, Discord: discord.NewSetupAPI}
+	// The scripted Discord for the repro script and the Proof (05-debug-interface-setup.md):
+	// setup refuses it live-instance on a live root.
+	if script := os.Getenv(FakeDiscordEnv); script != "" {
+		fake, err := discord.LoadFakeSetup(script)
+		if err != nil {
+			return control.NewError("bad-args", FakeDiscordEnv+": "+control.OneLine(err.Error()))
+		}
+		se.Discord, se.FakeDiscord = fake.API, true
+	}
+	return setup.Run(ctx, o, se)
 }
+
+// FakeDiscordEnv names a scripted Discord (discord.FakeScript, JSON) the Discord steps call in
+// place of Discord; the script file is rewritten with every change.
+const FakeDiscordEnv = "BROODFORGE_SETUP_FAKE_DISCORD"
 
 func contains(list []string, s string) bool {
 	for _, v := range list {
