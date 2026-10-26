@@ -33,6 +33,8 @@ const (
 	// ProviderAnthropic is the engine credentials' provider, ProviderDiscord the bot token's.
 	ProviderAnthropic = "anthropic"
 	ProviderDiscord   = "discord"
+	// ProviderGit is a project's git credential added by setup (AddGit).
+	ProviderGit = "git"
 )
 
 // MaxValue bounds an API key read from stdin.
@@ -195,16 +197,35 @@ func (s *Service) AddInstance(kind, label string, value []byte) (Record, error) 
 	return s.add(actorHost, kind, "", label, value)
 }
 
+// AddGit records a project's git credential (R-36) as `broodforge setup` takes it, before any
+// user is registered: an instance api-key credential (user_id null) of provider git, whose value
+// the handoff's push reads through Secret as it reads any api-key's.
+func (s *Service) AddGit(label string, value []byte) (Record, error) {
+	if len(value) == 0 || len(value) > MaxValue {
+		return Record{}, &Error{CodeBadValue, "a git credential is 1 to 65536 bytes"}
+	}
+	if label == "" {
+		return Record{}, &Error{CodeBadValue, "a credential needs a label"}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.addAs(actorHost, KindAPIKey, ProviderGit, "", label, value)
+}
+
 // add writes the value, the row and the audit event; the caller holds s.mu and has checked the
 // kind, the value and the user ("" for the instance's own).
 func (s *Service) add(actor, kind, user, label string, value []byte) (Record, error) {
-	id, err := newID() // 48 random bits; a collision fails the insert below
-	if err != nil {
-		return Record{}, err
-	}
 	provider := ProviderAnthropic
 	if kind == KindBotToken {
 		provider = ProviderDiscord
+	}
+	return s.addAs(actor, kind, provider, user, label, value)
+}
+
+func (s *Service) addAs(actor, kind, provider, user, label string, value []byte) (Record, error) {
+	id, err := newID() // 48 random bits; a collision fails the insert below
+	if err != nil {
+		return Record{}, err
 	}
 	r := Record{ID: id, Kind: kind, Provider: provider, User: user, Label: label,
 		AddedAt: store.FormatTime(s.now())}

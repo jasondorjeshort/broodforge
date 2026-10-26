@@ -117,7 +117,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		taken++
 		args = fs.Args()[1:]
 	}
-	if taken < len(names) {
+	if taken < len(names) && !optional[cmd] {
 		return inv.fail(&usageError{cmd.Name + ": missing <" + names[taken] + ">"})
 	}
 	for _, name := range required[cmd] {
@@ -187,6 +187,10 @@ func (inv *invocation) flagSet(cmd *Command, env *Env) (*flag.FlagSet, error) {
 // kind FlagString, are not accepted as --flags, and are all required. A command file fills it
 // from its own init().
 var positionals = map[*Command][]string{}
+
+// optional marks the commands whose positionals may be left out (`setup [<step>]`), each then
+// the empty string. A command file fills it from its own init().
+var optional = map[*Command]bool{}
 
 // variadic marks the commands whose last positional takes every argument left, after `--` or
 // from the first non-flag on, unparsed (`scratch run -- <command...>`); Env.Strings reads it.
@@ -366,6 +370,10 @@ func commandUsage(c *Command) string {
 	for i, n := range positionals[c] {
 		if variadic[c] && i == len(positionals[c])-1 {
 			b.WriteString(" -- <" + n + "...>")
+			continue
+		}
+		if optional[c] {
+			b.WriteString(" [<" + n + ">]")
 			continue
 		}
 		b.WriteString(" <" + n + ">")

@@ -9,9 +9,8 @@ commands and wire format `05-debug-interface.md`'s; the hook's environment, path
 ## Components and boundaries
 
 One Go binary, one process per instance (ADRs 0020, 0023), one package per component under `internal/<component>/`,
-named by the first column. A component talks only to the ones its row
-names; everything else goes through `SessionService`. Host differences live in `spawn`,
-`worktree-remove`, `control` (the socket path) and nowhere else (`06-platforms.md`, Sharing).
+named by the first column. A component talks only to the ones its row names; everything else goes through `SessionService`.
+Host differences live in `spawn`, `worktree-remove`, `control` (the socket path), `setup`'s host files and nowhere else (`06-platforms.md`, Sharing).
 
 | Component | Owns | Talks to |
 |---|---|---|
@@ -29,7 +28,8 @@ names; everything else goes through `SessionService`. Host differences live in `
 | `spawn` | `SpawnBackend`: `same-account` and `linux-sudo-bwrap`; interrupt; `engine-entry`; preflight | the OS |
 | `backup` | `backup snapshot`, `verify`, `rehearse` (never scheduled by the bot) | `store` |
 | `config` | Loading, validation, last-good, `reload`, `config check` | `credentials` (id existence), `policy` (the model and effort values) |
-| `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control`; `credentials` (`credential init`, the reads' store fallback, the bot's handlers); `session` (`serve` builds the service and serves it); `discord` (`serve`'s adapter, the standalone `discord render`); `git` and `policy` (the worktree handlers); `workflow` (`workflow render` and `probe`, the handoff's copy path, `serve`'s session copy and probe at start) |
+| `setup` | `broodforge setup` (ADR 0027): the step runner, the prompts and their defaults, the single-writer bind of the control address, the host scripts | `config`, `credentials`, `store`, `spawn`, `git`, `discord`, `control`; `audit` (the credential service's writer) |
+| `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control`; `credentials` (`credential init`, the reads' store fallback, the bot's handlers); `session` (`serve` builds the service and serves it); `discord` (`serve`'s adapter, the standalone `discord render`); `git` and `policy` (the worktree handlers); `workflow` (`workflow render` and `probe`, the handoff's copy path, `serve`'s session copy and probe at start); `setup` (the `setup` command) |
 
 `SessionService` is the boundary N-11 names: `start`, `submit`, `answer`, `setMode`, `interrupt`, `end`, `invite`,
 `status`, `subscribe(sessionId)`. The Discord adapter and the control socket call the same methods and read the same

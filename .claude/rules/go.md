@@ -32,7 +32,8 @@ paths:
 - `json.Decoder.DisallowUnknownFields` on configuration files only, never on the engine stream:
   an unknown field or kind there is read, not refused.
 - No host branching (`runtime.GOOS`, `_windows.go`, `//go:build windows`) outside `spawn`, the
-  worktree removal it owns, and `control`.
+  worktree removal it owns, `control`, and `setup`'s `host_windows.go` and `host_linux.go` (the
+  elevated part and hidden terminal input are host code by nature; no other file of `setup` branches).
 - One package per component of `docs/design/03-architecture.md`'s table, under `internal/`; a
   package imports only the components its row names. A library is imported only by the component
   ADR 0023 names; `docs/reference/go-dependencies.md` changes with `go.mod`.

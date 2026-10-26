@@ -67,6 +67,23 @@ func OpenVault(path, keyFile string) (*Vault, error) {
 	return &Vault{path: path, aead: aead}, nil
 }
 
+// Entries counts the entries of the store file at path without opening any: what a new key
+// would make unreadable (`setup key`, key-in-use). A missing file holds none.
+func Entries(path string) (int, error) {
+	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, &Error{CodeStoreUnreadable, err.Error()}
+	}
+	var f vaultFile
+	if err := json.Unmarshal(b, &f); err != nil {
+		return 0, &Error{CodeStoreUnreadable, path + ": not a version 1 credential store"}
+	}
+	return len(f.Entries), nil
+}
+
 // tempPattern names a write's temp file beside the store file.
 const tempPattern = ".store-*.json"
 

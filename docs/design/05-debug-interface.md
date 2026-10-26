@@ -15,7 +15,7 @@ and JSONL output rules, the N-07 exit codes and what `--expect` compares, the sc
 (`scratch new|run|delete|prune`, channels `100` and `200`, credential `cred-scratch`; a kept
 root is named on stderr as `scratch root kept: <path>`), and the
 shared isolation rules (no command prints a secret; `error: live-instance` for a debug flag
-that widens a live session), the hidden probe `control echo`. Sections below give only what differs.
+that widens a live session), the hidden probe `control echo`. Sections below give only what differs; `setup` is `05-debug-interface-setup.md`.
 
 ## Bot lifecycle
 
@@ -27,13 +27,13 @@ does) to stderr, then `held  <ids>` for the interrupted sessions it holds (ADR 0
 `discord.applicationId`, `guildId` and `botCredentialId` (a `bot-token` credential whose value
 has a bot token's shape, checked before anything connects) and opens the gateway after the
 socket (`05-debug-interface-discord-live.md`); any of it failing is `start-discord`. With only `fake`
-channels, steps 5 and 6 skip the engine checks. `broodforge status [--wait <seconds>] [--expect ok|last-good]` waits for the
+channels, steps 5 and 6 skip the engine checks. `broodforge status [--wait <seconds>] [--expect ok|last-good|setup]` waits for the
 socket to answer and prints, in order: `config: ok` or `config: last-good from <time>`, `discord:
 live|dry-run connected|disconnected` (dry-run is always connected), `sessions: <open> open,
 <waiting> waiting-for-answer, <interrupted> interrupted`, `worktrees: <kept> kept with unpushed
 commits`, `backup: last good <age> ago|none` (age `45s`, `12m`, `3h`, `2d`), `engine: <path>
 <version>` (`-` when unset); `--json` nests the same under those keys; the outcome token is the
-config value. `broodforge stop [--timeout 30]` is 03's shutdown: every running turn interrupted,
+config value; a `setup` holding the address answers `config: setup` instead (its lines: `05-debug-interface-setup.md`). `broodforge stop [--timeout 30]` is 03's shutdown: every running turn interrupted,
 every open session marked interrupted, `stopped  <sessions marked>`, then the bot exits 0; past
 the timeout `error: stop-timeout: open sessions: <ids>` and the bot exits 1. A session waiting for an
 answer is open too, and its prompt and idle timers stop with the bot. `broodforge
@@ -290,7 +290,7 @@ Moved to `05-debug-interface-discord.md`: `discord check|render|inject`, the dry
 
 ```
 broodforge [--root <path>] [--json]
-  serve  status  stop  reconcile                     scratch new|run|delete|prune
+  serve  status  stop  reconcile  setup [<step>]     scratch new|run|delete|prune
   config check|show|reload                           register <id>|list|show|set-default
   credential init|add|login|list|remove|show         session start|send|answer|mode|model|effort|timeout|interrupt|end|invite
   session list|show|tail|outbox|transcript|reach-report   engine run|record   workflow render|probe

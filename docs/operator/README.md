@@ -41,7 +41,5 @@ rather than trusting a status line, and drop a step already done.
 | `2026-10-14-droplet-bubblewrap-and-apparmor.md` | Install bubblewrap, socat and, on Ubuntu 24.04, the unconfined-userns AppArmor profile. |
 | `2026-10-14-droplet-engine-go-and-broodforge.md` | Install the pinned engine as its native ELF, Go and `gcc`, and the Broodforge binary at paths both users read. |
 | `2026-10-14-pc-broodforge-account-and-task.md` | Create the PC `broodforge` account, log in once, install Claude Code, register the Task Scheduler task. |
-| `2026-10-14-credential-store-key-per-host.md` | Run `credential init` per host and store the key in the password manager. |
 | `2026-10-17-rewrite-history-to-fix-authorship-and-remove-the-pc-user-name.md` | Back up both repositories, rewrite their history with filter-repo (the owner's identity on the 28 root commits; the PC user name and the machine owner's names out of every commit and message), force-push both, re-clone, purge. |
 | `2026-10-21-discord-application-bot-and-test-server.md` | Create the Discord application and bot (Message Content on), a test server with a project channel, a notice channel and a sessions category, add the bot, put its token in the store with `credential add --instance`, fill the `discord` keys, run `discord check`. |
-| `2026-10-23-allow-the-service-account-in-privacy-allow.md` | Add `broodforge` and `broodforge-engine` to `privacy.allow` in the live `config/instance.json` before the bot runs under a service account, so the push scan does not refuse every commit naming the project. |

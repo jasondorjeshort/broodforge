@@ -16,6 +16,7 @@ import (
 	"github.com/jasondorjeshort/broodforge/internal/config"
 	"github.com/jasondorjeshort/broodforge/internal/control"
 	"github.com/jasondorjeshort/broodforge/internal/session"
+	"github.com/jasondorjeshort/broodforge/internal/setup"
 	"github.com/jasondorjeshort/broodforge/internal/store"
 )
 
@@ -127,6 +128,15 @@ func renderStatus(env *Env, raw json.RawMessage) error {
 	env.Out.SetToken(r.Config)
 	if env.JSON {
 		return env.Out.Record(raw, nil)
+	}
+	if r.Config == setup.StatusSetup {
+		// A setup holds the address (ADR 0027, Decision 4): `config: setup` and - for the rest.
+		for _, l := range []string{"config: setup", "discord: -", "sessions: -", "worktrees: -", "backup: -", "engine: -"} {
+			if _, err := fmt.Fprintln(env.Out.w, l); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 	cfg := "config: ok"
 	if r.Config != "ok" {

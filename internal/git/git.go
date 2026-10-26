@@ -43,6 +43,7 @@ const (
 	CodeNoCredential        = "no-git-credential"
 	CodeCommitMsg           = "commit-msg"
 	CodeSessionRef          = "session-ref" // refs/sessions/<id> cannot be read from the canonical
+	CodeClone               = "clone"       // setup could not clone a project's canonical (CloneCanonical)
 )
 
 var sessionIDRE = regexp.MustCompile(`^s[0-9a-z]{4,}$`)

@@ -19,6 +19,7 @@ Planned documents (added as we go):
 | `05-debug-interface-discord.md` | Companion to 05: the Discord adapter's drive, observe, reproduce and isolation, including the `discord` commands |
 | `05-debug-interface-discord-live.md` | Sibling of the Discord companion: `serve --discord live` (the gateway, the sweep, the REST surface), the one stderr line per inbound event and its outcomes, every interaction acknowledged, the held interrupted sessions (ADR 0026) |
 | `05-debug-interface-git.md` | Companion to 05: the git handoff's drive, observe, reproduce and isolation, including `worktree check\|bundle\|handoff`, the askpass helper and the commit-msg and pre-push hooks |
+| `05-debug-interface-setup.md` | Companion to 05: `broodforge setup`'s drive, observe, reproduce and isolation (the steps' lines, `--check`, `setup <step>`, the held control address and `status`'s `config: setup`), the surface itself being ADR 0027's companion |
 | `05-debug-interface-session.md` | Companion to 05: registration and participants, the session commands (`session start\|send\|show\|tail\|list` and the rest), the trace summaries and deciders `session tail` shows, prompt-mode defer and resume |
 | `05-cli-conventions.md` | Companion to 05: the one binary and its flags, the control-socket wire format, output and exit-code rules, `--expect`, the scratch root, the shared isolation rules |
 | `06-platforms.md` | Target hosts, what each asks of every part, the sharing strategy between hosts, and the major choices bundled into proposal loops |

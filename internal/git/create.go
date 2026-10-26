@@ -5,6 +5,8 @@ package git
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -34,6 +36,38 @@ func Create(ctx context.Context, b spawn.Backend, s Session) (string, error) {
 		return "", err
 	}
 	return base, nil
+}
+
+// CloneCanonical is a project's canonical checkout created by `broodforge setup` (ADR 0027):
+// `git clone` of url into dir as the bot's own account, the account's credential helpers
+// cleared so the askpass helper is the one answer, with the stored git credential (none when
+// token is empty) on that one process, as the push carries it (PushEnv). A refusal is an
+// *Error with code clone and git's most telling line.
+func CloneCanonical(ctx context.Context, askpass, url, dir string, token []byte) error {
+	parent := filepath.Dir(dir)
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return &Error{Code: CodeClone, Message: err.Error()}
+	}
+	_, err := run(ctx, CodeClone, parent, PushEnv(askpass, token), "-c", "credential.helper=", "clone", "--quiet", "--", url, dir)
+	return err
+}
+
+// OriginURL is the URL of remote in the checkout at dir.
+func OriginURL(ctx context.Context, dir, remote string) (string, error) {
+	out, err := run(ctx, CodeClone, dir, nil, "remote", "get-url", remote)
+	return strings.TrimSpace(out), err
+}
+
+// SetOriginURL points remote of the checkout at dir to url.
+func SetOriginURL(ctx context.Context, dir, remote, url string) error {
+	_, err := run(ctx, CodeClone, dir, nil, "remote", "set-url", remote, url)
+	return err
+}
+
+// HeadBranch is the branch HEAD names in the checkout at dir.
+func HeadBranch(ctx context.Context, dir string) (string, error) {
+	out, err := run(ctx, CodeClone, dir, nil, "symbolic-ref", "--short", "HEAD")
+	return strings.TrimSpace(out), err
 }
 
 // Base is the session's base commit as the canonical knows it: the merge base of

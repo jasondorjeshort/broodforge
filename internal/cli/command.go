@@ -23,7 +23,8 @@ const (
 	// ClassFile commands, marked `(file)` in 05, run Local on the files under the root and
 	// never touch the socket.
 	ClassFile
-	// ClassStandalone commands (serve, hook, engine-entry) run Local and need no root.
+	// ClassStandalone commands (hook, engine-entry, setup) run Local and need no root: setup is
+	// 05-cli-conventions.md's exception to the missing-root rule, its default root its own.
 	ClassStandalone
 )
 

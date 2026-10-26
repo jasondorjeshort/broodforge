@@ -1,5 +1,5 @@
 ---
-verified: 2026-10-21
+verified: 2026-10-26
 source: observed (go.mod, go mod graph, and the LICENSE file of each module in the module cache)
 ---
 
@@ -21,10 +21,11 @@ through `GOPROXY` and the checksum database).
 | `github.com/disgoorg/disgo` | v0.19.6 | Apache-2.0 | `discord` |
 | `github.com/disgoorg/snowflake/v2` | v2.0.3 | Apache-2.0 | `discord` (disgo's id type) |
 | `zombiezen.com/go/sqlite` | v1.4.2 | ISC | `store` |
-| `golang.org/x/sys` | v0.49.0 | BSD-3-Clause | `spawn`, `control` |
+| `golang.org/x/sys` | v0.49.0 | BSD-3-Clause | `spawn`, `control`, `setup` |
 
-`control` and `spawn` import `golang.org/x/sys/windows` (Windows build only; `go mod tidy`
-counts every platform, so the module stays pinned); `store` imports `zombiezen.com/go/sqlite`
+`control`, `spawn` and `setup` import `golang.org/x/sys/windows` (Windows build only; `go mod tidy`
+counts every platform, so the module stays pinned), and `setup` also `golang.org/x/sys/unix` (Linux
+build only) for the terminal's echo during a hidden answer; `store` imports `zombiezen.com/go/sqlite`
 and its `sqlitex`, and no other package does; `discord` imports disgo's `discord` (the message,
 component, interaction and permission types), `gateway` and `rest` packages and the snowflake
 id type, and no other package does. It does not import disgo's `bot` package or its root,

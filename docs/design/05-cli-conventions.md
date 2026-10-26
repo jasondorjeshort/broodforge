@@ -5,10 +5,11 @@ in 05 follows these conventions; a section there writes out only what differs. T
 is `03-hook-contract.md` and the spawn is the ADR 0022 companion; this file is the CLI side only.
 
 Surface. One binary, `broodforge`, the same entry point as the bot (ADR 0020); every command but
-`serve`, `hook`, `engine-entry` and the ones marked `(file)` is a client of the control socket
+`serve`, `setup` (a listener like `serve`, holding the control address while it writes; `setup
+--check` is `(file)`), `hook`, `engine-entry` and the ones marked `(file)` is a client of the control socket
 (03, Debug surface attachment). Invocation: `broodforge [--root <path>] [--json] <group>
 <command> [flags] [args]`; `--root` and `--json` may also stand among the command's flags, which
-precede its arguments. `--root` or `BROODFORGE_ROOT` names the instance root; neither set, exit 2.
+precede its arguments. `--root` or `BROODFORGE_ROOT` names the instance root; neither set, exit 2, except for `setup` and `setup host`, where the default root applies (ADR 0027).
 Socket: `<root>/data/control.sock` on Linux, `\\.\pipe\broodforge-<instanceName>` on Windows,
 always from `instanceName` (a scratch root's is `scratch-<12 hex>`, generated at `scratch new`,
 so no path is hashed; the client reads only that key of `config/instance.json`, then of
