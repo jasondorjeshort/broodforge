@@ -27,6 +27,7 @@ Planned documents (added as we go):
 | `08-implementation-plan.md` | The ordered coder passes for `cmd/` and `internal/`, from the toolchain to the held Linux backend: per pass what it implements, the files, the proof command, dependencies, size, and whether the owner sees its output; the facts the findings hold that the design docs do not |
 | `08-implementation-plan-discord.md` | Companion to 08: the Discord passes P11 to P12d (the dry-run renderer and outbox, the live gateway, model and effort from Discord, the header's select menus, the held sessions, the audited refusals and the inbound log), under 08's conventions |
 | `08-implementation-plan-session-workflow.md` | Companion to 08: the passes P15 to P19 that follow ADR 0025 (the session never pushes, the push scan, the workflow copy and probe, the hook child chain, injection in a session), under 08's conventions |
+| `08-implementation-plan-setup.md` | Companion to 08: the passes P20 to P26 that build ADR 0027 (the Windows host spike, `setup` host-neutral, the Discord steps, `setup host` on Windows, `config export` and `--from`, `setup login`, the droplet), the machines each verifies on, and which pass lands each command, under 08's conventions |
 | `proposals/` | Draft proposals for major choices; each gets a critic pass before becoming an ADR |
 | `decisions/` | Architecture decision records (ADRs), one per decision |
 
