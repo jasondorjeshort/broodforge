@@ -23,9 +23,13 @@ and refuses `needs-input-<step>` where there is no default:
 | `--wait <seconds>` | none: the bound on every poll | 900; `0` is unbounded | taken |
 | `--from <export>` | none: `config import` first, then only the host-bound and secret steps ask | none | - |
 
+Off a terminal every question is refused `needs-input-<step>` naming its flag, so a token on stdin
+needs `--yes`.
+
 Names `setup` looks up or creates and never stores (03's config holds ids): the role (`--role`), the
 category `Sessions`, the lobby `#<project id>`, the notices channel `#<project id>-notices`. Config
-values written with a default and no prompt: timeouts 0, mode `prompt`.
+values written with a default and no prompt: timeouts 0, mode `prompt`; `discord.mode` is written
+`dry-run` and becomes `live` in the role step of the run that fills the last Discord id.
 
 Output: one line per step, `ok  <step>  <detail>`, `skip  <step>  <already>` or `fix  <step>  <what
 the owner does>`; `--json`: one object each, `{"result":"ok|skip|fix","step":"<step>","detail":"<text>"}`.
@@ -56,7 +60,9 @@ Steps, in order:
 - `config`: asks the repository URL (`--repo`); the project id is the repository name lowered, runs
   outside `[a-z0-9-]` made `-`, collapsed, cut to 32, asked for (`--project`) when it does not start
   with a letter (03's pattern); writes `instance.json` and `projects/<id>.json` with every key
-  commented, each only when absent. The question is here because the id names the project file,
+  commented, each only when absent; the repository URL is kept in the project file as the comment
+  key `"//url"`, the one place the schema allows, so a rerun after a refused clone needs no `--repo`.
+  The question is here because the id names the project file,
   the channels and the clone.
 - `key`: `credential init`; `ok  key  <hex>  <path>` (the one print) then the pause until Enter;
   `skip  key  exists` for a valid key (64 hex digits and a newline).
@@ -64,21 +70,26 @@ Steps, in order:
 - `token`: read hidden, or from stdin, stored as the instance's `bot-token`; `skip` when the stored
   one answers `GET /oauth2/applications/@me`; refused, `fix  token  Discord refused the stored
   token: <reason>` and the token prompt again (`--yes` with no stdin token: `needs-input-token`).
+  Only a 401 means refused; a 5xx or 429 is no answer, a waiting `fix` that keeps the stored token.
 - `application`: the id from the token's application; the flags ORed with
   `GATEWAY_MESSAGE_CONTENT_LIMITED` (1<<19) by `PATCH /applications/@me`, `skip` when 1<<18 or
   1<<19 is set, `fix` naming the portal switch when the PATCH is refused.
 - `guild`: one membership taken; none, the invite link printed and a poll until the bot joins;
   several, a list (disgo `OAuth2.GetCurrentUserGuilds("")`, the empty token meaning the bot's).
   The role question is asked here, before the link is printed, so the link carries Manage Roles
-  only on a yes.
+  only on a yes. The invite's permission integer with Manage Roles is 2251800082246736.
 - `channels`: the configured ids first, then by name, then create (the ask when the guild has
-  channels), the ids written.
+  channels), the ids written. The lobby is the channel named for the project or the entry setup
+  wrote, never any configured id; under `setup channels` gone non-lobby ids are dropped.
 - `role`: the configured id first, then by name; absent and the answer no (or the bot already in
   the guild without Manage Roles), a `fix` that waits for the owner to make it; yes, the default,
   create, check it sits below the bot's highest role, assign to the guild's `owner_id`; then, on
-  every run, the Manage Roles check below.
-- `git-credential`: the token read hidden, or Enter to defer (`handoff: "none"`); before the clone,
-  so a private canonical clones.
+  every run, the Manage Roles check below. A role at or above the bot's highest prints a `fix`
+  line, then `mismatch-role`; Administrator on the bot prints its own `fix` (remove it in Server
+  Settings, Roles; it holds Manage Roles); Discord not answering is a waiting `fix`.
+- `git-credential`: the token read hidden, or Enter to defer, which writes nothing; stored as an
+  instance credential with no user (`AddGit`), none being registered at setup time; before the
+  clone, so a private canonical clones.
 - `project`: the canonical cloned from the repository into `projects/<id>/`, the stored git
   credential in that one git process through `GIT_ASKPASS` (ADR 0022's push route); `skip` when
   present with the same remote; refused, `fix  project  <git's line>; add the token with setup
@@ -124,6 +135,10 @@ Each is one stderr line `error: <code>: <message>`, exit 1 (`--json`: the wire e
 | `timeout-<step>` | `still waiting after <n>s: <what to do>` | a rerun, or `--wait 0` |
 | `needs-elevation` | `run setup <host\|login> from an elevated PowerShell` or `... with sudo`; on the PC also `<root or pipe> is denied; run this from an elevated PowerShell` | the owner, from that shell |
 | `key-in-use` | `credentials/store.json holds <n> entries under the present key; restore it from your password manager or remove them first` | the owner |
+| `socket-path` | `<the host's Listen failure>`: the control socket path is too long for the host | a shorter `--root` |
+| `refused-project` | `<git's line>; add the token with setup git-credential and rerun` | the owner, then a rerun |
+| `live-instance` | `the scripted Discord does not run on a live root` | a root whose `discord.mode` is `dry-run` |
+| `bad-config` | `<file>: <part and key the schema rejects>` (an export under `config import`, an unreadable instance file) | the owner fixes the file |
 | `check-failed` | `<steps>` | the listed steps' `fix` lines |
 | `login-failed` | `the engine's login exited <code>` | a rerun of `setup login` |
 | `config-exists` | `<root>/config/instance.json exists` (`config import`) | the owner, an empty root |
@@ -213,10 +228,18 @@ after the service was removed by hand; `setup host` calls it.
 
 `broodforge config export [--out <file>]` (file) writes `config/` as one JSON document with the
 host-bound keys emptied (`engine.path`, `engine.gitBashPath`, `credentials.keyFile`,
-`paths.install`, `repo.canonical`, `botCredentialId`, `gitCredentialId`); no secret, never the
+`paths.install`, `repo.canonical`, `botCredentialId`, `gitCredentialId`; `engine.fakeFixtures` and
+`audit.fileSink`, host paths, written `null`); the credential ids are
+emptied, not carried (the token and git credential are asked for again); no secret, never the
 store; default `--out` `<root>/data/config-export.json`, outside any repository, the docs'
 personal-data rule applying to the file. `setup --from <file>` (`config import <file>` (file) alone,
 `config-exists` on a configured root) writes the files and asks only the host-bound and secret
-questions; on a second PC with the same application and guild `channels` and `role` find
+questions; on a configured root it adds absent keys and reruns clean (`setup host` passes it on every
+rerun); the export's `instanceName` is the shown default for `--instance`; the file is copied to
+`<root>/data/config-export.json`; a bad export under `config import` is `bad-config`; on a second PC with the same application and guild `channels` and `role` find
 everything by the imported ids or by name, and the first instance must be retired first (one
 application per instance). State and secrets stay 0021's backup and restore.
+
+## Amendments
+
+- 2026-10-26: aligned to P21-P24 (the code wins): the departures the three passes accepted, the invite integer and the new refusal codes.
