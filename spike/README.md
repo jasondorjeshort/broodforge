@@ -19,6 +19,7 @@ recorded fixtures move to `fixtures/engine/<name>/` after a person reads them.
 | `hookmode.sh` | Droplet: writes `<sess>/home/spike-hook.json` through the sandbox. |
 | `strace-cfg.sh` | Droplet C38: paths under `<cfg>` in an strace log, written and read, unexpected ones marked `!`. |
 | `share/empty/` | An empty `CLAUDE.md` (must stay empty: no SPDX line), `mcp.json` (`{"mcpServers":{}}`), and `dir/`, which is not in git because it must hold nothing: `setup.js` and `bwrap.sh` create it. |
+| `setup-host/` | P20's Windows host spike in PowerShell (W1, W3a, W4, W6, the root ACL); its own `README.md`; not part of the TypeScript harness. |
 | `package.json`, `package-lock.json`, `tsconfig.json`, `.gitignore` | `typescript` and `@types/node` only; `tsc` writes `*.js` beside the sources (ignored). |
 
 ## Build (Git Bash on the PC)
