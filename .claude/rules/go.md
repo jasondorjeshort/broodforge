@@ -11,7 +11,7 @@ paths:
 - Format with `gofmt`. Clean under the check line, run from the repository root:
   `go vet ./... && go tool staticcheck ./... && go tool exhaustive ./...`.
 - Build before test: `CGO_ENABLED=0 go build ./...`, the check line, then `CGO_ENABLED=1 go test -race ./...` on
-  Linux and on the PC (there with `PATH="/c/msys64/ucrt64/bin:$PATH"` for gcc).
+  Linux and on the PC (there with `PATH="/c/msys64/mingw64/bin:$PATH"` for gcc).
 - The binary is `CGO_ENABLED=0 go build -o bin/ ./cmd/broodforge`: the trailing slash makes Go
   add `.exe` on Windows, where `-o bin/broodforge` writes a file PowerShell will not run.
   `CGO_ENABLED` is set on the command line, never in `go.mod`. Nothing goes on `PATH`; never
