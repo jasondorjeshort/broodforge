@@ -24,9 +24,10 @@ and refuses `needs-input-<step>` where there is no default:
 | `--from <export>` | none: `config import` first, then only the host-bound and secret steps ask | none | - |
 
 Off a terminal every question is refused `needs-input-<step>` naming its flag, so a token on stdin
-needs `--yes`, with two exceptions: the git-credential question is deferred, not refused (it writes
-nothing; `setup git-credential` adds it later), and the token refusal reads `pass the bot token on
-stdin with --yes`, not `pass --<flag>`.
+needs `--yes`, with three exceptions: the git-credential question is deferred, not refused (it writes
+nothing; `setup git-credential` adds it later), the token refusal reads `pass the bot token on
+stdin with --yes`, not `pass --<flag>`, and `setup git-credential` with empty stdin refuses
+`needs-input-git-credential: pass the token on stdin` (`internal/setup/steps.go`).
 
 Names `setup` looks up or creates and never stores (03's config holds ids): the role (`--role`), the
 category `Sessions`, the lobby `#<project id>`, the notices channel `#<project id>-notices`. Config
@@ -126,7 +127,8 @@ Steps, in order:
 
 ## Refusals
 
-Each is one stderr line `error: <code>: <message>`, exit 1 (`--json`: the wire error object); a
+Each is one stderr line `error: <code>: <message>`, exit 1 (`--json`: the wire error object), except
+`config import`, which prints one `error: bad-config:` line per problem (`internal/cli/config.go`); a
 `fix` line for the step precedes it on stdout where one applies.
 
 | Code | Message | Lifted by, from which shell |
@@ -135,18 +137,18 @@ Each is one stderr line `error: <code>: <message>`, exit 1 (`--json`: the wire e
 | `setup-running` | `another setup holds <address>; finish it or press Ctrl-C there` | the owner, in that terminal |
 | `needs-input-<step>` | `pass --<flag>` | a flag, or an interactive run |
 | `mismatch-<step>` | `config has <X>, found <Y>; run setup <step> to replace it` | `setup <step>` with the bot stopped: from the elevated PowerShell on the PC (relaunched as `broodforge`, below), `sudo -u broodforge` on Linux |
-| `refused-<step>` | `<Discord's reason>; <the portal or server setting>` | the owner in the portal or server, then a rerun; a refusal a rerun can lift is a `fix` line and a poll instead, never this code |
+| `refused-<step>` | `<Discord's reason>; <the portal or server setting>` | the owner in the portal or server, then a rerun; a refusal a rerun can lift is a `fix` line and a poll instead, never this code; a non-waiting `fix` in a normal run also becomes `refused-<step>`, carrying the fix's own detail (`internal/setup/setup.go`) |
 | `timeout-<step>` | `still waiting after <n>s: <what to do>` | a rerun, or `--wait 0` |
 | `needs-elevation` | `run setup <host\|login> from an elevated PowerShell` or `... with sudo`; on the PC also `<root or pipe> is denied; run this from an elevated PowerShell`, on Linux `<addr> is denied; run this with sudo` | the owner, from that shell |
 | `key-in-use` | `credentials/store.json holds <n> entries under the present key; restore it from your password manager or remove them first` | the owner |
 | `socket-path` | `<the host's Listen failure>; choose a shorter --root` (pending the owner's review) | a shorter `--root` |
 | `refused-project` | `<git's line>; add the token with setup git-credential and rerun` | the owner, then a rerun |
 | `live-instance` | `the scripted Discord (BROODFORGE_SETUP_FAKE_DISCORD) is refused on a live instance` (pending the owner's review) | a root whose `discord.mode` is `dry-run` |
-| `bad-config` | `<file>: <part and key the schema rejects>` (an export under `config import`, an unreadable instance file) (pending the owner's review) | the owner fixes the file |
+| `bad-config` | `<file>: <part and key the schema rejects>` (an export under `config import`, an instance file that does not parse; an OS read error is `internal`) (pending the owner's review) | the owner fixes the file |
 | `mismatch-config` | `export <file> has <part: problem>, ...; fix the file or export it again with this version` (a refused `--from` export; interim, pending the owner's review) | the owner fixes the file or exports again, from any shell |
 | `no-config` | `<file> is missing; run setup` (the instance file or the project's, on a run that writes; `--check` prints a `fix` line instead) | `setup`, from the shell that runs it |
 | `key-unreadable` | `<key path>: <the OS error>` | the owner fixes the file's access or path |
-| `bad-args` | `the repository URL carries a credential; pass it without the user and password, and add the token with setup git-credential` (also an unreadable `--from`: `--from: <error>`) | a rerun with a plain URL |
+| `bad-args` | `the repository URL carries a credential; pass it without the user and password, and add the token with setup git-credential` (also an unreadable `--from`: `--from: <error>`; an invalid instance name; an invalid `--project`; a guild id the bot is not in; a bad `BROODFORGE_SETUP_FAKE_DISCORD` script) | a rerun with the argument corrected (a plain URL, a valid name) |
 | `check-failed` | `<steps>`: `--check` names the steps that printed `fix`; a normal run names `check` when its echoed lines failed | the listed steps' `fix` lines |
 | `login-failed` | `the engine's login exited <code>` | a rerun of `setup login` |
 | `config-exists` | `<root>/config/instance.json exists` (`config import`) | the owner, an empty root |
@@ -252,3 +254,7 @@ application per instance). State and secrets stay 0021's backup and restore.
 ## Amendments
 
 - 2026-10-26: aligned to P21, P22 and P24 (the code wins): the departures the three passes accepted, the invite integer and the new refusal codes.
+- 2026-10-26: this companion now diverges from ADR 0027's own text, and the companion governs. Decision 6 says
+  two owner texts await re-approval; now four (see The owner's texts). Decision 4's refusal-code list
+  lacks `socket-path`, `live-instance`, `bad-config`, `mismatch-config`, `no-config`, `key-unreadable`
+  and `bad-args`. Decision 3's "`fix` otherwise" is now a fix line, then `mismatch-role`, exit 1.

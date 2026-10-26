@@ -8,9 +8,8 @@ Updated: 2026-10-26 by main session (P20 spike run, W6 open; Go installed)
 - Unpushed on `main`: ADR 0027 `d891592` through companion `bfb56b3`, then the P20 verdicts and the
   Go reference. Code commits were reviewed with fixes amended in; the companions (`6f006b8`,
   `bfb56b3`) and today's two docs commits go to the reviewer before the owner's requested push.
-- P20 spike run by the owner: every claim holds except W6's last step (`Start-ScheduledTask` never
-  started the task, 0x41303); cause unknown. P23 waits on it. The owner wants no coding this session.
-- Go installed (go1.27.0, switches to 1.27.2 per `go.mod`); the full check and test lines pass.
+- P20 spike run by the owner: every claim holds but W6's last step (`Start-ScheduledTask` never
+  started the task, 0x41303; cause unknown) and the unreported console row. P23 waits on W6.
 
 ## Next
 
@@ -18,8 +17,8 @@ Updated: 2026-10-26 by main session (P20 spike run, W6 open; Go installed)
    honours, `schtasks /run`), then an owner re-run of the spike. Then P23: coder.
 2. Reviewer: `6f006b8`, `bfb56b3` and today's docs commits; then a fresh pusher.
 3. P25 `setup login` (after P23); P26 Linux on the Ubuntu VM then the droplet (held with P14).
-4. Tester: the repro needs `</dev/null` (it reads stdin to EOF); triage the 2026-10-23 and
-   2026-10-24 ideas; confirm the MSYS2 gcc package name in `go-on-windows.md` (unverified).
+4. Tester: the repro needs `</dev/null` (it reads stdin to EOF); triage the 2026-10-23, 2026-10-24
+   and 2026-10-26 ideas (the last: `goLive` after a role timeout, needs a test).
 5. Earlier queue: s000a post-mortem Next; milestone 1 blocker (`engine run --real`, prompt mode,
    subagents); s0008's open items; the last-good cold start; the net-diff finding; carry-backs.
 
@@ -28,7 +27,8 @@ Updated: 2026-10-26 by main session (P20 spike run, W6 open; Go installed)
 - P20: whether a console window appeared on the desktop during `run.ps1` (at the W6 re-run).
 - Texts the passes added (see `05-debug-interface-setup.md`): the `fix token` portal line, the
   `fix application` intent line, the role-above-the-bot and Administrator lines, the channels-wait
-  and guild-picker prompts, the `mismatch-config` export message; and `next` says "the bot is
+  and guild-picker prompts, the `mismatch-config` export message, the invite and closing line
+  prefixes, the `socket-path`, `live-instance` and `bad-config` texts; and `next` says "the bot is
   running" before P23 starts one.
 - Earlier: the `pre-push` line (P15); P12a wording; "Never ends for inactivity."; the switch post;
   the hook no-answer phrase; R-17; `Waits:` blocks; commit name and email; `C:\elsewhere` to delete.

@@ -33,7 +33,7 @@ article: a temporary profile) and is not retried.
 
 ## What was tried
 
-Not run yet. The owner decided on 2026-10-26 that the spike runs on their PC against disposable
+Written before the run. The owner decided on 2026-10-26 that the spike runs on their PC against disposable
 accounts it creates and deletes, never `broodforge`, with no cloud machine. The scripts, in
 `spike/setup-host/` (runbook `README.md`), use built-in Windows PowerShell 5.1 cmdlets only:
 
@@ -71,8 +71,8 @@ are the scrubbed `<host>` and `<profiles>` the owner pasted.
 
 ## Result
 
-Seven rows hold, W6 is refuted at its last step only, and the console-window row was not reported.
-The evidence column is the claim line's text after the verdict.
+Every row holds but W6's last step and the console-window row. The evidence cells are abridged from
+the claim lines.
 
 | Claim | Holds when | Verdict | Evidence |
 |---|---|---|---|
@@ -98,12 +98,14 @@ re-registering with the new password succeeded.
 
 Failed: only the last step. `run.ps1` (the W6 block, lines 405-445) then ran `Start-ScheduledTask`
 and waited 60 s for the task's output file; none appeared. `LastTaskResult` 267011 is `0x41303`,
-`SCHED_S_TASK_HAS_NOT_RUN`: the task never started. A bad password or a missing batch-logon right
-would be expected to give a different code, so those are not what the evidence points to.
+`SCHED_S_TASK_HAS_NOT_RUN`: the task never started. 
 
-The cause is not established. Candidates, none tested: the task's `AtStartup` trigger (the task has
-no logon or time trigger, and `Start-ScheduledTask` may not start an `AtStartup` task registered
-this way); `Start-ScheduledTask` called from a non-interactive elevated host; the action or its
+The cause is not established. Candidates, none tested: a bad password or a missing batch-logon
+right (reviewer's knowledge, untested: a stored-password task that fails to log on at launch can
+leave Last Run Result at `0x41303`, the real error showing only as event 101 in the
+`Microsoft-Windows-TaskScheduler/Operational` log); the task's `AtStartup` trigger, a weak candidate
+(reviewer's knowledge, untested: an on-demand start does not depend on the trigger type when demand
+start is allowed); `Start-ScheduledTask` called from a non-interactive elevated host; the action or its
 output path as registered (not read back in this run); the task's settings or state (for example
 disabled, or a start condition). Because the verdict reads one step that did not run, it says
 nothing about whether the task would run as `bf-spike` on the new password.
@@ -114,7 +116,8 @@ not, and P23 should not script it as proven.
 
 ## Next
 
-1. A coder pass on the W6 last step: read back the registered task (action, trigger, settings,
+1. A coder pass on the W6 last step: enable the `Microsoft-Windows-TaskScheduler/Operational` log
+   before the re-run, and after it read the task's events and `LastRunTime`; read back the registered task (action, trigger, settings,
    state) after the second `Register-ScheduledTask`, and try the start with a trigger that
    `Start-ScheduledTask` is known to honour, then with `schtasks /run`, from the same
    non-interactive elevated host, using disposable accounts and `cleanup.ps1` as before. Record the
