@@ -1,31 +1,31 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-26 by main session (setup in few steps: ADR 0027, P20-P22 and P24 built)
+Updated: 2026-10-26 by main session (P20 spike run, W6 open; Go installed)
 
 ## Now
 
-- `main` is 7 ahead of origin, unpushed: ADR 0027 `d891592`, plan `0338526`, spike `9fa0532`, P21
-  `fab65e1`, P22 `4acc5e8`, P24 `ed5f0d9`, companion `6f006b8`. Every code commit had its reviewer
-  read and its fixes amended in; the companion commit (`6f006b8`, docs) has not been reviewed yet.
-- Go is not installed on this PC: the passes used a go1.27.2 zip at `%LOCALAPPDATA%\Temp\bf-gotool-Kf7H`
-  (nothing on PATH) and gcc from `C:\msys64\mingw64\bin`; `docs/reference/go-on-windows.md` is stale.
-- The owner's spike (P20, `spike/setup-host/README.md`) has not been run; P23 waits on its verdicts.
+- Unpushed on `main`: ADR 0027 `d891592` through companion `bfb56b3`, then the P20 verdicts and the
+  Go reference. Code commits were reviewed with fixes amended in; the companions (`6f006b8`,
+  `bfb56b3`) and today's two docs commits go to the reviewer before the owner's requested push.
+- P20 spike run by the owner: every claim holds except W6's last step (`Start-ScheduledTask` never
+  started the task, 0x41303); cause unknown. P23 waits on it. The owner wants no coding this session.
+- Go installed (go1.27.0, switches to 1.27.2 per `go.mod`); the full check and test lines pass.
 
 ## Next
 
-1. Owner: run the P20 spike and paste its `claim` lines; the tester fills the finding. Then P23
-   (`setup host` and `setup service` on Windows, `08-implementation-plan-setup.md`): coder.
-2. Reviewer: `6f006b8` (companion) before the push; then the pusher, when the owner asks.
+1. Coder: W6 per the P20 finding's Next (read back the task, a trigger `Start-ScheduledTask`
+   honours, `schtasks /run`), then an owner re-run of the spike. Then P23: coder.
+2. Reviewer: `6f006b8`, `bfb56b3` and today's docs commits; then a fresh pusher.
 3. P25 `setup login` (after P23); P26 Linux on the Ubuntu VM then the droplet (held with P14).
-4. Tester: `docs/reference/go-on-windows.md` (Go not installed here; the temp toolchain); the repro
-   needs `</dev/null` (it reads stdin to EOF); triage the 2026-10-23 and 2026-10-24 ideas.
+4. Tester: the repro needs `</dev/null` (it reads stdin to EOF); triage the 2026-10-23 and
+   2026-10-24 ideas; confirm the MSYS2 gcc package name in `go-on-windows.md` (unverified).
 5. Earlier queue: s000a post-mortem Next; milestone 1 blocker (`engine run --real`, prompt mode,
    subagents); s0008's open items; the last-good cold start; the net-diff finding; carry-backs.
 
 ## Waiting on user
 
-- Go on this PC: install it (`winget install GoLang.Go`) or keep the temp toolchain.
+- P20: whether a console window appeared on the desktop during `run.ps1` (at the W6 re-run).
 - Texts the passes added (see `05-debug-interface-setup.md`): the `fix token` portal line, the
   `fix application` intent line, the role-above-the-bot and Administrator lines, the channels-wait
   and guild-picker prompts, the `mismatch-config` export message; and `next` says "the bot is
@@ -35,6 +35,6 @@ Updated: 2026-10-26 by main session (setup in few steps: ADR 0027, P20-P22 and P
 
 ## Open findings
 
-- `docs/findings/2026-10-26-spike-windows-setup-host-claims.md` (verdicts empty; Next 1)
+- `docs/findings/2026-10-26-spike-windows-setup-host-claims.md` (W6 open; Next 1)
 - `docs/findings/2026-10-24-interrupted-session-cannot-be-ended-after-a-restart.md`; `2026-10-24-s000a-post-mortem-*.md`, `2026-10-24-background-subagents-*.md`, `2026-10-24-session-friction-*.md`; `2026-10-23-subagents-in-a-session-end-before-writing.md`, `...-first-live-*.md`
 - `docs/findings/2026-10-17-net-diff-privacy-scan-let-named-commits-go-public.md`; `2026-10-15-spike-*.md` (droplet open); `2026-10-16-prior-art-chat-front-ends-for-coding-agents.md`
