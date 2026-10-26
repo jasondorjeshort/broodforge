@@ -1,5 +1,5 @@
 {
-  "$comment": "Project policy for the hooks in this directory. Schema, defaults and fail modes: docs/hatchery/decisions/0006-hook-policy-file.md. Usage is per meter (5-hour holds at 60, weekly at 75, no deny line). The privacy scan (privacy-scan.js, guard rule 20, the pre-push hook under git.hooksPath; ADR 0018) passes each identity listed in privacy.identities, the placeholder user names user, alice and bob, and the service accounts broodforge (the droplet's) and broodforge-engine, both named after the project. The post-edit hook runs gofmt -w on every edited Go file. Check with: node .claude/hooks/policy.js",
+  "$comment": "Project policy for the hooks in this directory. Schema, defaults and fail modes: docs/hatchery/decisions/0006-hook-policy-file.md. Usage is per meter (5-hour holds at 60, weekly at 98, no deny line). The privacy scan (privacy-scan.js, guard rule 20, the pre-push hook under git.hooksPath; ADR 0018) passes each identity listed in privacy.identities, the placeholder user names user, alice and bob, and the service accounts broodforge (the droplet's) and broodforge-engine, both named after the project. The post-edit hook runs gofmt -w on every edited Go file. Check with: node .claude/hooks/policy.js",
   "git": {
     "commit": { "subagents": ["runner"], "protectedBranches": [] },
     "push": { "subagents": ["pusher"], "branches": ["*"], "mainSession": true, "forceWithLease": [] },
@@ -10,7 +10,7 @@
     "hold": 60,
     "deny": null,
     "fiveHour": { "hold": 60, "deny": null },
-    "sevenDay": { "hold": 75, "deny": null },
+    "sevenDay": { "hold": 98, "deny": null },
     "staleSeconds": 7200,
     "whenStale": "allow",
     "pool": null
