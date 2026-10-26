@@ -78,7 +78,6 @@ const (
 	CodeKeyInUse     = "key-in-use"
 	CodeCheckFailed  = "check-failed"
 	CodeNoConfig     = "no-config"
-	CodeNotBuilt     = "not-built"
 	CodeLiveInstance = "live-instance"
 )
 
@@ -109,6 +108,9 @@ type Options struct {
 	Channels   string
 	CreateRole string
 	Role       string
+	// From is --from: a config export (config.Export) imported before the steps, absent keys
+	// only, its copy kept at <root>/data/config-export.json.
+	From string
 }
 
 // Echo is one line of a command the check step runs in process (config check, spawn
@@ -179,14 +181,23 @@ func Run(ctx context.Context, o Options, env Env) error {
 	}
 	s := &State{opt: o, env: env, check: o.Check, alone: o.Step != "",
 		prompt: &prompter{in: newLineReader(env.Stdin), out: env.Stderr, tty: env.TTY, yes: o.Yes, echoOff: env.EchoOff}}
+	if o.From != "" {
+		if err := s.readExport(); err != nil {
+			return err
+		}
+	}
 	if err := s.resolve(); err != nil {
 		return err
 	}
 	if env.FakeDiscord {
-		// An instance file that cannot be read cannot show the root is not live: refused.
+		// An instance file that cannot be read cannot show the root is not live: refused. With
+		// no instance file, the export --from would import is the instance.
 		inst, err := s.instanceDoc()
 		if err != nil {
 			return toControl(err)
+		}
+		if inst == nil && s.from != nil {
+			inst = s.from.Instance
 		}
 		if inst != nil && inst.String("discord", "mode") == config.DiscordLive {
 			return control.NewError(CodeLiveInstance, "the scripted Discord (BROODFORGE_SETUP_FAKE_DISCORD) is refused on a live instance")
@@ -207,6 +218,11 @@ func Run(ctx context.Context, o Options, env Env) error {
 			return err
 		}
 		defer b.close()
+		if s.from != nil {
+			if err := s.importExport(); err != nil {
+				return err
+			}
+		}
 	}
 	defer s.close()
 	return s.run(ctx, steps)

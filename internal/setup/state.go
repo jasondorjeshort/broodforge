@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -46,6 +47,11 @@ type State struct {
 	channelsYes *bool // the channels question's answer once asked
 	wrote       map[string]bool
 	liveNote    string // the role line's note once discord.mode was switched
+
+	// --from: the export, read before the root is resolved, and what its import wrote.
+	from     *config.ExportDoc
+	imported []string
+	ignored  []string // "<file> <key>": present keys holding another value than the export's
 }
 
 // DefaultRoot is the root with no --root: %ProgramData%\Broodforge\<instance> where the
@@ -97,9 +103,16 @@ func (s *State) resolve() error {
 		}
 	}
 	if s.instance == "" {
-		s.instance = DefaultInstance
+		def := DefaultInstance
+		if s.from != nil {
+			// --from: the export's instance name is the shown default.
+			if n := s.from.Instance.String("instanceName"); config.ValidInstanceName(n) {
+				def = n
+			}
+		}
+		s.instance = def
 		if !s.check {
-			name, err := s.prompt.Prompt("root", "instance", "Instance name", DefaultInstance)
+			name, err := s.prompt.Prompt("root", "instance", "Instance name", def)
 			if err != nil {
 				return err
 			}
@@ -128,6 +141,91 @@ func (s *State) resolve() error {
 }
 
 func quote(s string) string { return `"` + s + `"` }
+
+// readExport reads --from's export and checks it against this binary's schema: a key the
+// schema rejects, or a newer schemaVersion, is mismatch-config naming it.
+func (s *State) readExport() error {
+	path, err := filepath.Abs(s.opt.From)
+	if err != nil {
+		return control.NewError("bad-args", "--from: "+err.Error())
+	}
+	e, err := config.ReadExport(path)
+	var inv *config.InvalidError
+	switch {
+	case errors.As(err, &inv):
+		var found []string
+		for _, p := range inv.Problems {
+			found = append(found, p.String())
+		}
+		// Wording pending the owner's review (the coordinator's interim text).
+		return control.NewError("mismatch-config", "export "+filepath.ToSlash(path)+" has "+strings.Join(found, ", ")+
+			"; fix the file or export it again with this version")
+	case err != nil:
+		return control.NewError("bad-args", "--from: "+control.OneLine(err.Error()))
+	}
+	s.from = e
+	return nil
+}
+
+// importExport is `config import` inside the run, once the address is bound: the export's copy
+// at <root>/data/config-export.json (unless --from names it), then its files written, absent
+// keys only. The config step's line reports what it wrote.
+func (s *State) importExport() error {
+	// The project is settled over the files the import will leave, before it writes any: a
+	// refusal here (needs-input-project) leaves the root as it was.
+	if _, err := s.resolveProject(); err != nil {
+		return err
+	}
+	src, err := filepath.Abs(s.opt.From)
+	if err != nil {
+		return err
+	}
+	dst := filepath.Join(s.root, "data", config.ExportName)
+	if filepath.Clean(src) != filepath.Clean(dst) { // a copy onto itself would only rewrite it
+		b, err := os.ReadFile(src)
+		if err != nil {
+			return control.NewError("bad-args", "--from: "+control.OneLine(err.Error()))
+		}
+		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+			return err
+		}
+		if err := os.WriteFile(dst, b, 0o600); err != nil {
+			return err
+		}
+	}
+	// The host-bound keys are filled from this host's templates as the files are written, so no
+	// file is left with an empty repo.canonical whatever the run does next.
+	wrote, err := config.Import(s.root, s.from, config.ImportOptions{InstanceName: s.instance,
+		Instance: s.instanceTemplate(), Project: s.projectTemplate})
+	if err != nil {
+		return toControl(err)
+	}
+	for _, w := range wrote {
+		if len(w.Keys) > 0 || len(w.Ignored) == 0 {
+			s.imported = append(s.imported, w.String())
+		}
+		for _, k := range w.Ignored {
+			s.ignored = append(s.ignored, w.File+" "+k)
+		}
+	}
+	return nil
+}
+
+// instanceTemplate is the instance file setup writes on this host.
+func (s *State) instanceTemplate() *config.Doc {
+	return config.SetupInstance(config.SetupOptions{InstanceName: s.instance,
+		KeyFile: DefaultKeyFile(s.root, s.instance), Install: filepath.ToSlash(s.env.Install)})
+}
+
+// projectTemplate is the host-bound part of a project file on this host: its canonical under
+// the root.
+func (s *State) projectTemplate(id string) *config.Doc {
+	return config.SetupProject(config.SetupProjectOptions{ID: id, Canonical: s.canonicalDefault(id)})
+}
+
+func (s *State) canonicalDefault(id string) string {
+	return filepath.ToSlash(filepath.Join(s.root, "projects", id))
+}
 
 // instancePath and projectPath are the config files.
 func (s *State) instancePath() string { return config.InstancePath(s.root) }
@@ -183,16 +281,22 @@ func DeriveProjectID(url string) (string, bool) {
 	return id, projectIDRE.MatchString(id)
 }
 
-// projects is the ids of config/projects/*.json, sorted.
+// projects is the ids of config/projects/*.json, sorted; with --from (not --check), the
+// export's projects too, so the project is settled over the files the import leaves.
 func (s *State) projects() []string {
-	ents, err := os.ReadDir(filepath.Join(config.Dir(s.root), "projects"))
-	if err != nil {
-		return nil
-	}
 	var ids []string
-	for _, e := range ents {
-		if id, ok := strings.CutSuffix(e.Name(), ".json"); ok && !e.IsDir() {
-			ids = append(ids, id)
+	if ents, err := os.ReadDir(filepath.Join(config.Dir(s.root), "projects")); err == nil {
+		for _, e := range ents {
+			if id, ok := strings.CutSuffix(e.Name(), ".json"); ok && !e.IsDir() {
+				ids = append(ids, id)
+			}
+		}
+	}
+	if s.from != nil && !s.check {
+		for _, id := range s.from.IDs {
+			if !slices.Contains(ids, id) {
+				ids = append(ids, id)
+			}
 		}
 	}
 	sort.Strings(ids)
@@ -208,6 +312,9 @@ func (s *State) resolveProject() (bool, error) {
 	}
 	if s.opt.Project != "" && !projectIDRE.MatchString(s.opt.Project) {
 		return false, control.NewError("bad-args", "--project "+quote(s.opt.Project)+": want "+projectIDRE.String())
+	}
+	if err := checkRepoURL(s.opt.Repo); err != nil {
+		return false, err
 	}
 	s.repoURL = s.opt.Repo
 	if s.repoURL == "" {
@@ -231,6 +338,9 @@ func (s *State) resolveProject() (bool, error) {
 		}
 		url, err := s.prompt.Prompt("repo", "repo", textRepo, "")
 		if err != nil {
+			return false, err
+		}
+		if err := checkRepoURL(url); err != nil {
 			return false, err
 		}
 		s.repoURL = url
@@ -259,7 +369,19 @@ func (s *State) resolveProject() (bool, error) {
 func (s *State) storedURL() {
 	if d, _, err := config.ReadDoc(s.projectPath(s.project)); err == nil && d != nil {
 		s.repoURL = d.String("repo", config.SetupURLKey)
+	} else if s.from != nil && s.from.Projects[s.project] != nil {
+		s.repoURL = s.from.Projects[s.project].String("repo", config.SetupURLKey)
 	}
+}
+
+// checkRepoURL refuses a repository URL carrying a credential: it would be written to the
+// project file and travel in an export.
+func checkRepoURL(u string) error {
+	if config.RepoURLCredential(u) {
+		return control.NewError("bad-args", "the repository URL carries a credential; pass it without the user and "+
+			"password, and add the token with setup git-credential")
+	}
+	return nil
 }
 
 // backend is the spawn backend the instance file names, for the askpass helper of the clone.

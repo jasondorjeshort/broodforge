@@ -99,8 +99,7 @@ func stepConfig(_ context.Context, s *State) (Line, error) {
 		return Line{}, toControl(err)
 	}
 	var wrote, fixes []string
-	tmpl := config.SetupInstance(config.SetupOptions{InstanceName: s.instance,
-		KeyFile: DefaultKeyFile(s.root, s.instance), Install: filepath.ToSlash(s.env.Install)})
+	tmpl := s.instanceTemplate()
 	if inst != nil {
 		changed := false
 		if name := inst.String("instanceName"); inst.Has("instanceName") && name != s.instance {
@@ -135,6 +134,19 @@ func stepConfig(_ context.Context, s *State) (Line, error) {
 						s.wroteDefaults = true
 					}
 				}
+			}
+		}
+		// A host-bound key an import left empty is filled as an absent key is.
+		filled, err := inst.FillEmpty(tmpl, config.HostBoundInstance)
+		if err != nil {
+			return Line{}, control.NewError("bad-config", s.instancePath()+": "+err.Error())
+		}
+		if len(filled) > 0 {
+			if s.check {
+				fixes = append(fixes, "config/instance.json has no "+strings.Join(filled, ", "))
+			} else {
+				changed = true
+				wrote = append(wrote, "config/instance.json "+strings.Join(filled, ", "))
 			}
 		}
 		if lacking := lacksAccounts(inst); len(lacking) > 0 && !slices.Contains(added, "privacy") && !slices.Contains(added, "privacy.allow") {
@@ -190,7 +202,7 @@ func stepConfig(_ context.Context, s *State) (Line, error) {
 			forge, handoff = config.ForgeGitHub, config.HandoffPullRequest
 		}
 		ptmpl := config.SetupProject(config.SetupProjectOptions{ID: s.project, Name: name,
-			Canonical: filepath.ToSlash(filepath.Join(s.root, "projects", s.project)), Forge: forge, Handoff: handoff,
+			Canonical: s.canonicalDefault(s.project), Forge: forge, Handoff: handoff,
 			URL: s.repoURL})
 		pdoc, _, err := config.ReadDoc(s.projectPath(s.project))
 		if err != nil {
@@ -209,6 +221,11 @@ func stepConfig(_ context.Context, s *State) (Line, error) {
 			if err != nil {
 				return Line{}, control.NewError("bad-config", s.projectPath(s.project)+": "+err.Error())
 			}
+			filled, err := pdoc.FillEmpty(ptmpl, config.HostBoundProject)
+			if err != nil {
+				return Line{}, control.NewError("bad-config", s.projectPath(s.project)+": "+err.Error())
+			}
+			added = append(added, filled...)
 			switch {
 			case len(added) == 0:
 			case s.check:
@@ -220,16 +237,54 @@ func stepConfig(_ context.Context, s *State) (Line, error) {
 				wrote = append(wrote, pfile+" "+strings.Join(added, ", "))
 			}
 		}
+		// Every other project file: a host-bound key left empty (an import's) is filled too.
+		for _, id := range s.projects() {
+			if id == s.project {
+				continue
+			}
+			od, _, err := config.ReadDoc(s.projectPath(id))
+			if err != nil {
+				return Line{}, toControl(err)
+			}
+			if od == nil {
+				continue
+			}
+			filled, err := od.FillEmpty(s.projectTemplate(id), config.HostBoundProject)
+			if err != nil {
+				return Line{}, control.NewError("bad-config", s.projectPath(id)+": "+err.Error())
+			}
+			switch {
+			case len(filled) == 0:
+			case s.check:
+				fixes = append(fixes, "config/projects/"+id+".json has no "+strings.Join(filled, ", "))
+			default:
+				if err := config.WriteDoc(s.projectPath(id), od); err != nil {
+					return Line{}, err
+				}
+				wrote = append(wrote, "config/projects/"+id+".json "+strings.Join(filled, ", "))
+			}
+		}
 	} else {
 		fixes = append(fixes, "no project file")
+	}
+	// --from: the keys config already held with another value than the export's were kept.
+	kept := ""
+	if len(s.ignored) > 0 {
+		kept = "; kept " + strings.Join(s.ignored, ", ") + " over the export's (setup <step> replaces a key)"
 	}
 	switch {
 	case len(fixes) > 0:
 		return fix(step, strings.Join(fixes, "; ")+"; run setup --repo <url>"), nil
+	case len(s.imported) > 0:
+		detail := "imported " + strings.Join(s.imported, "; ") + " from " + filepath.ToSlash(s.opt.From)
+		if len(wrote) > 0 {
+			detail += "; wrote " + strings.Join(wrote, "; ")
+		}
+		return ok(step, detail+kept), nil
 	case len(wrote) > 0:
-		return ok(step, "wrote "+strings.Join(wrote, "; ")), nil
+		return ok(step, "wrote "+strings.Join(wrote, "; ")+kept), nil
 	}
-	return skip(step, "config/instance.json, "+pfile), nil
+	return skip(step, "config/instance.json, "+pfile+kept), nil
 }
 
 // lacksAccounts is the service accounts privacy.allow lacks (any case), when it is present.
@@ -614,9 +669,12 @@ func stepProject(ctx context.Context, s *State) (Line, error) {
 	if err != nil || l != nil {
 		return deref(l), err
 	}
+	if l, err := s.otherProjects(ctx); err != nil {
+		return l, err
+	}
 	canonical := pdoc.String("repo", "canonical")
 	if canonical == "" {
-		canonical = filepath.ToSlash(filepath.Join(s.root, "projects", s.project))
+		canonical = s.canonicalDefault(s.project)
 	}
 	remote := pdoc.String("repo", "remote")
 	if remote == "" {
@@ -644,7 +702,7 @@ func stepProject(ctx context.Context, s *State) (Line, error) {
 			return ok(step, canonical+"  "+s.repoURL), nil
 		}
 		if pdoc.String("repo", "defaultBranch") == "" && !s.check {
-			return s.defaultBranch(ctx, pdoc, canonical)
+			return s.defaultBranch(ctx, s.project, pdoc, canonical)
 		}
 		return skip(step, canonical), nil
 	}
@@ -654,6 +712,9 @@ func stepProject(ctx context.Context, s *State) (Line, error) {
 	if s.repoURL == "" {
 		url, err := s.prompt.Prompt("repo", "repo", textRepo, "")
 		if err != nil {
+			return Line{}, err
+		}
+		if err := checkRepoURL(url); err != nil {
 			return Line{}, err
 		}
 		s.repoURL = url
@@ -668,6 +729,59 @@ func stepProject(ctx context.Context, s *State) (Line, error) {
 			return Line{}, err
 		}
 	}
+	return s.clone(ctx, s.project, pdoc, s.repoURL, canonical)
+}
+
+// otherProjects clones every project but the settled one whose canonical is missing and whose
+// file keeps its repository URL (config.SetupURLKey): the other projects of an import. One with
+// no URL is left as it is. Each clone prints its own project line; a refused one ends the run.
+func (s *State) otherProjects(ctx context.Context) (Line, error) {
+	const step = "project"
+	for _, id := range s.projects() {
+		if id == s.project {
+			continue
+		}
+		pdoc, _, err := config.ReadDoc(s.projectPath(id))
+		if err != nil {
+			return Line{}, toControl(err)
+		}
+		url := ""
+		if pdoc != nil {
+			url = pdoc.String("repo", config.SetupURLKey)
+		}
+		if url == "" {
+			continue
+		}
+		canonical := pdoc.String("repo", "canonical")
+		if canonical == "" {
+			canonical = s.canonicalDefault(id)
+		}
+		var l Line
+		switch {
+		case exists(canonical):
+			if pdoc.String("repo", "defaultBranch") != "" || s.check {
+				continue
+			}
+			l, err = s.defaultBranch(ctx, id, pdoc, canonical)
+		case s.check:
+			l = fix(step, "no clone at "+canonical+" (project "+id+"); run setup")
+		default:
+			l, err = s.clone(ctx, id, pdoc, url, canonical)
+		}
+		if err != nil {
+			return l, err
+		}
+		if err := s.emit(l); err != nil {
+			return Line{}, err
+		}
+	}
+	return Line{}, nil
+}
+
+// clone clones project id's canonical from url with its stored git credential through
+// GIT_ASKPASS, then writes its default branch.
+func (s *State) clone(ctx context.Context, id string, pdoc *config.Doc, url, canonical string) (Line, error) {
+	const step = "project"
 	inst, err := s.instanceDoc()
 	if err != nil || inst == nil {
 		return s.noConfig(step)
@@ -677,16 +791,16 @@ func stepProject(ctx context.Context, s *State) (Line, error) {
 		return Line{}, err
 	}
 	var token []byte
-	if id := pdoc.String("repo", "gitCredentialId"); id != "" {
+	if cid := pdoc.String("repo", "gitCredentialId"); cid != "" {
 		svc, err := s.service()
 		if err != nil {
 			return Line{}, err
 		}
-		if token, err = svc.Secret(id); err != nil {
+		if token, err = svc.Secret(cid); err != nil {
 			return Line{}, toControl(err)
 		}
 	}
-	err = git.CloneCanonical(ctx, b.Askpass(), s.repoURL, canonical, token)
+	err = git.CloneCanonical(ctx, b.Askpass(), url, canonical, token)
 	clear(token)
 	if err != nil {
 		msg := err.Error()
@@ -697,11 +811,12 @@ func stepProject(ctx context.Context, s *State) (Line, error) {
 		msg += "; add the token with setup git-credential and rerun"
 		return fix(step, msg), refused(step, msg)
 	}
-	return s.defaultBranch(ctx, pdoc, canonical)
+	return s.defaultBranch(ctx, id, pdoc, canonical)
 }
 
-// defaultBranch writes repo.defaultBranch from the clone's HEAD when the file has none.
-func (s *State) defaultBranch(ctx context.Context, pdoc *config.Doc, canonical string) (Line, error) {
+// defaultBranch writes project id's repo.defaultBranch from the clone's HEAD when the file has
+// none.
+func (s *State) defaultBranch(ctx context.Context, id string, pdoc *config.Doc, canonical string) (Line, error) {
 	branch, err := git.HeadBranch(ctx, canonical)
 	if err != nil {
 		return Line{}, toControl(err)
@@ -710,7 +825,7 @@ func (s *State) defaultBranch(ctx context.Context, pdoc *config.Doc, canonical s
 		if err := pdoc.Set("", config.RawValue(branch), "repo", "defaultBranch"); err != nil {
 			return Line{}, toControl(err)
 		}
-		if err := config.WriteDoc(s.projectPath(s.project), pdoc); err != nil {
+		if err := config.WriteDoc(s.projectPath(id), pdoc); err != nil {
 			return Line{}, err
 		}
 	}

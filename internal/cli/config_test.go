@@ -99,3 +99,45 @@ func TestConfigLastGoodAndManyProblems(t *testing.T) {
 		t.Errorf("--last-good: exit %d stdout %q stderr %q", r.Code, r.Stdout, r.Stderr)
 	}
 }
+
+// TestConfigExportImport is P24's surface on the built binary: config export to its default
+// path and to --out, config import into an empty root, config-exists on a configured one, and
+// bad-config naming the key of an export this binary's schema rejects.
+func TestConfigExportImport(t *testing.T) {
+	dir := filepath.ToSlash(t.TempDir())
+	src := dir + "/src"
+	if err := os.CopyFS(src, os.DirFS(configTree("valid"))); err != nil {
+		t.Fatal(err)
+	}
+	want(t, clitest.Run(t, nil, "config", "export", "--root", src), 0, "written  "+src+"/data/config-export.json\n", "")
+	want(t, clitest.Run(t, nil, "--json", "config", "export", "--root", src, "--out", dir+"/e.json"), 0,
+		`{"path":"`+dir+`/e.json","result":"written"}`+"\n", "")
+	a, _ := os.ReadFile(src + "/data/config-export.json")
+	b, _ := os.ReadFile(dir + "/e.json")
+	if len(a) == 0 || string(a) != string(b) {
+		t.Errorf("the two exports differ:\n%s\n%s", a, b)
+	}
+	want(t, clitest.Run(t, nil, "config", "import", "--root", dir+"/dst", dir+"/e.json"), 0,
+		"written  "+dir+"/dst/config/instance.json\nwritten  "+dir+"/dst/config/projects/scratch.json\n", "")
+	want(t, clitest.Run(t, nil, "config", "import", "--root", dir+"/dst", dir+"/e.json"), 1, "",
+		"error: config-exists: "+dir+"/dst/config/instance.json exists\n")
+	if err := os.WriteFile(dir+"/bad.json", []byte(strings.Replace(string(b), `"mode": "dry-run"`, `"mode": "dry-run", "shard": 1`, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	want(t, clitest.Run(t, nil, "config", "import", "--root", dir+"/bad", dir+"/bad.json"), 1, "",
+		"error: bad-config: "+dir+"/bad.json: instance: unknown key discord.shard\n")
+	if _, err := os.Stat(dir + "/bad"); err == nil {
+		t.Error("a refused import wrote the root")
+	}
+	// A value config check refuses is refused before anything is written.
+	if err := os.WriteFile(dir+"/evil.json", []byte(strings.Replace(string(b), `"instanceName": "test-valid"`, `"instanceName": "../../evil"`, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := clitest.Run(t, nil, "config", "import", "--root", dir+"/evil", dir+"/evil.json")
+	if r.Code != 1 || !strings.HasPrefix(r.Stderr, "error: bad-config: "+dir+"/evil.json: instance: instanceName \"../../evil\": ") {
+		t.Errorf("evil instanceName: exit %d stderr %q", r.Code, r.Stderr)
+	}
+	if _, err := os.Stat(dir + "/evil"); err == nil {
+		t.Error("a refused import wrote the root")
+	}
+}

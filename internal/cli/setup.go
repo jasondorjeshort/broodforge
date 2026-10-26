@@ -65,9 +65,6 @@ func runSetup(ctx context.Context, env *Env) error {
 	if step != "" && !contains(setup.StepNames(), step) {
 		return &usageError{"setup: unknown step " + strconv.Quote(step) + "; want one of " + strings.Join(setup.StepNames(), ", ")}
 	}
-	if env.String("from") != "" {
-		return control.NewError(setup.CodeNotBuilt, "setup --from (config import first) is not built yet")
-	}
 	tty, echoOff := false, func() func() { return nil }
 	if f, ok := env.Stdin.(*os.File); ok && f == os.Stdin {
 		tty, echoOff = setup.StdinTerminal()
@@ -75,7 +72,7 @@ func runSetup(ctx context.Context, env *Env) error {
 	o := setup.Options{Root: env.Root, Instance: env.String("instance"), Repo: env.String("repo"),
 		Project: env.String("project"), Step: step, Check: env.Bool("check"), Yes: env.Bool("yes"), JSON: env.JSON,
 		Wait: time.Duration(env.Int("wait")) * time.Second, Guild: env.String("guild"), Channels: env.String("channels"),
-		CreateRole: env.String("create-role"), Role: env.String("role")}
+		CreateRole: env.String("create-role"), Role: env.String("role"), From: env.String("from")}
 	// paths.install is written empty: the binary's parent directory, as the template says, never
 	// a checkout or temporary directory the binary happened to run from.
 	se := setup.Env{Stdin: env.Stdin, Stdout: env.Out.w, Stderr: env.Stderr, TTY: tty, EchoOff: echoOff,

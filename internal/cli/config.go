@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/jasondorjeshort/broodforge/internal/config"
 	"github.com/jasondorjeshort/broodforge/internal/control"
@@ -17,6 +19,7 @@ import (
 const (
 	CodeUnknownProject = "unknown-project"
 	CodeUnknownChannel = "unknown-channel"
+	CodeConfigExists   = "config-exists"
 )
 
 // configCheck is `broodforge config check (file)` (05-debug-interface.md, Configuration): it
@@ -50,7 +53,36 @@ var configShow = Command{
 	Local: runConfigShow,
 }
 
-func init() { commands = append(commands, &configCheck, &configShow) }
+// configExport is `broodforge config export [--out <file>] (file)` (ADR 0027; the companion's
+// `config export`): config/ as one JSON document with the host-bound keys emptied and no
+// secret (config.Export), written to --out, default <root>/data/config-export.json; prints
+// `written  <path>`. The configuration must load, as config check reads it.
+var configExport = Command{
+	Name:  "config export",
+	Class: ClassFile,
+	Flags: []Flag{
+		{Name: "out", Kind: FlagString, Value: "<file>", Usage: "where to write it (default <root>/data/config-export.json)"},
+	},
+	Local: runConfigExport,
+}
+
+// configImport is `broodforge config import <file> (file)`: an export's files written into an
+// empty root's config/ (config.Import), one `written  <path>` record each; a root whose
+// config/instance.json exists is config-exists, and an export this binary's schema rejects is
+// bad-config naming the key. setup --from does the same inside its run.
+var configImport = Command{
+	Name:  "config import",
+	Class: ClassFile,
+	Flags: []Flag{
+		{Name: "file", Kind: FlagString, Value: "<file>"},
+	},
+	Local: runConfigImport,
+}
+
+func init() {
+	commands = append(commands, &configCheck, &configShow, &configExport, &configImport)
+	positionals[&configImport] = []string{"file"}
+}
 
 var (
 	checkColumns       = []string{"result", "projects", "channels"}
@@ -174,6 +206,72 @@ func runConfigShow(_ context.Context, env *Env) error {
 	return env.Out.Result(out, showFileColumns)
 }
 
+var writtenColumns = []string{"result", "path"}
+
+func runConfigExport(_ context.Context, env *Env) error {
+	c, err := config.Load(env.Root, credentialExists)
+	if err != nil {
+		return configFailure(env, err)
+	}
+	doc, err := config.Export(c)
+	if err != nil {
+		return configFailure(env, err)
+	}
+	out := env.String("out")
+	if out == "" {
+		out = filepath.Join(env.Root, "data", config.ExportName)
+		if err := os.MkdirAll(filepath.Dir(out), 0o700); err != nil {
+			return control.NewError(control.CodeBadArgs, err.Error())
+		}
+	}
+	if err := os.WriteFile(out, doc, 0o600); err != nil {
+		return control.NewError(control.CodeBadArgs, "--out: "+control.OneLine(err.Error()))
+	}
+	return printWritten(env, out)
+}
+
+func runConfigImport(_ context.Context, env *Env) error {
+	if p := config.InstancePath(env.Root); fileExists(p) {
+		return control.NewError(CodeConfigExists, p+" exists")
+	}
+	file := env.String("file")
+	e, err := config.ReadExport(file)
+	var inv *config.InvalidError
+	switch {
+	case errors.As(err, &inv):
+		for i := range inv.Problems { // each problem names the export file, then its part
+			inv.Problems[i].File = filepath.ToSlash(file) + ": " + inv.Problems[i].File
+		}
+		return configFailure(env, err)
+	case err != nil:
+		return control.NewError(control.CodeBadArgs, control.OneLine(err.Error()))
+	}
+	wrote, err := config.Import(env.Root, e, config.ImportOptions{})
+	if err != nil {
+		return configFailure(env, err)
+	}
+	for _, w := range wrote {
+		if err := printWritten(env, filepath.Join(env.Root, filepath.FromSlash(w.File))); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+// printWritten is the `written  <path>` record.
+func printWritten(env *Env, path string) error {
+	b, err := marshal(map[string]string{"result": "written", "path": filepath.ToSlash(path)})
+	if err != nil {
+		return err
+	}
+	return env.Out.Record(b, writtenColumns)
+}
+
 // configFailure maps a load error to the CLI's codes: no-config for a missing instance file,
 // bad-config for anything invalid. Every problem is its own `error: bad-config: ...` line on
 // stderr (the wire object per line with --json); the last is the returned error, so the
@@ -205,7 +303,7 @@ func configFailure(env *Env, err error) error {
 
 // marshal is json.Marshal without HTML escaping, so a path such as <root>/projects prints as
 // the file has it.
-func marshal[T string | []config.EffectiveChannel | []showFile | checkResult](v T) (json.RawMessage, error) {
+func marshal[T string | []config.EffectiveChannel | []showFile | checkResult | map[string]string](v T) (json.RawMessage, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)

@@ -113,6 +113,45 @@ done
 git diff --no-index --exit-code "$work/config-before" "$r1/config" || fail "the rerun changed config/"
 [ "$(grep -c '"Create\|"Update\|"AddMember' "$work/discord.json")" = "$writes" ] || fail "the rerun wrote to Discord"
 
+# 2a. The round trip (P24): r1 gains a git credential, so its export has one to leave behind;
+# config export, then setup --from on a fresh root with its own token: the host-bound and
+# secret steps ok, the imported ones skip, every non-secret key equal, no secret in the file,
+# nothing written to Discord, the new root with its own key and store. The repository URL
+# travels (here a path in the scratch root); paths of r1 do not.
+"$bf" setup git-credential --yes --root "$r1" <<<"example-git-token" >/dev/null || fail "setup git-credential on r1 failed"
+show "config export" "$bf" config export --root "$r1" --out "$work/e.json"
+[ "$code" = 0 ] && grep -q '^written  .*/e\.json$' "$work/out" || fail "config export exited $code"
+echo "## the export"
+cat "$work/e.json"
+[ "$(grep -c cred- "$work/e.json" || true)" = 0 ] || fail "the export holds a credential id"
+grep -q -e "$token" -e example-git-token -e "$r1" -e "$work/1/t.key" -e "$(cat "$work/1/t.key")" "$work/e.json" && fail "the export holds a secret or a path of this host"
+r20=$work/20/root
+show "setup --from the export" "$bf" setup --from "$work/e.json" --yes --root "$r20" --instance t2 --wait 1 <<<"$token"
+[ "$code" = 0 ] || fail "setup --from exited $code"
+for s in root config key engine token project; do
+	grep -q "^ok  $s  " "$work/out" || fail "setup --from: $s is not ok"
+done
+for s in application guild channels role git-credential defaults; do
+	grep -q "^skip  $s  " "$work/out" || fail "setup --from: $s is not skip"
+done
+grep -q '^ok  config  imported config/instance.json; config/projects/scratch.json from ' "$work/out" || fail "setup --from: no import in the config line"
+[ "$(grep -c '"Create\|"Update\|"AddMember' "$work/discord.json")" = "$writes" ] || fail "setup --from wrote to Discord"
+"$bf" config check --root "$r20" >/dev/null || fail "config check fails after setup --from"
+"$bf" config export --root "$r20" --out "$work/e2.json" >/dev/null
+sed 's/"instanceName": "t2"/"instanceName": "t"/' "$work/e2.json" | diff - "$work/e.json" || fail "a non-secret key differs after the round trip"
+[ -s "$work/20/t2.key" ] && ! cmp -s "$work/20/t2.key" "$work/1/t.key" || fail "the new root has no key of its own"
+for id in $(grep -o 'cred-[a-z0-9]*' "$r1/config/instance.json" "$r1/config/projects/scratch.json" | cut -d: -f2); do
+	grep -q "$id" "$r20/credentials/store.json" "$r20/config/instance.json" && fail "$id travelled"
+done
+cmp -s "$r20/data/config-export.json" "$work/e.json" || fail "no copy of the export in the new root's data/"
+show "config import on a configured root" "$bf" config import --root "$r20" "$work/e.json"
+[ "$code" = 1 ] && grep -qx "error: config-exists: .*/20/root/config/instance.json exists" "$work/err" || fail "no config-exists"
+sed 's/"mode": "dry-run"/"mode": "dry-run", "shard": 1/' "$work/e.json" >"$work/e-bad.json"
+show "setup --from an export with an unknown key" "$bf" setup --from "$work/e-bad.json" --yes --root "$work/21/root" --instance t2 --wait 1
+[ "$code" = 1 ] && grep -q '^error: mismatch-config: export .*e-bad.json has instance: unknown key discord.shard; fix the file or export it again with this version$' "$work/err" ||
+	fail "no mismatch-config for an unknown key"
+[ ! -e "$work/21" ] || fail "the refused import created $work/21"
+
 # 3. --check on an empty root: fix for every step, nothing created.
 show "--check on an empty root" "$bf" setup --check --root "$work/2/root" --instance t
 [ "$code" = 1 ] || fail "--check on an empty root exited $code"

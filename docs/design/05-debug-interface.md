@@ -291,7 +291,7 @@ Moved to `05-debug-interface-discord.md`: `discord check|render|inject`, the dry
 ```
 broodforge [--root <path>] [--json]
   serve  status  stop  reconcile  setup [<step>]     scratch new|run|delete|prune
-  config check|show|reload                           register <id>|list|show|set-default
+  config check|show|reload|export|import             register <id>|list|show|set-default
   credential init|add|login|list|remove|show         session start|send|answer|mode|model|effort|timeout|interrupt|end|invite
   session list|show|tail|outbox|transcript|reach-report   engine run|record   workflow render|probe
   hook pre-tool-use|try|cases                        worktree list|check|bundle|handoff|forget|adopt
