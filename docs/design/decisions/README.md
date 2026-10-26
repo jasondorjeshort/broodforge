@@ -17,6 +17,8 @@ Hatchery's own records are in `../../hatchery/decisions/`, never edited here (AD
 | `0025-session-workflow-composition.md` | The bot's contract as a precedence header over the repository's workflow injected from a per-session copy of the canonical's default branch; repository hooks as deny-only children of the bot's hook; no push from a session; a push-time scan; the PC keeps an outside gate |
 | `0025-refusals-and-checks.md` | Companion to 0025: the copy procedure, the runtime probe, the refusal texts with their lifts, the open checks and the pass that closes each |
 | `0026-interrupted-sessions-held-after-a-restart.md` | Interrupted sessions loaded into memory at start so `end` works on them; every service refusal audited; one stderr line per inbound Discord event; every interaction acknowledged; the interrupted wording |
+| `0027-setup-in-few-steps.md` | `broodforge setup` does every scriptable step and asks the rest; the bot makes its channels and the `Trusted` role (Manage Roles default yes, removed at the end); `setup host` creates the PC account with a generated password; `setup login`, `config export`, `setup --from`; amends 0022 |
+| `0027-setup-commands.md` | Companion to 0027: the `setup` command line and its steps in order, `setup host` per host, `setup login`, `setup service`, `config export` and `setup --from` |
 
 Template:
 

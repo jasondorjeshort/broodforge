@@ -1,7 +1,7 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-24, s000a post-mortem, by main session (rooted in the repo, hooks loaded)
+Updated: 2026-10-26, setup proposal 0027 recorded, by main session (rooted in the repo, hooks loaded)
 
 ## Now
 
@@ -24,7 +24,8 @@ Updated: 2026-10-24, s000a post-mortem, by main session (rooted in the repo, hoo
    session. Triage: the 2026-10-23 and 2026-10-24 ideas without a block.
 4. Owner: in policy mode until item 2 lands; set the live `instance.json` timeouts to 0; a real root
    outside Temp (s000a's commits sat only there); delete the s0008 branch on origin when unwanted.
-5. Then the last-good cold start, the net-diff finding, the P11 remainder `Plan:`, `audit --follow`,
+5. Setup in few steps (ADR 0027, owner's calls answered 2026-10-26): pass plan and execution later.
+6. Then the last-good cold start, the net-diff finding, the P11 remainder `Plan:`, `audit --follow`,
    `/usage`; carry-backs; the surfaces ADR; the session-land idea (owner's ADR; agent lands added).
 
 ## Waiting on user

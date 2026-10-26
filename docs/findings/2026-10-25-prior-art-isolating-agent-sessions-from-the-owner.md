@@ -1,7 +1,8 @@
 ---
 date: 2026-10-25
-status: open
+status: resolved (ADR 0027)
 area: setup
+promoted_to: docs/design/decisions/0027-setup-in-few-steps.md
 ---
 
 # Runners and agent sandboxes keep jobs off the owner's account; on Windows that means a dedicated account
@@ -91,7 +92,7 @@ Docker Sandboxes run on Windows 11 Home (neither page names editions). Devin was
   (README). Supported by Codex and Copilot; Claude Code is among those "releasing support", not yet
   shipped. An open Claude Code request asks for it (claudeissues.com/issue/69495, secondary).
 
-## Conclusions
+### Conclusions
 
 Windows. No runner defaults to the interactive owner. CI runners default to a built-in service
 identity: NetworkService for GitHub and Azure, which Azure recommends over named accounts because
@@ -130,7 +131,7 @@ ways. One holds the credential outside the boundary: Docker Sandboxes' proxy, an
 sessions' GitHub token "outside the sandbox". The other denies the credential directories inside
 it, as srt's default deny of `.claude` does. Neither exists on the PC today.
 
-### Worth copying
+#### Worth copying
 
 1. Setup creates the dedicated account itself, with one UAC prompt and a tool-generated password
    it stores and rotates (srt `windows-install`, Codex `codex sandbox setup --elevated`). This cuts
@@ -143,8 +144,7 @@ it, as srt's default deny of `.claude` does. Neither exists on the PC today.
 
 ## Next
 
-The architect cites this in 0027's isolation-mode row: keep the account, fold practice 1 into
-`setup`. A coder probe on a throwaway Windows machine (not the owner's PC) would settle whether
-`setup` can create the account and register the task with no password typed, and whether MXC
-process containers exist on Windows 11 Home build 26300. Recheck ADR 0022's trigger when Claude
-Code ships MXC support or srt leaves alpha on Windows. Resolve when 0027 is decided.
+Resolved 2026-10-26: ADR 0027 keeps the account and folds practice 1 into `setup host` (Decision
+5); whether the account and the task can be made with no password typed is claim W6, spiked in
+P20 of `../design/08-implementation-plan-setup.md`. ADR 0022's trigger (Claude Code ships MXC
+support, or srt leaves alpha on Windows) stays in that ADR's "Supersede when".

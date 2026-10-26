@@ -1,7 +1,8 @@
 ---
 date: 2026-10-25
-status: open
+status: resolved (ADR 0027)
 area: setup
+promoted_to: docs/design/decisions/0027-setup-in-few-steps.md
 ---
 
 # Good setup tools prompt for what is irreversible, take a flag for everything, default the rest
@@ -90,9 +91,9 @@ of its installer text); Wrangler `init` / C3 and Rails beyond credentials were n
   The authorize URL's `guild_id` with `disable_guild_select=true` pins the server (oauth2), so the
   server choice can be made in Discord's own dialog.
 
-## Conclusions
+### Conclusions
 
-### The answer to the coordinator's question
+#### The answer to the coordinator's question
 
 Every tool that is well regarded for setup does all three, split by the kind of choice. Prompt
 when the owner is present and the choice is consequential, hard to undo and has no safe default:
@@ -112,7 +113,7 @@ Discord's own dialogs. The server is picked in the authorize screen, which can b
 `guild_id`. What the bot may do is the invite's permission integer. What it creates is an
 owner-only command run after it joins, which stores the ids it made.
 
-### Worth copying
+#### Worth copying
 
 1. A flag for every prompt; non-interactive mode refuses an irreversible choice and names the
    flag (redbot-setup `--no-prompt`, Synapse generate, `gh --with-token`).
@@ -126,7 +127,7 @@ owner-only command run after it joins, which stores the ids it made.
    (Nextcloud autoconfig), a generated secret printed once (Mastodon's admin password).
 6. A separate "change one setting" verb next to first setup (`tailscale set`, `redbot --edit`).
 
-### Worth avoiding
+#### Worth avoiding
 
 - Echoing a bot token while it is typed (Red's `interactive_config` uses `input()`).
 - A second store that silently beats the first (Vaultwarden `config.json` over env vars).
@@ -139,8 +140,6 @@ owner-only command run after it joins, which stores the ids it made.
 
 ## Next
 
-The architect cites this in proposal 0027 for the owner-call rows: each choice classed as prompt
-(irreversible, owner present), flag (always, refusing in non-interactive mode), or config default
-(reversible), with the invite integer and an owner-only create command for Discord. Resolve this
-finding when 0027 is decided. The unverified rows above are worth a fetch only if 0027 leans on
-them.
+Resolved 2026-10-26: proposal 0027 (Constraints) and ADR 0027 (Context, Decision 2) class each
+choice as prompt, flag or config default as the conclusions say, with the invite integer and the
+owner-only `channels` and `role` steps for Discord. The unverified rows were not leaned on.

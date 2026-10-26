@@ -89,5 +89,14 @@ Decisions so far (this project's own; Hatchery's records are in
   to `interrupted`; every refusal the service returns is audited (the P12b carve-out gone); the
   gateway writes one stderr line per inbound event with its outcome and acknowledges every
   interaction; a refusal on an interrupted session has its own wording (the owner's).
+- [0027 Setup in few steps](decisions/0027-setup-in-few-steps.md): one command, `broodforge
+  setup`, does every scriptable step from "has the binary" to a bot online (the application
+  flags, the invite, the config, the key, the credentials, the clone, the checks) and asks the
+  rest with a shown default and a flag per prompt; the bot creates its category, lobby, notice
+  channel and the `Trusted` role by name (Manage Roles on the invite, default yes, removed by the
+  owner at the end); `setup` holds the control address while it writes; `setup host` is the
+  elevated host part, on the PC creating the `broodforge` account with a generated password under
+  `%ProgramData%`; `setup login`, `setup service`, `config export` and `setup --from`. Owner's
+  answers 2026-10-26; amends 0022; a simple same-account PC default rejected.
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).

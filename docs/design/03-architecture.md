@@ -163,9 +163,9 @@ once and never changed; a rename is a new file plus `worktree forget` for the ol
 
 ```json
 { "schemaVersion": 1, "instanceName": "pc",
-  "credentials": { "keyFile": "C:/Users/broodforge/AppData/Local/Broodforge/pc.key" },
+  "credentials": { "keyFile": "C:/ProgramData/Broodforge/pc.key" },
   "discord": { "mode": "live", "applicationId": "…", "guildId": "…", "botCredentialId": "cred-…", "noticeChannelId": "…" },
-  "engine": { "path": "C:/Users/broodforge/.local/bin/claude.exe", "version": "2.1.300",
+  "engine": { "path": "C:/ProgramData/Broodforge/engine/claude.exe", "version": "2.1.300",
               "gitBashPath": "C:/Program Files/Git/bin/bash.exe", "fakeFixtures": null },
   "spawn": { "backend": "same-account", "interruptTimeoutSeconds": 20 },
   "paths": { "install": "…" }, "audit": { "fileSink": null },
@@ -247,7 +247,7 @@ flow). No commits: the tree is removed and the session says so. The tree is remo
 | Bot (`broodforge serve`) | user `broodforge`, systemd unit with `KillMode=mixed` (ADR 0022) | account `broodforge`, Task Scheduler, run whether logged on or not |
 | Engine, hook, clone, bundle | user `broodforge-engine` through `sudo -n` and bwrap | the same `broodforge` account, `same-account` backend |
 | Nightly backup job | systemd timer as `broodforge` | Task Scheduler as `broodforge` |
-| Debug CLI | any shell as `broodforge` | the `broodforge` account; the owner's own account for scratch runs |
+| Debug CLI | any shell as `broodforge` | an elevated PowerShell (reads and `stop`; writes through `setup`, relaunched as `broodforge`, ADR 0027); the owner's own account for scratch runs |
 | Control socket | `data/control.sock`, directory `0700` | named pipe `\\.\pipe\broodforge-<instanceName>` |
 
 Startup, in order; a failure at any step is a refusal naming the step, exit 1: (1) the instance root from the flag or

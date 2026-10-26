@@ -1,7 +1,7 @@
 # 0027. Setup in few steps: `broodforge setup`, bot-made channels, the PC account created by `setup host`
 
-Date: 2026-10-25 (revised 2026-10-25 after `0027-critic-review.md`)
-Status: under review
+Date: 2026-10-25 (revised 2026-10-25 after `0027-critic-review.md`; the owner's answers 2026-10-26)
+Status: promoted to ADR 0027
 
 ## Question
 
@@ -63,15 +63,15 @@ group; the store opened by a command while no bot runs; config written once by a
 As B, and `setup` creates what the bot needs in the guild given Manage Channels (already in the
 invite's set): one category, one lobby per project, one notice channel; it finds an existing one
 by name first, writes the ids, and never deletes or renames a channel it finds (the venue deletion
-of `../05-debug-interface-discord-live.md` is unchanged). The `trusted` role is found by name;
-`--create-role` (default off, a prompt) adds Manage Roles to the invite, creates it, gives it to
-the guild's `owner_id`, then waits until the owner has removed Manage Roles again. Cost: C's REST
-calls against the `restAPI` fake. Risk: a bot creating channels in someone else's server (the
-droplet serves Utopia's) must be told where: setup asks when the guild has channels and creates
-nothing without a yes. Counts: PC 19, droplet 21 (`--create-role` 18 and 20; the git credential
-deferred, 16 and 18). Exit cost: delete the `channels` and `role` steps; B's four prompts return.
-Moving parts: channel and role creation at setup time only; Manage Roles for the minutes between
-the invite and the removal when opted in.
+of `../05-debug-interface-discord-live.md` is unchanged). The `Trusted` role is found by name;
+absent, a prompt (default yes; `--create-role yes|no`) adds Manage Roles to the invite, creates
+it, gives it to the guild's `owner_id`, then waits until the owner has removed Manage Roles again.
+Cost: C's REST calls against the `restAPI` fake. Risk: a bot creating channels in someone else's
+server (the droplet serves Utopia's) must be told where: setup asks when the guild has channels
+and creates nothing without a yes. Counts: PC 18, droplet 20 (the role made by hand, 19 and 21;
+the git credential deferred, 15 and 17). Exit cost: delete the `channels` and `role` steps; B's
+four prompts return. Moving parts: channel and role creation at setup time only; Manage Roles for
+the minutes between the invite and the removal.
 
 ### D. C plus a simple mode as the PC default (rejected by the owner, 2026-10-25)
 
@@ -83,7 +83,7 @@ Discord session reads and persists into everything the owner's account can, unat
 policy mode, the owner's `~/.claude/.credentials.json` and `settings.json` included (W5), and the
 account's value rises with the coder count. It would supersede lines of ADR 0022 (Context,
 Decision), `06-platforms.md` (Already constrained) and this proposal's constraints. Its count, once
-account creation is code, is 19 on the PC: equal to C. Honest exit cost: `config export`, a fresh
+account creation is code, is 18 on the PC: equal to C. Honest exit cost: `config export`, a fresh
 `setup host` under the account, 0021 restore for the store, a new login per credential. Moving
 parts: the owner's interactive session as the bot's home; a bot down from a reboot until the owner
 signs in; a console window at every logon unless hidden.
@@ -91,75 +91,95 @@ signs in; a console window at every logon unless hidden.
 ## The `setup` surface (B and C)
 
 `broodforge setup [<step>] [--root <path>] [--instance <name>] [--repo <url>] [--project <id>]
-[--role <name>] [--create-role] [--from <export>] [--check] [--yes] [--wait <seconds>] [--json]
-(file)`. One line per step, `ok  <step>  <detail>`, `skip  <step>  <already>` or `fix  <step>
-<what the owner does>` (`--json`: one object each), pausing at a `fix` that needs a hand and
-continuing when the step passes. `--check` reports and changes nothing. `--yes` accepts every shown
-default and refuses where a value is missing. With a `<step>` it runs that step alone and may
-replace that step's keys after printing `old <value>`, `new <value>` and asking (`--yes` accepts):
-the "change one setting" verb of the finding, and the only way `setup` overwrites a present key.
-Exit 0 all ok, 1 a step failed (its `fix` line is the error), 2 usage.
+[--guild <id>] [--channels yes|no] [--create-role yes|no] [--role <name>] [--from <export>] [--check]
+[--yes] [--wait <seconds>] [--json]` (a listener while it runs, `(file)` under `--check`; Review
+fixes). One line per step, `ok  <step>  <detail>`, `skip  <step>  <already>` or `fix
+<step>  <what the owner does>` (`--json`: one object each), pausing at a `fix` that needs a hand and
+polling, bounded by `--wait` (default 900 s), until the step passes. `--check` reports and changes
+nothing. `--yes` accepts every shown default and refuses only where there is no default. With a
+`<step>` it runs that step alone and may replace that step's keys after printing `old  <value>`,
+`new  <value>` (a secret as its id or path) and asking (`--yes` accepts): the "change one setting"
+verb of the finding, and the only way `setup` overwrites a present key. Exit 0 all ok, 1 a step
+failed (its `fix` line on stdout, one stderr `error: <code>: ...` line), 2 usage. The companion
+ADR file `../decisions/0027-setup-commands.md` is authoritative for the flags, the per-step `--json`
+fields, the rerun rule per key and the refusal table.
 
-Steps, in order. `root`: the directories. `config`: `instance.json` and `projects/<id>.json` with
-every key commented, only when absent. `key`: `credential init`, printed once, a pause until Enter
-(`--json`: the one print is this step's object, never repeated). `engine`: path and version.
-`token`: read hidden, or from stdin, stored as the instance's `bot-token`; `skip` when the stored
-one answers C1, `fix` when Discord refuses it. `application`: the id from the token's application;
+Steps, in order. `root`: the directories. `config`: the repository URL asked here (`--repo`), the
+project id from the repository name lowered, runs outside `[a-z0-9-]` made `-`, collapsed, cut to
+32, asked for (`--project`) when it does not start with a letter (03's pattern), because the id
+names the project file, the channels and the clone; `instance.json` and `projects/<id>.json` with
+every key commented, only when absent. `key`: `credential init`, `ok  key  <hex>  <path>` once, a
+pause until Enter (`--json`: the one print is this step's object, never repeated). `engine`: path
+and version. `token`: read hidden, or from stdin, stored as the instance's `bot-token`; `skip` when
+the stored one answers C1; refused by Discord, a `fix` naming the reason and the prompt again, the
+new token a new id and the old one `removed`. `application`: the id from the token's application;
 the flags ORed with `GATEWAY_MESSAGE_CONTENT_LIMITED` (1<<19) and written back, `skip` when 1<<18
 or 1<<19 is set, `fix` naming the portal switch when the PATCH is refused. `guild`: one membership
 taken; none, the invite link printed and a poll until the bot joins; several, a list (disgo
-`OAuth2.GetCurrentUserGuilds("")`, the empty token meaning the bot's). `channels`: find by name,
-ask when the guild has channels, create what is missing, write the ids. `role`: by name; absent
-and `--create-role` off, a `fix` that waits for the owner to make it; on, create, check it sits
-below the bot's highest role (C6), assign, then a `fix` that waits until the bot no longer holds
-Manage Roles. `project`: the canonical cloned from `--repo` into `projects/<id>/`; the id from the
-repository name lowered, runs outside `[a-z0-9-]` made `-`, collapsed, cut to 32, asked for when it
-does not start with a letter (03's pattern). `git-credential`: the token read hidden, or Enter to
-defer (`handoff: "none"`). `defaults`: timeouts 0, mode `prompt`. `check`: `config check`, `spawn
-preflight`, `discord check`, each line echoed. `next`: the one line that follows. Non-interactive:
-the bot token on `setup`'s stdin; `setup git-credential` reads its token on stdin alone.
+`OAuth2.GetCurrentUserGuilds("")`, the empty token meaning the bot's). The role question is asked
+here, before the link is printed, so the link carries Manage Roles only on a yes. `channels`: the
+configured ids first, then by name, ask when the guild has channels, create what is missing, write
+the ids. `role`: the configured id first, then by name; absent and the answer no (or the bot
+already in the guild without Manage Roles), a `fix` that waits for the owner to make it; yes, the
+default, create, check it sits below the bot's highest role (C6), assign; then, on every run, a
+`fix` that waits while the bot still holds Manage Roles. `git-credential`: the token read hidden,
+or Enter to defer (`handoff: "none"`), before the clone so a private canonical clones. `project`:
+the canonical cloned from the repository into `projects/<id>/` with the stored credential through
+`GIT_ASKPASS`. `defaults`: timeouts 0, mode `prompt`. `check`: `config check`, `spawn preflight`,
+`discord check`, each line echoed. `next`: the one line that follows. Non-interactive: the bot
+token on `setup`'s stdin; `setup git-credential` reads its token on stdin alone.
 
 | Choice | Kind | Flag | Default shown | With `--yes` and no flag |
 |---|---|---|---|---|
 | Instance root and name | prompt | `--root`, `--instance` | `%ProgramData%\Broodforge\<instance>` or `/srv/broodforge/<instance>`; `main` | taken |
-| Which guild (several); create channels in a guild that has some | prompt | `--guild <id>`; `--channels yes\|no` | none; no | `needs-input-guild`, `-channels` |
+| Which guild (several); create channels in a guild that has some | prompt | `--guild <id>`; `--channels yes\|no` | none; no | `needs-input-guild`; no taken, `channels` waits by name |
 | Repository URL; project id when the derived one is invalid | prompt | `--repo`, `--project` | none; derived | `needs-input-repo`, `-project` |
-| Create the role (Manage Roles) | prompt | `--create-role` | no | no |
+| Create the role (Manage Roles on the invite until removed) | prompt | `--create-role yes\|no` | yes | yes |
 | Role name; timeouts, mode, channel names | config | `--role`; none | `Trusted`; 0, `prompt`, `Sessions`, `#<id>`, `#<id>-notices` | taken |
 
 Single writer. At start `setup` (not `--check`) binds the control address (`data/control.sock`;
-the pipe `\\.\pipe\broodforge-<instanceName>`) and holds it until exit, so `serve` fails
-`start-control` as for any listener and the vault's single-writer invariant (S1) holds with one
-writer at a time; its `status` reply says `setup`. A rerun never overwrites a present config key
-(a disagreement is a `fix`), the key file (`skip  key  exists`), a stored credential (a new token
-is a new id, the old one `removed`), or a channel or role it found. Refusals, exit 1:
+the pipe `\\.\pipe\broodforge-<instanceName>`) and holds it until exit, a listener beside `serve`,
+so `serve` fails `start-control` as for any listener and the vault's single-writer invariant (S1)
+holds with one writer at a time; its `status` reply is `config: setup`. A rerun never overwrites a
+present config key (a disagreement is `mismatch-<step>`), a valid key file (`skip  key  exists`), a
+stored credential (a new token is a new id, the old one `removed`), or a channel or role it found;
+the rule per key (a refused stored token replaced in the run; `setup key` only while the store is
+empty; configured channel and role ids checked before names; Manage Roles re-checked on every run)
+is the companion's. Refusals, exit 1, each one stderr `error: <code>: <message>` line (05) with the
+step's `fix` line on stdout where one applies; the companion's table carries the full list
+(`key-in-use`, `check-failed`, `login-failed`, `config-exists` added by the review fixes):
 
-| Code | When | Message | Lifted by |
+| Code | When | Message | Lifted by, from which shell |
 |---|---|---|---|
-| `running` | a bot answers at the address (never for `--check`) | `error: running: a bot answers at <address>; stop it with broodforge stop (every open session is interrupted) or use setup --check` | the owner, `broodforge stop` from any shell that reaches the address; nothing else while the bot runs |
+| `running` | a bot answers at the address (never for `--check`) | `error: running: a bot answers at <address>; stop it with broodforge stop in this shell (every open session is interrupted) or use setup --check` | the owner, `broodforge stop` from the same shell (the PC's elevated PowerShell; a shell as `broodforge` on Linux); nothing else while the bot runs |
 | `setup-running` | another `setup` holds the address | `error: setup-running: another setup holds <address>; finish it or press Ctrl-C there` | the owner, in that terminal |
-| `needs-input-<step>` | `--yes` and no value | `error: needs-input-<step>: pass --<flag>` | a flag, or an interactive run |
-| `mismatch-<step>` | config has a value and the host or guild disagrees | `fix  <step>  config has <X>, found <Y>; run setup <step> to replace it` | the owner, `setup <step>`, bot stopped |
-| `refused-<step>` | Discord refuses (a permission, a dead token) | `fix  <step>  <Discord's reason>; <the portal or server setting>` | the owner in the portal or server; setup polls |
-| `timeout-<step>` | a poll ran past `--wait` | `fix  <step>  still waiting after <n>s: <what to do>` | a rerun |
-| `needs-elevation` | `setup host` or `setup login` not elevated or root | `fix  host  run from an elevated PowerShell` / `run with sudo` | the owner |
+| `needs-input-<step>` | `--yes` and no default | `error: needs-input-<step>: pass --<flag>` | a flag, or an interactive run |
+| `mismatch-<step>` | config has a value and the host or guild disagrees | `error: mismatch-<step>: config has <X>, found <Y>; run setup <step> to replace it` | `setup <step>`, bot stopped: the elevated PowerShell on the PC (relaunched as `broodforge`), `sudo -u broodforge` on Linux |
+| `refused-<step>` | Discord refuses with nothing a poll can lift | `error: refused-<step>: <Discord's reason>; <the portal or server setting>` | the owner in the portal or server, then a rerun |
+| `timeout-<step>` | a poll ran past `--wait` | `error: timeout-<step>: still waiting after <n>s: <what to do>` | a rerun, or `--wait 0` |
+| `needs-elevation` | `setup host` or `setup login` not elevated or root; on the PC a denied root or pipe | `error: needs-elevation: run setup <host\|login> from an elevated PowerShell` / `... with sudo` | the owner, from that shell |
 
 ## `setup host`, `setup login`, `setup service`, `config export`
 
-`broodforge setup host [--engine-version <v>] [--print]`, elevated or root, idempotent, ends by
-running `setup` as the bot's account and starting the service; `--print` writes the commands and
-files it would run and change, nothing else (the debug interface for a part no test runs without
-elevation). Linux: the operator files as code: group and users, root and modes, the sudoers file
+`broodforge setup host [--root <path>] [--instance <name>] [--engine-version <v>] [--from <export>]
+[--print]`, elevated or root, idempotent with the bot stopped (`running` otherwise), ends by
+running `setup` as the bot's account with the flags passed through (`--from`'s file copied into
+the root first) and starting the service; `--print` writes the commands and files it would run
+and change, the password withheld and said so, nothing else (the debug interface for a part no
+test runs without elevation). Linux: the operator files as code: group and users, root and modes, the sudoers file
 from the generated `env_keep` list through a temp file and `visudo -cf` (L1), packages, the
 AppArmor profile on Ubuntu 24.04, the engine ELF pinned at `/opt/broodforge/engine/claude`, the
 binary beside it, `sudo -u broodforge broodforge setup` on the same terminal, then the unit.
 Windows, from an elevated PowerShell (one UAC click), through the built-in cmdlets run as a child
 with the script and the password on stdin, never an argument (no new dependency): the account
 `broodforge` (`New-LocalUser`, `Add-LocalGroupMember Users`, never expires) with a 32-character
-password `setup host` generates; the root `%ProgramData%\Broodforge\<instance>` and the key
-`%ProgramData%\Broodforge\<instance>.key`, inheritance off, entries for `broodforge` and
-Administrators only (no session path depends on a profile or carries a user segment; ADR 0022's
-key default amended by the ADR for 0027); the binary copied to `%ProgramData%\Broodforge\bin\`; the
+password `setup host` generates; the directory `%ProgramData%\Broodforge\`, inheritance off,
+inheritable entries for SYSTEM, Administrators and `broodforge` only, which the root
+`%ProgramData%\Broodforge\<instance>` and the key `%ProgramData%\Broodforge\<instance>.key` inherit
+(the key is created by the inner `setup`'s `credential init`, never by `setup host`, so its
+`key-exists` rule stands; no session path depends on a profile or carries a user segment; ADR
+0022's key default amended by the ADR for 0027); `bin\` and `engine\` beneath it read-only to
+`broodforge`; the binary copied to `%ProgramData%\Broodforge\bin\`; the
 engine copied to `%ProgramData%\Broodforge\engine\` (W4) or, until W4 holds, the native installer
 run as `broodforge`; the task `Broodforge` registered at startup with the generated password and
 the operator file's three settings, the XML read back and `PT0S` required (`fix` otherwise); the
@@ -190,13 +210,14 @@ per instance). State and secrets stay 0021's backup and restore.
 ## Step tables
 
 The table of one row per hand action is the Appendix (after the responses, so the body stays
-short); `SQ` is the status quo from the operator files, `C` as above with its defaults
-(`--create-role` off, the git credential given during setup). Its sums: status quo PC 49, droplet
-53; C PC 19, droplet 21; with `--create-role` 18 and 20; the git credential deferred, 16 and 18.
-Second PC, same application and guild, from an export, the first instance retired: build, `setup
-host --from`, token, key, GitHub token paste, `/register`, `/credential add`, `setup login`, the
-browser: 9. B is C plus three channel creates, Developer Mode, four id copies and four pastes:
-PC 31, droplet 32. D is C with `setup` in place of `setup host`: 19.
+short); `SQ` is the status quo from the operator files, `C` as above with its defaults (the role
+created by setup, the git credential given during setup). Its sums: status quo PC 49, droplet 53;
+C PC 18, droplet 20; the role made by hand (`--create-role no`), 19 and 21; the git credential
+deferred, 15 and 17. Second PC, same application and guild, from an export, the first instance
+retired: build, `setup host --from`, token, key, GitHub token paste, `/register`, `/credential
+add`, `setup login`, the browser: 9. B is C with the role by hand plus three channel creates,
+Developer Mode, four id copies and four pastes: PC 31, droplet 32. D is C with `setup` in place of
+`setup host`: 18.
 
 ## Recommendation
 
@@ -207,19 +228,21 @@ the W3a and W4 spikes on a throwaway machine; the Linux `setup host` joins P14. 
 amends ADR 0021 ("owner-edited" to "owner-edited, created once by `setup`"), ADR 0022 ("written by
 the bot only" to "by the bot, or by `setup` while it holds the control address"; the Windows key
 default; the account created by `setup host`) and retires the PC account operator file.
-The owner's calls, each waiting; the proposed text or name is quoted for approval as is:
+The owner's calls, answered 2026-10-26 (Owner's answers, below); the texts as decided:
 
 1. Settled 2026-10-25: C, the account kept, simple mode the development and scratch backend.
-2. Manage Roles: default off, as the critic asked (the owner makes the role, two steps); opting in
-   costs one step instead (the removal). Prompt: "Let setup create the role "Trusted"? This adds
-   Manage Roles to the invite link; setup asks you to remove it again at the end. [y/N]". Waiting
-   line when off: "fix  role  create a role named Trusted in Server Settings, Roles, and give it to
-   yourself; setup is waiting". When on: "fix  role  remove Manage Roles from the bot's role in
-   Server Settings, Roles; setup is waiting".
+2. Manage Roles: default on (the owner, 2026-10-26; the proposal had off, as the critic asked):
+   setup creates the role and the owner removes Manage Roles at the end, one step; answering no
+   costs two instead (the owner makes the role and assigns it). Prompt: "Let setup create the role
+   "Trusted"? This adds Manage Roles to the invite link; setup asks you to remove it again at the
+   end. [Y/n]". Waiting line on no: "fix  role  create a role named Trusted in Server Settings,
+   Roles, and give it to yourself; setup is waiting". On yes: "fix  role  remove Manage Roles from
+   the bot's role in Server Settings, Roles; setup is waiting".
 3. The names the bot creates: category "Sessions", lobby "#<project id>", notices
    "#<project id>-notices", role "Trusted".
 4. The prompts: token "Bot token (Developer Portal, Bot, Reset Token; not shown as you type):";
-   key "key  <hex>  <path>" then "Copy the key into your password manager, then press Enter.";
+   key "ok  key  <hex>  <path>" (Review fixes: a step line; the owner's "key  <hex>  <path>") then
+   "Copy the key into your password manager, then press Enter.";
    invite "Open this link, pick the server, Authorize: <url>" then "waiting for the bot to join";
    guild with channels "This server already has channels. Create Sessions, #<project id> and
    #<project id>-notices in it? [y/N]"; repository "Repository URL of the project (its canonical):";
@@ -227,7 +250,21 @@ The owner's calls, each waiting; the proposed text or name is quoted for approva
    git-credential):"; the closing line "next  the bot is running. In Discord: /register, then
    /credential add kind:subscription; then here: broodforge setup login <credential id>".
 5. The refusal texts of the table above, in particular `running`: "a bot answers at <address>;
-   stop it with broodforge stop (every open session is interrupted) or use setup --check".
+   stop it with broodforge stop in this shell (every open session is interrupted) or use setup
+   --check" (Review fixes: "in this shell" added; the owner's text had no shell).
+
+## Owner's answers, 2026-10-26
+
+1. C is the decision; the PC keeps the service account; simple mode (`same-account`) stays the
+   development and scratch backend. ADR 0022 is amended, not superseded, where this proposal names
+   the Windows key default and the account created by `setup host`.
+2. Manage Roles: default on. The prompt "Let setup create the role "Trusted"? ..." defaults to
+   yes, bracket `[Y/n]`; the invite carries Manage Roles; setup still asks the owner to remove it
+   at the end (the "remove Manage Roles" waiting line). The counts above are the default-on ones.
+3. and 4. The names and the prompts were not questions to the owner: accepted exactly as quoted.
+5. The refusal texts accepted as quoted, the `running` text included.
+
+Recorded as `../decisions/0027-setup-in-few-steps.md`.
 
 ## What would change this recommendation
 
@@ -272,7 +309,7 @@ Resolutions: 11 accepted, 8 accepted with change, 0 rejected.
    trade as the critic put it (a Discord session reads and persists into everything the owner's
    account can, unattended) and that the account's value rises with the coder count.
 3. Serious, D buys three or four steps once. Accepted. C recommended; `same-account` stays the
-   development and scratch backend. The recount makes it moot: D is 19, equal to C.
+   development and scratch backend. The recount makes it moot: D is 18, equal to C.
 4. Serious, the owner's account name in every path. Accepted with change. D is gone, but the point
    stands for C too: the root and key defaults move to `%ProgramData%\Broodforge\`, created by the
    elevated `setup host` with entries for `broodforge` and Administrators only, so no session path
@@ -286,7 +323,9 @@ Resolutions: 11 accepted, 8 accepted with change, 0 rejected.
    manager entry, the sign-out and the engine install all leave the count (seven PC rows to one).
 7. Serious, Manage Roles held forever. Accepted. Default off; `--create-role` opt-in with the
    prompt, the removal `fix` that waits until the bot's permissions no longer carry the bit, and a
-   position check before assigning (C6). The owner's call 2 states the one-step difference.
+   position check before assigning (C6). The owner's call 2 states the one-step difference. (The
+   owner set the default to on, 2026-10-26: the prompt, the removal `fix` and the position check
+   stand; "held forever" stays answered by the `fix` that waits for the removal.)
 8. Serious, rerun and the refusal with no lift. Accepted with change. `--check` never refuses; the
    `running` message names `stop` and its effect; a disagreement is `mismatch-<step>`, changes
    nothing, exits 1; the change verb is `setup <step>` (one step alone, old and new printed, a
@@ -297,7 +336,8 @@ Resolutions: 11 accepted, 8 accepted with change, 0 rejected.
    `status` answers `setup`. `--check` binds nothing.
 10. Serious, bundled counts. Accepted. The Step tables apply one rule to every option and host,
     with the build, the GitHub token (three rows), the login round trip, the code paste and
-    `--done`. The quoted numbers moved from 40/41 and 18/13 to 49/53 and 19/21; the ranking did not.
+    `--done`. The quoted numbers moved from 40/41 and 18/13 to 49/53 and 19/21 (18/20 once the
+    owner set the role default to yes); the ranking did not.
 11. Minor, C3's disgo route. Accepted. Named in the `guild` step.
 12. Minor, C4's flag write. Accepted. OR, skip on 1<<18, `fix` when refused; in `application`.
 13. Minor, W1's side effects. Accepted with change. D is rejected, so the logon task, the hidden
@@ -308,7 +348,8 @@ Resolutions: 11 accepted, 8 accepted with change, 0 rejected.
 15. Minor, `config export` carries personal data; two instances on one application. Accepted.
     Default `--out` under the root's `data/`, the docs rule named; the retire-first sentence added.
 16. Minor, drivability gaps. Accepted with change. `--wait <seconds>` bounds the `guild` and
-    `role` polls (`--yes` without it refuses `needs-input-guild`); one secret per command: the bot
+    `role` polls (first "`--yes` without it refuses `needs-input-guild`"; the review fixes gave
+    `--wait` a default instead, so `needs-input-guild` is only several guilds and no `--guild`); one secret per command: the bot
     token on `setup`'s stdin, the git credential hidden in the interactive run or on `setup
     git-credential`'s stdin alone; the one-time key print is the `key` step's one object in
     `--json`.
@@ -320,10 +361,43 @@ Resolutions: 11 accepted, 8 accepted with change, 0 rejected.
     a prediction that can fail (no later pass adds a scriptable owner step; a rerun changes
     nothing); D's moving part is the owner's interactive session as the bot's home.
 
+## Review fixes, 2026-10-26
+
+An Opus reviewer read the ADR, its companion and this proposal after promotion (findings B1,
+S1 to S9, M1 to M4, in the coordinator's brief). What moved in the body above and in the ADR:
+
+- B1: `setup host` creates the `%ProgramData%\Broodforge\` directory and its ACL (SYSTEM,
+  Administrators, `broodforge`; `bin\` and `engine\` read-only to the account), never the key file;
+  `credential init` creates the key inside it and its `key-exists` rule stands.
+- S1: every lift names its shell: the PC's elevated PowerShell (the pipe's default descriptor
+  admits Administrators; no DACL change) or a shell as `broodforge` on Linux; on the PC `setup` and
+  `setup <step>` relaunch themselves as `broodforge` by `setup host`'s route. The `running` text
+  gains "in this shell".
+- S2: the repository is asked in `config`; `git-credential` precedes `project`.
+- S3: the rerun rule per key (the companion): a refused stored token replaced in the run; a key
+  file that is not a key is `mismatch-key` and `setup key` works only on an empty store
+  (`key-in-use`); configured channel and role ids checked before names; Manage Roles re-checked on
+  every run.
+- S4: every refusal is one stderr `error:` line with the `fix` line on stdout; the `--json` fields
+  are stated; `setup` and `setup host` take the default root (05's one exception); `(file)` marks
+  on `config export|import`, `setup service` and `setup --check`; `setup` is a listener; `status`
+  answers `config: setup`; `needs-elevation` names the subcommand.
+- S5: `--guild` and `--channels` in the command line; `--yes` takes the `channels` default;
+  `--wait` defaults to 900 s, so `needs-input-guild` is only several guilds and no `--guild`.
+- S6: `setup host` takes `--root`, `--instance`, `--from` (the file copied into the root); a bot
+  running is `running`, idempotence is with the bot stopped.
+- S7: `old` and `new` print a secret as its id or path; `setup key` cannot orphan the store.
+- S8: the unverified claims and the pass that settles each are in the ADR's Context.
+- S9: ADR 0021 carries an amendment entry; `03-architecture.md`'s example paths and Debug CLI row
+  follow; the role and channel names are lookup names, not config values.
+- M1 to M4: the key is a sibling of the root; the counts above read 18/20; the two prior-art
+  findings are resolved to the ADR; the key line is the step's `ok` line; `--print` says the
+  password is withheld; the refusal table lives in the companion with its lifters and shells.
+
 ## Appendix: the step tables
 
-One row per hand action; `SQ` the status quo from the operator files, `C` as recommended with its
-defaults (`--create-role` off, the git credential given during setup).
+One row per hand action; `SQ` the status quo from the operator files, `C` as decided with its
+defaults (the role created by setup, the git credential given during setup).
 
 | Hand action | SQ PC | SQ droplet | C PC | C droplet |
 |---|---|---|---|---|
@@ -336,8 +410,9 @@ defaults (`--create-role` off, the git credential given during setup).
 | Client: create the sessions category | 1 | 1 | - | - |
 | Client: create the lobby channel | 1 | 1 | - | - |
 | Client: create the notice channel | 1 | 1 | - | - |
-| Client: create the `Trusted` role | 1 | 1 | 1 | 1 |
-| Client: give the role to yourself | 1 | 1 | 1 | 1 |
+| Client: create the `Trusted` role (C: `--create-role no` only) | 1 | 1 | - | - |
+| Client: give the role to yourself (C: `--create-role no` only) | 1 | 1 | - | - |
+| Client: remove Manage Roles from the bot's role (setup waits) | - | - | 1 | 1 |
 | Paste the application id into the invite URL | 1 | 1 | - | - |
 | Open the invite, pick the server, Authorize | 1 | 1 | 1 | 1 |
 | Client: Developer Mode on | 1 | 1 | - | - |
@@ -394,4 +469,4 @@ defaults (`--create-role` off, the git credential given during setup).
 | Browser sign-in and authorize | 1 | 1 | 1 | 1 |
 | Paste the code back (always on the droplet; the PC when the callback fails) | - | 1 | - | 1 |
 | `credential login <id> --done` | 1 | 1 | - | - |
-| **Sum** | **49** | **53** | **19** | **21** |
+| **Sum** | **49** | **53** | **18** | **20** |
