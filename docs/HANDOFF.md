@@ -1,13 +1,13 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-26 by main session (P20 spike run, W6 open; Go installed)
+Updated: 2026-10-26 by main session (P20 spike run, W6 open; Go installed; pushed; day's end)
 
 ## Now
 
-- Unpushed on `main`: ADR 0027 `d891592` through companion `bfb56b3`, then the P20 verdicts and the
-  Go reference. Code commits were reviewed with fixes amended in; the companions (`6f006b8`,
-  `bfb56b3`) and today's two docs commits go to the reviewer before the owner's requested push.
+- Pushed through `c3ecb62` (ADR 0027, P20-P22, P24, companions, P20 verdicts, Go reference), each
+  reviewed. Go is installed; check, test and hook suites all pass. This clone lacked the `hatchery`
+  remote, which turned hook case O1 red; the owner added it (carry-back idea filed).
 - P20 spike run by the owner: every claim holds but W6's last step (`Start-ScheduledTask` never
   started the task, 0x41303; cause unknown) and the unreported console row. P23 waits on W6.
 
@@ -15,10 +15,10 @@ Updated: 2026-10-26 by main session (P20 spike run, W6 open; Go installed)
 
 1. Coder: W6 per the P20 finding's Next (read back the task, a trigger `Start-ScheduledTask`
    honours, `schtasks /run`), then an owner re-run of the spike. Then P23: coder.
-2. Reviewer: `6f006b8`, `bfb56b3` and today's docs commits; then a fresh pusher.
+2. Hatchery's coordinator files the 2026-10-26 O1 idea (no diff) as a Hatchery idea.
 3. P25 `setup login` (after P23); P26 Linux on the Ubuntu VM then the droplet (held with P14).
-4. Tester: the repro needs `</dev/null` (it reads stdin to EOF); triage the 2026-10-23, 2026-10-24
-   and 2026-10-26 ideas (the last: `goLive` after a role timeout, needs a test).
+4. Tester: the repro needs `</dev/null` (it reads stdin to EOF); triage the 2026-10-23 and 2026-10-24
+   ideas and the 2026-10-26 `goLive` idea (after a role timeout; needs a test).
 5. Earlier queue: s000a post-mortem Next; milestone 1 blocker (`engine run --real`, prompt mode,
    subagents); s0008's open items; the last-good cold start; the net-diff finding; carry-backs.
 
