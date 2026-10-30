@@ -22,3 +22,12 @@ only; the agent still leaves such a turn without a word on what it did.
 - Whether a turn whose last step is a tool call should prompt the engine once for a closing message
   (a change to the turn loop, `internal/session/turn.go`), so the venue gets the agent's own summary
   and not only the bot's footer. The owner chose report-only for the first change.
+
+Question: should a turn whose last entry is a tool call cost one more engine process (a fixed
+no-tools prompt, like the session-end closing turn) so the venue gets the agent's own closing
+text, or stay report-only as chosen on 2026-10-24? Recommendation: stay report-only and try the
+free fix first: one sentence in the header the agent reads at start (`04-ux-session-start.md`,
+your wording) asking it to end every turn with a line on what it did and what comes next. The
+extra process costs a round of about 3 s and tokens on every such turn and would pay even when the
+agent simply forgot to speak; revisit this idea if the header line does not change the rate.
+Answer:
