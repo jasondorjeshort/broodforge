@@ -8,14 +8,14 @@ Updated: 2026-10-30 by main session (wave built; nine ideas recorded; golden ses
 - Account `jdorje`. Ahead of `origin/main`, each reviewed: Hatchery update (base line `8d6ee28`),
   dev instance design and P27, importfixture, goLive, triage amendments (P28 to P31), lint test,
   P11 items 1, 2, 6, 8, departure rows, reviewer findings as tests, nine ideas, golden sessions (P32).
-- Dev instance: `%LOCALAPPDATA%\Broodforge\dev`, dry-run for good, bot stopped, no credential yet
-  (the owner's step, `docs/operator/2026-10-30-dev-instance-credential.md`).
+- Dev instance: `%LOCALAPPDATA%\Broodforge\dev`, dry-run for good, bot stopped, dev credential
+  `cred-2ha7apqowv` usable (owner logged in 2026-10-30; confirm `stop` was run).
 - `../hatchery` `main` pushed at `61b6409` (two ideas). Five reviewed carry-back branches in
   `../broodforge-wt/` (ADR 0024 names the shas); the owner asked for every push on 2026-10-30.
 
 ## Next
 
-1. After the owner's credential step: one real turn on the dev root on the owner's quoted word.
+1. One real turn on the dev root, only on the owner's quoted go-ahead (`run` skill step 4).
 2. W6: the owner re-runs `spike/setup-host/` (README) and pastes the lines; the finding records
    the result; then P23 (coder), owner steps, P25.
 3. Coder passes, value order: P32 golden sessions (`08-implementation-plan-golden-sessions.md`);
@@ -27,7 +27,7 @@ Updated: 2026-10-30 by main session (wave built; nine ideas recorded; golden ses
 
 ## Waiting on user
 
-- The dev credential step (five minutes, one sign-in); then the go-ahead for one real turn.
+- The go-ahead for one real turn on the dev root.
 - Wording: five dry-run setup texts (companion); four Discord strings (`05-debug-interface-discord.md`);
   two canonical rows in `04-ux.md` and refuse-or-warn; subagent text indent. W6: the console window.
 - Nine `Question:` blocks in `docs/ideas/`; the `auto` spike go-ahead; setup texts
