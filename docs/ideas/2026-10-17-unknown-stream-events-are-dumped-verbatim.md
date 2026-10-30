@@ -27,3 +27,16 @@ line 131 ("Everything else is `unknown`"), `parse_test.go` (the unknown-line tab
 
 - Whether a fixture recorded on 2.1.296 with the event in it should become a parser golden, so
   the shrink is tested against the real shape.
+
+Plan: architect, one pass, an amendment and no code. `EngineEvent.Unknown` is a shape in
+`docs/design/03-architecture.md` and `engine run` prints it "exactly as the adapter parsed them"
+(`05-debug-interface.md`), so the shrink is a design amendment first. Recommended shape:
+`Unknown *struct{ Type, Subtype string; Bytes int; Head string }`, `Head` the line's first 200
+bytes, JSON `{"type":"unknown","eventType":..,"subtype":..,"bytes":..,"head":..}`; the recording
+stays verbatim because `ClaudeCode.Raw` sees the line before the parser. No named
+`commands_changed` kind: it carries nothing the bot reads. Amend 03 (the struct line and the
+`unknown` sentence) and 05 (the one-line form), then add the coder pass to
+`08-implementation-plan.md`: `parse.go`, `events.go`, `parse_test.go`, the goldens regenerated
+(`-run TestGolden -update`, diff read), and a `commands_changed` line of real size in a fixture
+the next `engine record` produces (`recorded-read` has none). Out of scope: `rate_limit_event`,
+which has its own idea and its own kind.
