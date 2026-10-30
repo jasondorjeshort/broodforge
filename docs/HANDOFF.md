@@ -5,9 +5,9 @@ Updated: 2026-10-30 by main session (P28, P32 and its dev-read golden built and 
 
 ## Now
 
-- Account `jdorje`. Ahead of `origin/main`, each reviewed: the channel-200 credential doc fix
-  (`4d15450`), P28 (`cb1047c`), P32 (`560ab29`), ideas, the `dev-read` golden (`97e5542`, on the
-  owner's word after the independent read), this handoff. Push on request.
+- Account `jdorje`. Pushed at `9b1a1c5`: the channel-200 credential doc fix, P28, P32 with its four
+  goldens (`dev-read` on the owner's word after the independent read), four ideas. Ahead of
+  `origin/main`: the ADR 0024 git-guard row (`a68f795`), this handoff. Push on request.
 - Dev instance: `%LOCALAPPDATA%\Broodforge\dev`, dry-run for good, bot stopped, store at schema 4, dev
   credential `cred-2ha7apqowv` usable; channel 200 as the owner, or `--credential <dev>`. The three
   real turns the owner granted are spent; the next real turn needs a fresh quoted go-ahead.
