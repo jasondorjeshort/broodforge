@@ -1,13 +1,14 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-30 by main session (P28, P32 and its dev-read golden built and reviewed)
+Updated: 2026-10-30 by main session (P28, P32, dev-read golden, transcript line, internal-error event)
 
 ## Now
 
 - Account `jdorje`. Pushed at `9b1a1c5`: the channel-200 credential doc fix, P28, P32 with its four
-  goldens (`dev-read` on the owner's word after the independent read), four ideas. Ahead of
-  `origin/main`: the ADR 0024 git-guard row (`a68f795`), this handoff. Push on request.
+  goldens (`dev-read` on the owner's word after the independent read). Ahead of `origin/main`, each
+  reviewed: the ADR 0024 git-guard row (`a68f795`), the transcript decision line (`b313fa2`), the
+  `internal-error` event (`532b971`), this handoff. Push on request.
 - Dev instance: `%LOCALAPPDATA%\Broodforge\dev`, dry-run for good, bot stopped, store at schema 4, dev
   credential `cred-2ha7apqowv` usable; channel 200 as the owner, or `--credential <dev>`. The three
   real turns the owner granted are spent; the next real turn needs a fresh quoted go-ahead.
@@ -17,17 +18,16 @@ Updated: 2026-10-30 by main session (P28, P32 and its dev-read golden built and 
 
 1. W6: the owner re-runs `spike/setup-host/` (README) and pastes the lines; the finding records
    the result; then P23 (coder), owner steps, P25.
-2. Coder passes, value order: P29 (`08-implementation-plan-engine-stream.md`); the transcript
-   decision-line idea and the `cred-dev` rewrite idea (`Plan:`, tester, each re-blesses one golden);
-   P30, P31 (`08-implementation-plan-canonical.md`); the three p10 remainders; Git Bash stayed waiting.
+2. Coder passes, value order: P29 (`08-implementation-plan-engine-stream.md`); the `cred-dev` rewrite
+   idea (`Plan:`, tester, re-blesses `dev-read`); P30, P31 (`08-implementation-plan-canonical.md`); the
+   three p10 remainders; Git Bash stayed waiting.
 3. Hatchery: Land the five branches there; then `update-from-hatchery` here; delete the seven ideas.
 4. The `auto` spike (tester, the owner's login, spends the plan): only on the owner's word. The dev
    engine still loads the account's synced skills (`commands_changed`); weigh that for sessions.
 
 ## Waiting on user
 
-- Two new `Question:` blocks in `docs/ideas/` (a store-failure event type; the decision-line wording),
-  nine earlier ones; the `auto` spike.
+- Nine `Question:` blocks in `docs/ideas/`; the `auto` spike.
 - Wording: dry-run and setup texts (companion, `05-debug-interface-setup.md`); four Discord strings
   (`05-debug-interface-discord.md`); two canonical rows in `04-ux.md` and refuse-or-warn; subagent
   text indent; the `pre-push` line (P15); P12a; "Never ends for inactivity."; the switch post; the
