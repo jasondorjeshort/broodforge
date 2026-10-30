@@ -36,6 +36,8 @@ the brief supplies what only this task knows.
   expected.
 - reviewer: name the claim most worth testing (a destructive step, a safety property); experiments
   in the scratchpad are expected and it may run them unasked, but naming the claim focuses the review.
+  Name a boundary that decides on paths or names (a hook, a guard, a sandbox list) as one, so the
+  reviewer tries the escape classes its agent file lists.
 - runner: give exact commands or the commit brief from the `commit` skill; nothing to interpret.
 - pusher: use the one-line brief from the `commit` skill, with the user's request quoted.
 

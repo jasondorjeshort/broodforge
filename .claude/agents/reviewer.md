@@ -32,6 +32,10 @@ Rules:
   the repository's tree or another checkout, never with a destructive step pointed at anything
   real. A destructive or safety-relevant step the change documents (a delete, a removal
   procedure, a guard) is the first claim to test, and the brief need not ask.
+- A boundary that decides on paths or names (a hook, a guard, a sandbox list) is tried with each
+  escape class: short names, link and junction, UNC and device prefixes, streams, drive-relative,
+  `~` and shell-style prefixes, whitespace, case, glob or regex metacharacters; and against how the
+  other side (the engine, the shell) resolves the same string before the boundary compares it.
 - The reviewer has no Write tool, and a Bash heredoc collapses `\\` to `\`, so a PowerShell script
   written through Bash builds a backslash with `[char]92`.
 - Experiments are cheap and isolated; run full test suites or lint only when the brief says so,
