@@ -26,3 +26,14 @@ A carry-back request, no diff:
   classification; possibly A1 and CB1 likewise.
 - The decant, or a session-start check, warns when a decanted project (one with a `Hatchery base:`
   line) has no `hatchery` remote.
+
+Plan: no diff from here (`carry-back` skill: a request without a diff is filed by Hatchery's coordinator
+as a Hatchery idea; the handoff routes it so). Hatchery's coordinator (a session in `../hatchery`) files
+it in Hatchery's `docs/ideas/` from the two bullets above, `kind: chore`, with Hatchery's anchors: the O1
+`contract(...)` FAIL line in `.claude/hooks/test-hooks.js` and its sentence under "Harness group `O`" in
+`docs/hatchery/decisions/0016-ownership-map.md` for the lift (suggested: `lift: in Hatchery classify it;
+in a decanted project git remote add hatchery <url>, decant step 2`; A1 and CB1 likewise), and for the
+warning the `decant` skill's checks step and the harness's own O1 line as candidate homes, Hatchery's
+triage choosing. Verify: the file is on `hatchery/main` (`git fetch hatchery; git ls-tree --name-only
+hatchery/main docs/ideas/`); then the runner deletes this file. Out of scope: any edit to this project's
+hooks or `ownership.json`; the lift text comes back by `update-from-hatchery`.
