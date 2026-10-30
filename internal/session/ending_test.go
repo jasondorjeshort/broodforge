@@ -489,3 +489,55 @@ func TestHeld(t *testing.T) {
 		}
 	})
 }
+
+// TestEndingEvent: before the handoff runs, end publishes session-ending with the tree's commit
+// count (04: `Ending: checking and handing off 2 commits...`), unknown when it cannot be read;
+// the summary's facts carry each commit's hash and subject, the pull request's title and its web
+// URL (P11 remainder, items 1 and 2).
+func TestEndingEvent(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		commits func(context.Context, string) (*int, error)
+		summary string
+		want    *int
+	}{
+		{"counted", func(context.Context, string) (*int, error) { n := 2; return &n, nil }, "2 commits", ptr(2)},
+		{"one", func(context.Context, string) (*int, error) { n := 1; return &n, nil }, "1 commit", ptr(1)},
+		{"unreadable", func(context.Context, string) (*int, error) { return nil, errors.New("no tree") }, "commits unknown", nil},
+		{"no counter", nil, "commits unknown", nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			h := newHarness(t, "", true)
+			h.cfg.Commits = c.commits
+			h.svc = New(h.cfg)
+			ctx := context.Background()
+			if _, err := h.svc.Start(ctx, StartRequest{Channel: "100", As: "1001"}); err != nil {
+				t.Fatal(err)
+			}
+			web := "https://github.com/o/r/pull/42"
+			h.handoff = func(string) (git.Outcome, error) {
+				return git.Outcome{Outcome: git.OutcomePullRequest, Mode: git.ModePullRequest, Commits: 2, URL: &web,
+					Request: &git.PullRequest{URL: "https://api.github.com/repos/o/r/pulls", Body: git.PullRequestBody{Title: "Session s0001: fix it"}},
+					Log:     []git.CommitLine{{Hash: "a1b2c3d4", Subject: "Add config reload"}, {Hash: "9f8e7d6c", Subject: "Docs"}}}, nil
+			}
+			if _, err := h.svc.End(ctx, EndRequest{ActRequest: ActRequest{Session: "s0001", As: "1001"}}); err != nil {
+				t.Fatal(err)
+			}
+			evs, _ := h.svc.Events("s0001", 0)
+			n := len(evs)
+			if n < 2 || evs[n-2].Type != EventSessionEnding || evs[n-1].Type != EventSessionEnded {
+				t.Fatalf("the last two events: %v", summaries(evs))
+			}
+			ending, end := evs[n-2], evs[n-1].End
+			if ending.Summary != c.summary || (ending.Commits == nil) != (c.want == nil) || (c.want != nil && *ending.Commits != *c.want) {
+				t.Errorf("session-ending %q %v, want %q %v", ending.Summary, ending.Commits, c.summary, c.want)
+			}
+			if end == nil || end.URL != web || end.Title != "Session s0001: fix it" || len(end.Log) != 2 ||
+				end.Log[0] != (CommitLine{Hash: "a1b2c3d4", Subject: "Add config reload"}) {
+				t.Errorf("end info %+v", end)
+			}
+		})
+	}
+}
+
+func ptr(n int) *int { return &n }

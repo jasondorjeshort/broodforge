@@ -227,6 +227,14 @@ func newGateway(a *Adapter, c GatewayConfig, r restAPI) (*Gateway, error) {
 			return nil, fmt.Errorf("discord.noticeChannelId %q is not a Discord id", c.NoticeChannel)
 		}
 	}
+	// A panel an earlier run created is edited where it is (03, Configuration).
+	for _, p := range a.storedPanels() {
+		ch, cerr := snowflake.Parse(p.Channel)
+		m, merr := snowflake.Parse(p.DiscordID)
+		if cerr == nil && merr == nil {
+			g.msgs[p.MessageID] = msgRef{ch, m}
+		}
+	}
 	g.ctx, g.cancel = context.WithCancel(context.Background())
 	return g, nil
 }
@@ -458,6 +466,7 @@ func (g *Gateway) send(p Post) {
 		g.mu.Lock()
 		g.msgs[p.MessageID] = msgRef{ch, m.ID}
 		g.mu.Unlock()
+		g.warn("panel "+p.MessageID, g.a.panelCreated(p.MessageID, m.ID.String()))
 		if p.Pinned {
 			g.warn("pin "+p.MessageID, g.rest.PinMessage(ch, m.ID, opt))
 		}
@@ -465,6 +474,16 @@ func (g *Gateway) send(p Post) {
 		if ref, ok := g.ref(p.MessageID, what); ok {
 			_, err := g.rest.UpdateMessage(ref.channel, ref.message, messageUpdate(p), opt)
 			g.warn(what, err)
+			var re *rest.Error
+			if errors.As(err, &re) && re.Code == rest.JSONErrorCodeUnknownMessage {
+				// A panel deleted by hand: forget it, so the next panel post creates it anew.
+				if panel, serr := g.a.panelGone(p.MessageID); panel {
+					g.mu.Lock()
+					delete(g.msgs, p.MessageID)
+					g.mu.Unlock()
+					g.warn("panel "+p.MessageID, serr)
+				}
+			}
 		}
 	case OpDelete:
 		if ref, ok := g.ref(p.MessageID, what); ok {

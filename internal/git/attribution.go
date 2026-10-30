@@ -65,6 +65,7 @@ func (a Attribution) Required(t time.Time) []string {
 // CommitCheck is one commit's result: no problems is ok.
 type CommitCheck struct {
 	Hash     string
+	Subject  string   // the message's first line, for the end-of-session summary (04)
 	Problems []string // author:<got>, committer:<got>, missing:<trailer line>
 }
 
@@ -83,7 +84,7 @@ const (
 	fieldSep  = "\x1f"
 	recordSep = "\x1e"
 	logFormat = "%H" + fieldSep + "%an" + fieldSep + "%ae" + fieldSep + "%cn" + fieldSep + "%ce" + fieldSep + "%ct" +
-		fieldSep + "%(trailers:only,unfold)" + recordSep
+		fieldSep + "%s" + fieldSep + "%(trailers:only,unfold)" + recordSep
 )
 
 // Check is the attribution check (ADR 0022 companion, Handoff step 3) on every commit of
@@ -102,22 +103,22 @@ func Check(ctx context.Context, s Session, base string, a Attribution) ([]Commit
 		if rec == "" {
 			continue
 		}
-		f := strings.SplitN(rec, fieldSep, 7)
-		if len(f) != 7 {
+		f := strings.SplitN(rec, fieldSep, 8)
+		if len(f) != 8 {
 			return nil, &Error{Code: CodeRefusedAttribution, Message: "git log: unexpected output"}
 		}
 		secs, err := strconv.ParseInt(f[5], 10, 64)
 		if err != nil {
 			return nil, &Error{Code: CodeRefusedAttribution, Message: "git log: committer time " + strconv.Quote(f[5])}
 		}
-		c := CommitCheck{Hash: f[0]}
+		c := CommitCheck{Hash: f[0], Subject: f[6]}
 		if got := (Identity{f[1], f[2]}); got != a.Driver {
 			c.Problems = append(c.Problems, "author:"+got.String())
 		}
 		if got := (Identity{f[3], f[4]}); got != a.Driver {
 			c.Problems = append(c.Problems, "committer:"+got.String())
 		}
-		have := coAuthors(f[6])
+		have := coAuthors(f[7])
 		for _, line := range a.Required(time.Unix(secs, 0)) {
 			if !have[strings.TrimPrefix(line, TrailerKey+": ")] {
 				c.Problems = append(c.Problems, "missing:"+line)

@@ -55,6 +55,9 @@ type Event struct {
 	Start *StartInfo `json:"start,omitempty"`
 	Usage *TurnUsage `json:"usage,omitempty"`
 	End   *EndInfo   `json:"end,omitempty"`
+	// Commits is session-ending's count of the tree's commits over its base, nil when it cannot
+	// be read: the venue's "Ending: checking and handing off <n> commits..." (04).
+	Commits *int `json:"commits,omitempty"`
 }
 
 // indentUnit is one level of a subagent's nesting in a summary (04, The turn loop: subagent
@@ -119,21 +122,30 @@ type TurnUsage struct {
 
 // EndInfo is the summary's facts (04, Ending a session). Commits is the count handed off, or
 // CommitsUnknown when a held session ends by one of end's escapes (ADR 0026), whose commits were
-// handed off earlier or not at all.
+// handed off earlier or not at all. Log is those commits, oldest first, when the handoff read
+// them; Title is the pull request's, when the handoff built one.
 type EndInfo struct {
-	By        string   `json:"by"` // who ended it, by name; "" for the idle timeout
-	Reason    string   `json:"reason"`
-	StartedAt string   `json:"startedAt"`
-	Turns     int      `json:"turns"`
-	In        int64    `json:"in"`
-	Out       int64    `json:"out"`
-	Model     string   `json:"model,omitempty"`
-	Branch    string   `json:"branch"`
-	Outcome   string   `json:"outcome"`
-	Commits   int      `json:"commits"`
-	URL       string   `json:"url,omitempty"`
-	Author    string   `json:"author"`
-	CoAuthors []string `json:"coAuthors"`
+	By        string       `json:"by"` // who ended it, by name; "" for the idle timeout
+	Reason    string       `json:"reason"`
+	StartedAt string       `json:"startedAt"`
+	Turns     int          `json:"turns"`
+	In        int64        `json:"in"`
+	Out       int64        `json:"out"`
+	Model     string       `json:"model,omitempty"`
+	Branch    string       `json:"branch"`
+	Outcome   string       `json:"outcome"`
+	Commits   int          `json:"commits"`
+	Log       []CommitLine `json:"log,omitempty"`
+	URL       string       `json:"url,omitempty"`
+	Title     string       `json:"title,omitempty"`
+	Author    string       `json:"author"`
+	CoAuthors []string     `json:"coAuthors"`
+}
+
+// CommitLine is one commit the summary lists: its hash and its subject.
+type CommitLine struct {
+	Hash    string `json:"hash"`
+	Subject string `json:"subject"`
 }
 
 // CommitsUnknown is EndInfo.Commits for an end by an escape: the count is not known.
@@ -227,4 +239,7 @@ const (
 	EventHandoffRefused     EventType = "handoff-refused"
 	EventSessionEnded       EventType = "session-ended"
 	EventMessageDropped     EventType = "message-dropped"
+	// EventSessionEnding is the end's handoff about to run (04, Ending a session: the venue shows
+	// `Ending: checking and handing off <n> commits...` meanwhile); its summary is the count.
+	EventSessionEnding EventType = "session-ending"
 )

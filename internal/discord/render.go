@@ -48,6 +48,8 @@ type View struct {
 	lastCall  int        // the number of the turn's newest call, 0 before one
 	lastText  int        // the number of the turn's newest text, 0 before one
 
+	ending      string // the `Ending:` line's message id while the end's handoff runs
+	summaryTo   func(lobby string) string
 	prompt      string // the open prompt's message id
 	promptCall  string
 	promptTrace string
@@ -69,16 +71,19 @@ type part struct {
 	start int // entry index
 }
 
-// ViewConfig is what a View needs besides its session id.
+// ViewConfig is what a View needs besides its session id. SummaryChannel is the project's
+// venue.summaryChannel for a project channel, "" for none (03, Configuration); nil is none.
 type ViewConfig struct {
-	NewID func() string
-	Name  func(user string) string
-	Offer func(Post)
+	NewID          func() string
+	Name           func(user string) string
+	Offer          func(Post)
+	SummaryChannel func(lobby string) string
 }
 
 // NewView returns the view of session id.
 func NewView(id string, c ViewConfig) *View {
-	return &View{id: id, venue: id, newID: c.NewID, name: c.Name, offer: c.Offer, bypass: map[string]session.Event{}}
+	return &View{id: id, venue: id, newID: c.NewID, name: c.Name, offer: c.Offer, summaryTo: c.SummaryChannel,
+		bypass: map[string]session.Event{}}
 }
 
 // Lobby is the session's project channel, "" before its session-started event.
@@ -154,7 +159,7 @@ func (v *View) Handle(ev session.Event) {
 	case session.EventToolResult:
 		line := ev.Summary
 		if d, ok := v.bypass[ev.ToolUseID]; ok {
-			line = session.BypassLine(session.TraceLine(ev.Tool, ev.Target), d.Decision == session.DecisionAllow, d.DecidedBy)
+			line = session.Indent(ev.Depth, session.BypassLine(session.TraceLine(ev.Tool, ev.Target), d.Decision == session.DecisionAllow, d.DecidedBy))
 		}
 		v.result(ev.ToolUseID, firstOf(splitLines(line)))
 		v.closeCall(ev.ToolUseID)
@@ -187,9 +192,16 @@ func (v *View) Handle(ev session.Event) {
 		}
 		if v.held {
 			v.create(handoffRefusedHeldText(msg), nil)
-			break
+		} else {
+			v.create(handoffRefusedText(msg), nil)
 		}
-		v.create(handoffRefusedText(msg), nil)
+		v.endingDone() // the session stays open: nothing is being handed off
+	case session.EventSessionEnding:
+		// 04's line while the handoff runs, where the summary will come; none when there is
+		// nothing to hand off.
+		if ev.Commits == nil || *ev.Commits > 0 {
+			v.ending = v.create(endingText(ev.Commits), nil)
+		}
 	case session.EventSessionEnded:
 		v.sessionEnded(ev, t)
 	case session.EventSessionInterrupted:
@@ -197,8 +209,10 @@ func (v *View) Handle(ev session.Event) {
 			v.heldOpening(ev)
 			break
 		}
-		// The bot stopping posts nothing in 04; the header is not re-synced after it.
+		// The bot stopping posts nothing in 04; the header is not re-synced after it. An Ending
+		// line of a handoff the stop cut short goes.
 		v.closed = true
+		v.endingDone()
 	case session.EventMessageQueued, session.EventMessageDropped, session.EventParticipantInvited:
 		// The hourglass on a queued message is the gateway's (it holds the message's Discord
 		// id); a dropped message and an invitation post nothing in 04.
@@ -610,10 +624,29 @@ func (v *View) sessionEnded(ev session.Event, t time.Time) {
 	}
 	summary := summaryText(v.id, end, t)
 	v.create(summary, nil)
-	if v.lobby != "" {
+	v.endingDone()
+	if v.lobby == "" {
+		return
+	}
+	channels := []string{v.lobby}
+	if v.summaryTo != nil {
+		if c := v.summaryTo(v.lobby); c != "" && c != v.lobby {
+			channels = append(channels, c) // venue.summaryChannel gets both too (04)
+		}
+	}
+	transcript := Transcript(v.id, v.events, v.who)
+	for _, ch := range channels {
 		msg := v.newID()
-		v.post(Post{Op: OpCreate, Channel: v.lobby, MessageID: msg, Body: summary})
-		v.post(Post{Op: OpAttach, Channel: v.lobby, MessageID: msg, File: v.id + ".md", First: v.id + ".md",
-			Body: Transcript(v.id, v.events, v.who)})
+		v.post(Post{Op: OpCreate, Channel: ch, MessageID: msg, Body: summary})
+		v.post(Post{Op: OpAttach, Channel: ch, MessageID: msg, File: v.id + ".md", First: v.id + ".md", Body: transcript})
+	}
+}
+
+// endingDone deletes the `Ending:` line once what it announced is posted: the summary, or the
+// refusal that keeps the session open.
+func (v *View) endingDone() {
+	if v.ending != "" {
+		v.post(Post{Op: OpDelete, MessageID: v.ending})
+		v.ending = ""
 	}
 }

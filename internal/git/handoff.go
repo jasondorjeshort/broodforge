@@ -146,6 +146,15 @@ type Outcome struct {
 	// Removed is false when the tree outlived a done handoff; RemoveError says why.
 	Removed     bool   `json:"removed"`
 	RemoveError string `json:"removeError,omitempty"`
+	// Log is the commits handed off, oldest first, for the end-of-session summary (04, Ending a
+	// session); `worktree handoff` does not print it.
+	Log []CommitLine `json:"-"`
+}
+
+// CommitLine is one commit as the summary lists it: its hash and its subject.
+type CommitLine struct {
+	Hash    string `json:"hash"`
+	Subject string `json:"subject"`
 }
 
 // Handoff is one session's handoff: the five steps of the ADR 0022 companion.
@@ -195,6 +204,9 @@ func (h *Handoff) Run(ctx context.Context, dryRun bool) (Outcome, error) {
 	}
 	refspec := SessionRef(s.ID) + ":refs/heads/" + s.Branch()
 	out := Outcome{Mode: h.Mode, Remote: s.Remote, Refspec: refspec, Commits: c.Commits}
+	for _, ch := range c.Checks {
+		out.Log = append(out.Log, CommitLine{Hash: ch.Hash, Subject: ch.Subject})
+	}
 	if c.Commits == 0 {
 		out.Outcome, out.Refspec = OutcomeNone, ""
 		if dryRun {

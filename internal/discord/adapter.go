@@ -52,6 +52,12 @@ type Config struct {
 	DryRun bool
 	// Credentials serves /credential (04, Credentials); nil answers it not-built.
 	Credentials Credentials
+	// Panels is every project channel's panel as the store recorded it (03, Configuration: the
+	// panel message id is recorded per project channel), loaded by New, so a restart edits the
+	// panel it posted before. SavePanel records one when `panel post` posts it or the live
+	// gateway learns its Discord id; nil records nothing.
+	Panels    []Panel
+	SavePanel func(Panel) error
 }
 
 // Credentials is what /credential needs of the credential store, which the adapter does not
@@ -94,16 +100,20 @@ type Adapter struct {
 	ready   map[string]chan struct{}
 	ended   map[string]bool // sessions whose session-ended event the renderer saw
 	panels  map[string]Panel
+	posted  map[string]bool // channels whose panel this run posted
 	// views is each followed session's View, from SessionStarted until its follow returns (the
 	// end or the interruption rendered), for a refused pick's Resync.
 	views map[string]*View
 }
 
-// Panel is a project channel's panel message (04, The project channel and the panel).
+// Panel is a project channel's panel message (04, The project channel and the panel):
+// MessageID is the adapter's, as the outbox shows it; DiscordID is the message's Discord id once
+// the live gateway created it, "" in a dry run.
 type Panel struct {
 	Channel   string `json:"channel"`
 	MessageID string `json:"messageId"`
 	PostedAt  string `json:"postedAt"`
+	DiscordID string `json:"discordMessageId,omitempty"`
 }
 
 // New returns an adapter; Attach gives it the session service and Run starts its pacing.
@@ -117,7 +127,14 @@ func New(cfg Config) *Adapter {
 	ctx, cancel := context.WithCancel(context.Background())
 	a := &Adapter{cfg: cfg, Outbox: NewOutbox(), ctx: ctx, cancel: cancel, venues: map[string]string{},
 		venueOf: map[string]string{}, ready: map[string]chan struct{}{}, ended: map[string]bool{}, panels: map[string]Panel{},
-		views: map[string]*View{}}
+		posted: map[string]bool{}, views: map[string]*View{}}
+	// The stored panels, and message ids past theirs: a new message never takes a panel's id.
+	for _, p := range cfg.Panels {
+		a.panels[p.Channel] = p
+		if n, err := strconv.ParseInt(strings.TrimPrefix(p.MessageID, "m"), 10, 64); err == nil && n > a.nextID.Load() {
+			a.nextID.Store(n)
+		}
+	}
 	a.co = NewCoalescer(func(now time.Time, p Post) {
 		p = a.Outbox.add(now, p)
 		if g := a.live.Load(); g != nil {
@@ -227,7 +244,7 @@ func (a *Adapter) SessionStarted(id string) {
 	if a.live.Load() == nil {
 		a.bindVenue(id, id) // a dry run's venue is the session id; live, the gateway binds it
 	}
-	v := NewView(id, ViewConfig{NewID: a.newID, Name: a.name, Offer: a.co.Offer})
+	v := NewView(id, ViewConfig{NewID: a.newID, Name: a.name, Offer: a.co.Offer, SummaryChannel: a.summaryChannel})
 	a.mu.Lock()
 	a.views[id] = v
 	a.mu.Unlock()
@@ -248,6 +265,19 @@ func (a *Adapter) SessionStarted(id string) {
 		a.mu.Unlock()
 		a.co.Done(id)
 	}()
+}
+
+// summaryChannel is the venue.summaryChannel of the project whose channel lobby is, as the
+// configuration says now; "" for none.
+func (a *Adapter) summaryChannel(lobby string) string {
+	if a.cfg.Config == nil {
+		return ""
+	}
+	p := a.cfg.Config().ChannelProject(lobby)
+	if p == nil || p.Venue.SummaryChannel == nil {
+		return ""
+	}
+	return *p.Venue.SummaryChannel
 }
 
 // viewOf is the session's View while its follow runs, nil otherwise.
@@ -684,7 +714,8 @@ func (a *Adapter) start(ctx context.Context, in Inbound, channel, model string) 
 }
 
 // PostPanel posts or refreshes a project channel's panel (04; `panel post <channel id>`): the
-// first post creates and pins it, a later one edits it in place.
+// first post creates and pins it, a later one, in this run or after a restart, edits it in
+// place. The record is saved before the post is offered; a failed save posts nothing.
 func (a *Adapter) PostPanel(channel string) (Panel, error) {
 	c := a.cfg.Config()
 	p := c.ChannelProject(channel)
@@ -697,17 +728,78 @@ func (a *Adapter) PostPanel(channel string) (Panel, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	panel, ok := a.panels[channel]
+	if ok && !a.posted[channel] && panel.DiscordID == "" && a.live.Load() != nil {
+		ok = false // stored by a dry run, or before its Discord id was known: nothing live to edit
+	}
 	op := OpEdit
 	if !ok {
 		panel, op = Panel{Channel: channel, MessageID: a.newID()}, OpCreate
 	}
 	panel.PostedAt = a.cfg.Clock.Now().UTC().Format(time.RFC3339)
+	if a.cfg.SavePanel != nil {
+		if err := a.cfg.SavePanel(panel); err != nil {
+			return Panel{}, err
+		}
+	}
 	a.panels[channel] = panel
+	a.posted[channel] = true
 	a.co.Offer(Post{Op: op, Channel: channel, MessageID: panel.MessageID, Body: Mask(body), Buttons: buttons, Pinned: op == OpCreate})
 	return panel, nil
 }
 
-// PanelOf is the channel's panel, false when none was posted while the bot runs.
+// panelCreated records the Discord id the live gateway got for a create, when the message is a
+// panel's: a later run's edit reaches it (the gateway's message map is in memory only). A failed
+// save leaves this run's edits working; the gateway logs it, and a restart posts anew.
+func (a *Adapter) panelCreated(messageID, discordID string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for ch, p := range a.panels {
+		if p.MessageID != messageID {
+			continue
+		}
+		p.DiscordID = discordID
+		a.panels[ch] = p
+		if a.cfg.SavePanel != nil {
+			return a.cfg.SavePanel(p)
+		}
+		return nil
+	}
+	return nil
+}
+
+// panelGone forgets the Discord message of a panel Discord no longer has (deleted by hand: an
+// edit answered Unknown Message), so the next `panel post` creates it anew; false when the
+// message is no panel's.
+func (a *Adapter) panelGone(messageID string) (bool, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for ch, p := range a.panels {
+		if p.MessageID != messageID {
+			continue
+		}
+		p.DiscordID = ""
+		a.panels[ch] = p
+		delete(a.posted, ch)
+		if a.cfg.SavePanel != nil {
+			return true, a.cfg.SavePanel(p)
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+// storedPanels is every panel the adapter knows, for the live gateway's message map.
+func (a *Adapter) storedPanels() []Panel {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := make([]Panel, 0, len(a.panels))
+	for _, p := range a.panels {
+		out = append(out, p)
+	}
+	return out
+}
+
+// PanelOf is the channel's panel, false when none was posted, in this run or one before.
 func (a *Adapter) PanelOf(channel string) (Panel, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

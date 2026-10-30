@@ -193,3 +193,47 @@ func socketOf(t *testing.T, run func(...string) clitest.Result) string {
 	r := run("status")
 	return strings.TrimSuffix(strings.TrimPrefix(r.Stderr, "error: not-running: no bot at "), "\n")
 }
+
+// TestPanelSurvivesRestart: `panel post` records the panel in the store, so after a restart
+// `panel show` prints the same message id and `panel post` edits it in the outbox instead of
+// creating a second (03, Configuration; P11 remainder, item 8).
+func TestPanelSurvivesRestart(t *testing.T) {
+	_, env := scratchEnv(t)
+	root, _ := scratchNew(t, env)
+	run := func(args ...string) clitest.Result {
+		return clitest.Run(t, env, append([]string{"--root", root}, args...)...)
+	}
+	serve := func() <-chan int {
+		_, exit := startServe(t, env, root)
+		if r := run("status", "--wait", "10", "--expect", "ok"); r.Code != 0 {
+			t.Fatalf("status: %d %q", r.Code, r.Stderr)
+		}
+		return exit
+	}
+	exit := serve()
+	want(t, run("panel", "show", "100"), 1, "", "error: no-panel: no panel posted in 100\n")
+	posted := run("panel", "post", "100")
+	id, _, _ := strings.Cut(strings.TrimPrefix(posted.Stdout, "100  "), "  ")
+	if posted.Code != 0 || !strings.HasPrefix(id, "m") {
+		t.Fatalf("panel post: %d %q %q", posted.Code, posted.Stdout, posted.Stderr)
+	}
+	want(t, run("stop"), 0, "stopped  0\n", "")
+	<-exit
+
+	exit = serve()
+	want(t, run("panel", "show", "100"), 0, posted.Stdout, "")
+	if r := run("panel", "post", "100"); r.Code != 0 || !strings.HasPrefix(r.Stdout, "100  "+id+"  ") {
+		t.Errorf("panel post after the restart: %d %q %q", r.Code, r.Stdout, r.Stderr)
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	out := ""
+	for !strings.Contains(out, "  edit  "+id+"  ") && time.Now().Before(deadline) {
+		time.Sleep(200 * time.Millisecond)
+		out = run("session", "outbox", "-", "--channel", "100").Stdout
+	}
+	if !strings.Contains(out, "  edit  "+id+"  ") || strings.Contains(out, "  create  ") {
+		t.Errorf("the panel after the restart is not one edit of %s:\n%s", id, out)
+	}
+	want(t, run("stop"), 0, "stopped  0\n", "")
+	<-exit
+}

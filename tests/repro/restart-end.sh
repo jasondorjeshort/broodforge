@@ -12,7 +12,8 @@
 # tree with the Haiku co-author trailer, and is interrupted by `stop`. The second `serve` holds
 # it: its stderr says `held  s0001`, its log opens with the restart, the venue gets the notice
 # with the tree's commit count, a message is refused with the interrupted text, and End session
-# hands it off and ends it with the summary, the lobby's copy and the transcript. Each serve's
+# hands it off (the venue's Ending line meanwhile) and ends it with the summary listing the commit,
+# the lobby's copy and the transcript. Each serve's
 # output is kept under the root (serve.log, serve2.log), which scratch run keeps on a failure.
 set -euo pipefail
 
@@ -100,6 +101,12 @@ outbox_has "$id" '"op":"create","session":"'"$id"'","channel":"'"$id"'","message
 outbox_has "$id" '"op":"create","session":"'"$id"'","channel":"100","messageId":"m[0-9]*","length":[0-9]*,"first":"Session '"$id"' ended by Ada Example' --json ||
 	fail "the lobby has no summary"
 outbox_has "$id" '"op":"attach","session":"'"$id"'","channel":"100",' --json || fail "the lobby's summary has no transcript"
+# While the handoff ran the venue said so, and that line went once the summary came (04, Ending a session).
+outbox_has "$id" '  create  m[0-9]*  [0-9]*  Ending: checking and handing off 1 commit\.\.\.$' ||
+	fail "session outbox has no Ending line with 1 commit"
+ending=$("$bf" session outbox "$id" --all | grep '  Ending: ' | awk '{print $4}')
+outbox_has "$id" "  delete  $ending  " || fail "the Ending line $ending was not deleted"
+outbox_has "$id" 'Commits: [0-9a-f]\{7\} Add hi\.txt' --json || fail "the summary does not list the commit's hash and subject"
 "$bf" session outbox "$id" --all
 
 # Ended now: end again is session-closed.

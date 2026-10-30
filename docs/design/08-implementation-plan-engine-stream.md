@@ -26,7 +26,7 @@ JSON `{"type":"rate-limit","status":..,"rateLimitType":..,"fiveHour":{"utilizati
 `DisallowUnknownFields`); `internal/engine/parse_test.go` (the line of `fixtures/engine/recorded-read/turn-1.jsonl`,
 `allowed_warning`, seven-day `0.68`, and one with no `unifiedWindows`); every `fixtures/engine/*/events-<n>.jsonl`
 regenerated (each changed line was an `unknown` whose `raw` began `{"type":"rate_limit_event"`, nothing else);
-`internal/store/migrations/0003-credential-meter.sql` (the ADR 0021 amendment's table: `credential_id`
+`internal/store/migrations/0004-credential-meter.sql` (the ADR 0021 amendment's table: `credential_id`
 primary key referencing `credential`, `seen_at`, `session_id`, `status`, `rate_limit_type`,
 `five_hour_utilization`, `five_hour_resets_at`, `seven_day_utilization`, `seven_day_resets_at`,
 `overage_status`, `is_using_overage`, the parsed values as read); `internal/store/` (the upsert and the

@@ -328,9 +328,13 @@ func startBot(env *Env) (*bot, error) {
 	b.wt = &WorktreeService{Root: root, Config: c, Current: b.config, Store: b.st, Audit: b.aud, Backend: b.backend,
 		Secret: b.creds.Secret}
 	// The Discord adapter without the gateway (P11): the service tells it of each new session.
+	panels, err := storedPanels(b.st)
+	if err != nil {
+		return fail(stepDiscord, err)
+	}
 	b.adapter = discord.New(discord.Config{Config: b.config, Channel: b.channel, DryRun: b.discord == config.DiscordDryRun,
 		Groups:      func() map[string][]string { return b.config().Instance.RoleGroups },
-		Credentials: discordCredentials{b.creds}})
+		Credentials: discordCredentials{b.creds}, Panels: panels, SavePanel: savePanel(b.st)})
 	if b.discord == config.DiscordLive {
 		// Step 9's first half: the token and the ids, before anything is served; Open connects.
 		if b.gateway, err = b.newGateway(env, keyPath); err != nil {

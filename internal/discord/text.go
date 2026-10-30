@@ -422,6 +422,9 @@ func summaryText(id string, end *session.EndInfo, ended time.Time) string {
 	switch {
 	case end.Outcome == "pull-request":
 		lines = append(lines, "Branch "+end.Branch+" -> pull request "+pullNumber(end.URL)+end.URL)
+		if end.Title != "" {
+			lines = append(lines, "Title: "+cutRunes(end.Title, summaryTitleRunes)) // not 04: 04 says the summary shows the title, not how
+		}
 	case end.Outcome == "pushed":
 		lines = append(lines, "Branch "+end.Branch+" -> pushed") // not 04
 	case end.Outcome == session.OutcomeTreeMissing:
@@ -434,8 +437,12 @@ func summaryText(id string, end *session.EndInfo, ended time.Time) string {
 	default:
 		lines = append(lines, "Branch "+end.Branch+" -> not handed off ("+end.Outcome+")") // not 04
 	}
-	if end.Commits != session.CommitsUnknown { // an escape's count is not known: no line
-		lines = append(lines, "Commits: "+strconv.Itoa(end.Commits)) // not 04: 04 lists each commit's hash and subject
+	switch {
+	case len(end.Log) > 0:
+		lines = append(lines, commitsLine(end.Log))
+	case end.Commits != session.CommitsUnknown: // an escape's count is not known: no line
+		// not 04: a handoff that did not read its commits (refused before the check) has the count only.
+		lines = append(lines, "Commits: "+strconv.Itoa(end.Commits))
 	}
 	co := "none" // not 04
 	if len(end.CoAuthors) > 0 {
@@ -443,6 +450,52 @@ func summaryText(id string, end *session.EndInfo, ended time.Time) string {
 	}
 	lines = append(lines, "Author: "+end.Author+". Co-authors: "+co+".", "Unmerged subagent branches removed: none.")
 	return strings.Join(lines, "\n")
+}
+
+// The summary's bounds, so it stays one message: the commits listed, each subject's length, and
+// the title's.
+const (
+	summaryCommits      = 10
+	summarySubjectRunes = 72
+	summaryTitleRunes   = 200
+)
+
+// commitsLine is 04's `Commits: a1b2c3d Add config reload · 9f8e7d6 Test last-good fallback`:
+// each commit's short hash and subject, oldest first. not 04: past summaryCommits the rest are
+// counted (` · and 4 more`), and a subject past summarySubjectRunes is cut with `...`.
+func commitsLine(log []session.CommitLine) string {
+	parts := make([]string, 0, min(len(log), summaryCommits)+1)
+	for i, c := range log {
+		if i == summaryCommits {
+			parts = append(parts, "and "+strconv.Itoa(len(log)-summaryCommits)+" more")
+			break
+		}
+		hash := c.Hash
+		if len(hash) > 7 {
+			hash = hash[:7]
+		}
+		parts = append(parts, hash+" "+cutRunes(c.Subject, summarySubjectRunes))
+	}
+	return "Commits: " + strings.Join(parts, " · ")
+}
+
+// cutRunes is s cut to n runes, the cut marked `...`.
+func cutRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n-3]) + "..."
+}
+
+// endingText is 04's line while the end's handoff runs (Ending a session): `Ending: checking
+// and handing off 3 commits...`. not 04: `the commits` when the count could not be read.
+func endingText(commits *int) string {
+	what := "the commits"
+	if commits != nil {
+		what = plural(*commits, "commit", "commits")
+	}
+	return "Ending: checking and handing off " + what + "..."
 }
 
 // pullNumber is `#42 ` from a pull request URL ending in /pull/42, "" otherwise.

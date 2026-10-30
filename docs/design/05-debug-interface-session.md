@@ -153,7 +153,8 @@ blocked, bypassed or failed), `waiting-for-answer` (`<tool use id> [<tool>] <tar
 `mode-changed` (04's `From the next turn: asks first.` or `acts freely.`), `model-changed` and
 `effort-changed` (04's `From the next turn: Sonnet.`, `From the next turn: effort high.`),
 `timeout-changed` (04's `Ends after <n> without activity.` or `Never ends for inactivity.`), `turn-ended` (the stop
-reason, or `interrupted`), `handoff-refused`, `session-ended` (`Session <id> ended by <name>.`, or
+reason, or `interrupted`), `handoff-refused`, `session-ending` (`<n> commits`, `1 commit` or `commits unknown`:
+the tree's count over its base as the handoff starts), `session-ended` (`Session <id> ended by <name>.`, or
 04's `Session <id> ended: no activity for <n>.`), `session-interrupted`. A decision row's
 decider is `policy` (the hook answered from the table; also the `deferred` row, and the `dropped`
 row of every other call of that message, C28), `participant` or `prompt-timeout` (an answer),
@@ -186,11 +187,12 @@ reach. P11 (the renderer, `05-debug-interface-discord.md`, which has the detail)
 <id> [--follow]` prints the dry-run renderer's posts: `<seq>  <time>  channel|create|edit|delete|attach
 <message id>  <length>  <first line>`, `--json` with the full body; `session transcript <id> [--out
 <file>]` prints 04's Markdown transcript as the summary would attach it; `broodforge panel post
-<channel id>` posts or refreshes the project channel's panel (04) and keeps its message id in the
-bot's memory (a store record is later), which `panel show <channel id>` prints back; on a dry-run
+<channel id>` posts or refreshes the project channel's panel (04) and records its message id in the
+store's `panel` table, loaded at start, which `panel show <channel id>` prints back; on a dry-run
 instance it lands in the outbox.
 Observe. `session show`, `session tail --json` (every field: tool, target, decision, decided by,
-reason, result), `audit --kind permission-decision --session <id>`, the fake's
+reason, result; `commits` on `session-ending`, absent when unknown; `end.log`, each handed-off commit's
+`hash` and `subject`, and `end.title`, the pull request's, on `session-ended`), `audit --kind permission-decision --session <id>`, the fake's
 `sessions/<id>/fake/received-<n>.json` (the exact `TurnRequest`, plus `args`, the flags it sets
 on the real engine: `--append-system-prompt-file <root>/workflow/<id>/instructions.md` always,
 `--agents <root>/workflow/<id>/agents.json` when the copy has agents, never

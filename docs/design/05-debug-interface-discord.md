@@ -44,7 +44,9 @@ that starts one renderer per session, following its events from the first; every
 through the outbound mask, then one coalescer for the bot, then the outbox. The wording is
 `04-ux.md`'s, built in one file (`internal/discord/text.go`; the no-answer trace phrase is
 `session.NoAnswerCause`, shared with `session tail`), where a string 04 does not give
-word for word is marked `not 04:`.
+word for word is marked `not 04:`. Interim, the owner's review pending: `Ending: checking and
+handing off the commits...` (count unknown), the summary's `Title: <title>`, its commit list
+capped at ten then ` · and <n> more`, and a subject or title cut with `...`.
 
 Drive. `broodforge discord render --events <jsonl> [--clock fake|real] [--expect <token>]`
 (standalone, no root) reads `session tail --json` lines, each with an optional `"session"` key
@@ -69,8 +71,12 @@ custom id, since the key comes back only through the live modal. It prints `ephe
 `live-instance`, a bad custom id, shown only by its length and prefix) are audited
 `action-refused` like the service's. `--roles` stands in for the guild lookup and is always
 checked (none given is no roles). `broodforge panel post <channel id>` posts the panel with its
-`Start session` button (`bf:<channel>:start`), a second post edits it; `panel show <channel id>`
-prints `<channel>  <message id>  <posted at>` from the bot's memory (`no-panel` before a post).
+`Start session` button (`bf:<channel>:start`), a second post edits it, after a restart too; `panel
+show <channel id>` prints `<channel>  <message id>  <posted at>` from the store's `panel` table,
+loaded at start (`no-panel` before a post); a live create also records the message's Discord id
+there, so a restarted live bot edits that message (one with no Discord id is posted anew), and on a
+live instance `panel post --json` and `panel show --json` carry it as `discordMessageId`. An edit
+Discord answers Unknown Message (the panel deleted by hand) clears that id, so the next post creates it anew.
 Observe. `session outbox <id> [--channel <id>] [--follow] [--since <seq>] [--limit <n>|--all]`
 (the bot's memory, `not-running` without it) prints `<seq>  <time>  channel|create|edit|delete|attach
 <message id>  <length>  <first line>`: `channel` creates the venue (`#s0001-<first name>`),

@@ -439,6 +439,7 @@ func (s *Service) end(ctx context.Context, l *live, actor, who, reason, summary 
 		}
 	}
 	if s.cfg.Handoff != nil {
+		s.ending(ctx, l)
 		out, err := s.cfg.Handoff(ctx, l.id)
 		if err != nil {
 			var ge *git.Error
@@ -475,6 +476,25 @@ func (s *Service) end(ctx context.Context, l *live, actor, who, reason, summary 
 	out.Outcome = git.OutcomeNone
 	s.closeSession(l, actor, reason, before, out.Outcome, summary, out, who)
 	return out, nil
+}
+
+// ending publishes session-ending before the handoff runs: the tree's commit count over its base
+// through Config.Commits, nil when there is none or it cannot be read.
+func (s *Service) ending(ctx context.Context, l *live) {
+	var n *int
+	if s.cfg.Commits != nil {
+		if c, err := s.cfg.Commits(ctx, l.id); err == nil {
+			n = c
+		}
+	}
+	summary := "commits unknown"
+	if n != nil {
+		summary = strconv.Itoa(*n) + " commits"
+		if *n == 1 {
+			summary = "1 commit"
+		}
+	}
+	l.log.add(Event{Time: s.stamp(), Type: EventSessionEnding, Summary: summary, Commits: n})
 }
 
 // OutcomeTreeMissing is the end of a held session whose tree is gone while refs/sessions/<id> is
@@ -722,11 +742,19 @@ func (s *Service) endInfo(l *live, reason, outcome string, out git.Outcome, by s
 	info := &EndInfo{By: by, Reason: reason, StartedAt: l.startedAt, Turns: l.turn, In: l.sessIn, Out: l.sessOut,
 		Model: topModel(l.sessionModels, l.model), Branch: l.git.Branch(), Outcome: outcome, Commits: out.Commits,
 		Author: l.driver.Name, CoAuthors: []string{}}
+	// The opened request's web URL (04's `pull request #42 <url>`); before it opens, as on a
+	// failed request, the API URL it was posted to.
 	switch {
-	case out.Request != nil:
-		info.URL = out.Request.URL
 	case out.URL != nil:
 		info.URL = *out.URL
+	case out.Request != nil:
+		info.URL = out.Request.URL
+	}
+	if out.Request != nil {
+		info.Title = out.Request.Body.Title
+	}
+	for _, c := range out.Log {
+		info.Log = append(info.Log, CommitLine{Hash: c.Hash, Subject: c.Subject})
 	}
 	lines, err := s.trailers(l)
 	if err == nil {

@@ -120,6 +120,8 @@ func Transcript(id string, events []session.Event, who func(user string) string)
 			session.EventMessageDropped, session.EventHandoffRefused:
 			blank()
 			line("_" + ev.Time + "_ " + ev.Summary)
+		case session.EventSessionEnding:
+			// The venue's `Ending:` line is deleted when the summary comes; the summary stands for it.
 		case session.EventSessionEnded:
 			blank()
 			line("## Ended · " + ev.Time)

@@ -65,7 +65,7 @@ func TestProofScratchNewCheckRehearseDelete(t *testing.T) {
 		t.Fatalf("snapshot: exit %d stdout %q stderr %q", r.Code, r.Stdout, r.Stderr)
 	}
 	r := clitest.Run(t, env, "--root", root, "backup", "rehearse", "--expect", "ok")
-	if r.Code != 0 || !strings.HasPrefix(r.Stdout, "ok\nmigration  2\naudit_event  1\ncredential  1\n") || !strings.Contains(r.Stdout, "\nregistration  0\n") ||
+	if r.Code != 0 || !strings.HasPrefix(r.Stdout, "ok\nmigration  3\naudit_event  1\ncredential  1\n") || !strings.Contains(r.Stdout, "\nregistration  0\n") ||
 		!strings.HasSuffix(r.Stdout, "worktree  0\nreconcile  0 missing\n") || r.Stderr != "" {
 		t.Errorf("rehearse: exit %d stdout %q stderr %q", r.Code, r.Stdout, r.Stderr)
 	}

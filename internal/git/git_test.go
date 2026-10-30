@@ -180,6 +180,10 @@ func TestHandoffPush(t *testing.T) {
 	if out.Outcome != git.OutcomePushed || out.Commits != 1 || !out.Removed || out.Refspec != "refs/sessions/s0001:refs/heads/broodforge/test/s0001" {
 		t.Errorf("outcome %+v", out)
 	}
+	// The summary's commit list: each hash and subject, oldest first (04, Ending a session).
+	if want := []git.CommitLine{{Hash: head, Subject: "one"}}; !reflect.DeepEqual(out.Log, want) {
+		t.Errorf("log %+v, want %+v", out.Log, want)
+	}
 	if got := strings.TrimSpace(gittest.Git(t, f.remote, "rev-parse", "broodforge/test/s0001")); got != head {
 		t.Errorf("remote branch %q, want %q", got, head)
 	}
