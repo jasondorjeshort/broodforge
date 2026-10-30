@@ -6,7 +6,7 @@ Updated: 2026-10-30 by main session (P28, P32 and its dev-read golden built and 
 ## Now
 
 - Account `jdorje`. Ahead of `origin/main`, each reviewed: the channel-200 credential doc fix
-  (`4d15450`), P28 (`cb1047c`), P32 (`73986be`), ideas, the `dev-read` golden (`74a1287`, on the
+  (`4d15450`), P28 (`cb1047c`), P32 (`560ab29`), ideas, the `dev-read` golden (`97e5542`, on the
   owner's word after the independent read), this handoff. Push on request.
 - Dev instance: `%LOCALAPPDATA%\Broodforge\dev`, dry-run for good, bot stopped, store at schema 4, dev
   credential `cred-2ha7apqowv` usable; channel 200 as the owner, or `--credential <dev>`. The three
