@@ -1,40 +1,40 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-26 by main session (P20 spike run, W6 open; Go installed; pushed; day's end)
+Updated: 2026-10-30 by main session (triage wave; W6 re-run script; HOLD-wait rule in Hatchery)
 
 ## Now
 
-- Pushed through `c3ecb62` (ADR 0027, P20-P22, P24, companions, P20 verdicts, Go reference), each
-  reviewed. Go is installed; check, test and hook suites all pass. This clone lacked the `hatchery`
-  remote, which turned hook case O1 red; the owner added it (carry-back idea filed).
-- P20 spike run by the owner: every claim holds but W6's last step (`Start-ScheduledTask` never
-  started the task, 0x41303; cause unknown) and the unreported console row. P23 waits on W6.
+- Account `jdorje`. 23 reviewed commits ahead of `origin/main`, unpushed: the 2026-10-29 triage (20
+  blocks, the ADR 0027 prediction idea, review fixes) and the W6 re-run script (`9437a94`).
+- `../hatchery` holds `8d6ee28` on `main`, reviewed, unpushed (last fetch 2026-10-29): the owner's
+  decision that a session-meter HOLD is waited out (Hatchery ADR 0022). This clone's base line is
+  `dc896c3`; `update-from-hatchery` after that push brings the rule here.
 
 ## Next
 
-1. Coder: W6 per the P20 finding's Next (read back the task, a trigger `Start-ScheduledTask`
-   honours, `schtasks /run`), then an owner re-run of the spike. Then P23: coder.
-2. Hatchery's coordinator files the 2026-10-26 O1 idea (no diff) as a Hatchery idea.
-3. P25 `setup login` (after P23); P26 Linux on the Ubuntu VM then the droplet (held with P14).
-4. Tester: the repro needs `</dev/null` (it reads stdin to EOF); triage the 2026-10-23 and 2026-10-24
-   ideas and the 2026-10-26 `goLive` idea (after a role timeout; needs a test).
-5. Earlier queue: s000a post-mortem Next; milestone 1 blocker (`engine run --real`, prompt mode,
-   subagents); s0008's open items; the last-good cold start; the net-diff finding; carry-backs.
+1. Dev instance on the PC (none exists; `status` fails for want of a root): architect, one short
+   sitting on `05-debug-interface.md` (a kept root under the owner's account, `discord.mode` dry-run,
+   the owner's subscription via `credential login`, the real engine, a project `run` skill); then coder.
+2. W6: the owner re-runs `spike/setup-host/` (README, three steps, five minutes) and pastes the lines;
+   the coordinator records the result in the finding; then P23 (coder), owner steps, P25.
+3. Plans ready. `tester`: goLive after a role timeout; importfixture home form; the `auto` spike.
+   `coder`: p11 remainder; the three p10 remainders; Git Bash stayed waiting (repro first).
+4. Architect sitting: the four amendments (rate-limit kind, unknown-event shrink, stale canonical,
+   committer time), the ADR 0027 prediction, go-rules lint, `serve --trace`, a milestones table in 08.
+5. Hatchery sitting: push `8d6ee28`; `carry-back` Send for the five Plan carry-backs; file the two
+   Hatchery ideas (git-guard scope by location, O1 lift); `update-from-hatchery` here.
 
 ## Waiting on user
 
-- P20: whether a console window appeared on the desktop during `run.ps1` (at the W6 re-run).
-- Texts the passes added (see `05-debug-interface-setup.md`): the `fix token` portal line, the
-  `fix application` intent line, the role-above-the-bot and Administrator lines, the channels-wait
-  and guild-picker prompts, the `mismatch-config` export message, the invite and closing line
-  prefixes, the `socket-path`, `live-instance` and `bad-config` texts; and `next` says "the bot is
-  running" before P23 starts one.
+- Push: "push both" pushes Hatchery `8d6ee28` and this clone's 23 commits (pusher, fresh each).
+- W6: whether a console window appeared on the desktop during the first `run.ps1`.
+- Nine `Question:` blocks in `docs/ideas/`, each with a recommendation; seven are from 2026-10-29.
+- Setup texts (`05-debug-interface-setup.md`): `fix token`, `fix application`, role, Administrator,
+  channels-wait, guild-picker, `mismatch-config`, invite, closing, `socket-path`, `bad-config`.
 - Earlier: the `pre-push` line (P15); P12a wording; "Never ends for inactivity."; the switch post;
   the hook no-answer phrase; R-17; `Waits:` blocks; commit name and email; `C:\elsewhere` to delete.
 
 ## Open findings
 
-- `docs/findings/2026-10-26-spike-windows-setup-host-claims.md` (W6 open; Next 1)
-- `docs/findings/2026-10-24-interrupted-session-cannot-be-ended-after-a-restart.md`; `2026-10-24-s000a-post-mortem-*.md`, `2026-10-24-background-subagents-*.md`, `2026-10-24-session-friction-*.md`; `2026-10-23-subagents-in-a-session-end-before-writing.md`, `...-first-live-*.md`
-- `docs/findings/2026-10-17-net-diff-privacy-scan-let-named-commits-go-public.md`; `2026-10-15-spike-*.md` (droplet open); `2026-10-16-prior-art-chat-front-ends-for-coding-agents.md`
+Thirteen (`node .claude/hooks/queue-list.js findings --status open`). Live: `docs/findings/2026-10-26-spike-windows-setup-host-claims.md` (Next 2); the 2026-10-23 and 2026-10-24 session findings (s000a, s0008 items); `2026-10-17-net-diff-privacy-scan-let-named-commits-go-public.md` (owner).
