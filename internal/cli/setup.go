@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jasondorjeshort/broodforge/internal/config"
 	"github.com/jasondorjeshort/broodforge/internal/control"
 	"github.com/jasondorjeshort/broodforge/internal/discord"
 	"github.com/jasondorjeshort/broodforge/internal/setup"
@@ -19,7 +20,7 @@ import (
 
 // setupCmd is `broodforge setup [<step>] [--root <path>] [--instance <name>] [--repo <url>]
 // [--project <id>] [--guild <id>] [--channels yes|no] [--create-role yes|no] [--role <name>]
-// [--from <export>] [--check] [--yes] [--wait <seconds>] [--json]` (ADR 0027; the companion
+// [--from <export>] [--discord live|dry-run] [--check] [--yes] [--wait <seconds>] [--json]` (ADR 0027; the companion
 // decisions/0027-setup-commands.md; 05-debug-interface-setup.md): one `ok`, `skip` or `fix`
 // line per step, exit 0, 1 (one stderr `error: <code>: ...` line) or 2. It is standalone: with
 // no --root and no BROODFORGE_ROOT the default root applies (05-cli-conventions.md, the
@@ -38,6 +39,7 @@ var setupCmd = Command{
 		{Name: "create-role", Kind: FlagString, Value: "yes|no", Usage: "let setup create the role (default yes)"},
 		{Name: "role", Kind: FlagString, Default: "Trusted", Value: "<name>", Usage: "the role setup looks up or creates"},
 		{Name: "from", Kind: FlagString, Value: "<export>", Usage: "a config export to start from"},
+		{Name: "discord", Kind: FlagString, Default: "live", Value: "live|dry-run", Usage: "dry-run calls no Discord and writes the development placeholders"},
 		{Name: "check", Kind: FlagBool, Usage: "report every step; change, bind and poll nothing"},
 		{Name: "yes", Kind: FlagBool, Usage: "take every shown default; refuse where there is none"},
 		{Name: "wait", Kind: FlagInt, Default: "900", Value: "<seconds>", Usage: "the bound on every poll; 0 is unbounded"},
@@ -58,6 +60,14 @@ func runSetup(ctx context.Context, env *Env) error {
 			return &usageError{"setup: --" + f + " " + strconv.Quote(v) + ": want yes or no"}
 		}
 	}
+	dryRun := false
+	switch v := env.String("discord"); v {
+	case config.DiscordLive, "":
+	case config.DiscordDryRun:
+		dryRun = true
+	default:
+		return &usageError{"setup: --discord " + strconv.Quote(v) + ": want live or dry-run"}
+	}
 	if env.Int("wait") < 0 {
 		return &usageError{"setup: --wait must be 0 or more"}
 	}
@@ -72,14 +82,17 @@ func runSetup(ctx context.Context, env *Env) error {
 	o := setup.Options{Root: env.Root, Instance: env.String("instance"), Repo: env.String("repo"),
 		Project: env.String("project"), Step: step, Check: env.Bool("check"), Yes: env.Bool("yes"), JSON: env.JSON,
 		Wait: time.Duration(env.Int("wait")) * time.Second, Guild: env.String("guild"), Channels: env.String("channels"),
-		CreateRole: env.String("create-role"), Role: env.String("role"), From: env.String("from")}
+		CreateRole: env.String("create-role"), Role: env.String("role"), From: env.String("from"), DryRun: dryRun}
 	// paths.install is written empty: the binary's parent directory, as the template says, never
 	// a checkout or temporary directory the binary happened to run from.
 	se := setup.Env{Stdin: env.Stdin, Stdout: env.Out.w, Stderr: env.Stderr, TTY: tty, EchoOff: echoOff,
 		LookupEnv: os.LookupEnv, LookPath: exec.LookPath, Checks: setupChecks, Discord: discord.NewSetupAPI}
 	// The scripted Discord for the repro script and the Proof (05-debug-interface-setup.md):
-	// setup refuses it live-instance on a live root.
-	if script := os.Getenv(FakeDiscordEnv); script != "" {
+	// setup refuses it live-instance on a live root. --discord dry-run calls no Discord, so the
+	// script is not read (dry-run wins).
+	if dryRun {
+		se.Discord = nil
+	} else if script := os.Getenv(FakeDiscordEnv); script != "" {
 		fake, err := discord.LoadFakeSetup(script)
 		if err != nil {
 			return control.NewError("bad-args", FakeDiscordEnv+": "+control.OneLine(err.Error()))

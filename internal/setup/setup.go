@@ -111,6 +111,9 @@ type Options struct {
 	// From is --from: a config export (config.Export) imported before the steps, absent keys
 	// only, its copy kept at <root>/data/config-export.json.
 	From string
+	// DryRun is --discord dry-run (decisions/0027-setup-commands.md, The dry-run form): the five
+	// Discord steps call nothing and write the development placeholders; Env.Discord is unused.
+	DryRun bool
 }
 
 // Echo is one line of a command the check step runs in process (config check, spawn
@@ -154,7 +157,8 @@ type Env struct {
 	Install string
 	// Discord builds the Discord calls over a bot token, for one step: discord.NewSetupAPI, or
 	// the scripted fake's API. nil leaves Discord out of the run: the five Discord steps print
-	// `skip  <step>  no Discord`, for the tests of the other steps.
+	// `skip  <step>  no Discord`, for the tests of the other steps (Options.DryRun sets it nil
+	// and writes the dry-run form instead).
 	Discord func(token string) (discord.SetupAPI, error)
 	// FakeDiscord marks Discord as the scripted fake (BROODFORGE_SETUP_FAKE_DISCORD): refused
 	// live-instance on a live root, and discord.mode is left dry-run.
@@ -170,6 +174,10 @@ const pollEvery = 2 * time.Second
 func Run(ctx context.Context, o Options, env Env) error {
 	if env.Clock == nil {
 		env.Clock = RealClock
+	}
+	if o.DryRun {
+		// dry-run wins over a scripted Discord: nothing Discord is called.
+		env.Discord, env.FakeDiscord = nil, false
 	}
 	steps := Steps()
 	if o.Step != "" {
@@ -189,7 +197,7 @@ func Run(ctx context.Context, o Options, env Env) error {
 	if err := s.resolve(); err != nil {
 		return err
 	}
-	if env.FakeDiscord {
+	if env.FakeDiscord || o.DryRun {
 		// An instance file that cannot be read cannot show the root is not live: refused. With
 		// no instance file, the export --from would import is the instance.
 		inst, err := s.instanceDoc()
@@ -200,6 +208,9 @@ func Run(ctx context.Context, o Options, env Env) error {
 			inst = s.from.Instance
 		}
 		if inst != nil && inst.String("discord", "mode") == config.DiscordLive {
+			if o.DryRun {
+				return control.NewError(CodeLiveInstance, "--discord dry-run is refused on a live instance")
+			}
 			return control.NewError(CodeLiveInstance, "the scripted Discord (BROODFORGE_SETUP_FAKE_DISCORD) is refused on a live instance")
 		}
 	}

@@ -64,7 +64,7 @@ run's `serve-<stamp>.log` for the start-up lines and warnings; `credential list`
 credential's `usable`; `register list` for the owner's registration beside `1001`.
 
 Reproduce. The whole loop on a temporary root, no owner, no plan spent: `bash
-tests/repro/dev-instance.sh` [no-check: written by P27] makes a dry-run root under the OS temp
+tests/repro/dev-instance.sh` makes a dry-run root under the OS temp
 directory with a generated instance name, runs the round trip on channel `100`, reruns `setup`
 (only `ok` and `skip`), turns the root live against the scripted Discord
 (`BROODFORGE_SETUP_FAKE_DISCORD`) and shows the placeholders replaced, then removes the root. On

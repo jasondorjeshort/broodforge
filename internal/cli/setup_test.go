@@ -19,6 +19,7 @@ import (
 
 	"github.com/jasondorjeshort/broodforge/internal/cli"
 	"github.com/jasondorjeshort/broodforge/internal/cli/clitest"
+	"github.com/jasondorjeshort/broodforge/internal/config"
 	"github.com/jasondorjeshort/broodforge/internal/discord"
 	"github.com/jasondorjeshort/broodforge/internal/git/gittest"
 	"github.com/jasondorjeshort/broodforge/internal/spawn/spawntest"
@@ -335,4 +336,91 @@ func readTree(t *testing.T, dir string) string {
 		t.Fatal(err)
 	}
 	return b.String()
+}
+
+// setKeyCLI sets one key of a config file of root, as the owner's hand edit.
+func setKeyCLI(t *testing.T, root, file, value string, path ...string) {
+	t.Helper()
+	p := filepath.Join(root, "config", file)
+	d, _, err := config.ReadDoc(p)
+	if err != nil || d == nil {
+		t.Fatalf("read %s: %v", p, err)
+	}
+	if err := d.Set("", []byte(value), path...); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.WriteDoc(p, d); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestProofSetupDryRun is P27's flag on the built binary: a value outside live|dry-run is a
+// usage error; under dry-run BROODFORGE_SETUP_FAKE_DISCORD is not read (a script that does not
+// parse is no refusal); --check --discord dry-run prints the form's fix lines; setup <step>
+// takes the flag.
+func TestProofSetupDryRun(t *testing.T) {
+	w := newSetupWorld(t)
+	root := w.seeded(t, "d")
+
+	r := w.run(t, "setup", "--discord", "bogus", "--yes", "--root", root)
+	if r.Code != 2 || !strings.HasPrefix(r.Stderr, `error: usage: setup: --discord "bogus": want live or dry-run`) {
+		t.Errorf("--discord bogus: exit %d %q", r.Code, r.Stderr)
+	}
+
+	// A script that does not parse: refused bad-args when read, so a pass proves it unread.
+	bad := filepath.Join(w.dir, "not-a-script.json")
+	if err := os.WriteFile(bad, []byte("not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w.env = append(w.env, cli.FakeDiscordEnv+"="+bad)
+	r = w.run(t, "setup", "--check", "--root", root)
+	if r.Code != 1 || !strings.HasPrefix(r.Stderr, "error: bad-args: "+cli.FakeDiscordEnv+": ") {
+		t.Fatalf("the bad script without dry-run: exit %d %q", r.Code, r.Stderr)
+	}
+
+	// --check --discord dry-run before setup: fix lines, the dry-run next.
+	r = w.run(t, "setup", "--check", "--discord", "dry-run", "--root", root, "--repo", w.repo)
+	if r.Code != 1 || !strings.HasPrefix(r.Stderr, "error: check-failed: ") ||
+		!strings.Contains(r.Stdout, "skip  token  dry-run\n") || !strings.Contains(r.Stdout, "fix  next  run broodforge setup --discord dry-run\n") {
+		t.Errorf("--check --discord dry-run: exit %d %q\n%s", r.Code, r.Stderr, r.Stdout)
+	}
+
+	full := []string{"setup", "--discord", "dry-run", "--yes", "--root", root, "--instance", w.instance, "--repo", w.repo, "--wait", "1"}
+	r = w.run(t, full...)
+	if r.Code != 0 {
+		t.Fatalf("setup --discord dry-run: exit %d %s\n%s", r.Code, r.Stderr, r.Stdout)
+	}
+	for _, l := range []string{"skip  token  dry-run", "skip  application  dry-run", "skip  guild  dry-run", "ok  role  dry-run 10"} {
+		if !strings.Contains(r.Stdout, l+"\n") {
+			t.Errorf("no %q:\n%s", l, r.Stdout)
+		}
+	}
+	if !strings.Contains(r.Stdout, "ok  channels  dry-run 100 fake, 200 claude-code; fixtures ") {
+		t.Errorf("no dry-run channels line:\n%s", r.Stdout)
+	}
+
+	// The placeholders removed by hand: --check names the form's two fix texts.
+	setKeyCLI(t, root, "projects/demo.json", "{}", "channels")
+	setKeyCLI(t, root, "instance.json", "[]", "roleGroups", "trusted")
+	r = w.run(t, "setup", "--check", "--discord", "dry-run", "--root", root)
+	for _, l := range []string{"fix  channels  the dry-run channels are not configured; run setup --discord dry-run",
+		"fix  role  roleGroups.trusted is not set; run setup --discord dry-run", "fix  next  run broodforge setup --discord dry-run"} {
+		if !strings.Contains(r.Stdout, l+"\n") {
+			t.Errorf("--check: no %q:\n%s", l, r.Stdout)
+		}
+	}
+	if r.Code != 1 || !strings.HasPrefix(r.Stderr, "error: check-failed: channels role next") {
+		t.Errorf("--check: exit %d %q", r.Code, r.Stderr)
+	}
+
+	// setup <step> --discord dry-run writes that step's placeholders alone.
+	for _, step := range []string{"channels", "role"} {
+		r = w.run(t, "setup", step, "--discord", "dry-run", "--yes", "--root", root)
+		if r.Code != 0 || len(firstColumns(r.Stdout)) != 1 || firstColumns(r.Stdout)[0] != "ok "+step {
+			t.Errorf("setup %s --discord dry-run: exit %d %s\n%s", step, r.Code, r.Stderr, r.Stdout)
+		}
+	}
+	if r := w.run(t, "setup", "--check", "--discord", "dry-run", "--root", root); r.Code != 0 {
+		t.Errorf("--check after setup <step>: exit %d %s\n%s", r.Code, r.Stderr, r.Stdout)
+	}
 }

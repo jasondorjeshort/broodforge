@@ -21,6 +21,31 @@ import (
 // the OS user names are never literals, and the project's name is in every import path.
 var SetupAllow = []string{"broodforge", "broodforge-engine"}
 
+// DryRunChannel is one channel of setup's dry-run form: its id and harness.
+type DryRunChannel struct {
+	ID      string
+	Harness string
+}
+
+// The development placeholders (decisions/0027-setup-commands.md, The dry-run form): the
+// channels `setup --discord dry-run` writes, 100 for the fake and 200 for the real engine, and
+// the trusted role 10. They are the scratch template's ids too, and never Discord's (a snowflake
+// has 17 digits or more), which is how a `--discord live` run tells them from the owner's.
+var DryRunChannels = []DryRunChannel{{ID: "100", Harness: HarnessFake}, {ID: "200", Harness: HarnessClaudeCode}}
+
+// PlaceholderRole is the dry-run form's trusted role id.
+const PlaceholderRole = "10"
+
+// PlaceholderChannel reports whether id is one of DryRunChannels.
+func PlaceholderChannel(id string) bool {
+	for _, c := range DryRunChannels {
+		if c.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // SetupOptions are what the instance template needs from setup.
 type SetupOptions struct {
 	InstanceName string

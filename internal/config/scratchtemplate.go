@@ -15,7 +15,8 @@ import (
 // The scratch configuration (05-cli-conventions.md, Scratch): dry-run Discord, the fake
 // harness reading the repository's fixtures/engine/, the same-account backend, the store key
 // under the root, and one project `scratch` with channel 100 (code reach, prompt mode) and
-// channel 200 (read-only reach, policy mode), both open to group `trusted` (role 10).
+// channel 200 (read-only reach, policy mode), both open to group `trusted` (role 10): the ids
+// of setuptemplate.go's DryRunChannels and PlaceholderRole.
 
 // ScratchKeyFile is a scratch root's credentials.keyFile, relative to the root, so a scratch
 // run never names the owner's key (BROODFORGE_KEY_FILE is ignored on a scratch root).
@@ -44,7 +45,7 @@ func ScratchTemplate(o ScratchOptions) (Instance, Project) {
 		Engine:        Engine{FakeFixtures: &fixtures},
 		Spawn:         Spawn{Backend: BackendSameAccount},
 		Paths:         Paths{Install: filepath.ToSlash(o.Install)},
-		RoleGroups:    map[string][]string{"trusted": {"10"}},
+		RoleGroups:    map[string][]string{"trusted": {PlaceholderRole}},
 		Defaults:      Defaults{IdleTimeoutMinutes: 0, PromptTimeoutMinutes: 0, Mode: ModePrompt, Harness: HarnessFake},
 	}
 	roles := Roles{Start: []string{"trusted"}, Contribute: []string{"trusted"}, Answer: []string{"trusted"}}
@@ -55,8 +56,8 @@ func ScratchTemplate(o ScratchOptions) (Instance, Project) {
 			DefaultBranch: o.DefaultBranch},
 		Handoff: HandoffPush,
 		Channels: map[string]Channel{
-			"100": {Reach: ReachCode, Roles: roles, Mode: &prompt},
-			"200": {Reach: ReachReadOnly, Roles: roles, Mode: &policy},
+			DryRunChannels[0].ID: {Reach: ReachCode, Roles: roles, Mode: &prompt},
+			DryRunChannels[1].ID: {Reach: ReachReadOnly, Roles: roles, Mode: &policy},
 		},
 	}
 	return inst, proj

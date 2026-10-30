@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -44,6 +46,8 @@ const (
 	textIntent       = "in the Developer Portal, Bot, switch on Message Content Intent; setup is waiting"
 	textChannelsWait = "create the category Sessions and the text channels #%s and #%s-notices, or rerun with --channels yes; setup is waiting"
 	textNoDiscord    = "no Discord"
+	textDryRun       = "dry-run"
+	textNoFixtures   = "build the binary in a checkout: no fixtures/engine beside bin/"
 	categoryName     = "Sessions"
 	defaultRole      = "Trusted"
 )
@@ -166,6 +170,9 @@ func (s *State) tryToken(ctx context.Context, token string) (discord.SetupApp, e
 // a stored token Discord refuses is replaced in the run (a new id, the old one removed).
 func stepToken(ctx context.Context, s *State) (Line, error) {
 	const step = "token"
+	if s.opt.DryRun {
+		return skip(step, textDryRun), nil
+	}
 	if s.env.Discord == nil {
 		return skip(step, textNoDiscord), nil
 	}
@@ -302,6 +309,9 @@ func (s *State) newToken(ctx context.Context, inst *config.Doc, old string, ask 
 // 1<<19 is set; a refused PATCH waits for the owner's switch in the portal.
 func stepApplication(ctx context.Context, s *State) (Line, error) {
 	const step = "application"
+	if s.opt.DryRun {
+		return skip(step, textDryRun), nil
+	}
 	if s.env.Discord == nil {
 		return skip(step, textNoDiscord), nil
 	}
@@ -396,6 +406,9 @@ func (s *State) roleAnswer(ask bool) (bool, error) {
 // several; in none, the role question, then the invite link and a poll until the bot joins.
 func stepGuild(ctx context.Context, s *State) (Line, error) {
 	const step = "guild"
+	if s.opt.DryRun {
+		return skip(step, textDryRun), nil
+	}
 	if s.env.Discord == nil {
 		return skip(step, textNoDiscord), nil
 	}
@@ -551,6 +564,9 @@ func dropChannel(pdoc *config.Doc, id string) error {
 // venue.category, channels.<lobby id> and discord.noticeChannelId.
 func stepChannels(ctx context.Context, s *State) (Line, error) {
 	const step = "channels"
+	if s.opt.DryRun {
+		return s.dryRunChannels()
+	}
 	if s.env.Discord == nil {
 		return skip(step, textNoDiscord), nil
 	}
@@ -594,11 +610,16 @@ func stepChannels(ctx context.Context, s *State) (Line, error) {
 	}
 	// The project's channels: every configured id must be in the guild (`setup channels` drops
 	// the gone ones after its old and new records). The lobby among them is the one named
-	// #<project id>, else the one holding the entry setup writes; any other is the owner's.
+	// #<project id>, else the one holding the entry setup writes; any other is the owner's. The
+	// dry-run form's placeholders count as no id: dropped without asking, never a mismatch.
 	entries := channelEntries(pdoc)
 	keys := slices.Sorted(maps.Keys(entries))
-	var goneIDs []string
+	var goneIDs, placeholders []string
 	for _, cid := range keys {
+		if config.PlaceholderChannel(cid) {
+			placeholders = append(placeholders, cid)
+			continue
+		}
 		c, ok := byID[cid]
 		if !ok {
 			label := ""
@@ -647,7 +668,7 @@ func stepChannels(ctx context.Context, s *State) (Line, error) {
 			missing = append(missing, sl.label)
 		}
 	}
-	if s.check && (len(missing) > 0 || slices.ContainsFunc(slots, func(sl *slot) bool { return sl.set })) {
+	if s.check && (len(missing) > 0 || len(placeholders) > 0 || slices.ContainsFunc(slots, func(sl *slot) bool { return sl.set })) {
 		return fix(step, "the channels are not configured; run setup"), nil
 	}
 	if len(missing) > 0 {
@@ -694,7 +715,7 @@ func stepChannels(ctx context.Context, s *State) (Line, error) {
 	}
 	// A gone configured id: the lobby's is replaced by the lobby found or made, any other is
 	// dropped (new -), each after its old and new records.
-	var drop []string
+	drop := placeholders // setup wrote them itself: no old and new records, no question
 	for _, cid := range goneIDs {
 		next := "-"
 		if lobby.set && isLobbyEntry(entries[cid]) {
@@ -780,6 +801,9 @@ func findRole(roles []discord.SetupRole, match func(discord.SetupRole) bool) (di
 // every run, the bot's Manage Roles: held, the removal fix, polled.
 func stepRole(ctx context.Context, s *State) (Line, error) {
 	const step = "role"
+	if s.opt.DryRun {
+		return s.dryRunRole()
+	}
 	if s.env.Discord == nil {
 		return skip(step, textNoDiscord), nil
 	}
@@ -812,6 +836,10 @@ func stepRole(ctx context.Context, s *State) (Line, error) {
 			return Line{}, mismatch(step, "roleGroups.trusted "+string(raw), "not a list of role ids")
 		}
 		old, trusted = string(raw), nil
+	}
+	if len(trusted) > 0 && trusted[0] == config.PlaceholderRole {
+		// The dry-run form's placeholder counts as no id: replaced without asking.
+		trusted = nil
 	}
 	var role *discord.SetupRole
 	if len(trusted) > 0 {
@@ -936,7 +964,7 @@ func (s *State) goLive(inst *config.Doc) error {
 // set: the guild line, then each channel and the intent, a missing one a failed line.
 func (s *State) discordEchoes(ctx context.Context) []Echo {
 	const name = "discord check  "
-	if s.env.Discord == nil {
+	if s.opt.DryRun || s.env.Discord == nil {
 		return nil
 	}
 	inst, err := s.instanceDoc()
@@ -983,4 +1011,130 @@ func (s *State) discordEchoes(ctx context.Context) []Echo {
 			Text: name + cl.ID + "  " + cl.State + "  " + cl.Reach + "  " + cl.Perms})
 	}
 	return out
+}
+
+// dryRunEntry is a placeholder channel's entry: code reach, prompt mode, its harness, the
+// trusted group may start, contribute and answer.
+type dryRunEntry struct {
+	Reach   string          `json:"reach"`
+	Mode    string          `json:"mode"`
+	Harness string          `json:"harness"`
+	Roles   json.RawMessage `json:"roles"`
+}
+
+// dryRunChannels is the channels step of the dry-run form: with no channel in the project file,
+// config.DryRunChannels written, and engine.fakeFixtures, while unset, as fixtures/engine under
+// the effective install directory; no such directory is a fix that does not wait, so the run
+// ends refused-channels with nothing written. Nothing Discord is called.
+func (s *State) dryRunChannels() (Line, error) {
+	const step = "channels"
+	inst, err := s.instanceDoc()
+	if err != nil {
+		return Line{}, toControl(err)
+	}
+	if inst == nil {
+		return s.noConfig(step)
+	}
+	pdoc, l, err := s.projectDoc(step)
+	if err != nil || l != nil {
+		return deref(l), err
+	}
+	needChannels := len(channelEntries(pdoc)) == 0
+	fixtures := inst.String("engine", "fakeFixtures")
+	needFixtures := fixtures == ""
+	if needFixtures {
+		dir, err := installDir(inst)
+		if err != nil {
+			msg := "the running binary's path: " + control.OneLine(err.Error())
+			return fix(step, msg), control.NewError(control.CodeInternal, msg)
+		}
+		fixtures = filepath.ToSlash(filepath.Join(dir, "fixtures", "engine"))
+		if st, err := os.Stat(fixtures); err != nil || !st.IsDir() {
+			return fix(step, textNoFixtures), nil
+		}
+	}
+	if s.check && (needChannels || needFixtures) {
+		return fix(step, "the dry-run channels are not configured; run setup --discord dry-run"), nil
+	}
+	if needChannels {
+		roles := json.RawMessage(`{"start":["trusted"],"contribute":["trusted"],"answer":["trusted"]}`)
+		for _, c := range config.DryRunChannels {
+			b, err := json.Marshal(dryRunEntry{Reach: config.ReachCode, Mode: config.ModePrompt, Harness: c.Harness, Roles: roles})
+			if err != nil {
+				return Line{}, err
+			}
+			comment := "A dry-run placeholder (setup --discord dry-run), the " + c.Harness + " harness; a --discord live run replaces it."
+			if err := pdoc.Set(comment, b, "channels", c.ID); err != nil {
+				return Line{}, toControl(err)
+			}
+		}
+		if err := config.WriteDoc(s.projectPath(s.project), pdoc); err != nil {
+			return Line{}, err
+		}
+		s.markWrote(step)
+	}
+	if needFixtures {
+		if err := s.writeInstance(inst, config.RawValue(fixtures), "engine", "fakeFixtures"); err != nil {
+			return Line{}, err
+		}
+		s.markWrote(step)
+	}
+	entries := channelEntries(pdoc)
+	var parts []string
+	for _, id := range slices.Sorted(maps.Keys(entries)) {
+		var e struct {
+			Harness string `json:"harness"`
+		}
+		if json.Unmarshal(entries[id], &e) != nil {
+			parts = append(parts, id+" ?") // config check names what is wrong with the entry
+			continue
+		}
+		if e.Harness == "" {
+			e.Harness = inst.String("defaults", "harness")
+		}
+		parts = append(parts, strings.TrimSpace(id+" "+e.Harness))
+	}
+	return s.passed(step, textDryRun+" "+strings.Join(parts, ", ")+"; fixtures "+fixtures), nil
+}
+
+// installDir is the effective install directory, as the spawn backend resolves it: paths.install,
+// else the parent of the running binary's directory (the checkout, for bin/broodforge). Without
+// the binary's path it is an error, never a relative directory.
+func installDir(inst *config.Doc) (string, error) {
+	if p := inst.String("paths", "install"); p != "" {
+		return p, nil
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(filepath.Dir(exe)), nil
+}
+
+// dryRunRole is the role step of the dry-run form: an empty roleGroups.trusted becomes the
+// placeholder role config.PlaceholderRole; a present list is kept. Nothing Discord is called.
+func (s *State) dryRunRole() (Line, error) {
+	const step = "role"
+	inst, err := s.instanceDoc()
+	if err != nil {
+		return Line{}, toControl(err)
+	}
+	if inst == nil {
+		return s.noConfig(step)
+	}
+	var trusted []string
+	if raw, ok := inst.Get("roleGroups", "trusted"); ok && json.Unmarshal(raw, &trusted) != nil {
+		return Line{}, mismatch(step, "roleGroups.trusted "+string(raw), "not a list of role ids")
+	}
+	if len(trusted) > 0 {
+		return skip(step, textDryRun+" "+strings.Join(trusted, ",")), nil
+	}
+	if s.check {
+		return fix(step, "roleGroups.trusted is not set; run setup --discord dry-run"), nil
+	}
+	if err := s.writeInstance(inst, config.RawValue([]string{config.PlaceholderRole}), "roleGroups", "trusted"); err != nil {
+		return Line{}, err
+	}
+	s.markWrote(step)
+	return ok(step, textDryRun+" "+config.PlaceholderRole), nil
 }

@@ -30,6 +30,8 @@ const (
 	textRepo          = "Repository URL of the project (its canonical):"
 	textGitCredential = "Token for pushes to it (not shown; Enter to add later with setup git-credential):"
 	textNext          = "the bot is running. In Discord: /register, then /credential add kind:subscription; then here: broodforge setup login <credential id>"
+	// Under --discord dry-run (2026-10-30, interim wording, the owner's review pending).
+	textNextDryRun = "the dry-run instance is ready: broodforge serve --discord dry-run starts it; a rerun with --discord live adds Discord"
 )
 
 // Steps is the run in the companion's order; the Discord steps are in discord.go.
@@ -398,8 +400,9 @@ func (s *State) newKey(path string) (Line, error) {
 		After: func() error { return s.prompt.Pause(textKeyPause) }}, nil
 }
 
-// stepEngine finds the engine (the pinned place, the configured path, PATH), reads its
-// --version as spawn preflight does, and writes engine.path and engine.version when absent.
+// stepEngine finds the engine (the pinned place, the configured path, PATH; reversed under
+// --discord dry-run), reads its --version as spawn preflight does, and writes engine.path and
+// engine.version when absent.
 func stepEngine(_ context.Context, s *State) (Line, error) {
 	const step = "engine"
 	inst, err := s.instanceDoc()
@@ -468,26 +471,46 @@ func orDash(s string) string {
 }
 
 // findEngine is the engine binary: the pinned place setup host fills, else the configured
-// path when it is a file, else the engine on PATH; "" when there is none. Slash form.
+// path when it is a file, else the engine on PATH; "" when there is none. Slash form. Under
+// --discord dry-run the order is reversed (PATH, the configured path, the pinned place), so a
+// development root keeps the owner's own engine after setup host has pinned one.
 func (s *State) findEngine(configured string) string {
-	if p := pinnedEngine(s.env.LookupEnv); p != "" && isFile(p) {
+	pinned := func() string {
+		if p := pinnedEngine(s.env.LookupEnv); p != "" && isFile(p) {
+			return filepath.ToSlash(p)
+		}
+		return ""
+	}
+	conf := func() string {
+		if configured != "" && isFile(configured) {
+			return filepath.ToSlash(filepath.Clean(configured))
+		}
+		return ""
+	}
+	onPath := func() string {
+		look := s.env.LookPath
+		if look == nil {
+			return ""
+		}
+		p, err := look(engineName)
+		if err != nil {
+			return ""
+		}
+		if abs, err := filepath.Abs(p); err == nil {
+			p = abs
+		}
 		return filepath.ToSlash(p)
 	}
-	if configured != "" && isFile(configured) {
-		return filepath.ToSlash(filepath.Clean(configured))
+	order := []func() string{pinned, conf, onPath}
+	if s.opt.DryRun {
+		order = []func() string{onPath, conf, pinned}
 	}
-	look := s.env.LookPath
-	if look == nil {
-		return ""
+	for _, f := range order {
+		if p := f(); p != "" {
+			return p
+		}
 	}
-	p, err := look(engineName)
-	if err != nil {
-		return ""
-	}
-	if abs, err := filepath.Abs(p); err == nil {
-		p = abs
-	}
-	return filepath.ToSlash(p)
+	return ""
 }
 
 // noConfig is a step that needs config/instance.json run without it.
@@ -946,7 +969,14 @@ func stepCheck(ctx context.Context, s *State) (Line, error) {
 // stepNext is the one closing line; under --check with a fix printed, what to run instead.
 func stepNext(_ context.Context, s *State) (Line, error) {
 	if s.check && len(s.fixed) > 0 {
+		if s.opt.DryRun {
+			// Interim wording, the owner's review pending.
+			return fix("next", "run broodforge setup --discord dry-run"), nil
+		}
 		return fix("next", "run broodforge setup"), nil
+	}
+	if s.opt.DryRun {
+		return ok("next", textNextDryRun), nil
 	}
 	return ok("next", textNext), nil
 }

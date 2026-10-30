@@ -283,8 +283,8 @@ on channel `100`, the rerun, the live turn against `BROODFORGE_SETUP_FAKE_DISCOR
 operator README's shape. Proof: the build, check and test lines; `bash tests/repro/dev-instance.sh` exit 0; on the PC, from the main checkout,
 the `run` skill's steps 0 to 3 and 5 on the real dev root, output pasted without the key line: the tail's last line `turn-ended  end_turn`, the
 outbox's `channel` line and the header's `create`, `status` after `stop` printing `error: not-running`; the `setup` line a second time printing
-only `ok` and `skip`; then, when the brief says the owner's step follows, step 2b (the detached start; the PID file and log names reported) and
-the bot left running. Owner step: the numbered commands of `05-debug-interface-dev-instance.md` (the login, ending in `stop`), then `credential
+only `ok` and `skip`; then, when the brief says the owner's step follows, step 2b (the detached start; the PID file and log names reported),
+the detached step proven once and the bot stopped; the owner starts it for the credential step. Owner step: the numbered commands of `05-debug-interface-dev-instance.md` (the login, ending in `stop`), then `credential
 list` showing `usable`. Does not: call Discord; run a real turn; promote the dev root; touch `~/.claude`, `%ProgramData%` or anything of P23. Depends on: P22.
 
 ## Milestones

@@ -39,8 +39,11 @@ bin/broodforge.exe setup --discord dry-run --yes --root "$BROODFORGE_ROOT" --ins
 
 The `setup` line runs from the main checkout only: it writes that checkout's paths into the root.
 In a worktree, build there and skip the line; a missing root is then a report, not a setup from the
-worktree. First time: every step `ok`, the key line included (a dev key; it goes in no password
-manager, and it stays out of your report). Later: only `ok` and `skip`. `error: mismatch-engine`
+worktree. First time: `ok` for every step but `skip  token|application|guild  dry-run` and
+`skip  git-credential  deferred; ...`; `channels` reads `ok  channels  dry-run 100 fake, 200
+claude-code; fixtures <checkout>/fixtures/engine`, `role` `ok  role  dry-run 10`, and the key line
+is among them (a dev key; it goes in no password manager, and it stays out of your report). Later:
+only `ok` and `skip`. `error: mismatch-engine`
 means the owner's Claude Code auto-updated: run `bin/broodforge.exe setup engine --yes`, then the
 same `setup` line again. Any other refusal is a finding, not something to work around by editing
 the root; `live-instance` means someone promoted the root by mistake (the doc says what then).
@@ -71,32 +74,37 @@ powershell -NoProfile -Command "\$p = Start-Process -FilePath '$exe' -ArgumentLi
 bin/broodforge.exe status --wait 10 --expect ok
 ```
 
-Report the PID file and the log names. The matching stop, by whoever the brief says (the owner
-after the credential step, or a later run told to): `bin/broodforge.exe stop`; only when the bot
-does not answer that within its timeout, `taskkill /PID "$(cat "$BROODFORGE_ROOT/serve.pid")" /F`;
-then delete `serve.pid`.
+The process outlives the call; its log holds `serving  \\.\pipe\broodforge-dev`, its `.err`
+`held  -`. Report the PID file and the log names. The matching stop, by whoever the brief says
+(the owner after the credential step, or a later run told to): `bin/broodforge.exe stop`; only
+when the bot does not answer that within its timeout,
+`MSYS_NO_PATHCONV=1 taskkill /PID "$(tr -d '\r\n' <"$BROODFORGE_ROOT/serve.pid")" /F` (`Set-Content`
+writes the PID with a CRLF, and Git Bash rewrites a bare `/PID` into a path); then delete `serve.pid`.
 
 ## 3. The round trip on the fake channel
 
 ```
 bin/broodforge.exe register 1001 --name "Ada Example" --email ada@example.com
-printf scratch | bin/broodforge.exe credential add --kind api-key --user 1001 --label fake
-bin/broodforge.exe register set-default 1001 <the cred-… just printed>
+cred=$(printf scratch | bin/broodforge.exe credential add --kind api-key --user 1001 --label fake)
+bin/broodforge.exe register set-default 1001 "$cred"
 bin/broodforge.exe discord inject click --custom-id bf:100:start --user 1001 --roles 10
 bin/broodforge.exe session list
 bin/broodforge.exe discord inject message --channel <id> --user 1001 --roles 10 "Read hello.txt and reply with its one word."
+for i in $(seq 1 40); do bin/broodforge.exe session tail <id> --all | tail -n 1 | grep -q turn-ended && break; sleep 0.25; done
 bin/broodforge.exe session tail <id> --all
 bin/broodforge.exe session outbox <id>
 ```
 
 `register` and the credential are idempotent on a rerun (`register` replaces the pair; a second
-`credential add` is a second id, harmless). `<id>` is the session `inject click` started, the next
-free one (`s0001` on a fresh root); `session list` shows it. What to check: the tail's last line is
-`turn-ended  end_turn`; the outbox has the `channel` line for `<id>` and a `create` whose first line
-starts `Session <id> on Broodforge`; the final message and the working message's `delete` arrive
-once the coalescer is through, so poll the outbox rather than count its lines. Drive the feature
-under test the same way: every command of `docs/design/05-debug-interface.md` and its companions
-works here.
+`credential add` is a second id, harmless). `<id>` is the session `inject click` started
+(`ephemeral  Session <id> is open in <#<id>>.`), the next free one (`s0001` on a fresh root);
+`session list` shows it first. `inject message` returns at once (`none  turn 1 started`), so the
+loop polls the tail until the turn ends. What to check: the tail's last line is
+`turn-ended  end_turn`; the outbox has the `channel` line for `<id>` and a `create` whose text
+starts `Session <id> on broodforge, branch broodforge/dev/<id>` (the project's name, from the
+repository's); the final message and the working message's `delete` arrive once the coalescer is
+through, so poll the outbox rather than count its lines. Drive the feature under test the same
+way: every command of `docs/design/05-debug-interface.md` and its companions works here.
 
 ## 4. The real engine, on the owner's word only
 
@@ -115,8 +123,12 @@ bin/broodforge.exe stop
 bin/broodforge.exe status
 ```
 
-`stop` prints `stopped  <n>`; the `status` after it prints `error: not-running: ...`, exit 1, which
-is the wanted outcome (a bot still answering a few seconds later is a bug to report).
+`session end` prints the handoff, `none  origin  -  0  -  -` for a session that committed nothing;
+one that committed pushes `broodforge/dev/<id>` into the main checkout as a local branch (the
+root's handoff is `push`), which your report names. `stop` prints `stopped  <n>` (the sessions it
+interrupted); the `status` after it prints `error: not-running: ...`, exit 1, which is the wanted
+outcome (a bot still answering a few seconds later is a bug to report). In step 2 the harness then
+reports your background `serve` exited 0.
 
 End your sessions first: an open session at `stop` is held as `interrupted` at the next start
 (ADR 0026) and someone has to `end` it. Report what ran and the lines that mattered (never the key

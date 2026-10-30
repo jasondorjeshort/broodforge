@@ -72,7 +72,7 @@ with a bot on the root, a setup paused at the key (`start-control`, `setup-runni
 nothing created), two servers without `--guild` (`needs-input-guild`), the bot keeping Manage
 Roles (the removal `fix` on two runs), a configured channel gone (`mismatch-channels`), and the
 script on a live root (`live-instance`). The dry-run form and the placeholder rule: `bash
-tests/repro/dev-instance.sh` [no-check: written by P27] (a dry-run root made, driven, rerun, then
+tests/repro/dev-instance.sh` (a dry-run root made, driven, rerun, then
 turned live against the scripted Discord with `100`, `200` and `10` gone) and `go test
 ./internal/setup -run 'TestDryRun|TestPlaceholders'`. The Go proofs: `go test ./internal/setup -run
 'TestSteps|TestRerun|TestRefusals|TestSingleWriter|TestJSON|TestDiscordSteps|TestRole|TestChannels'`,
