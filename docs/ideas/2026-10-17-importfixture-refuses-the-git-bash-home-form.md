@@ -24,3 +24,15 @@ fixtures stay byte-identical. Anchor: `internal/tools/importfixture/main.go` (`r
 ## Open
 
 - Whether a deferred-Bash recording is wanted as a fixture at all; the `defer` fixture already covers the shape.
+
+Plan: tester, one pass. `internal/tools/importfixture/main.go`: a third home form in
+`matchPath`, `/<drive letter>/Users/<user>` (MSYS: `/` separators only, the leading `/` must not
+follow a word byte, the same segment-ending and spike-root rules, `/home/user` or
+`/home/user/bf-spike` out); the slug rewrite needs nothing new. `main_test.go`: the
+`/c/Users/alice/x` cases in `TestImportRecordedRefusals` and `TestSurvivingUserNameRefused` flip
+from refused to rewritten (`/home/user/x`), `/c/Users/bob/x` stays refused in
+`TestOtherUsersHomeRefused`, and one new case puts `cd /c/Users/alice/bf-p7/tree` inside a JSON
+string. Verify: `go test ./internal/tools/importfixture/`, then re-import one spike fixture into
+a temp directory and `diff -r` it against its `fixtures/engine/<name>` (byte-identical). Out of
+scope: URL-encoded and `\u`-escaped forms (the user-name scan refuses the first; the engine does
+not emit the second for ASCII), and whether a deferred-Bash recording becomes a fixture.
