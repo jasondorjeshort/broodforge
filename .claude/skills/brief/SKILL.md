@@ -40,6 +40,7 @@ the brief supplies what only this task knows.
   classes to try: short names, link and junction, UNC and device prefixes, streams, drive-relative,
   `~` and shell-style prefixes, whitespace, case, patterns with metacharacters first, and ask it to
   check how the other side (the engine, the shell) resolves the same string before it compares.
+  Ask for a finding as a failing test (its exact text, file and name) wherever it can be one, not prose.
   The P6 hook needed three rounds because the first brief named none of these.
 - runner: give exact commands or the commit brief from the `commit` skill; nothing to interpret.
 - pusher: use the one-line brief from the `commit` skill, with the user's request quoted.
