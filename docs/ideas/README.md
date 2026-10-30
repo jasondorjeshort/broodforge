@@ -105,3 +105,4 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-29-a-session-remembers-across-weeks.md` | feature | Moonshot: the engine writes a per-session handoff file into the worktree each turn, so a session resumed after a long gap starts from it, not cold |
 | `2026-10-29-cross-host-lanes-run-a-check-on-the-other-instance.md` | feature | Moonshot: a droplet session runs a Windows-only check on the PC instance and gets the result in its venue; a departure from the one-instance vision, a proposal |
 | `2026-10-29-voice-sessions-from-a-discord-voice-channel.md` | feature | Moonshot: a voice channel feeds speech-to-text turns into a session and summaries come back as speech; text stays the record; a proposal |
+| `2026-10-29-adr-0027-prediction-p21-rerun-prints-only-ok-and-skip.md` | chore | ADR 0027 prediction whose P21 trigger has fired: a `setup` rerun on a configured host prints only ok and skip lines and changes nothing; record the Outcome |
