@@ -1,7 +1,7 @@
 ---
 date: 2026-10-30
 kind: bug
-related: [2026-10-30-a-transcript-decision-line-names-neither-its-call-nor-its-depth.md]
+related: []
 ---
 
 # A store failure inside a turn is logged as a permission decision
@@ -34,4 +34,4 @@ event type, or ride `turn-ended`'s fields? Recommendation: yes, a type `EventInt
 the transcript renders as one line carrying the error text and Discord posts nothing for; the three
 call sites switch to it and `03-architecture.md` names it. Riding `turn-ended` would lose errors
 that happen mid-turn and tie a reading (the meter) to the turn's end.
-Answer:
+Answer: the type, `EventInternalError`, as recommended (owner, 2026-10-30; the surface check below decides the ADR step).

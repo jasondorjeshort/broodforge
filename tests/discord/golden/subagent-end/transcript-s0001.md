@@ -14,11 +14,11 @@ Asking the reviewer to read the change.
 
 - `[Agent]`
 - `  [Read] hello.txt`
-  - allow (policy)
+    - allow (policy) for [Read] hello.txt
 
-No findings.
+  No findings.
 
-  - allow (policy)
+  - allow (policy) for [Agent]
 
 Reviewed: no findings.
 

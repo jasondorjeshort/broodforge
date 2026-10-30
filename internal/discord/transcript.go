@@ -68,7 +68,12 @@ func Transcript(id string, events []session.Event, who func(user string) string)
 		case session.EventText:
 			onCall = false
 			blank()
-			line(ev.Text)
+			for _, l := range strings.Split(strings.TrimRight(ev.Text, "\n"), "\n") {
+				if l != "" {
+					l = session.Indent(ev.Depth, l)
+				}
+				line(l)
+			}
 			blank()
 		case session.EventToolCall:
 			onCall = true
@@ -78,11 +83,15 @@ func Transcript(id string, events []session.Event, who func(user string) string)
 			if ev.User != "" {
 				by = who(ev.User) + ", " + ev.DecidedBy
 			}
+			call := ""
+			if ev.Tool != "" {
+				call = " for " + session.TraceLine(ev.Tool, ev.Target)
+			}
 			reason := ""
 			if ev.Reason != "" {
 				reason = ": " + ev.Reason
 			}
-			line("  - " + ev.Decision + " (" + by + ")" + reason)
+			line(session.Indent(ev.Depth, "  - "+ev.Decision+" ("+by+")"+call+reason))
 		case session.EventToolResult:
 			onCall = true
 			if strings.Contains(ev.Summary, " -> ") {

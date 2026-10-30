@@ -11,7 +11,7 @@ Started 2026-10-30T20:01:06Z.
 > Read go.mod and reply with the module's name.
 
 - `[Read] go.mod`
-  - allow (policy)
+  - allow (policy) for [Read] go.mod
 
 The module is `github.com/jasondorjeshort/broodforge`.
 

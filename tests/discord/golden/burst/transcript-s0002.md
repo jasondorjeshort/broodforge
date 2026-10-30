@@ -11,9 +11,9 @@ Started 2026-10-16T10:00:00.050Z.
 > Add left-pad.
 
 - `[Bash] npm install left-pad --save`
-  - deferred (policy)
+  - deferred (policy) for [Bash] npm install left-pad --save
 - waiting for an answer: `[Bash] npm install left-pad --save`
-  - allow (Sam Example, participant)
+  - allow (Sam Example, participant) for [Bash] npm install left-pad --save
 
 Installed left-pad; key [masked] never shows.
 
