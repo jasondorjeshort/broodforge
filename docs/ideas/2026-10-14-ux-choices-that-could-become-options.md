@@ -16,3 +16,14 @@ expects some of them to become a user or channel option eventually:
 - Model and effort per session: `/session model|effort`, driver only, next turn (R-29), where v1
   has channel configuration only.
 - Dot-prefix command aliases beside the slash commands.
+
+Question: Which of these, if any, should become a per-channel or per-user option now, rather than
+staying 04's fixed decisions?
+Two are already settled: model and effort per session landed with R-29
+(`../design/04-ux-session-controls.md`, P12a and P12b), and dot-prefix aliases were decided
+against (04, decision 1). The other five stand as 04's decisions 3 to 7, each the owner's.
+Recommendation: none now. Each is a channel key in 03's configuration plus a renderer or venue
+branch; only the thread venue (B) has design weight (the sweep, venue binding, auto-archiving).
+Decide after a month of live use on the Broodforge channel shows which fixed choice chafes; the
+one picked goes to the architect for a 03 and 04 amendment, then one coder pass per option.
+Answer:
