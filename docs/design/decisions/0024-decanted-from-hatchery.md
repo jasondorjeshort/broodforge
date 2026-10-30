@@ -3,7 +3,7 @@
 Date: 2026-10-21
 Status: accepted
 
-Hatchery base: dc896c32ecdde6d00b1de7a02ce48eb42f5eb84b
+Hatchery base: 8d6ee28e50b4693b17f90576ea5945f962dd8665
 Mechanism: Hatchery ADR 0016 (update by patch over the base-owned set).
 
 ## Context
