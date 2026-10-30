@@ -298,6 +298,32 @@ func TestRole(t *testing.T) {
 			t.Errorf("role:\n%s\n%v", out, f.fake.Script().Calls)
 		}
 	})
+	t.Run("held on the second run goes live", func(t *testing.T) {
+		s := fresh()
+		g := scriptedGuild(guildID, "Test", false)
+		g.Roles = append(g.Roles, discord.FakeRole{ID: "5002", Name: "Trusted", Position: 1})
+		s.Invite = &g
+		f := withFake(newFixture(t), s)
+		out, c := f.run(tokA+"\n", func(o *setup.Options) { o.CreateRole = "no" })
+		if c != "timeout-role" {
+			t.Fatalf("first run: code %q:\n%s", c, out)
+		}
+		f.edit(func(s *discord.FakeScript) { s.Guilds[0].OwnerRoles = []string{"5002"} })
+		out, c = f.run("")
+		if c != "" {
+			t.Fatalf("second run refused %s:\n%s", c, out)
+		}
+		if l := line(out, "ok  role  "); l != "ok  role  Trusted  5002  held by "+owner+"; discord.mode live" {
+			t.Errorf("role line %q:\n%s", l, out)
+		}
+		cfg, err := config.Load(f.root, config.AnyCredential)
+		if err != nil {
+			t.Fatalf("config: %v", err)
+		}
+		if cfg.Instance.Discord.Mode != config.DiscordLive {
+			t.Errorf("discord.mode %s, want live", cfg.Instance.Discord.Mode)
+		}
+	})
 	t.Run("Manage Roles kept: the removal fix on every run", func(t *testing.T) {
 		s := fresh()
 		s.Invite.DropManageRolesAfter = 0

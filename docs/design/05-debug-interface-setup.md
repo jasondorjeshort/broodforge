@@ -26,22 +26,21 @@ error object); 2 usage. With no `--root` and no `BROODFORGE_ROOT` the default ro
 token is read hidden on a terminal, or from stdin with `--yes` (off a terminal stdin is otherwise the
 key's Enter alone, so without `--yes` the token step is `needs-input-token`); with no token stored, the
 token step's `fix` line names the Developer Portal steps. A waiting `fix` may add one stderr line
-before its poll (`waiting for the bot to join` after the invite; none under `--json`). Once a run
-has filled the Discord ids, `discord.mode` is switched from `dry-run` to `live`. The role goes to
-the guild's `owner_id`, not to whoever runs setup; the `role` line names it: `ok  role  <name>
-<role id>  held by <member id>`. `--discord dry-run` (default `live`) is the development form
-(companion, The dry-run form; the instance it makes: `05-debug-interface-dev-instance.md`): no
-Discord call; `token`, `application` and `guild` print `skip  <step>  dry-run`; `channels` writes
-the placeholder channels `100` (harness `fake`) and `200` (`claude-code`) when the project has none,
-and `engine.fakeFixtures`; `role` writes the placeholder role `10` as `trusted` when the list is
-empty; the `engine` step looks on `PATH` before the pinned place; `check` has no `discord check`
-line; `discord.mode` stays `dry-run`; `next` is the dry-run closing line. On a live root it is
-refused `live-instance` before anything is written; another value is a usage error, exit 2; set
-beside `BROODFORGE_SETUP_FAKE_DISCORD`, `dry-run` wins. A later run with `--discord live` counts
-the placeholders as no id and replaces them, asking nothing, so a dry-run root the owner chooses
-to promote goes live with one more `setup` and no `mismatch` (the `dev` root itself is never
-promoted: `05-debug-interface-dev-instance.md`).
-
+before its poll (`waiting for the bot to join` after the invite; none under `--json`). In the first
+run in which every Discord id is present and the role is held, `discord.mode` is switched from
+`dry-run` to `live`. The role goes to the guild's `owner_id`, not to whoever runs setup; the `role`
+line names it: `ok  role  <name> <role id>  held by <member id>`. `--discord dry-run` (default
+`live`) is the development form (companion, The dry-run form; the instance it makes:
+`05-debug-interface-dev-instance.md`): no Discord call; `token`, `application` and `guild` print
+`skip  <step>  dry-run`; `channels` writes the placeholder channels `100` (harness `fake`) and
+`200` (`claude-code`) when the project has none, and `engine.fakeFixtures`; `role` writes the
+placeholder role `10` as `trusted` when the list is empty; the `engine` step looks on `PATH` before
+the pinned place; `check` has no `discord check` line; `discord.mode` stays `dry-run`; `next` is
+the dry-run closing line. On a live root it is refused `live-instance` before anything is written;
+another value is a usage error, exit 2; set beside `BROODFORGE_SETUP_FAKE_DISCORD`, `dry-run` wins.
+A later run with `--discord live` counts the placeholders as no id and replaces them, asking
+nothing, so a dry-run root the owner chooses to promote goes live with one more `setup` and no
+`mismatch` (the `dev` root itself is never promoted: `05-debug-interface-dev-instance.md`).
 Observe. `setup --check` prints every step's line, changes nothing, binds nothing, polls nothing,
 and exits 1 with `error: check-failed: <steps>` naming the steps that printed `fix`; it is
 `(file)` and runs beside a bot. While a setup runs it holds the control address: `status` answers

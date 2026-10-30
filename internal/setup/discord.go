@@ -935,13 +935,10 @@ func stepRole(ctx context.Context, s *State) (Line, error) {
 	return s.passed(step, name+"  "+role.ID+"  held by "+g.OwnerID+s.liveNote), nil
 }
 
-// goLive switches discord.mode from dry-run to live once a run that wrote a Discord id has them
-// all; the scripted Discord leaves it dry-run.
+// goLive switches discord.mode from dry-run to live in the first run in which every Discord id is
+// present and the role is held (its caller); the scripted Discord leaves it dry-run.
 func (s *State) goLive(inst *config.Doc) error {
 	if s.check || inst.String("discord", "mode") != config.DiscordDryRun {
-		return nil
-	}
-	if !slices.ContainsFunc([]string{"token", "application", "guild", "channels", "role"}, func(st string) bool { return s.wrote[st] }) {
 		return nil
 	}
 	for _, k := range []string{"applicationId", "guildId", "botCredentialId", "noticeChannelId"} {
@@ -950,13 +947,16 @@ func (s *State) goLive(inst *config.Doc) error {
 		}
 	}
 	if s.env.FakeDiscord {
-		s.liveNote = "; discord.mode stays dry-run (scripted Discord)"
+		if slices.ContainsFunc([]string{"token", "application", "guild", "channels", "role"}, func(st string) bool { return s.wrote[st] }) {
+			s.liveNote = "; discord.mode stays dry-run (scripted Discord)"
+		}
 		return nil
 	}
 	if err := s.writeInstance(inst, config.RawValue(config.DiscordLive), "discord", "mode"); err != nil {
 		return err
 	}
 	s.liveNote = "; discord.mode live"
+	s.markWrote("role")
 	return nil
 }
 

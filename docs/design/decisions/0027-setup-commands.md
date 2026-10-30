@@ -31,9 +31,9 @@ stdin with --yes`, not `pass --<flag>`, and `setup git-credential` with empty st
 `needs-input-git-credential: pass the token on stdin` (`internal/setup/steps.go`).
 
 Names `setup` looks up or creates and never stores (03's config holds ids): the role (`--role`), the
-category `Sessions`, the lobby `#<project id>`, the notices channel `#<project id>-notices`. Config
-values written with a default and no prompt: timeouts 0, mode `prompt`; `discord.mode` is written
-`dry-run` and becomes `live` in the role step of the run that fills the last Discord id.
+category `Sessions`, the lobby `#<project id>`, the notices channel `#<project id>-notices`. Config values
+written with a default and no prompt: timeouts 0, mode `prompt`; `discord.mode` is written `dry-run` and
+becomes `live` in the role step of the first run in which every Discord id is present and the role is held.
 
 Output: one line per step, `ok  <step>  <detail>`, `skip  <step>  <already>` or `fix  <step>  <what
 the owner does>`; `--json`: one object each, `{"result":"ok|skip|fix","step":"<step>","detail":"<text>"}`.
