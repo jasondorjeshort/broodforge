@@ -38,3 +38,18 @@ and rate limits, and reading the lines over the control pipe (`trace tail --foll
 - Whether the trace is a new event stream on the control pipe or reuses the session-event channel.
 - Whether it belongs in 05-debug-interface-discord.md as a new section (a design change goes through
   the proposal loop).
+
+Plan: coder, one pass. Files: `internal/cli/serve.go` (a `--trace` bool flag, any root, no
+refusal: the lines carry no text, URL or token); `internal/discord/gateway.go` (a decorator over
+`restAPI` installed when the flag is set, one line per call to `GatewayConfig.Log`: `<time>
+discord: rest <method name> <channel or message id, or -> -> <HTTP status|error, one line> <ms>`,
+never the URL, which carries interaction tokens, never a body; and, always on, `<time> discord:
+gateway ready|resumed|closed <reason, one line>` from the events and close handler disgo exposes,
+a rate limit visible only as the REST line's duration); `internal/discord/gateway_test.go` (the
+fake-REST harness: one `rest` line per call with the flag, none without, no token or text in the
+log); `docs/design/05-debug-interface-discord-live.md` (a paragraph under Inbound log: the two
+formats, the flag, and that the trace rides the inbound log's stderr, `serve.log` under `scratch
+run`). Verify: `go test ./internal/discord -run TestLive`, then the check line. Out of scope:
+a control-pipe read (`trace tail --follow`): the service instance's stderr location is P23's,
+and a pipe read is reconsidered with `audit --follow` (the related P10 idea) once P23 says where
+the log lives; disgo's own debug logging, which prints URLs.
