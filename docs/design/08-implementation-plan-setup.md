@@ -59,8 +59,8 @@ version and `claude -p` with a scratch config directory answers one turn (one re
 when every cmdlet ran from `powershell -NonInteractive -Command -` with the script on stdin and the `ping`
 outlived the password change; plus the task XML's `ExecutionTimeLimit` as registered (P23's `fix` depends on
 it). Left behind on failure: the account, its profile, the task, the root and the engine copy, every one
-named `bf-spike` or under `Broodforge-spike\`, removed by running `cleanup.ps1` again; nothing touches the
-owner's profile or `~/.claude`. Proof: `run.ps1` then `cleanup.ps1` from one elevated PowerShell, `probe-unelevated.ps1` from an unelevated one; after cleanup
+named `bf-spike` or under `Broodforge-spike\`, plus the `Microsoft-Windows-TaskScheduler/Operational` log
+turned on when it was off; running `cleanup.ps1` again undoes all of them; nothing touches the owner's profile or `~/.claude`. Proof: `run.ps1` then `cleanup.ps1` from one elevated PowerShell, `probe-unelevated.ps1` from an unelevated one; after cleanup
 `Get-LocalUser bf-spike` is an error and the root is gone; the finding's rows filled, each with its
 evidence. Depends on: nothing; done before P23's brief is written.
 

@@ -4,14 +4,18 @@
 # against two disposable local accounts, bf-spike and bf-spike2, on the owner's PC. README.md is the
 # runbook. Run from an elevated PowerShell as
 #   powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\run.ps1 -EnginePath <claude.exe>
-# It creates and changes nothing outside the two accounts, their profiles, the task bf-spike-test and
-# %ProgramData%\Broodforge-spike\ (refused when that directory already exists). It removes nothing: it
-# leaves everything for probe-unelevated.ps1, and cleanup.ps1 removes it.
+# It creates and changes nothing outside the two accounts, their profiles, the task bf-spike-test,
+# %ProgramData%\Broodforge-spike\ (refused when that directory already exists) and the enabled state
+# of the Microsoft-Windows-TaskScheduler/Operational log: when that log is disabled, the script writes
+# bf-spike-tslog.txt in the root and enables it, and cleanup.ps1 disables it again only while that
+# file is there. It removes nothing: it leaves everything for probe-unelevated.ps1, and cleanup.ps1
+# removes it.
 #
-# Output: one "claim <id>: hold|refuted|untested: <evidence>" line per claim, then one "spike:" line;
-# a refusal is a single "spike: refused: <reason>" line. Evidence is scrubbed (~, <profiles>,
-# <host>, <owner>, %ProgramData%). The generated passwords live in this process's memory only and
-# are never printed, written to a file or passed on a command line.
+# Output: one "claim <id>: hold|refuted|untested: <evidence>" line per claim, then the "w6 ..." detail
+# lines (the log, the task read back, the battery, the log's events for the task), then one "spike:"
+# line; a refusal is a single "spike: refused: <reason>" line. Every line is scrubbed (~, <profiles>,
+# <host>, <owner>, %ProgramData%, the machine part of a SID). The generated passwords live in this
+# process's memory only and are never printed, written to a file or passed on a command line.
 
 [CmdletBinding()]
 param(
@@ -36,15 +40,21 @@ $Probe      = Join-Path $Root 'bf-spike-acl-probe.txt'
 $ProbeText  = 'bf-spike wrote this'
 $Cmd        = Join-Path $env:SystemRoot 'System32\cmd.exe'
 $Ping       = Join-Path $env:SystemRoot 'System32\PING.EXE'
+$Wevtutil   = Join-Path $env:SystemRoot 'System32\wevtutil.exe'
+$Schtasks   = Join-Path $env:SystemRoot 'System32\schtasks.exe'
+$TsLog      = 'Microsoft-Windows-TaskScheduler/Operational'
+$TsLogRecord = Join-Path $Root 'bf-spike-tslog.txt'
+$TsLogRecordText = 'enabled-by-spike'
 $SidSystem  = New-Object System.Security.Principal.SecurityIdentifier 'S-1-5-18'
 $SidAdmins  = New-Object System.Security.Principal.SecurityIdentifier 'S-1-5-32-544'
 $ProfilesDir = [Environment]::ExpandEnvironmentVariables(
     (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList').ProfilesDirectory)
 
 $Claims = [ordered]@{}
-foreach ($id in 'W1', 'W3a', 'W3a-env', 'W4', 'W6', 'ACL-second-account') {
+foreach ($id in 'W1', 'W3a', 'W3a-env', 'W4', 'W6', 'W6-a', 'W6-b', 'W6-c', 'ACL-second-account') {
     $Claims[$id] = @('untested', 'not reached')
 }
+$Detail = New-Object System.Collections.Generic.List[string]
 
 function Set-Claim([string] $Id, [string] $Verdict, [string] $Evidence) {
     $Claims[$Id] = @($Verdict, $Evidence)
@@ -61,6 +71,7 @@ function Format-Evidence([string] $Text) {
     if ($env:USERNAME -notlike 'bf-spike*') {
         $t = $t -ireplace ('\b' + [regex]::Escape($env:USERNAME) + '\b'), '<owner>'
     }
+    $t = $t -replace 'S-1-5-21-\d+-\d+-\d+', 'S-1-5-21-<machine>'
     return $t
 }
 
@@ -72,6 +83,7 @@ function Write-Claims {
     foreach ($k in $Claims.Keys) {
         Write-Output ('claim {0}: {1}: {2}' -f $k, $Claims[$k][0], (Format-Evidence $Claims[$k][1]))
     }
+    foreach ($d in $Detail) { Write-Output (Format-Evidence $d) }
 }
 
 function Stop-Spike([string] $Reason) {
@@ -260,6 +272,28 @@ try {
     exit 1
 }
 
+# ---- 2b. the TaskScheduler Operational log, enabled for W6's events ----
+# The record is written before wevtutil runs, so a run that stops after this point still leaves
+# cleanup.ps1 the note that the log was disabled before the spike.
+
+$LogSince = (Get-Date).AddSeconds(-5)
+$script:LastEventRecord = [long] -1
+$tslog = [ordered]@{}
+try {
+    $tslog['was-enabled'] = (Get-WinEvent -ListLog $TsLog).IsEnabled
+    if (-not $tslog['was-enabled']) {
+        [System.IO.File]::WriteAllText($TsLogRecord, $TsLogRecordText)
+        $tslog['record'] = 'bf-spike-tslog.txt'
+        $o = & $Cmd /d /c ('{0} sl {1} /e:true 2>&1' -f $Wevtutil, $TsLog)
+        $tslog['wevtutil-exit'] = $LASTEXITCODE
+        if ($o) { $tslog['wevtutil-output'] = ($o | Out-String).Trim() }
+    }
+    $tslog['enabled-now'] = (Get-WinEvent -ListLog $TsLog).IsEnabled
+} catch {
+    $tslog['failed'] = $_.Exception.Message
+}
+$Detail.Add('w6 ts-log: ' + (Join-Evidence $tslog))
+
 Write-Batch (Join-Path $Work 'w3a.cmd') @'
 @echo off
 whoami > "%~dp0w3a-out.txt" 2>&1
@@ -402,7 +436,132 @@ try {
     Set-Claim 'W1' 'refuted' (Join-Evidence $w1)
 }
 
-# ---- 7. W6: -User -Password -Force, rotation under a running process, Start-ScheduledTask ----
+# ---- 7. W6: -User -Password -Force, rotation under a running process, then the start three ways ----
+
+# The registered task as the scheduler holds it: action, trigger, principal, state, settings.
+function Get-TaskReadback {
+    $t = Get-ScheduledTask -TaskName $TaskName -TaskPath '\'
+    $s = $t.Settings
+    $r = [ordered]@{}
+    $r['action'] = '[' + ((@($t.Actions | ForEach-Object { '{0} {1}' -f $_.Execute, $_.Arguments })) -join ' | ') + ']'
+    $r['trigger'] = '[' + ((@($t.Triggers | ForEach-Object {
+        '{0} Enabled={1} StartBoundary={2}' -f $_.CimClass.CimClassName, $_.Enabled, $_.StartBoundary })) -join ' | ') + ']'
+    $r['principal'] = '{0}/{1}/{2}' -f $t.Principal.UserId, $t.Principal.LogonType, $t.Principal.RunLevel
+    $r['state'] = $t.State
+    foreach ($k in 'Enabled', 'AllowDemandStart', 'DisallowStartIfOnBatteries', 'StopIfGoingOnBatteries',
+        'StartWhenAvailable', 'RunOnlyIfNetworkAvailable', 'RunOnlyIfIdle', 'Hidden', 'ExecutionTimeLimit',
+        'MultipleInstances') {
+        $r[$k] = $s.$k
+    }
+    return (Join-Evidence $r)
+}
+
+# Win32_BatteryStatus 1 is discharging (on battery); 2 is on AC; no instance is no battery.
+function Get-BatteryState {
+    try {
+        $b = @(Get-CimInstance -ClassName Win32_Battery)
+        if ($b.Count -eq 0) { return 'no Win32_Battery instance (no battery)' }
+        return ((@($b | ForEach-Object { 'BatteryStatus={0}' -f $_.BatteryStatus })) -join ', ') + ' (1 = on battery, 2 = on AC)'
+    } catch { return 'unknown: ' + $_.Exception.Message }
+}
+
+# The log's events naming the task since the last call (the first call: since 2b enabled the log).
+function Add-TaskEvents([string] $Label) {
+    try {
+        $events = @(Get-WinEvent -FilterHashtable @{ LogName = $TsLog; StartTime = $LogSince } -ErrorAction SilentlyContinue |
+            Where-Object { $_.RecordId -gt $script:LastEventRecord } | Sort-Object RecordId)
+    } catch {
+        $Detail.Add(('w6 events after {0}: read failed: {1}' -f $Label, $_.Exception.Message))
+        return
+    }
+    $n = 0
+    foreach ($ev in $events) {
+        if ($ev.RecordId -gt $script:LastEventRecord) { $script:LastEventRecord = $ev.RecordId }
+        $msg = $ev.Message
+        if ([string]::IsNullOrEmpty($msg)) { $msg = '(no message) ' + ((@($ev.Properties | ForEach-Object { $_.Value })) -join ', ') }
+        if ($msg -notlike "*$TaskName*") { continue }
+        $n++
+        $Detail.Add(('w6 event after {0}: id={1} time={2} {3}' -f $Label, $ev.Id, $ev.TimeCreated.ToString('HH:mm:ss'), $msg))
+    }
+    if ($n -eq 0) { $Detail.Add(('w6 events after {0}: none naming {1}' -f $Label, $TaskName)) }
+}
+
+# One start attempt: optional preparation, the start, up to 30 s for the output file, then the
+# task's result, last run time, state and events. Records the attempt's start time in
+# $AttemptStarts and whether its own read saw the output file in $AttemptSaw, and returns that same
+# read's answer (one read decides both the claim and the return).
+function Invoke-StartAttempt([string] $Id, [string] $Method, [scriptblock] $Prepare, [scriptblock] $Start) {
+    $ev = [ordered]@{ method = $Method }
+    if ($null -ne $Prepare) {
+        try { $ev['prepare'] = & $Prepare }
+        catch {
+            $ev['prepare'] = 'failed: ' + $_.Exception.Message
+            Set-Claim $Id 'untested' (Join-Evidence $ev)
+            Add-TaskEvents $Id
+            return $false
+        }
+    }
+    try { $ev['state-before'] = (Get-ScheduledTask -TaskName $TaskName -TaskPath '\').State } catch { $ev['state-before'] = 'unknown' }
+    $AttemptStarts[$Id] = Get-Date
+    try { $ev['start'] = & $Start } catch { $ev['start'] = 'failed: ' + $_.Exception.Message }
+    $deadline = (Get-Date).AddSeconds(30)
+    while (-not (Test-Path -LiteralPath $taskOut) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
+    Start-Sleep -Seconds 2
+    $out = Read-Out $taskOut
+    $saw = $out -ne '(no output file)'
+    $AttemptSaw[$Id] = $saw
+    $ev['task-ran-as'] = $out
+    try {
+        $info = Get-ScheduledTaskInfo -TaskName $TaskName -TaskPath '\'
+        $ev['LastTaskResult'] = '0x{0:X8} ({0})' -f [uint32] $info.LastTaskResult
+        $ev['LastRunTime'] = if ($null -eq $info.LastRunTime) { '(none)' } else { $info.LastRunTime.ToString('yyyy-MM-dd HH:mm:ss') }
+        $ev['state-after'] = (Get-ScheduledTask -TaskName $TaskName -TaskPath '\').State
+    } catch { $ev['info'] = 'failed: ' + $_.Exception.Message }
+    Add-TaskEvents $Id
+    $ran = $out -like "*\$Account"
+    Set-Claim $Id $(if ($ran) { 'hold' } else { 'refuted' }) (Join-Evidence $ev)
+    return $saw
+}
+
+# Which attempt the output file belongs to, by time: the last attempt that started at or before the
+# file's creation. A file no attempt's own read saw is that attempt's late output (late-output=); an
+# attempt that started after the file was created gets untested; a file older than every start
+# existed before the first one. Returns started-by: an attempt id, "<id> (late)", "before W6-a" or
+# "none".
+function Resolve-StartedBy([string[]] $Ids) {
+    $startedBy = 'none'
+    if (Test-Path -LiteralPath $taskOut) {
+        $created = (Get-Item -LiteralPath $taskOut).CreationTime
+        $out = Read-Out $taskOut
+        $owner = $null
+        foreach ($id in $AttemptStarts.Keys) { if ($AttemptStarts[$id] -le $created) { $owner = $id } }
+        if ($null -eq $owner) {
+            $startedBy = 'before W6-a'
+        } elseif ($AttemptSaw[$owner]) {
+            $startedBy = $owner
+        } else {
+            $startedBy = "$owner (late)"
+            $late = $Claims[$owner][1] + ' late-output=' + $out
+            Set-Claim $owner $(if ($out -like "*\$Account") { 'hold' } else { 'refuted' }) $late
+        }
+        foreach ($id in $AttemptStarts.Keys) {
+            if ($AttemptStarts[$id] -gt $created) {
+                $who = if ($null -eq $owner) { 'existed before the first start' } else { "belongs to $owner" }
+                Set-Claim $id 'untested' ('the output file (created {0}) predates this start and {1}; {2}' -f
+                    $created.ToString('HH:mm:ss.fff'), $who, $Claims[$id][1])
+            }
+        }
+    }
+    foreach ($id in $Ids) {
+        if ($Claims[$id][1] -ne 'not reached') { continue }
+        if ($startedBy -eq 'before W6-a') {
+            Set-Claim $id 'untested' 'not tried: the output file existed before the first start'
+        } elseif ($startedBy -ne 'none') {
+            Set-Claim $id 'untested' ('not needed: {0} produced the output file' -f $startedBy)
+        }
+    }
+    return $startedBy
+}
 
 $pingProc = $null
 try {
@@ -431,14 +590,49 @@ try {
         -Password $cred2.GetNetworkCredential().Password -RunLevel Limited -Force | Out-Null
     $w6['reregister-new-password'] = 'ok'
 
-    Start-ScheduledTask -TaskName $TaskName -TaskPath '\'
-    $deadline = (Get-Date).AddSeconds(60)
-    while (-not (Test-Path -LiteralPath $taskOut) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
-    Start-Sleep -Seconds 2
-    $w6['task-ran-as'] = Read-Out $taskOut
-    $w6['LastTaskResult'] = (Get-ScheduledTaskInfo -TaskName $TaskName -TaskPath '\').LastTaskResult
+    try { $Detail.Add('w6 readback after the second registration: ' + (Get-TaskReadback)) }
+    catch { $Detail.Add('w6 readback after the second registration: failed: ' + $_.Exception.Message) }
+    $Detail.Add('w6 battery: ' + (Get-BatteryState))
 
-    $ok = $nonInteractive -and $w6['ping-alive-after-rotate'] -and ($w6['task-ran-as'] -like "*\$Account")
+    # The start three ways, in order, stopping at the first after which the output file exists.
+    # Resolve-StartedBy then credits the file by its creation time, not by loop position.
+    $attempts = @(
+        @{ Id = 'W6-a'; Method = 'Start-ScheduledTask (AtStartup trigger as registered)'; Prepare = $null
+           Start = { Start-ScheduledTask -TaskName $TaskName -TaskPath '\' | Out-Null; 'ok' } },
+        @{ Id = 'W6-b'; Method = 'Start-ScheduledTask after re-registration with a one-time trigger a year ahead'
+           Prepare = {
+               $once = New-ScheduledTaskTrigger -Once -At (Get-Date).AddYears(1)
+               Register-ScheduledTask -TaskName $TaskName -TaskPath '\' -Action $action -Settings $settings `
+                   -Trigger $once -User $userId -Password $cred2.GetNetworkCredential().Password -RunLevel Limited -Force | Out-Null
+               try { $Detail.Add('w6 readback after the W6-b registration: ' + (Get-TaskReadback)) }
+               catch { $Detail.Add('w6 readback after the W6-b registration: failed: ' + $_.Exception.Message) }
+               'registered' }
+           Start = { Start-ScheduledTask -TaskName $TaskName -TaskPath '\' | Out-Null; 'ok' } },
+        @{ Id = 'W6-c'; Method = 'schtasks /run /tn (on the task as last registered)'; Prepare = $null
+           Start = {
+               $o = & $Cmd /d /c ('{0} /run /tn \{1} 2>&1' -f $Schtasks, $TaskName)
+               'exit={0} {1}' -f $LASTEXITCODE, (($o | Out-String).Trim()) } }
+    )
+    $AttemptStarts = [ordered]@{}
+    $AttemptSaw = @{}
+    foreach ($a in $attempts) {
+        if (Test-Path -LiteralPath $taskOut) { break }
+        if (Invoke-StartAttempt $a.Id $a.Method $a.Prepare $a.Start) { break }
+    }
+    # Nothing yet after the last attempt: a further 30 s for a late file, then attribute it by time.
+    $deadline = (Get-Date).AddSeconds(30)
+    while (-not (Test-Path -LiteralPath $taskOut) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
+    if (Test-Path -LiteralPath $taskOut) { Start-Sleep -Seconds 2 }
+    if ($AttemptStarts.Count -gt 0) { Add-TaskEvents 'the final wait' }
+    $startedBy = Resolve-StartedBy @($attempts | ForEach-Object { $_.Id })
+    $w6['started-by'] = $startedBy
+    $w6['task-ran-as'] = Read-Out $taskOut
+    if (Test-Path -LiteralPath $taskOut) {
+        $w6['output-created'] = (Get-Item -LiteralPath $taskOut).CreationTime.ToString('HH:mm:ss.fff')
+    }
+
+    $ok = $nonInteractive -and $w6['ping-alive-after-rotate'] -and ($startedBy -like 'W6-*') -and
+        ($w6['task-ran-as'] -like "*\$Account")
     Set-Claim 'W6' $(if ($ok) { 'hold' } else { 'refuted' }) (Join-Evidence $w6)
 } catch {
     $w6['failed'] = $_.Exception.Message

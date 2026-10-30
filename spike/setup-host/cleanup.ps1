@@ -14,6 +14,10 @@
 #     and whose SID resolves to a spike account or to no account;
 #   - %ProgramData%\Broodforge-spike\ only while it holds bf-spike.marker with run.ps1's text, holds
 #     nothing but the entries run.ps1 writes, and holds no link.
+# Besides those removals, it disables the Microsoft-Windows-TaskScheduler/Operational log only while
+# that same verified directory holds bf-spike-tslog.txt with run.ps1's text (run.ps1 writes it only
+# when the log was disabled before it ran), reads the log's state back, and keeps the directory when
+# the log still reads enabled.
 # Assert-SpikeName re-checks each name right before the call. No wildcard and no value from outside
 # this file reaches those calls, so the account broodforge, the task Broodforge and a real
 # instance's directory are never touched.
@@ -32,7 +36,12 @@ $SpikeTask     = 'bf-spike-test'
 $Root          = Join-Path $env:ProgramData 'Broodforge-spike'
 $Marker        = Join-Path $Root 'bf-spike.marker'
 $MarkerPrefix  = 'bf-spike spike root (spike/setup-host/run.ps1)'
-$RootEntries   = @('bf-spike.marker', 'engine', 'spike', 'bf-spike-acl-probe.txt')
+$RootEntries   = @('bf-spike.marker', 'engine', 'spike', 'bf-spike-acl-probe.txt', 'bf-spike-tslog.txt')
+$TsLog         = 'Microsoft-Windows-TaskScheduler/Operational'
+$TsLogRecord   = Join-Path $Root 'bf-spike-tslog.txt'
+$TsLogRecordText = 'enabled-by-spike'
+$Cmd           = Join-Path $env:SystemRoot 'System32\cmd.exe'
+$Wevtutil      = Join-Path $env:SystemRoot 'System32\wevtutil.exe'
 $Left = New-Object System.Collections.Generic.List[string]
 
 # Load the modules before any -WhatIf takes effect: an auto-load under -WhatIf prints its Set-Alias
@@ -162,6 +171,35 @@ if (-not (Test-Path -LiteralPath $Root)) {
     if ($null -eq $why) {
         $links = @(Get-ChildItem -LiteralPath $Root -Recurse -Force -Attributes ReparsePoint)
         if ($links.Count -gt 0) { $why = 'holds a link or junction; not touched' }
+    }
+    # The TaskScheduler log, disabled again only when run.ps1 recorded that it enabled it, and only
+    # in a directory the checks above found to be the spike's; otherwise a record found is reported.
+    $logWhat = "enable of $TsLog"
+    if ($null -ne $why) {
+        if (Test-Path -LiteralPath $TsLogRecord) {
+            Write-Left $logWhat ('not disabled: bf-spike-tslog.txt is there but the directory is kept (' + $why + ')')
+        }
+    } else {
+        $rec = $null
+        if (Test-Path -LiteralPath $TsLogRecord) {
+            try { $rec = [System.IO.File]::ReadAllText($TsLogRecord) } catch { $rec = '(unreadable)' }
+        }
+        if ($null -eq $rec) {
+            Write-Absent "$logWhat (run.ps1 found it enabled or did not reach it)"
+        } elseif ($rec -cne $TsLogRecordText) {
+            Write-Left $logWhat 'bf-spike-tslog.txt does not carry run.ps1''s text; the log is not touched'
+            $why = 'kept: bf-spike-tslog.txt does not carry run.ps1''s text'
+        } elseif ($PSCmdlet.ShouldProcess($TsLog, 'wevtutil sl /e:false (run.ps1 enabled it)')) {
+            $o = & $Cmd /d /c ('{0} sl {1} /e:false 2>&1' -f $Wevtutil, $TsLog)
+            $code = $LASTEXITCODE
+            $enabled = try { (Get-WinEvent -ListLog $TsLog).IsEnabled } catch { 'unknown' }
+            if ($code -eq 0 -and $enabled -eq $false) {
+                Write-Removed "$logWhat (disabled again, reads enabled=False)"
+            } else {
+                Write-Left $logWhat ('wevtutil exit={0} enabled={1} {2}' -f $code, $enabled, (($o | Out-String).Trim()))
+                $why = 'kept: bf-spike-tslog.txt records that the log is still to disable'
+            }
+        }
     }
     if ($null -ne $why) {
         Write-Left $rootName $why
