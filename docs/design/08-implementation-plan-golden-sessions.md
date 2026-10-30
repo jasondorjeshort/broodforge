@@ -76,7 +76,7 @@ and a `render` with neither flag exit 2 with the usage line; `bash tests/repro/g
 runs `serve`, two policy-mode turns against `basic` on channel `100` as `1001` in two sessions each ended with
 `session end`, so the second is `s0002`, then `session tail s0002 --json --all` into a directory under the OS
 temp directory, `stop`; then `go run ./internal/tools/importfixture --events <that file>` leaves `grep -c s0002`
-at zero and P1's `grep -rliE "<pc user>|[A-Za-z]:(/|\\\\)+Users"` over the file empty, `discord render --golden
+at zero and P1's `grep -rliE "<pc user>|[A-Za-z]:[/\\]+Users"` over the file empty, `discord render --golden
 <that directory> --update` writes the output files and `--golden` on it exits 0 (the directory is deleted after;
 nothing of it is committed). `dev-read` only once `credential list` on the dev root shows the dev credential
 `usable` and the brief quotes the owner's go-ahead for one real turn in so many words: the `run` skill's steps 0

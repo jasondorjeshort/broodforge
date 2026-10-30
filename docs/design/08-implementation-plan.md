@@ -63,7 +63,7 @@ separators normalised to `/`; the engine's project slug
 `-home-user-bf-spike-tree`. Only `turn-<n>.jsonl` is imported; `meta-<n>.json` yields `fixture.json`
 (engine version, date, claim, exit code per turn: `interrupted` turns 1 and 2 exit 1). No test
 asserts on an original path. Proof: one `go run ./internal/tools/importfixture <src>
-fixtures/engine/<name>` per name; `grep -rliE "<pc user>|[A-Za-z]:(/|\\\\)+Users" fixtures/` empty. Before the commit, an agent that did not record the fixtures reads every file with nested JSON decoded, confirms no name, email, hostname, path outside the placeholder or repository content survives, and reports in a few lines what is account-level or personal and cannot be classified by a script; the owner decides on that report, never by reading the files. Depends on:
+fixtures/engine/<name>` per name; `grep -rliE "<pc user>|[A-Za-z]:[/\\]+Users" fixtures/` empty. Before the commit, an agent that did not record the fixtures reads every file with nested JSON decoded, confirms no name, email, hostname, path outside the placeholder or repository content survives, and reports in a few lines what is account-level or personal and cannot be classified by a script; the owner decides on that report, never by reading the files. Depends on:
 P0. Must not touch: `spike/`.
 
 ## P2. CLI conventions, the control socket, the in-process harness (medium)
