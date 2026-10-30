@@ -5,11 +5,10 @@ Updated: 2026-10-30 by main session (P29 built and reviewed)
 
 ## Now
 
-- Account `jdorje`. Pushed at `9b1a1c5`: the channel-200 credential doc fix, P28, P32 with its four
-  goldens (`dev-read` on the owner's word after the independent read). Ahead of `origin/main`, each
-  reviewed: the ADR 0024 git-guard row (`a68f795`), the transcript decision line (`b313fa2`), the
-  `internal-error` event (`532b971`), five ideas (`21278d1`), P29 (the `unknown` event shrunk to
-  type, subtype, length and head; goldens regenerated; its idea deleted). Push on request.
+- Account `jdorje`. Pushed at `2c62428`: P28, P32, the ADR 0024 git-guard row, the transcript
+  decision line, the `internal-error` event, five ideas, P29 (the `unknown` event shrunk to type,
+  subtype, length and head; goldens regenerated; its idea deleted). Nothing ahead but this handoff.
+  Push on request.
 - Dev instance: `%LOCALAPPDATA%\Broodforge\dev`, dry-run for good, bot stopped, store at schema 4, dev
   credential `cred-2ha7apqowv` usable; channel 200 as the owner, or `--credential <dev>`. The three
   real turns the owner granted are spent; the next real turn needs a fresh quoted go-ahead.
