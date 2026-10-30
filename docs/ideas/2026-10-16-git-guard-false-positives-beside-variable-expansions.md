@@ -32,3 +32,13 @@ the expansion's value could be it.
   tokenizer cannot tell a wrapper from a script path.
 - 2026-10-21: the update to Hatchery `dc896c3` took the base's guard, which has no `namesGit`;
   "the line names git" is a substring test over the raw text again (the related carry-back idea).
+
+Question: send the expansion-adjacent narrowing to Hatchery as a second carry-back on top of the
+2026-10-21 one, or fold this evidence as a dated line into Hatchery's open rule-19 question
+(`../hatchery/docs/ideas/2026-10-17-guard-false-positives-in-audits.md`, `Answer:` blank) and leave
+the guard as it is? Recommendation: fold and leave. Hatchery built and withdrew a data-position
+exemption because `for ...; do echo '<git cmd>'; done | sh` and `tee >(sh)` shapes bypassed it, and
+`$B git ...` (the Open item) has the same hole: the tokenizer cannot tell a wrapper from a script
+path, so the one safe narrowing is the quoted-text rule the 2026-10-21 Plan already carries, and the
+workaround costs one extra call. The scratch-repository half rides on the 2026-10-14 idea's Plan.
+Answer:
