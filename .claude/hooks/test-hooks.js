@@ -2419,6 +2419,21 @@ function fitnessDeps(root) {
     const want = [['~/.claude/mine.md', true, null], ['/etc/hosts', true, null], ['C:/x.md', true, null], ['../up.md', true, null]];
     report('IM13', 'resolve: targets outside the root are marked outside, never stat\'ed (exists null) or followed', JSON.stringify(r) === JSON.stringify(want), `got ${JSON.stringify(r)}`);
   }
+  if (selected('IM14')) {
+    // outside.md sits beside the root: on Windows the backslashes climb to it.
+    fs.writeFileSync(path.join(path.dirname(root), 'outside.md'), '# outside\n@beyond.md\n');
+    put('bs.md', String.raw`@.claude\..\..\outside.md` + '\n');
+    const r = resolve(root, 'bs.md').map((i) => [i.target, i.outside, i.exists]);
+    const want = [['.claude/../../outside.md', true, null]];
+    report('IM14', 'resolve: a token holding a backslash is outside on every host, never stat\'ed or followed', JSON.stringify(r) === JSON.stringify(want), `got ${JSON.stringify(r)}`);
+  }
+  if (selected('IM15')) {
+    put('dev/a.md', '@a:b.md @nul.md @x/AUX.Txt @conin$.md @COM¹.txt @nullable.md\n');
+    const r = resolve(root, 'dev/a.md').map((i) => [i.target, i.outside, i.exists]);
+    const want = [['dev/a:b.md', true, null], ['dev/nul.md', true, null], ['dev/x/AUX.Txt', true, null], ['dev/conin$.md', true, null],
+      ['dev/COM¹.txt', true, null], ['dev/nullable.md', false, false]];
+    report('IM15', 'resolve: a target with a colon or a device-name segment (any extension or case) is outside on every host', JSON.stringify(r) === JSON.stringify(want), `got ${JSON.stringify(r)}`);
+  }
 }
 
 // ---------- policy.js --claude-check and post-edit on the agreement files (group CL; ADR 0016) ----------

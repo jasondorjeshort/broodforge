@@ -14,7 +14,11 @@
 //     but its own imports are not.
 // A target outside the repository root (~/..., an absolute path, a ../ that climbs above the root)
 // is returned with outside: true and is never stat'ed, read or followed: the checks are about the
-// tree, and a file outside it is the user's.
+// tree, and a file outside it is the user's. On every host, so is a token holding a backslash
+// (Windows reads it as a separator, so .claude\..\..\x climbs) and a target with a ':' in any
+// segment (a drive or a stream) or a Windows device-name segment (CON, PRN, AUX, NUL, CONIN$,
+// CONOUT$, COM1-9, LPT1-9 and COM/LPT with a superscript 1-3, any extension, any case), the set
+// Go's filepath.IsLocal refuses on Windows.
 // The sentinel procedure in the agreement-loading reference entry checks this against the loader;
 // a mismatch is a fix here.
 //
@@ -100,14 +104,20 @@ function parse(text) {
   return found;
 }
 
+// A Windows device name as a path segment, with any extension and in any case (nul.md is NUL): the
+// set Go's filepath.IsLocal reserves on Windows, COM and LPT with superscript 1 to 3 included.
+const DEVICE = /^(con|prn|aux|nul|conin\$|conout\$|com[1-9¹²³]|lpt[1-9¹²³])(\..*)?$/i;
+
 // The target of token imported from file (repo-relative): { target, outside }.
 function targetOf(file, token) {
-  if (token.startsWith('~') || token.startsWith('/') || token.startsWith('\\') || /^[A-Za-z]:[\\/]/.test(token)) {
+  if (token.startsWith('~') || token.startsWith('/') || token.includes('\\') || /^[A-Za-z]:[\\/]/.test(token)) {
     return { target: token.replace(/\\/g, '/'), outside: true };
   }
   const rel = path.posix.normalize(path.posix.join(path.posix.dirname(file), token));
   if (rel === '..' || rel.startsWith('../')) return { target: rel, outside: true };
-  return { target: rel.replace(/^\.\//, ''), outside: false };
+  const target = rel.replace(/^\.\//, '');
+  if (target.split('/').some((s) => s.includes(':') || DEVICE.test(s))) return { target, outside: true };
+  return { target, outside: false };
 }
 
 const absOf = (root, target) => path.join(root, ...target.split('/'));

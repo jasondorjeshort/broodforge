@@ -147,7 +147,10 @@ and outside a fenced block, its token running to the next whitespace with a trai
 `;`, `:` or `)` stripped (the sentinel procedure in the reference entry settles the token rule
 against the loader; the parser follows the loader). Every check below counts over every file the
 chain reaches at any of the four hops, not over `CLAUDE.md` alone. An import whose target is
-outside the repository root (`../x`, `~/x`, an absolute path) is marked by the parser, never read,
+outside the repository root (`../x`, `~/x`, an absolute path; on every host also a token holding
+a backslash, and a target with a `:` in any segment or a Windows device-name segment, the set
+Go's `filepath.IsLocal` refuses on Windows, such as `nul.md`, `COM1.txt` or `CONIN$`, any
+extension or case) is marked by the parser, never read,
 not counted toward the 190 and never a `FAIL`: a project may keep a personal home import, and the
 cap measures only what the repository ships; `--claude-check` lists such imports in one info line
 (`info: <n> imports outside the repository, not counted: <paths>`). Lines, exit 1 on any `FAIL`, a
