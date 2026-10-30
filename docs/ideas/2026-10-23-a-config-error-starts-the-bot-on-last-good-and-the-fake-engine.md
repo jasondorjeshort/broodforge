@@ -28,3 +28,15 @@ only).
 - Is a cold start on last-good ever wanted (an unattended restart after a bad edit)? Then it needs a
   loud notice, not a quiet line in `status`.
 - Whether the fake engine's header line belongs in `04-ux.md` (what humans see: the owner's call).
+
+Question: at a cold start with an invalid `config/`, should `serve` keep ADR 0021's fallback to
+last-good, made loud (the notice-channel post the ADR designed and `startupReport` never built, a
+`config: last-good from <time>` clause in the start-up report, and an `engine: fake` line in the
+venue header when the channel runs the fake), or refuse unless a flag such as `--last-good` asks
+for it? Recommendation: keep the fallback and make it loud. The fallback exists for the unattended
+restart (`setup service`, Task Scheduler, systemd), where a refusal is a bot that stays down until
+someone looks, while an attended start already has `config check` and the audit row; the loud
+parts are the unbuilt half of ADR 0021 and need no new decision, only your wording for the two
+lines. A yes makes this a coder pass (`internal/cli/serve.go` steps 2 and 7, the gateway report,
+the header text); a no is an ADR 0021 amendment first.
+Answer:
