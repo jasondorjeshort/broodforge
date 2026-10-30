@@ -30,8 +30,7 @@ in PowerShell, `$g='C:\Program Files\Git\cmd\git.exe'; & $g push -f` stays denie
 Those commits' edits to `.claude/rules/README.md` and `.claude/rules/hooks.md` are not part of the
 carry-back.
 
-Plan: in a carry-back worktree cut from the current `hatchery/main` (`carry-back` skill, Send),
-port `namesGit` and the two parser fields from `5288955` onto the base guard, with the harness
-cases `GR24a` to `GR24k` and the 0002-hook-specs sentence from `14304c6` and `5288955`; `node
-.claude/hooks/test-hooks.js` green; one commit `Carry-back: git-guard: a quoted string that
-contains git does not name git`.
+Plan: Send is done: the branch `carry-back/git-guard-quoted-git` was sent at `fffd564` with the
+extended `namesGit(cmd, captured)` (not the `5288955` version), harness cases `GR24a` to `GR24z`,
+and the 0002-hook-specs sentence. What remains is Land in Hatchery (`carry-back` skill, Land), then
+`update-from-hatchery` here.

@@ -113,7 +113,9 @@ words; a brief that merely asks to "test on the real engine" is not that. Then, 
 credential `usable` in `credential list` (the owner's step): `bin/broodforge.exe engine run --real
 --credential <id> --cwd <tmp tree> --prompt "Read hello.txt and reply with its one word."` streams
 a `result`; a session on channel `200` (`--custom-id bf:200:start --user <owner id> --roles 10`)
-is the same cost per turn.
+is the same cost per turn. Start it as the owner's registration, whose default is the dev
+credential: `1001` defaults to the fake `scratch` key, so a start as `1001` needs `session start
+--channel 200 --as 1001 --roles 10 --credential <id>`, or the turn runs on the fake key and fails.
 
 ## 5. Stop
 

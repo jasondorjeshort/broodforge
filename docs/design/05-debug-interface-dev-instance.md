@@ -57,7 +57,11 @@ inject click --custom-id bf:100:start --user 1001 --roles 10` and `discord injec
 round trip, `session end <id>`, `stop`. Channel `200` is the real engine: a session there, or
 `engine run --real --credential <dev credential> --cwd <tmp tree> --prompt "..."`, spends the
 owner's plan and runs on the owner's word only, as every pass's "real turn" does: the brief quotes
-the owner's go-ahead for that real turn in so many words, or it does not run.
+the owner's go-ahead for that real turn in so many words, or it does not run. A session takes the
+credential of `--credential <id>` when given, else the default of the registration named by `--as`
+(or by `--user` on an inject click); `1001`'s default is the fake `scratch` key, so a channel-200
+session is started as the owner's registration (`--user <owner id>`) or with `session start ...
+--credential <dev credential>`, never by `1001` alone.
 
 Observe. `status`; `session tail <id> --all`; `session outbox <id>`; `audit --limit 20`; the
 run's `serve-<stamp>.log` for the start-up lines and warnings; `credential list` for the dev

@@ -28,3 +28,9 @@ The point of this idea: any re-graft of the project's own fix, and its return by
 
 Differs from `2026-10-21-carry-back-quoted-git-does-not-name-git.md`: that idea sends the fix; this
 one records the gap in the original fix and which version must come back.
+
+Question: Keep this file as a `Waits:` on Hatchery landing `carry-back/git-guard-quoted-git` (only the
+owner writes a `Waits:`), or move the "never `5288955`, take the extended `namesGit(cmd, captured)`"
+rule into the `git-guard.js` departure row of `docs/design/decisions/0024-decanted-from-hatchery.md`
+and delete this file? Recommendation: the row, then delete.
+Answer:
