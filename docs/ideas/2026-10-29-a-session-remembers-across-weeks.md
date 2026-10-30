@@ -1,7 +1,7 @@
 ---
 date: 2026-10-29
 kind: feature
-related: [2026-10-24-a-turn-ending-on-a-tool-call-could-prompt-the-engine-for-a-closing-message.md]  # that one writes for the venue; this one writes for the next resume
+related: [2026-10-24-a-turn-ending-on-a-tool-call-could-prompt-the-engine-for-a-closing-message.md, 2026-10-30-owner-less-weeks.md]  # the first writes for the venue; this one writes for the next resume; the last is the combined weeks-away vision that needs it
 ---
 
 # A session remembers across weeks

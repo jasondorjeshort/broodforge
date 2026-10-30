@@ -1,7 +1,7 @@
 ---
 date: 2026-10-22
 kind: feature
-related: [2026-10-16-p10-remainder-closing-turn-needs-login-interrupt-kill-live-reconcile.md, 2026-10-16-p11-remainder-for-the-live-gateway.md]
+related: [2026-10-16-p10-remainder-closing-turn-needs-login-interrupt-kill-live-reconcile.md, 2026-10-16-p11-remainder-for-the-live-gateway.md, 2026-10-30-the-bot-files-its-own-findings.md]  # the last reads these lines from a scratch session to reproduce a refusal; this one is the trace itself
 ---
 
 # A trace of the Discord layer, so an agent can watch a live bot

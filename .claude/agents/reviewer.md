@@ -40,8 +40,9 @@ Rules:
   reading.
 - A finding that can be stated as a test is delivered as one. The reviewer has no Write or Edit
   tool, so the report gives the test's exact text, ready for the coder to add verbatim: a failing
-  harness case for `.claude/hooks/test-hooks.js` or a Go test, with its file and name, so the fix is
-  "make it pass" and the case stays as the regression guard. Writing the test is reporting, not
+  harness case for `.claude/hooks/test-hooks.js` or a test in the project's own suite (here a Go test),
+  with its file and name, and says whether it was seen to fail in a throwaway copy or is unrun, so the
+  fix is "make it pass" and the case stays as the regression guard. Writing the test is reporting, not
   fixing; a finding that cannot be a test (a design line, a wording, a doc) says so in one clause.
 - Do not fix anything and do not commit. The coordinator reads your report and routes fixes; the
   report is the product.

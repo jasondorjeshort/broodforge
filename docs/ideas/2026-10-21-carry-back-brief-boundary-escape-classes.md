@@ -1,7 +1,7 @@
 ---
 date: 2026-10-21
 kind: chore
-related: [.claude/skills/brief/SKILL.md, docs/design/decisions/0024-decanted-from-hatchery.md]
+related: [.claude/skills/brief/SKILL.md, docs/design/decisions/0024-decanted-from-hatchery.md, 2026-10-30-carry-back-a-reviewer-finding-is-a-failing-test.md]
 ---
 
 # Carry back: a reviewer brief for a path or name boundary lists the escape classes

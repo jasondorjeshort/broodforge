@@ -1,7 +1,7 @@
 ---
 date: 2026-10-16
 kind: feature
-related: []
+related: [2026-10-30-credential-pool-scheduling-by-headroom.md]  # the pool idea routes work by these meters
 ---
 
 # Rate-limit events carry plan usage per credential
