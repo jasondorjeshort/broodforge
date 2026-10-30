@@ -9,8 +9,7 @@ commands and wire format `05-debug-interface.md`'s; the hook's environment, path
 ## Components and boundaries
 
 One Go binary, one process per instance (ADRs 0020, 0023), one package per component under `internal/<component>/`,
-named by the first column. A component talks only to the ones its row names; everything else goes through `SessionService`.
-Host differences live in `spawn`, `worktree-remove`, `control` (the socket path), `setup`'s host files and nowhere else (`06-platforms.md`, Sharing).
+named by the first column. A component talks only to the ones its row names; everything else goes through `SessionService`. Host differences live in `spawn`, `worktree-remove`, `control` (the socket path), `setup`'s host files and nowhere else (`06-platforms.md`, Sharing).
 
 | Component | Owns | Talks to |
 |---|---|---|
@@ -29,13 +28,12 @@ Host differences live in `spawn`, `worktree-remove`, `control` (the socket path)
 | `backup` | `backup snapshot`, `verify`, `rehearse` (never scheduled by the bot) | `store` |
 | `config` | Loading, validation, last-good, `reload`, `config check` | `credentials` (id existence), `policy` (the model and effort values) |
 | `setup` | `broodforge setup` (ADR 0027): the step runner, the prompts and their defaults, the single-writer bind of the control address, the host scripts | `config`, `credentials`, `store`, `spawn`, `git`, `discord`, `control`; `audit` (the credential service's writer) |
-| `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control`; `credentials` (`credential init`, the reads' store fallback, the bot's handlers); `session` (`serve` builds the service and serves it); `discord` (`serve`'s adapter, the standalone `discord render`); `git` and `policy` (the worktree handlers); `workflow` (`workflow render` and `probe`, the handoff's copy path, `serve`'s session copy and probe at start); `setup` (the `setup` command) |
+| `cli` | The one entry point `broodforge <command>`; `serve` runs the bot, everything else is a client of `control` | `control`; and, the exceptions `.claude/rules/go.md` defers to, every component a standalone or `(file)` subcommand lives in: `engine`, `config` and `hook` (`engine run\|record`, `config check\|show`, `hook pre-tool-use\|post-tool-use\|try\|cases`); `store`, `audit`, `backup` and `credentials` (the `(file)` commands, the read commands' fallback to the store file, `credential init`, the bot's handlers); `spawn` (`spawn preflight`; the backend the standalone engine commands start); `session` (`serve` builds the service and serves it); `discord` (`serve`'s adapter, the standalone `discord render`, `setup`'s Discord client and its scripted fake `BROODFORGE_SETUP_FAKE_DISCORD`); `git` and `policy` (the worktree handlers, the hidden `git-askpass`, `git-commit-msg` and `git-pre-push`); `workflow` (`workflow render\|probe`, the handoff's copy path, `serve`'s copy and probe at session start); `setup` (the `setup` command) |
 
-`SessionService` is the boundary N-11 names: `start`, `submit`, `answer`, `setMode`, `interrupt`, `end`, `invite`,
-`status`, `subscribe(sessionId)`. The Discord adapter and the control socket call the same methods and read the same
-`SessionEvent` stream; a behaviour reachable from Discord only is a bug. N-26: each session's turn is its own engine
-process and goroutine, nothing in `session` awaits another session, and store writes are short transactions (ADR 0021):
-a stuck engine delays only its own session, until a person stops or ends it.
+`SessionService` is the boundary N-11 names: `start`, `submit`, `answer`, `setMode`, `interrupt`, `end`, `invite`, `status`,
+`subscribe(sessionId)`. The Discord adapter and the control socket call the same methods and read the same `SessionEvent` stream; a
+behaviour reachable from Discord only is a bug. N-26: each session's turn is its own engine process and goroutine, nothing in `session`
+awaits another session, and store writes are short transactions (ADR 0021): a stuck engine delays only its own session, until a person stops or ends it.
 
 Registration and participants (R-01 to R-04, R-13, R-25, N-18). `discord` owns the register command: one registration
 per Discord user id; registering again replaces name and email with an audit event (R-02). `session` owns participants:
@@ -111,24 +109,28 @@ type TurnRequest struct {
 type TurnHandle struct { Events <-chan EngineEvent; Interrupt func() error }
 // A sum type: a struct with a Kind enum, one pointer payload per kind; `exhaustive` checks each switch (ADR 0023).
 type EngineEvent struct {
-	Kind       EventKind // init | assistant | tool-result | result | exit | unknown
+	Kind       EventKind // init | assistant | tool-result | result | exit | rate-limit | unknown
 	Init       *struct{ EngineSessionID, Model string; Tools, Capabilities []string }
 	Assistant  *struct{ MessageID, Model, ParentToolUseID string; Blocks []Block; Usage Usage }
 	ToolResult *struct{ ToolUseID string; IsError bool; Text, DecidedBy string } // tool_result_meta source
 	Result     *struct{ StopReason string; IsError bool; NumTurns int; Deferred *DeferredTool; PermissionDenials []json.RawMessage; ModelUsage map[string]ModelUsage; Usage json.RawMessage }
 	Exit       *struct{ Code *int; Signal string; Interrupted bool }
-	Unknown    string    // raw line; logged at debug level, never fatal
+	RateLimit  *struct{ Status, RateLimitType string; FiveHour, SevenDay Window; OverageStatus string; IsUsingOverage bool } // rate_limit_event's rate_limit_info
+	Unknown    *struct{ Type, Subtype string; Bytes int; Head string } // any other line: its type, subtype, length and first 200 bytes; never fatal
 }
-type Usage struct{ Input, CacheRead, CacheWrite int }
+type Usage struct{ Input, CacheRead, CacheWrite int }; type Window struct{ Utilization float64; ResetsAt int64 } // a fraction; unix seconds
 type DeferredTool struct{ ToolUseID, Name string; Input json.RawMessage }
 type Block struct{ Kind string; Text string; ID, Name string; Input json.RawMessage } // Kind: text | tool-use
 ```
 
-Stream-json subset consumed: `system` subtype `init` (session id, model, tools, `capabilities`); `assistant`
-(`message.id`, `message.model`, `message.usage`, text and `tool_use` content, `parent_tool_use_id`; one line per content
-block, S1); `user` with `tool_result` content and the optional `tool_result_meta`; `result` (`stop_reason`, `is_error`,
-`num_turns`, `deferred_tool_use`, `permission_denials`, `modelUsage`, `usage`). Everything else is `unknown`; partial
-messages are not requested; a `capabilities` set missing a name the adapter needs refuses at start (exit 1).
+Stream-json subset consumed: `system` subtype `init` (session id, model, tools, `capabilities`); `assistant` (`message.id`,
+`message.model`, `message.usage`, text and `tool_use` content, `parent_tool_use_id`; one line per content block, S1); `user` with
+`tool_result` content and the optional `tool_result_meta`; `result` (`stop_reason`, `is_error`, `num_turns`, `deferred_tool_use`,
+`permission_denials`, `modelUsage`, `usage`); `rate_limit_event` (`rate_limit_info`: `status`, `rateLimitType`, `unifiedWindows.five_hour`
+and `seven_day` with `utilization` and `resetsAt`, `overageStatus`, `isUsingOverage`; an absent field is its zero value; the account's plan
+meters, kept per credential: ADR 0020 and ADR 0021, Amendments 2026-10-30). Everything else is `unknown`, carried as its `type`, `subtype`,
+byte length and first 200 bytes, never the line (the engine's `commands_changed` runs to pages); partial messages are not requested; a
+`capabilities` set missing a name the adapter needs refuses at start (exit 1).
 
 Usage delta: `modelUsage` is cumulative per engine session over the turns that reached a `result`
 (a killed turn's counts are absent from the next cumulative, S2); the turn's record per model is
@@ -138,14 +140,13 @@ with no `result` gets the `assistant` counts deduplicated by `messageId`, output
 interrupted (ADR 0020), its own record outside the baseline. Models that worked are the keys of
 `modelUsage`, or the distinct `model` values seen when interrupted.
 
-The command line is ADR 0020's; the stdin message is one stream-json `user` line with one text block; the system prompt
-append is passed per process but the engine renders the prompt once per conversation and reuses it on every resume
-until a compaction renders it again (ADR 0025; from which launch's flags is not determined), so it carries nothing
-that changes within a session; `--mcp-config` names `<bf>/share/empty/mcp.json`, an empty map shipped with Broodforge and
-reached through the existing `<bf>` bind (ADR 0022 companion). The `fake` replays a fixture directory: `turn-<n>.jsonl`
-files of verbatim stream-json lines, an optional per-line delay in `fixture.json`, each `TurnRequest` received written
-as `received-<n>.json` for assertions; `interrupt()` ends the current file early with `exit` carrying `interrupted:
-true`. A recorded real-engine transcript is a fixture as captured (ADR 0020's spike).
+The command line is ADR 0020's; the stdin message is one stream-json `user` line with one text block; the system prompt append is
+passed per process but the engine renders the prompt once per conversation and reuses it on every resume until a compaction renders
+it again (ADR 0025; from which launch's flags is not determined), so it carries nothing that changes within a session; `--mcp-config`
+names `<bf>/share/empty/mcp.json`, an empty map shipped with Broodforge and reached through the existing `<bf>` bind (ADR 0022
+companion). The `fake` replays a fixture directory: `turn-<n>.jsonl` files of verbatim stream-json lines, an optional per-line delay
+in `fixture.json`, each `TurnRequest` received written as `received-<n>.json` for assertions; `interrupt()` ends the current file early
+with `exit` carrying `interrupted: true`. A recorded real-engine transcript is a fixture as captured (ADR 0020's spike).
 
 ## The PreToolUse hook
 
@@ -203,13 +204,12 @@ two project files is a `config check` error (R-07). Every credential id named mu
 
 ## Git: trees, branches, attribution, handoff
 
-Session id: `s` plus the base-36 session row id, at least four digits (`s0001`), unique per
-instance. Branch: `broodforge/<instanceName>/<session id>` (two instances pushing one remote cannot collide; the
-instance name matches the project-id pattern); tree: `sessions/<session id>/tree`; the canonical's ref:
-`refs/sessions/<session id>` (ADR 0022); the remote branch equals the local one. Subagent worktrees are the engine's
-own, inside the clone; only the session branch is bundled, so subagent work reaches the push once merged or
-cherry-picked into it (R-31); unmerged subagent branches are listed in the end-of-session summary and removed with the
-tree.
+Session id: `s` plus the base-36 session row id, at least four digits (`s0001`), unique per instance. Branch:
+`broodforge/<instanceName>/<session id>` (two instances pushing one remote cannot collide; the instance name matches the project-id
+pattern); tree: `sessions/<session id>/tree`; the canonical's ref: `refs/sessions/<session id>` (ADR 0022); the remote branch equals
+the local one; the base is the canonical's default branch after the fetch at session start (ADR 0022 companion, Clone step 0).
+Subagent worktrees are the engine's own, inside the clone; only the session branch is bundled, so subagent work reaches the push once
+merged or cherry-picked into it (R-31); unmerged subagent branches are listed in the end-of-session summary and removed with the tree.
 Attribution (R-32, R-33). Author and committer of every commit: the driver's registration,
 through the four git identity variables (ADR 0022). Trailers, one `Co-Authored-By: <name> <email>` each, in this order:
 every other participant who wrote a message before the commit's committer time, in join order; then every model with
@@ -250,20 +250,19 @@ flow). No commits: the tree is removed and the session says so. The tree is remo
 | Debug CLI | any shell as `broodforge` | an elevated PowerShell (reads and `stop`; writes through `setup`, relaunched as `broodforge`, ADR 0027); the owner's own account for scratch runs |
 | Control socket | `data/control.sock`, directory `0700` | named pipe `\\.\pipe\broodforge-<instanceName>` |
 
-Startup, in order; a failure at any step is a refusal naming the step, exit 1: (1) the instance root from the flag or
-environment variable (ADR 0021); (2) `config/` or last-good (ADR 0021), parsed and validated except for credential ids,
-then a probe of step 8's address: anything but nothing listening refuses `start-control` before any write, so a second
-bot never reconciles the first's sessions; (3) the key file the config names or `BROODFORGE_KEY_FILE`, the credential
-store, then the config's credential ids against it (ADR 0022); (4) `data/store.sqlite` and migrations; (5) the engine
-binary and version; (6) `spawn preflight`; (7) reconciliation (ADR 0021), then every interrupted session held in memory so `end` reaches it (ADR 0026); (8) the control socket; (9) the Discord
-gateway; (10) the interrupted notice in each interrupted session's venue, the start-up report to the notice channel if set.
+Startup, in order; a failure at any step is a refusal naming the step, exit 1: (1) the instance root from the flag or environment
+variable (ADR 0021); (2) `config/` or last-good (ADR 0021), parsed and validated except for credential ids, then a probe of step 8's
+address: anything but nothing listening refuses `start-control` before any write, so a second bot never reconciles the first's
+sessions; (3) the key file the config names or `BROODFORGE_KEY_FILE`, the credential store, then the config's credential ids against it
+(ADR 0022); (4) `data/store.sqlite` and migrations; (5) the engine binary and version; (6) `spawn preflight`; (7) reconciliation (ADR 0021),
+then every interrupted session held in memory so `end` reaches it (ADR 0026); (8) the control socket; (9) the Discord gateway; (10) the
+interrupted notice in each interrupted session's venue, the start-up report to the notice channel if set.
 
-Signals and leftovers. The spawn backend starts every engine (the `sudo` child on Linux) detached
-in its own process group, so a terminal's Ctrl-C reaches the bot alone and the bot interrupts each
-turn through the backend; `KillMode=mixed` makes `systemctl stop` do the same (SIGTERM to the bot
-only, SIGKILL to the rest of the cgroup after `TimeoutStopSec`). After a bot crash, systemd kills
-the leftover engines with the unit; on Windows the bot sits in a kill-on-close job object and each engine in its own, so a crash
-or `stop` ends them (ADR 0023). The next start records those turns interrupted.
+Signals and leftovers. The spawn backend starts every engine (the `sudo` child on Linux) detached in its own process group, so a
+terminal's Ctrl-C reaches the bot alone and the bot interrupts each turn through the backend; `KillMode=mixed` makes `systemctl stop`
+do the same (SIGTERM to the bot only, SIGKILL to the rest of the cgroup after `TimeoutStopSec`). After a bot crash, systemd kills the
+leftover engines with the unit; on Windows the bot sits in a kill-on-close job object and each engine in its own, so a crash or `stop`
+ends them (ADR 0023). The next start records those turns interrupted.
 
 Shutdown (`SIGTERM`, Ctrl-C, or `stop` over the control socket): stop accepting messages and clicks,
 interrupt every running turn through the spawn backend, mark every open session interrupted (R-17;
@@ -294,6 +293,7 @@ The last column names a 04 flow, not its wording.
 | `credentials`, `git` | Key file missing or store unreadable; id removed or `needs-login`; clone fails | start refused; session start refused naming the credential or the clone error, no tree recorded | session-refused |
 | `git` | Bundle, fetch or attribution check fails | handoff refused, tree kept, session stays open, commits listed | handoff-refused |
 | `git` | Push rejected, request API error | audit `failed`, tree kept, `status` lists it, retry by `worktree handoff` | handoff-failed |
+| `git` | The canonical's fetch fails at session start; its default branch has diverged from the remote | the session starts from the local branch, `session-started` carries `canonical` `stale`, `status --json` shows the last fetch (ADR 0022 companion, Clone step 0; a local branch ahead of the remote starts the same way, `canonical` `ahead <n>`, no venue line); diverged (neither contains the other): start refused `canonical-diverged`, nothing cloned, the row ended `refused: canonical-diverged` | canonical-stale; session-refused |
 | `store` | Locked, corrupt, schema newer than the binary | refusal at start, exit 1 (ADR 0021) | operator |
 | `config` | Invalid at start or reload | last-good or refusal (ADR 0021) | notice channel |
 | `session` | Idle timeout | the end-of-session sequence; a refused handoff keeps the tree | session-ended |

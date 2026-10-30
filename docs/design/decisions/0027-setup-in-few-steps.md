@@ -143,6 +143,16 @@ Windows (ADR 0022's trigger).
 
 - Prediction, check when P21 lands: a rerun of `setup` on a configured host with the bot stopped
   prints only `ok` and `skip` lines and changes no file, no credential, no channel and no role.
+  Outcome, 2026-10-30: holds, on the evidence in the tree at `4496e2b`, the scripted Discord
+  standing in for the guild. `tests/repro/setup.sh` step 2 (the proof of P21 and P22, under `scratch
+  run`) reruns the full `--yes` line on a configured root and asserts every result line is `ok` or
+  `skip`, the five Discord steps `skip`, `config/` byte-equal to its copy from before the rerun, and
+  no `Create`, `Update` or `AddMember` written to the scripted Discord; `TestPlaceholders` in
+  `internal/setup/setup_test.go` asserts only `ok` and `skip` for a live rerun of a root turned live
+  from dry-run; the P27 coder's run on the real dev root printed only `ok` and `skip` on the second
+  `setup --discord dry-run` line. The credential and key halves rest on `skip  token` and `skip
+  key  exists` (a skip writes nothing, the companion's rerun rule); no run diffed
+  `credentials/store.json` itself. The owner's guild is P22's owner step, not checked here.
 - Prediction, check by 2027-04-26: no later pass adds an owner-only step a command could have
   done; the PC count stays 18 or falls.
 - Prediction, check when P23 lands: W3a holds (the profile exists after the inner `setup`, no

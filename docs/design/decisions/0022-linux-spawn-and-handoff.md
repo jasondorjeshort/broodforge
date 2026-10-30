@@ -163,6 +163,26 @@ Never signal `sudo` or `bwrap` with SIGINT expecting a `result`; both end in a S
 
 ## Clone at session start
 
+0. The bot, in `<canon>`, before the workflow copy (ADR 0025 rule 5) and the clone: `git -c
+   credential.helper= fetch --quiet --no-tags --no-write-fetch-head <remote> +refs/heads/<default
+   branch>:refs/remotes/<remote>/<default branch>` (as the handoff's fetch runs), `<remote>` and the
+   branch the project's `repo.remote` and `repo.defaultBranch`, with the push's `GIT_ASKPASS` helper
+   and, when the project names `repo.gitCredentialId`, its value on that one process (step 4 below),
+   nothing else fetched, a deadline of thirty seconds. Then the two branches are compared
+   (`merge-base --is-ancestor` both ways): the local branch behind the fetched ref is fast-forwarded,
+   `git merge --ff-only` while HEAD is that branch, so the checkout stays coherent, else `git
+   update-ref <ref> <new> <old>`; equal is nothing; the local branch ahead (it contains the remote's
+   commit, as when the owner or a script commits in the canonical without pushing) is left as it is
+   and the session starts from it, the `session-started` row carrying `canonical` `ahead <n>`, the
+   count of local commits past the remote's, with no venue line; diverged (neither contains the
+   other) refuses the start, `canonical-diverged`, nothing cloned, the row ended `refused:
+   canonical-diverged`; the owner reconciles the canonical by hand. A fetch that fails or runs past
+   its deadline (offline, a credential refused, a `repo.gitCredentialId` the store lacks, which skips
+   the fetch with the reason `credential-missing`, a fast-forward refused by a dirty checkout) does
+   not refuse: the session starts from the local branch, the row carries `canonical` `stale: <git's
+   line or the reason>` (`fetched` otherwise), the venue's first post says so (`../04-ux.md`,
+   `canonical-stale`, the owner's wording) and `status --json` shows the last fetch per project.
+   The canonical is never reset or cleaned, and the bot's git still never opens a session's tree.
 1. The bot, in `<canon>`: `git update-ref refs/sessions/<id> <base commit>`; creates
    `<sess>` through `worktree-create`, which runs as the engine user:
 2. `git -c safe.directory=<canon> clone --shared --branch <base branch> <canon> <sess>/tree`,
@@ -223,3 +243,16 @@ no `safe.directory` for anything engine-owned. On Windows the same five steps ru
   backend sets both for an API key, `CLAUDE_CONFIG_DIR` naming `<sess>/home/.claude`, because on
   the same account the engine would otherwise read the owner's `~/.claude`; `<ecfg>` is the same
   directory either way.
+- 2026-10-30, the idea file of 2026-10-24 on a session starting from a stale canonical and the
+  2026-10-29 triage: nothing fetched the remote into the canonical, so a session branched from
+  whatever the default branch was last set to (on the live root, four commits behind, then twelve).
+  Clone at session start gains step 0 above, written in place as this living spec allows: the
+  fetch to the remote-tracking ref, the fast-forward (`merge --ff-only` while checked out,
+  `update-ref` otherwise; not `fetch --update-head-ok`, which leaves the checkout incoherent, and
+  not `pull`, which needs an upstream and runs a merge), the ahead case left alone (review of
+  2026-10-30: `tests/repro/full-session.sh` commits the workflow fixture into the canonical without
+  pushing, and one local commit of the owner's must not stop every session), the diverged refusal
+  and the stale start.
+  The fetch comes before the copy, so a session's rules are the remote's too. Built by P30
+  (`../08-implementation-plan-canonical.md`); the venue line and refuse-or-warn on divergence are
+  the owner's, pending in `../04-ux.md`.

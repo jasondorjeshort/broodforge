@@ -14,10 +14,16 @@ coder must remember and the reviewer must grep for; `go vet` and `staticcheck` e
 them. The "Import exception" paragraph restates the `cli` row of 03 with eight clauses and drifts
 whenever a package is added, and it loads on every `.go` read.
 
-Plan:
-- Architect, one sitting: move the "Import exception" list into the `cli` row of
-  `docs/design/03-architecture.md`; `go.md` keeps one line saying a package imports only the
-  components its row names and the `cli` row lists its exceptions.
-- Then one coder brief: one Go test under `tests/lint/` runs `go list -json ./...` and a file scan
-  for the four rules, so `go test ./...` enforces them and pusher check 8 needs no new hook.
-- Reviewer reads it.
+2026-10-30 (architect): the first half is done. The "Import exception" paragraph is gone from
+`.claude/rules/go.md`, whose package rule now says the `cli` row of `03-architecture.md` lists that
+package's exceptions; the row carries them (`engine`, `config`, `hook`, `store`, `audit`, `backup`,
+`spawn` added to what it named), one line per component with the commands that need it.
+
+Plan: coder, one brief: one Go test under `tests/lint/` [no-check: created by the pass] runs `go list -json ./...` and a file scan
+for the four rules of `.claude/rules/go.md`: the SPDX first line; no host branching outside `spawn`,
+the worktree removal it owns, `control` and `setup`'s `host_windows.go` and `host_linux.go`; no
+`interface{}` or `any` outside `internal/engine`'s raw layer (`parse.go`); a package imports only the
+components its row in `03-architecture.md` names, the `cli` row's exceptions included. The allowed
+import graph is data in the test, one entry per row, with a comment naming the row it mirrors; a
+package or import the table does not know fails the test with the row to edit. `go test ./...` then
+enforces all four and pusher check 8 needs no new hook; a `tests/README.md` row. Reviewer reads it.

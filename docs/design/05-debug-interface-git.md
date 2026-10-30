@@ -100,3 +100,34 @@ never opens the session tree (ADR 0022) and runs with the inherited `GIT_*` repo
 variables stripped; `worktree check` reads `refs/sessions/<id>` after its own fetch. Tests make
 their repositories under the test's temporary directory and commit through `os/exec` with the
 four identity variables (`internal/git/gittest`).
+
+## The fetch at session start
+
+ADR 0022 companion, Clone at session start, step 0; P30 of `08-implementation-plan-canonical.md`.
+Drive. `session start` first fetches the project's `repo.remote`'s `repo.defaultBranch` into the
+canonical's remote-tracking ref (`fetch --no-tags --no-write-fetch-head`, as the handoff's, a
+thirty-second deadline), with the project's git credential as the push carries it, before the
+workflow copy and the clone; nothing else is fetched and the canonical is never reset. Then, by
+`merge-base --is-ancestor` both ways: the local branch behind is fast-forwarded (`merge --ff-only`
+while it is checked out, `update-ref` otherwise); equal is nothing; the local branch ahead (it
+contains the remote's commit) is left as it is and the session starts from it, the
+`session-started` details carrying `canonical` `ahead <n>`, no venue line; diverged (neither
+contains the other) is `error: canonical-diverged: <canonical> <branch> is at <sha>, <remote> at
+<sha>; neither contains the other`, exit 1, audited `action-refused` with reason `canonical`, the
+row ended `refused: canonical-diverged`, nothing cloned. The owner reconciles a diverged canonical
+by pushing its local commits, or by `git -C <canonical> branch -f <branch> <remote>/<branch>`
+(`reset --keep <remote>/<branch>` while it is checked out). A fetch that fails or runs past its
+deadline (offline, a credential refused, a `repo.gitCredentialId` the store lacks, which skips the
+fetch with the reason `credential-missing`, a fast-forward refused by a dirty checkout) starts the
+session from the local branch: the details carry `canonical` `stale: <git's line or the reason>`
+(`fetched` otherwise) and the venue's first post gains 04's `canonical-stale` line (wording pending
+the owner).
+Observe. `status --json`'s `projects` (`branch`, `commit`, `fetched`, `ahead`, `error` from the last
+fetch, per project); `audit --kind session-started --json`; `git -C <root>/projects/scratch log
+--oneline -1 main` beside the remote's.
+Reproduce. `scratch run -- bash tests/repro/stale-canonical.sh` [no-check: written by P30]: a
+commit pushed to `<root>/remote/scratch.git` from a throwaway clone, then a start on it; an empty
+commit in the canonical for an `ahead 1` start; the remote renamed away for a stale start; a commit
+pushed to the remote from the clone while the canonical keeps its own for a diverged refusal.
+Isolation. The bot's git runs in the canonical with `-c credential.helper=` and the askpass helper
+alone; a scratch remote is a local path and needs no credential.

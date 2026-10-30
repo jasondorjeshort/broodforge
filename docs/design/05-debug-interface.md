@@ -19,11 +19,11 @@ that widens a live session), the hidden probe `control echo`. Sections below giv
 
 ## Bot lifecycle
 
-Drive. `broodforge serve [--discord live|dry-run]` runs the bot in the foreground through 03's
-startup steps, prints each configuration warning (`warning: <file>: <what>`, as `config check`
-does) to stderr, then `held  <ids>` for the interrupted sessions it holds (ADR 0026; `-` for none), and prints `serving  <socket>` once the socket listens; a failed step is
-`error: start-<step>: <reason>`, exit 1 (`root`, `config`, `discord`, `credentials`, `store`, `engine`,
-`preflight`, `reconcile`, `control`); the flag overrides the config key for this run. Live needs
+Drive. `broodforge serve [--discord live|dry-run] [--trace]` runs the bot in the foreground through 03's startup steps, prints each
+configuration warning (`warning: <file>: <what>`, as `config check` does) to stderr, then `held  <ids>` for the interrupted sessions it
+holds (ADR 0026; `-` for none), and prints `serving  <socket>` once the socket listens; a failed step is `error: start-<step>: <reason>`,
+exit 1 (`root`, `config`, `discord`, `credentials`, `store`, `engine`, `preflight`, `reconcile`, `control`); `--discord` overrides the config
+key for this run; `--trace` adds a stderr line per REST call, on any root (`05-debug-interface-discord-live.md`, Inbound log). Live needs
 `discord.applicationId`, `guildId` and `botCredentialId` (a `bot-token` credential whose value
 has a bot token's shape, checked before anything connects) and opens the gateway after the
 socket (`05-debug-interface-discord-live.md`); any of it failing is `start-discord`. With only `fake`
@@ -32,7 +32,8 @@ socket to answer and prints, in order: `config: ok` or `config: last-good from <
 live|dry-run connected|disconnected` (dry-run is always connected), `sessions: <open> open,
 <waiting> waiting-for-answer, <interrupted> interrupted`, `worktrees: <kept> kept with unpushed
 commits`, `backup: last good <age> ago|none` (age `45s`, `12m`, `3h`, `2d`), `engine: <path>
-<version>` (`-` when unset); `--json` nests the same under those keys; the outcome token is the
+<version>` (`-` when unset); `--json` nests the same under those keys and adds `projects`, one `{"id","canonical":{"branch","commit",
+"fetched","ahead","error"}}` per project from the last fetch at a session start (`05-debug-interface-git.md`, P30); the outcome token is the
 config value; a `setup` holding the address answers `config: setup` instead (its lines: `05-debug-interface-setup.md`). `broodforge stop [--timeout 30]` is 03's shutdown: every running turn interrupted,
 every open session marked interrupted, `stopped  <sessions marked>`, then the bot exits 0; past
 the timeout `error: stop-timeout: open sessions: <ids>` and the bot exits 1. A session waiting for an
@@ -41,12 +42,10 @@ reconcile [--report-only]` runs ADR 0021's reconciliation on demand; `--report-o
 file without the bot, writes nothing and prints `<kind>  <subject>  <session>  <detail>` per
 finding (`interrupt`, `missing`, `present`, `unrecorded`). A read the bot does not serve itself
 (`audit`, `usage`, `session list`, `register list|show`) reads the store file while it runs.
-Observe. `status`; `audit --kind instance-started --limit 1` and the events after it (the report).
-Reproduce. `broodforge scratch run -- broodforge serve --discord dry-run` with a second shell
-running `status --wait 10 --expect ok`; a start refusal keeps the scratch root.
-Isolation. `serve` refuses a root whose socket already answers (`error: start-control: another
-bot owns <socket>`; any failure but `not-running` refuses the same way), probed right after step 2,
-before any write, so a second bot never touches the first's sessions or audit log; scratch uses the same-account backend on both hosts.
+Observe. `status`; `audit --kind instance-started --limit 1` and the events after it (the report). Reproduce. `broodforge scratch run -- broodforge serve
+--discord dry-run` with a second shell running `status --wait 10 --expect ok`; a start refusal keeps the scratch root. Isolation. `serve` refuses a root
+whose socket already answers (`error: start-control: another bot owns <socket>`; any failure but `not-running` refuses the same way), probed right
+after step 2, before any write, so a second bot never touches the first's sessions or audit log; scratch uses the same-account backend on both hosts.
 
 ## Configuration
 
@@ -71,14 +70,11 @@ key the bot reads only at its start (`schemaVersion`, `credentials`, `discord`, 
 `config/`'s `instanceName` and, with nothing there, the last-good copy's, so a bot is reached
 after an edit of the name; `status` then adds `instance-name: <config's> (bot runs as <its>)`
 after the config line.
-Observe. `status` line one; `audit --kind configuration-changed --limit 1 --json` shows the file
-hash and changed keys; `config show --effective --channel 100 --json` returns the channel object
-of 03 with `defaults` merged in (`{"id":"100","project":"scratch","reach":"code",...}`).
-Reproduce. Last-good: in a scratch root start the bot, `config reload` once, write invalid JSON
-over `config/instance.json`, `stop`, `serve`, `status --expect last-good`. A validation
-bug is a tree beside `tests/config/valid/` and `tests/config/dup-key/`, or `config check --root
-<kept scratch root>`.
-Isolation. `config` reads the credential store for id existence only (03).
+Observe. `status` line one; `audit --kind configuration-changed --limit 1 --json` shows the file hash and changed keys; `config show
+--effective --channel 100 --json` returns the channel object of 03 with `defaults` merged in (`{"id":"100","project":"scratch","reach":"code",...}`).
+Reproduce. Last-good: in a scratch root start the bot, `config reload` once, write invalid JSON over `config/instance.json`, `stop`, `serve`,
+`status --expect last-good`. A validation bug is a tree beside `tests/config/valid/` and `tests/config/dup-key/`, or `config check --root
+<kept scratch root>`. Isolation. `config` reads the credential store for id existence only (03).
 
 ## The workflow copy
 
@@ -142,14 +138,13 @@ and is refused `not-built` (the plan: refused unless `relay.loginByDirectMessage
 <kind>  <user id>  <label>  usable|needs-login|removed  <last used or ->`, the user `-` for an
 instance credential; the status is the
 store's record (03): the bot never reads the config directory to infer it. `credential remove
-<id>` marks it removed; the next `session start` naming it is refused (R-41). `credential show
-<id> --json` prints the record without any store value.
-Observe. `credential list`; `audit --kind credential-added,credential-removed`.
-Reproduce. `printf scratch | broodforge --root <r> credential add --kind api-key --user 1001
---label t`; a delivery bug is read from the fake's `received-<n>.json`, whose `delivery` field
-carries the kind and the id (03), never the value.
-Isolation. The scratch store key lives under the scratch root; the fake accepts only the fixed
-string and refuses any other value with exit 1.
+<id>` marks it removed; the next `session start` naming it is refused (R-41). `credential show <id> --json` prints the record without
+any store value, plus `meter`: the latest `rate-limit` event of a turn paid by it (`status`, `rateLimitType`, `fiveHour` and `sevenDay` with
+`utilization` and `resetsAt`, `overageStatus`, `isUsingOverage`, `seenAt`, `session`; ADR 0021's `credential_meter`, P28), `null` before one.
+Observe. `credential list`; `audit --kind credential-added,credential-removed`. Reproduce. `printf scratch | broodforge --root <r> credential
+add --kind api-key --user 1001 --label t`; a delivery bug is read from the fake's `received-<n>.json`, whose `delivery` field carries the kind
+and the id (03), never the value. Isolation. The scratch store key lives under the scratch root; the fake accepts only the fixed string and
+refuses any other value with exit 1.
 
 ## Session lifecycle without Discord
 
@@ -160,7 +155,8 @@ Moved to `05-debug-interface-session.md`: `session start|send|answer|mode|model|
 Drive. Through a session: `session send` on a scratch root, where the channel's harness is `fake` and `--fixture <dir>` picks the
 directory (default `fixtures/engine/basic/` [no-check: no code yet]). Adapter alone, no store, no session: `broodforge engine run
 --fake <fixture dir> [--turn <n>] [--cwd <dir>] --prompt "<text>"` streams `EngineEvent`s as JSONL to stdout exactly as the
-adapter parsed them and exits 0 when the fixture's `exit` is 0, else 1 with `error: engine-exit`. `engine run --real --credential
+adapter parsed them (an unknown line as `{"type":"unknown","eventType":..,"subtype":..,"bytes":..,"head":..}`, `head` its first 200 bytes, so
+a page-long `commands_changed` is one short line; P29) and exits 0 when the fixture's `exit` is 0, else 1 with `error: engine-exit`. `engine run --real --credential
 <id> --cwd <dir> --prompt "<text>" [--resume <engine session id>] [--model <m>] [--workflow <dir>]`, with `--root`, does the same through the configured spawn
 backend: credential and git identity from the store, an API key through the key file; the hook sees session `engine-run`, code
 reach, `defaults.mode`, log `<root>/sessions/engine-run/home/hook.log`, and with `--workflow` `BROODFORGE_WORKFLOW` naming the
@@ -250,7 +246,8 @@ Drive. `broodforge usage [--session <id> | --user <id> | --credential <id> | --c
 --project <id>] [--since <time>] [--by model|turn]` prints one line per model `<model>  <turns>
 <input>  <output>  <cache read>  <cache write>  <interrupted turns>`, then the same columns as
 `total`, printed even with no usage; no filter is the instance total; `--user` is the requester
-total, `--credential` the payer total (02); `--by turn` prints `<session>  <turn>  <model>
+total, `--credential` the payer total (02), followed by `meter  <five-hour utilization>  <seven-day utilization>  <status>  <seen at>` or
+`meter  -`, the credential's latest `rate-limit` event (ADR 0021's `credential_meter`; `--json`: `meter` as `credential show`'s); `--by turn` prints `<session>  <turn>  <model>
 <input>  <output>  <cache read>  <cache write>  <interrupted>  <time>`. `broodforge audit
 [--since-seq <n>] [--kind <kind>[,<kind>]] [--session <id>] [--limit 20] [--follow]` prints
 `<seq>  <time>  <kind>  <phase or ->  <actor>  <session or ->  <details, first 80 chars>` in seq

@@ -78,6 +78,13 @@ command), `unknown-component`, `unknown-modal`, `unconfigured-channel` (a messag
 configured and no venue is bound), `lobby-not-permitted` (a lobby message from someone who may not
 start). Drops are logged, never audited: the audit log is for actions (N-17). A failed REST call keeps its
 `warning: discord:` line beside the inbound line.
+`serve --trace` (built after P12d) adds one line per REST call the gateway makes, written
+when the call returns, `<time> discord: rest <method> <channel, message or interaction id, or -> -> <HTTP status|error> <ms>`,
+`<method>` the `restAPI` method's name, never the URL or the body; and, always on, flagged or not, `<time> discord: gateway
+ready|resumed|closed <reason>` on each gateway state change. The flag runs on any root, live or dry-run (a dry run makes no REST
+call and traces nothing): the lines carry no text, URL, token or key, the inbound log above is already always on, and a live problem
+is only ever seen on a live root, so a scratch-only trace would trace nothing. Not under `--trace`: disgo's own debug logging, which
+prints URLs. Reading the lines over the control pipe (`trace tail --follow`) is not built; the run's `serve.log` is the read.
 Every interaction is answered within Discord's three seconds: the handled shapes as before (deferred, then
 the ephemeral answer or the click's follow-up; the API-key modal first); every other shape, another guild's
 included, gets an immediate ephemeral `CreateMessage`, text `Broodforge cannot handle this interaction.`
@@ -100,7 +107,7 @@ a `session-interrupted` event carrying `start` as they do from `session-started`
 transcript opens with its heading and the restart line. On `session-ended` the summary, the lobby's copy with
 the transcript attached and the venue's deletion follow as for any session; the transcript holds what came
 after the restart.
-Observe. The stderr lines; `audit --kind action-refused` (every service refusal, reason the code);
+Observe. The stderr lines, the `rest` lines under `--trace`; `audit --kind action-refused` (every service refusal, reason the code);
 `session tail <id>` on a held session (`session-interrupted  restart` first); `session outbox <id>`
 (the notice's `create`, then after `end` the summary and the lobby's `attach`).
 Reproduce. `scratch run -- bash tests/repro/restart-end.sh` (P12c; P12d extends it):

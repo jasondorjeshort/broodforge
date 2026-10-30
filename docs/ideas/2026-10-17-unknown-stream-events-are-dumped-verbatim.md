@@ -26,15 +26,17 @@ line 131 ("Everything else is `unknown`"), `parse_test.go` (the unknown-line tab
 ## Open
 
 - Whether a fixture recorded on 2.1.296 with the event in it should become a parser golden, so
-  the shrink is tested against the real shape.
+  the shrink is tested against the real shape. Answered 2026-10-30: `fixtures/engine/basic/turn-1.jsonl`
+  carries two real `commands_changed` lines (25626 bytes each) and its golden is the test.
 
-Plan: architect, an amendment and no code. `EngineEvent.Unknown` is a shape in
-`docs/design/03-architecture.md` and `engine run` prints it "exactly as the adapter parsed them"
-(`05-debug-interface.md`), so the shrink is an amendment first. Shape: `Unknown *struct{ Type,
-Subtype string; Bytes int; Head string }`, `Head` the line's first 200 bytes, JSON
-`{"type":"unknown","eventType":..,"subtype":..,"bytes":..,"head":..}`; the recording stays verbatim
-because `ClaudeCode.Raw` sees the line before the parser. No `commands_changed` kind: the bot reads
-nothing in it. Amend 03 (the struct line, the `unknown` sentence) and 05 (the one-line form), then
-the coder pass to `08-implementation-plan.md`: `parse.go`, `events.go`, `parse_test.go`, goldens
-regenerated (`-run TestGolden -update`, diff read), and a real-size `commands_changed` line in the
-next `engine record` fixture (`recorded-read` has none). Not `rate_limit_event` (own idea).
+2026-10-30 (architect): designed. `03-architecture.md` (The engine adapter) has the shape,
+`Unknown *struct{ Type, Subtype string; Bytes int; Head string }`, and the sentence; `05-debug-interface.md`
+(A turn against the fake engine) has the one-line form. No `commands_changed` kind: the bot reads
+nothing in it. The recording stays verbatim because `ClaudeCode.Raw` sees the line before the parser.
+
+Plan: coder, pass P29 of `../design/08-implementation-plan-engine-stream.md`, which is the brief,
+after P28 so the goldens move once each: `internal/engine/events.go` and `parse.go` (`UnknownEvent`,
+`Head` the first 200 bytes cut at a rune boundary, the JSON
+`{"type":"unknown","eventType":..,"subtype":..,"bytes":..,"head":..}`), `parse_test.go`'s unknown-line
+table with the real `commands_changed` line, the goldens regenerated and their diff read, a test that
+a recording still holds the full line. Proof: the pass's. Delete this file in the pass's commit.

@@ -148,3 +148,21 @@ wording in the agreement's advice), after the first injected session; the PC bou
 - 2026-10-23, review of P16: for a session push an identity's own address passes as author, as
   committer and in a trailer-block `Co-Authored-By`, because the bot writes them there
   (`internal/git/attribution.go`); ADR 0018's email row stands everywhere else.
+- 2026-10-30, the P19 review's point, carried by the idea file of 2026-10-23 on the review fact and
+  the 2026-10-29 triage: rule 7's last sentence, "A land onto the default branch additionally
+  requires a fact the stream proves: a `reviewer` `Agent` call whose result's audit row is
+  timestamped after the committer time of the session's last commit, which `session show` reports
+  as `review: <tool_use_id> after <commit>` or `review: none since <commit>`", is replaced. The
+  committer time is the session's to write (`GIT_COMMITTER_DATE`, `commit --amend --date`), so a
+  result row stamped after it proves nothing; bounding that time between the previous bundle and
+  the bot's clock narrows the window but leaves it open inside the last turn. The fact is now a sha
+  the bot observed: when `session` sees the `Agent` (or `Task`) call whose `subagent_type` is
+  `reviewer` launched in the stream (the `tool-use` block, before its result), it bundles the tree
+  and fetches `refs/sessions/<id>` exactly as `worktree check` does and writes the sha it got into
+  that call's `subagent-result` row (`commit`; a bundle that fails leaves it empty with the error,
+  and such a row never counts). A land onto the default branch requires that the newest such row
+  with result `ok` names the commit `refs/sessions/<id>` holds as of the last bundle (`worktree
+  check` and the handoff refresh it), which `session show` reports as `review: <tool_use_id> at
+  <commit>`, else `review: none since <commit>`. No clock enters the comparison: a commit or an
+  amend after the review moves the ref and voids the fact; a tree-id comparison would need the
+  same bundle and buy nothing more. Built by P31 (`../08-implementation-plan-canonical.md`).

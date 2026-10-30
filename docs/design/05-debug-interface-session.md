@@ -122,13 +122,17 @@ their first message (R-13), so no co-author line is owed for an invitation alone
 `pending: <tool use id>  <tool>  <target>  since <time>  until <deadline>`, then ADR 0025's
 lines: `workflow: <commit> <date>` or `workflow: none (inject none)` or `none (<branch> at
 <commit> has no CLAUDE.md or .claude)` (`-` for a session started without a copy), `hooks:
-<names>` (`hooks.json`'s, `-` for none), and `review: <tool use id> after <commit>` or `review:
-none since <commit>` (rule 7: `<commit>` is `refs/sessions/<id>`, the session's last commit as of
-the last bundle, which `worktree check` refreshes; the id is the newest `Agent` (or `Task`) call
-whose result's `subagent-result` audit row, written when the tool result comes and never at a
-person's answer, has `agent` `reviewer`, `result` `ok`, and a time after that commit's committer
-second: a reviewer allowed and then interrupted has no such row, an errored or denied one is
-`result` `error`; `-` once handed off, no ref left). A fact that cannot be read prints `review:
+<names>` (`hooks.json`'s, `-` for none), and `review: <tool use id> at <commit>` or `review:
+none since <commit>` (rule 7 as amended 2026-10-30, P31: `<commit>` is `refs/sessions/<id>`, the
+session's last commit as of the last bundle, which `worktree check` refreshes; the id is the newest
+`Agent` (or `Task`) call whose result's `subagent-result` audit row, written when the tool result
+comes and never at a person's answer, has `agent` `reviewer` and `result` `ok`, and the fact holds
+only when that row's `commit`, the sha the bot itself got when it bundled the tree and fetched the
+ref on seeing the call launched, equals the ref's sha, so no committer time, which the session
+writes, enters it: a reviewer allowed and then interrupted has no such row, an errored or denied one
+is `result` `error`, a bundle that failed at the launch leaves `commitError` in the row and the
+fact void, a commit, an amend or a reset after the review moves the ref and voids it, an older
+review of the sha reset to does not revive it; `-` once handed off, no ref left). A fact that cannot be read prints `review:
 error: <code>`, the rest of the record still printed and `--json`'s `review.error` holding the
 message: `session-ref` when the canonical cannot be read (moved, not a repository),
 `unknown-channel` when the bot's configuration no longer holds the session's channel, and without

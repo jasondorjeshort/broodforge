@@ -4,7 +4,7 @@ kind: feature
 related: [2026-10-16-p10-remainder-closing-turn-needs-login-interrupt-kill-live-reconcile.md, 2026-10-16-p11-remainder-for-the-live-gateway.md]
 ---
 
-# A debug-only trace of the Discord layer, so an agent can watch a live bot
+# A trace of the Discord layer, so an agent can watch a live bot
 
 The first live run (P12's proof) had two views: `audit` (decisions, from the store) and
 `session tail` (engine events, from the bot). Neither shows the Discord layer itself, which is where
@@ -30,6 +30,14 @@ and modal with its route and outcome, never text or a raw custom id (`05-debug-i
 Inbound log and held sessions). Still open here: a line per REST call and its status, gateway reconnects
 and rate limits, and reading the lines over the control pipe (`trace tail --follow`).
 
+2026-10-30 (architect): the design half is done. `05-debug-interface.md` (Bot lifecycle) has
+`serve [--discord live|dry-run] [--trace]`; `05-debug-interface-discord-live.md` (Inbound log) has
+the `rest` line, the always-on `gateway` line and the root rule: `--trace` runs on any root, not
+scratch only, because the lines carry no text, URL, token or key, the inbound log is already always
+on, and a scratch root is dry-run with no REST call to trace, so the constraint above would have
+traced nothing. The first Open item is answered by that line shape; the second and third by "the
+run's `serve.log` is the read" until `trace tail --follow` is wanted (after P23).
+
 ## Open
 
 - Redaction: a modal submission carries an API key and an interaction carries message text; the trace
@@ -39,13 +47,12 @@ and rate limits, and reading the lines over the control pipe (`trace tail --foll
 - Whether it belongs in 05-debug-interface-discord.md as a new section (a design change goes through
   the proposal loop).
 
-Plan: two sittings. Architect amends `05-debug-interface.md` (the `serve` line at 22 gains
-`--trace`) and `05-debug-interface-discord-live.md` (Inbound log), deciding whether `--trace`
-refuses a non-scratch root (the idea's constraint) or runs on any root (no text, URL or token). Then
-the coder, after P12d lands (the inbound half is P12d; the trace rides it): `internal/cli/serve.go`
-(`--trace`, root rule per the amendment); `internal/discord/gateway.go` (a `restAPI` decorator when
-flagged, a `GatewayConfig.Log` line per call: `<time> discord: rest <method name> <channel or
-message id, or -> -> <HTTP status|error> <ms>`, never URL or body; always on, `discord: gateway
-ready|resumed|closed <reason>`); `gateway_test.go` (a line per call flagged, none else, no token or
-text). Verify: `go test ./internal/discord -run TestLive`, check line. Not `trace tail --follow`
-(after P23); not disgo's debug logging (prints URLs).
+Plan: coder, after P12d lands (the inbound half is P12d; the trace rides its `GatewayConfig.Log`
+line): `internal/cli/serve.go` (`--trace`, any root, the architect's decision above);
+`internal/discord/gateway.go` (a `restAPI` decorator when flagged, a `Log` line per call `<time>
+discord: rest <method> <channel, message or interaction id, or -> -> <HTTP status|error> <ms>`, never
+URL or body; always on, `<time> discord: gateway ready|resumed|closed <reason>`);
+`internal/discord/gateway_test.go` (a line per call when flagged, none else, no token or text in the
+log). Verify: `go test ./internal/discord -run TestLive`, the check line; the owner reads one run's
+`serve.log` on the live bot. Not `trace tail --follow` (after P23); not disgo's debug logging (prints
+URLs). Delete this file in the pass's commit.

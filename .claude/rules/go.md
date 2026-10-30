@@ -35,16 +35,6 @@ paths:
   worktree removal it owns, `control`, and `setup`'s `host_windows.go` and `host_linux.go` (the
   elevated part and hidden terminal input are host code by nature; no other file of `setup` branches).
 - One package per component of `docs/design/03-architecture.md`'s table, under `internal/`; a
-  package imports only the components its row names. A library is imported only by the component
-  ADR 0023 names; `docs/reference/go-dependencies.md` changes with `go.mod`.
-- Import exception: `internal/cli` also imports `engine`, `config` and `hook`, for the standalone
-  subcommands the plan places there (engine run, record, replay; config check; hook pre-tool-use,
-  try, cases), and `store`, `audit`, `backup` and `credentials`, for the `(file)` commands and the
-  read commands' fallback to the store file, and `spawn`, for `spawn preflight` and the backend
-  the standalone engine commands start, `session`, for `serve`, which builds the session service
-  and serves it, `discord`, for `serve`'s adapter, the standalone `discord render`
-  and `setup`'s Discord client and its scripted fake (`BROODFORGE_SETUP_FAKE_DISCORD`), and `git`
-  and `policy`, for the worktree handlers and the hidden `git-askpass` and `git-commit-msg`, and
-  `workflow`, for the `(file)` commands `workflow render` and `probe`, the handoff's path to a
-  session's copy, and `serve`'s copy and probe at session start (the session service's
-  `Config.Workflow`); nothing else beyond what 03's `cli` row names.
+  package imports only the components its row names, and the `cli` row lists that package's
+  exceptions (the standalone and `(file)` subcommands), nothing beyond them. A library is imported
+  only by the component ADR 0023 names; `docs/reference/go-dependencies.md` changes with `go.mod`.

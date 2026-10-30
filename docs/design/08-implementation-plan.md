@@ -260,9 +260,10 @@ build -o bin/ ./cmd/broodforge` from the pinned source and `CGO_ENABLED=1 go tes
 session, `reach-report` matching the bind list, the Interrupt steps yielding a `result`. Depends on:
 P7 to P10.
 
-The passes for ADR 0025, P15 to P19, are in `08-implementation-plan-session-workflow.md`. The passes for
-ADR 0027, P20 to P26, are in `08-implementation-plan-setup.md`: P13 is built there as P23 (its reference
-file, its Proof and C37), and P14 gains P26 as its host half.
+The passes for ADR 0025, P15 to P19, are in `08-implementation-plan-session-workflow.md`. The passes for ADR 0027, P20 to P26, are in
+`08-implementation-plan-setup.md`: P13 is built there as P23 (its reference file, its Proof and C37), and P14 gains P26 as its host half.
+The 2026-10-29 triage's passes are by topic: P28 and P29 (the `rate-limit` event and the credential meter; the unknown event shrunk) in
+`08-implementation-plan-engine-stream.md`; P30 and P31 (the canonical fetched before the clone; the review fact against a bundled sha) in `08-implementation-plan-canonical.md`.
 
 ## P27. The PC development instance: `setup --discord dry-run`, the dev root, the `run` skill (medium; one owner step)
 
