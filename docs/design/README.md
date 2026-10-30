@@ -32,6 +32,7 @@ Planned documents (added as we go):
 | `08-implementation-plan-setup.md` | Companion to 08: the passes P20 to P26 that build ADR 0027 (the Windows host spike, `setup` host-neutral, the Discord steps, `setup host` on Windows, `config export` and `--from`, `setup login`, the droplet), the machines each verifies on, and which pass lands each command, under 08's conventions |
 | `08-implementation-plan-engine-stream.md` | Companion to 08: the passes P28 and P29 from the 2026-10-29 triage (the `rate_limit_event` line as a `rate-limit` event with a per-credential meter; the unknown event shrunk to its type, subtype, length and head), under 08's conventions |
 | `08-implementation-plan-canonical.md` | Companion to 08: the passes P30 and P31 from the 2026-10-29 triage (the canonical fetched and fast-forwarded before the clone; the review fact of ADR 0025 rule 7 measured against the sha the bot bundled at the reviewer's launch), under 08's conventions |
+| `08-implementation-plan-golden-sessions.md` | Companion to 08: the pass P32 (golden sessions: a recorded session's events replayed through the dry-run renderer by `discord render --golden`, its outbox and transcript diffed against the blessed ones, `--update` to re-bless, one transcript per session, the P11 replay fixtures promoted and one golden captured on the dev root), under 08's conventions |
 | `proposals/` | Draft proposals for major choices; each gets a critic pass before becoming an ADR |
 | `decisions/` | Architecture decision records (ADRs), one per decision |
 

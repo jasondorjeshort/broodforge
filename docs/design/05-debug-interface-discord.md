@@ -102,6 +102,82 @@ Reproduce. Both repro scripts of `05-debug-interface-session.md` read the outbox
 turn 2's timeout trace line.
 Isolation. All in memory in the bot; a dry run sends nothing anywhere.
 
+## Golden sessions (P32)
+
+Surface. A golden session is one directory `tests/discord/golden/<name>/` [no-check: created by P32]
+holding `events.jsonl`, `session tail --json --all` lines in the `ReplayEvent` shape of `discord
+render` (the `session` key as the fixtures carry it, `s0001` when absent; a first `#` line says what
+it shows), and what the renderer made of them when the golden was blessed: `outbox.jsonl`, one post
+per line as `session outbox --json` prints it less `seq` and `payload`, and one `transcript-<session>.md`
+per session in the file, in `session transcript`'s layout over that session's events alone, the names
+as the replay's views have them, not the registry's. The events are the input, the rest the blessed
+output; nothing else is kept. Why the renderer alone: the bot is never in the loop, so a golden
+replays in milliseconds with no root and no timing of its own, and the fake clock steps from the
+recorded event times, so the same events render the same posts on every machine.
+Drive. `broodforge discord render --golden <dir> [--update] [--expect <token>]` (standalone, no
+root) is `discord render --events <dir>/events.jsonl --clock fake` followed by the comparison.
+`--golden` beside `--events` or `--clock`, or a `render` with neither `--events` nor `--golden`, is a
+usage error, exit 2 (`--clock`'s default is empty and means real, so `--golden` can set fake). The
+comparison: each post reduced to the golden's fields against `outbox.jsonl` line by line, then each
+session's transcript against its `transcript-<session>.md`. A file that differs prints its first
+differing position as two records, `<file>  <line>  golden  <text or ->` and `<file>  <line>  now
+<text or ->` (`-` where that side has no such line), then `<file>  more  <n>` when further lines
+differ; the error line is `error: golden-differs: <dir>: <files>; --update, then git diff
+tests/discord/golden/, shows the whole`, exit 1. Equal, the pacing line of `discord render` prints
+and `--expect` judges its token as before, so `--expect 'edits<=1/s'` keeps the pacing check on
+every golden. `--update` writes the output files (never `events.jsonl`; a transcript of a session
+no longer in the events is removed), prints `golden  updated  <dir>`, exit 0, and compares nothing:
+the diff a human reads is `git diff tests/discord/golden/`, the bless is the commit of it and the
+revert is `git checkout` of the directory, so the command carries no diff engine and takes no
+library for one. `--json` prints the posts and the result as before, then one `golden` object per
+differing file with its first differing line and its count of further differences.
+What counts as a difference: text is exact. Compared: `time`, `op`, `session`, `channel`,
+`messageId`, `length`, `first`, `body`, `buttons` (label, custom id, style), `selects` (custom id,
+placeholder, options with their defaults), `pinned`, `file`; `time` is compared because on the fake
+clock it comes only from the event times, as stable as the body, so a coalescer that slows shows; a
+message id is the replay's own `m<n>` in creation order, never a Discord id, so a post added before
+another shifts the ids after it and the diff shows the shift. Not compared: `seq` (the line's
+position); `payload`, disgo's request body, not kept at all (the library's shape: a swap to arikawa,
+ADR 0023's exit, must not fail every golden). CRLF reads as LF on both sides; a final newline is
+not a difference.
+Capture. From a session the bot still holds (after `session end`, before `stop`: an ended session's
+events stay in memory until the bot stops), on a scratch root (`scratch run -- bash <script>`, the
+events written under the OS temp directory, never under the root) or on the dev root (the `run`
+skill, steps 0 to 3, then `session end <id> --no-closing-turn`, so the golden is the one turn):
+`broodforge session tail <id> --json --all > <dir>/events.jsonl` with the id `session start`
+printed, the `#` line prepended, then `go run ./internal/tools/importfixture --events
+<dir>/events.jsonl` (P1's token rewrite over one JSONL file in place: every PC home and root path
+form to `/home/user`, the project slug, and every whole-token occurrence of the captured session id
+to `s0001`, the summaries, `start.branch`, `end.branch`, the custom ids and the worktree paths in
+tool targets included; a file with no PC home path gets no home rewrite, which is not an error),
+then `discord render --golden <dir> --update`, then the read. The driver of every capture is the
+placeholder registration `1001 Ada Example`, on the dev root too: a start names the credential, not
+its user (`session start --channel 200 --as 1001 --roles 10 --credential cred-<dev>`), so a
+real-engine golden carries no name of the owner's and the owner's registration is never a golden's
+driver; a real turn runs on the owner's word only, as the skill's step 4 says, and its prompt names
+a file this repository has (`go.mod`). Before the commit, P1's independent read: an agent that did
+not capture it reads the golden's files with the nested JSON decoded, confirms no name, email, host
+name, path outside the placeholder or repository content survives, and reports what a script cannot
+classify; the owner decides on the report. The engine's words about this repository in a `text`
+event are repository content: the read says so and the owner decides.
+Observe. `discord render --golden <dir>`; `git diff tests/discord/golden/` after `--update`;
+`go test ./internal/discord -run TestGolden`.
+Reproduce. `bash tests/repro/golden-sessions.sh` [no-check: created by P32] runs `discord render
+--golden <dir> --expect 'edits<=1/s'` on every directory under `tests/discord/golden/`, prints
+`ok  <name>` or `differs  <name>` per golden with the records of each that differs, and exits 0
+only when every golden matches; it needs no root and does not run under `scratch run`, since the
+renderer is standalone. The same comparison is `TestGolden` of `internal/discord` (one `Errorf` per
+file that differs; `-update` blesses, as the parser goldens of `internal/engine` do), so every
+golden runs under every pass's test line and the pusher's check 8 on every push: that is the
+nightly form until something schedules nights (a scheduled run of the script is the overnight
+idea's to add, `../ideas/2026-10-29-broodforge-works-on-itself-overnight.md`, not P23's task, which
+is the service instance's backup). The `run` skill is not the place: it drives one bot on the dev
+root, and a golden needs none.
+Isolation. No root, no socket, no Discord; `--update` writes only the output files under the named
+directory. Not covered: the service's own wording in the events (a trace summary, `NoAnswerCause`)
+is the input, so a change there passes every golden and shows in `tests/repro/*.sh` instead; the
+live gateway; what a human sees, which stays `serve --discord live` and the owner.
+
 ## The live gateway (P12), the held sessions (P12c) and the inbound log (P12d)
 
 Moved by topic to `05-debug-interface-discord-live.md`: `serve --discord live` (the application check,

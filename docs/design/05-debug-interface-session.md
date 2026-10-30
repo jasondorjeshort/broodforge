@@ -189,7 +189,8 @@ reach. P11 (the renderer, `05-debug-interface-discord.md`, which has the detail)
 <file>]` prints 04's Markdown transcript as the summary would attach it; `broodforge panel post
 <channel id>` posts or refreshes the project channel's panel (04) and records its message id in the
 store's `panel` table, loaded at start, which `panel show <channel id>` prints back; on a dry-run
-instance it lands in the outbox.
+instance it lands in the outbox. An ended session's `session tail <id> --json --all`, read before the
+bot stops, is a golden session's input (`05-debug-interface-discord.md`, Golden sessions).
 Observe. `session show`, `session tail --json` (every field: tool, target, decision, decided by,
 reason, result; `commits` on `session-ending`, absent when unknown; `end.log`, each handed-off commit's
 `hash` and `subject`, and `end.title`, the pull request's, on `session-ended`), `audit --kind permission-decision --session <id>`, the fake's
