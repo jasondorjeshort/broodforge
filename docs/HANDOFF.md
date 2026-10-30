@@ -26,8 +26,8 @@ Updated: 2026-10-30 by main session (P28, P32 and its dev-read golden built and 
 
 ## Waiting on user
 
-- Three new `Question:` blocks in `docs/ideas/` (the git-guard gap: `Waits:` or the ADR 0024 row then
-  delete; a store-failure event type; the decision-line wording), nine earlier ones; the `auto` spike.
+- Two new `Question:` blocks in `docs/ideas/` (a store-failure event type; the decision-line wording),
+  nine earlier ones; the `auto` spike.
 - Wording: dry-run and setup texts (companion, `05-debug-interface-setup.md`); four Discord strings
   (`05-debug-interface-discord.md`); two canonical rows in `04-ux.md` and refuse-or-warn; subagent
   text indent; the `pre-push` line (P15); P12a; "Never ends for inactivity."; the switch post; the
