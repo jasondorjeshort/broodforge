@@ -8,7 +8,7 @@ description: Produce the brief that gets work committed by the runner, or pushed
 Normal work is committed by the `runner` from a brief the coordinator writes; the coordinator does
 not stage or commit itself below 50% usage. Wrap-up commits (the handoff, WIP)
 at HOLD or STOP are made by the main session, because the usage gate blocks subagent launches
-but not Bash.
+but not Bash (a session-meter HOLD is then waited out, not stopped at: `usage-gating.md`).
 
 ## Commit via the runner
 

@@ -141,3 +141,6 @@ Decisions so far:
   coordinator write its own HOLD grant with a reason; narrow allow lines and deny lines on the live
   hooks. Migration per sibling. Supersedes in part 0006, 0007, 0011, 0013, 0018.
   [no-check: the script exists once the ADR is implemented]
+- [0022 A session-meter HOLD is waited out](0022-session-meter-hold-is-waited-out.md): a HOLD on the
+  session meter alone is waited out with one scheduled wake-up after the reset, after the handoff,
+  commit and a report to the owner. Supersedes in part 0006 and 0011.

@@ -1,10 +1,12 @@
 # 0011. The usage cache is per session, the account a label, the pool advice at HOLD
 
 Date: 2026-10-16
-Status: accepted, superseded in part by 0021
+Status: accepted, superseded in part by 0021 and 0022
 Superseded in part by [0021](0021-guardrails-bound-damage.md), 2026-10-21: the HOLD deny
 that carries the pool advice may be lifted by the coordinator's own session grant under
 `usage.mode: "warn"`. Everything else stands.
+Superseded in part by [0022](0022-session-meter-hold-is-waited-out.md), 2026-10-29: the HOLD row's
+report-and-hand-over when only the session meter is at HOLD. Everything else stands.
 
 Record: proposal `../proposals/0011-usage-gate-under-account-switching.md` and
 `../proposals/0011-critic-review.md`. Amended the same day, before the push, from the stage 1
