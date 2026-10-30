@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"unicode/utf8"
 )
 
 // The raw stream layer: a port of spike/run.ts's parseLine, usageDelta and interruptedRow.
@@ -106,10 +107,9 @@ func ParseLine(line []byte) []EngineEvent {
 	if len(line) == 0 {
 		return nil
 	}
-	unknown := []EngineEvent{{Kind: KindUnknown, Unknown: string(line)}}
 	var o rawLine
 	if !json.Valid(line) || line[0] != '{' || !decode(line, &o) {
-		return unknown
+		return unknownOf(line, "", "")
 	}
 	switch {
 	case o.Type == "system" && o.Subtype == "init":
@@ -130,7 +130,23 @@ func ParseLine(line []byte) []EngineEvent {
 	case o.Type == "rate_limit_event":
 		return []EngineEvent{{Kind: KindRateLimit, RateLimit: rateLimit(o.RateLimitInfo)}}
 	}
-	return unknown
+	return unknownOf(line, o.Type, o.Subtype)
+}
+
+// unknownOf is the one unknown event of a trimmed line: the type and subtype given, the
+// line's length and its first UnknownHeadBytes bytes, cut back to a rune boundary.
+func unknownOf(line []byte, typ, subtype string) []EngineEvent {
+	head := line
+	if len(head) > UnknownHeadBytes {
+		n := UnknownHeadBytes
+		for i := 0; i < utf8.UTFMax-1 && n > 0 && !utf8.RuneStart(line[n]); i++ {
+			n--
+		}
+		head = line[:n]
+	}
+	return []EngineEvent{{Kind: KindUnknown, Unknown: &UnknownEvent{
+		Type: typ, Subtype: subtype, Bytes: len(line), Head: string(head),
+	}}}
 }
 
 func assistant(o *rawLine) *AssistantEvent {

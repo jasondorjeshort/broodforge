@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // fixturesRoot is the repository's fixtures/engine/, from this package's directory.
@@ -238,12 +239,75 @@ func TestProofEvents(t *testing.T) {
 	}
 }
 
-func TestParseLineNeverRefuses(t *testing.T) {
-	for _, line := range []string{"not json", "[1,2]", `"s"`, `{"type":"system","subtype":"thinking_tokens"}`, `{"type":"user","message":{"content":"a prompt"}}`} {
-		evs := ParseLine([]byte(line))
-		if len(evs) != 1 || evs[0].Kind != KindUnknown || evs[0].Unknown != line {
-			t.Errorf("%s: %+v, want one unknown carrying the line", line, evs)
+// commandsChanged is the system/commands_changed lines of basic turn 1, two real ones recorded
+// on engine 2.1.296 (25626 bytes each).
+func commandsChanged(t *testing.T) []string {
+	t.Helper()
+	b, err := os.ReadFile(TurnFile(fixturesRoot+"/basic", 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, line := range strings.Split(string(b), "\n") {
+		if strings.HasPrefix(line, `{"type":"system","subtype":"commands_changed"`) {
+			out = append(out, strings.TrimSpace(line))
 		}
+	}
+	if len(out) != 2 {
+		t.Fatalf("basic turn 1 has %d commands_changed lines, want 2", len(out))
+	}
+	return out
+}
+
+// headOf is the oracle for an unknown event's head: whole runes of the line while they fit
+// in UnknownHeadBytes.
+func headOf(line string) string {
+	n := 0
+	for _, r := range line {
+		if n+utf8.RuneLen(r) > UnknownHeadBytes {
+			break
+		}
+		n += utf8.RuneLen(r)
+	}
+	return line[:n]
+}
+
+func TestParseLineNeverRefuses(t *testing.T) {
+	cc := commandsChanged(t)[0]
+	if len(cc) != 25626 {
+		t.Fatalf("commands_changed line is %d bytes, want 25626", len(cc))
+	}
+	// A line whose 200th byte is inside a rune: the head stops before the rune.
+	cut := strings.Repeat("a", UnknownHeadBytes-1) + "—" + "tail"
+	for _, tc := range []struct {
+		line, typ, subtype, head string
+	}{
+		{cc, "system", "commands_changed", headOf(cc)},
+		{"not json", "", "", "not json"},
+		{"[1,2]", "", "", "[1,2]"},
+		{`"s"`, "", "", `"s"`},
+		{`{"type":"system","subtype":"thinking_tokens"}`, "system", "thinking_tokens", `{"type":"system","subtype":"thinking_tokens"}`},
+		{`{"type":"user","message":{"content":"a prompt"}}`, "user", "", `{"type":"user","message":{"content":"a prompt"}}`},
+		{cut, "", "", strings.Repeat("a", UnknownHeadBytes-1)},
+	} {
+		evs := ParseLine([]byte(tc.line))
+		if len(evs) != 1 || evs[0].Kind != KindUnknown {
+			t.Errorf("%.40s: %+v, want one unknown", tc.line, evs)
+			continue
+		}
+		want := UnknownEvent{Type: tc.typ, Subtype: tc.subtype, Bytes: len(tc.line), Head: tc.head}
+		if got := *evs[0].Unknown; got != want {
+			t.Errorf("%.40s: %+v, want %+v", tc.line, got, want)
+		}
+		if tc.line == cc && len(evs[0].Unknown.Head) != UnknownHeadBytes {
+			t.Errorf("commands_changed head is %d bytes, want %d", len(evs[0].Unknown.Head), UnknownHeadBytes)
+		}
+		if len(tc.head) > UnknownHeadBytes || !strings.HasPrefix(tc.line, tc.head) {
+			t.Errorf("%.40s: head %q is not a prefix of at most %d bytes", tc.line, tc.head, UnknownHeadBytes)
+		}
+	}
+	if h := headOf(cc); len(h) < UnknownHeadBytes-utf8.UTFMax+1 || !utf8.ValidString(h) {
+		t.Errorf("commands_changed head is %d bytes or not whole runes: %q", len(h), h)
 	}
 	if evs := ParseLine([]byte("  \r")); len(evs) != 0 {
 		t.Errorf("blank line: %+v, want none", evs)
@@ -260,6 +324,24 @@ func TestParseLineNeverRefuses(t *testing.T) {
 	}
 }
 
+// TestUnknownHeadCutsAtRuneBoundary (P29): a 2-, 3- or 4-byte rune across byte 200 is left out whole; 199-, 200- and 201-byte lines.
+func TestUnknownHeadCutsAtRuneBoundary(t *testing.T) {
+	for _, r := range []string{"é", "—", "😀"} {
+		for pre := UnknownHeadBytes - len(r) - 1; pre <= UnknownHeadBytes+1; pre++ {
+			line := strings.Repeat("a", pre) + r + "tail"
+			u := ParseLine([]byte(line))[0].Unknown
+			if h := u.Head; len(h) == 0 || len(h) > UnknownHeadBytes || !utf8.ValidString(h) || h != headOf(line) || u.Bytes != len(line) {
+				t.Errorf("%d-byte rune after %d bytes: head %d bytes, valid %v, want %d", len(r), pre, len(h), utf8.ValidString(h), len(headOf(line)))
+			}
+		}
+	}
+	for _, n := range []int{199, 200, 201} {
+		if h := ParseLine([]byte(strings.Repeat("b", n)))[0].Unknown.Head; len(h) != min(n, UnknownHeadBytes) {
+			t.Errorf("%d-byte line: head %d bytes", n, len(h))
+		}
+	}
+}
+
 func TestMarshalFlatAndUnescaped(t *testing.T) {
 	ev := EngineEvent{Kind: KindToolResult, ToolResult: &ToolResultEvent{ToolUseID: "a", IsError: true, Text: "<tool_use_error>&</tool_use_error>"}}
 	b, err := ev.MarshalJSON()
@@ -269,8 +351,8 @@ func TestMarshalFlatAndUnescaped(t *testing.T) {
 	if want := `{"type":"tool-result","toolUseId":"a","isError":true,"text":"<tool_use_error>&</tool_use_error>"}`; string(b) != want {
 		t.Errorf("got %s\nwant %s", b, want)
 	}
-	b, _ = EngineEvent{Kind: KindUnknown, Unknown: `{"type":"x"}`}.MarshalJSON()
-	if want := `{"type":"unknown","raw":"{\"type\":\"x\"}"}`; string(b) != want {
+	b, _ = EngineEvent{Kind: KindUnknown, Unknown: &UnknownEvent{Type: "x", Subtype: "y", Bytes: 25, Head: `{"type":"x","subtype":"y"`}}.MarshalJSON()
+	if want := `{"type":"unknown","eventType":"x","subtype":"y","bytes":25,"head":"{\"type\":\"x\",\"subtype\":\"y\""}`; string(b) != want {
 		t.Errorf("got %s\nwant %s", b, want)
 	}
 	if _, err := (EngineEvent{Kind: "bogus"}).MarshalJSON(); err == nil {

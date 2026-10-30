@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -122,6 +123,51 @@ func TestClaudeCodeMatchesFake(t *testing.T) {
 			if !bytes.Equal(recorded, original) {
 				t.Errorf("%s: the recording differs from the stdout (%d bytes, want %d)", name, len(recorded), len(original))
 			}
+		}
+	}
+}
+
+// TestRecordingKeepsUnknownLine (P29): the recorder writes the stdout line before the parser
+// shrinks it, so a recorded turn holds the whole commands_changed line while its event carries
+// only the length and head.
+func TestRecordingKeepsUnknownLine(t *testing.T) {
+	lines := commandsChanged(t)
+	eng, _ := standinEngine(t, TurnFile(fixturesRoot+"/basic", 1))
+	t.Setenv(spawntest.EnvExit, "0")
+	rec, err := NewRecording(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	eng.Raw = rec.Write
+	h, err := eng.StartTurn(subscriptionRequest(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	evs := drain(h)
+	if err := rec.Finish(evs[len(evs)-1].Exit, "s", "2.1.296"); err != nil {
+		t.Fatal(err)
+	}
+	recorded, err := os.ReadFile(rec.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, line := range lines {
+		if !bytes.Contains(recorded, []byte("\n"+line+"\n")) {
+			t.Errorf("%s lacks commands_changed line %d (%d bytes)", rec.Path(), i+1, len(line))
+		}
+	}
+	var shrunk []*UnknownEvent
+	for _, ev := range evs {
+		if ev.Kind == KindUnknown && ev.Unknown.Subtype == "commands_changed" {
+			shrunk = append(shrunk, ev.Unknown)
+		}
+	}
+	if len(shrunk) != len(lines) {
+		t.Fatalf("%d commands_changed events, want %d", len(shrunk), len(lines))
+	}
+	for i, u := range shrunk {
+		if u.Bytes != len(lines[i]) || len(u.Head) > UnknownHeadBytes || !strings.HasPrefix(lines[i], u.Head) {
+			t.Errorf("commands_changed event %d: %d bytes, head %d bytes", i+1, u.Bytes, len(u.Head))
 		}
 	}
 }

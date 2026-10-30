@@ -85,7 +85,7 @@ const (
 )
 
 // EngineEvent is a sum type (ADR 0023, Types and JSON): Kind says which one payload is set.
-// Unknown is the raw line of any other kind, logged at debug level and never fatal.
+// Unknown stands for any other line, logged at debug level and never fatal.
 type EngineEvent struct {
 	Kind       EventKind
 	Init       *InitEvent
@@ -94,8 +94,23 @@ type EngineEvent struct {
 	Result     *ResultEvent
 	Exit       *ExitEvent
 	RateLimit  *RateLimitEvent
-	Unknown    string
+	Unknown    *UnknownEvent
 }
+
+// UnknownEvent is a line the parser does not map: its type and subtype when it is a JSON
+// object (empty otherwise), its byte length and its first UnknownHeadBytes bytes cut back to
+// a rune boundary, the whole line only when shorter (the engine's commands_changed runs to
+// pages). Invalid UTF-8 in a head marshals as U+FFFD; Bytes stays the line's true length.
+// The recording keeps the line.
+type UnknownEvent struct {
+	Type    string `json:"eventType"`
+	Subtype string `json:"subtype"`
+	Bytes   int    `json:"bytes"`
+	Head    string `json:"head"`
+}
+
+// UnknownHeadBytes is the most of an unknown line its event carries.
+const UnknownHeadBytes = 200
 
 // InitEvent is the engine's system/init line.
 type InitEvent struct {
@@ -196,8 +211,9 @@ type Block struct {
 }
 
 // MarshalJSON writes the event flat, its kind as "type" first and the payload's fields after
-// it: {"type":"init","engineSessionId":...}; an unknown event is {"type":"unknown","raw":...}.
-// HTML characters are not escaped, so a tool's text reads as the engine wrote it.
+// it: {"type":"init","engineSessionId":...}; an unknown event is
+// {"type":"unknown","eventType":...,"subtype":...,"bytes":...,"head":...}. HTML characters
+// are not escaped, so a tool's text reads as the engine wrote it.
 func (e EngineEvent) MarshalJSON() ([]byte, error) {
 	var body []byte
 	var err error
@@ -215,9 +231,7 @@ func (e EngineEvent) MarshalJSON() ([]byte, error) {
 	case KindRateLimit:
 		body, err = encodeJSON(e.RateLimit)
 	case KindUnknown:
-		body, err = encodeJSON(struct {
-			Raw string `json:"raw"`
-		}{e.Unknown})
+		body, err = encodeJSON(e.Unknown)
 	default:
 		return nil, fmt.Errorf("engine event: unknown kind %q", e.Kind)
 	}
