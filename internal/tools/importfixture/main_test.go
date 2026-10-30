@@ -65,6 +65,24 @@ func TestRewrite(t *testing.T) {
 	}
 }
 
+func TestRewriteMSYSHome(t *testing.T) {
+	for in, want := range map[string]string{
+		`/c/Users/alice/x`:                             `/home/user/x`,
+		`{"command":"cd /c/Users/alice/bf-p7/tree"}`:   `{"command":"cd /home/user/bf-p7/tree"}`,
+		`/c/Users/alice/AppData/Local/Temp/bf-spike/t`: `/home/user/bf-spike/t`,
+		`/c/Users/alice`:                               `/home/user`,
+	} {
+		if got := string(newRewriter(user).rewrite([]byte(in))); got != want {
+			t.Errorf("%s\n got  %s\n want %s", in, got, want)
+		}
+	}
+	for _, in := range []string{`/mnt/c/Users/alice/x`, `a/c/Users/alice/x`} {
+		if got := string(newRewriter(user).rewrite([]byte(in))); got != in {
+			t.Errorf("changed %s to %s", in, got)
+		}
+	}
+}
+
 func TestRewriteLeavesOtherTextAlone(t *testing.T) {
 	for _, in := range []string{
 		`C:\\Users\\user\\x`,
@@ -171,7 +189,7 @@ func TestImportRecordedRefusals(t *testing.T) {
 		"no fixture.json":          {"turn-1.jsonl": turn},
 		"turn list does not match": {"turn-1.jsonl": turn, "turn-2.jsonl": turn, "fixture.json": recordedFx},
 		"meta for some turns only": {"turn-1.jsonl": turn, "turn-2.jsonl": turn, "meta-1.json": "{}", "fixture.json": recordedFx},
-		"user survives":            {"turn-1.jsonl": "{\"p\":\"/c/Users/alice/x\"}\n", "fixture.json": recordedFx},
+		"user survives":            {"turn-1.jsonl": "{\"p\":\"/mnt/c/Users/alice/x\"}\n", "fixture.json": recordedFx},
 	} {
 		src := writeFiles(t, files)
 		dst := filepath.Join(t.TempDir(), "out")
@@ -236,14 +254,16 @@ func TestDestinationInsideSpikeRootRefused(t *testing.T) {
 
 func TestSurvivingUserNameRefused(t *testing.T) {
 	r := newRewriter(user)
-	in := []byte("{\"a\":1}\n{\"p\":\"/c/Users/alice/x\"}\n")
+	in := []byte("{\"a\":1}\n{\"p\":\"/mnt/c/Users/alice/x\"}\n")
 	err := scanLeak(user, map[string][]byte{"turn-1.jsonl": r.rewrite(in)})
 	if err == nil {
-		t.Fatal("MSYS form passed the scan")
+		t.Fatal("WSL form passed the scan")
 	}
-	clean := map[string][]byte{"turn-1.jsonl": r.rewrite([]byte(`"C:\\Users\\alice\\x"`))}
-	if err := scanLeak(user, clean); err != nil {
-		t.Fatalf("clean output refused: %v", err)
+	for _, ok := range []string{`"C:\\Users\\alice\\x"`, "{\"p\":\"/c/Users/alice/x\"}\n"} {
+		clean := map[string][]byte{"turn-1.jsonl": r.rewrite([]byte(ok))}
+		if err := scanLeak(user, clean); err != nil {
+			t.Fatalf("clean output %s refused: %v", ok, err)
+		}
 	}
 }
 

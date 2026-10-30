@@ -84,7 +84,6 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-21-carry-back-adr-amendments-section.md` | chore | Departure row: the adr skill's dated `## Amendments` section; carry it back |
 | `2026-10-21-carry-back-brief-boundary-escape-classes.md` | chore | Departure row: a reviewer brief for a path or name boundary lists the escape classes; carry it back |
 | `2026-10-21-carry-back-windows-reference-go-and-junction-facts.md` | question | Whether the base's Windows reference wants the scanner-quarantine and junction facts this project's copy carried |
-| `2026-10-17-importfixture-refuses-the-git-bash-home-form.md` | feature | The rewrite knows the Windows spellings and the slug but not `/c/Users/<user>`, so a recording whose Bash names the home cannot be imported; the first closing recording hit it |
 | `2026-10-21-go-rules-become-a-lint-test.md` | chore | The mechanical rules of `go.md` (SPDX, host branching, `any`, imports) become one test under `tests/lint/`; the import exceptions move to 03's `cli` row |
 | `2026-10-22-discord-layer-trace-for-debugging-the-live-bot.md` | feature | A debug-only `serve --trace` of interactions, scan outcomes, REST calls and gateway events, readable over the control pipe; what a second bot cannot see |
 | `2026-10-23-handoff-main-lands-a-session-on-the-default-branch.md` | feature | A third `handoff` value, `main`: check, rebase, fast-forward push to the default branch, falling back to the session branch; gated on a role group; waits on the owner's ADR |

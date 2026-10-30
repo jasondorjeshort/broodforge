@@ -368,7 +368,8 @@ func (r *rewriter) rewrite(in []byte) []byte {
 }
 
 // rewritePaths replaces every path token that starts with the PC home in any of its forms:
-// C:/Users/<user>, C:\Users\<user>, and the JSON-escaped forms with 2 or 4 backslashes. The
+// C:/Users/<user>, C:\Users\<user>, the JSON-escaped forms with 2 or 4 backslashes, and the MSYS
+// form /c/Users/<user> (forward slashes only, not after a word byte). For the drive forms the
 // separator form is fixed by the first separator after the drive; inside the token that form or
 // "/" separates, and a backslash run of any other length (a JSON escape such as \n) ends it.
 func (r *rewriter) rewritePaths(in []byte) []byte {
@@ -387,8 +388,15 @@ func (r *rewriter) rewritePaths(in []byte) []byte {
 }
 
 // matchPath reports whether a home path token starts at i, its replacement, and where it ends.
+// Besides the drive forms it knows the MSYS form "/c/Users/<user>", which has "/" separators only.
 func (r *rewriter) matchPath(in []byte, i int) (string, int, bool) {
-	if i+2 >= len(in) || !isLetter(in[i]) || in[i+1] != ':' || (i > 0 && isWordByte(in[i-1])) {
+	if i > 0 && isWordByte(in[i-1]) {
+		return "", 0, false
+	}
+	if i+3 < len(in) && in[i] == '/' && isLetter(in[i+1]) && in[i+2] == '/' {
+		return r.matchSegments(in, i+2, 0)
+	}
+	if i+2 >= len(in) || !isLetter(in[i]) || in[i+1] != ':' {
 		return "", 0, false
 	}
 	j := i + 2
@@ -400,6 +408,12 @@ func (r *rewriter) matchPath(in []byte, i int) (string, int, bool) {
 	} else if in[j] != '/' {
 		return "", 0, false
 	}
+	return r.matchSegments(in, j, sepLen)
+}
+
+// matchSegments reads the path segments from the first separator at j and, when they name the
+// PC user's home, returns the replacement and the token's end.
+func (r *rewriter) matchSegments(in []byte, j, sepLen int) (string, int, bool) {
 	// Split the token into segments; trailing is a separator with no segment after it.
 	var segs []string
 	var trailing bool
