@@ -10,19 +10,20 @@ Updated: 2026-10-30 by main session (wave built; nine ideas recorded; golden ses
   P11 items 1, 2, 6, 8, departure rows, reviewer findings as tests, nine ideas, golden sessions (P32).
 - Dev instance: `%LOCALAPPDATA%\Broodforge\dev`, dry-run for good, bot stopped, dev credential
   `cred-2ha7apqowv` usable (owner logged in 2026-10-30; confirm `stop` was run).
-- `../hatchery` `main` pushed at `61b6409` (two ideas). Five reviewed carry-back branches in
-  `../broodforge-wt/` (ADR 0024 names the shas); the owner asked for every push on 2026-10-30.
+- Hatchery `main` pushed at `61b6409`. Five carry-back branches pushed (ADR 0024 names the shas).
 
 ## Next
 
-1. One real turn on the dev root, only on the owner's quoted go-ahead (`run` skill step 4).
+1. Real turns on the dev root need the owner's quoted go-ahead (2 of 3 haiku turns spent 2026-10-30, both
+   ok; a channel-200 session must be driven as the owner's registration, not `1001`, whose default
+   credential is the fake key: fix the dev-instance doc and `run` skill step 4). The dev engine still
+   loads the account's synced skills (`commands_changed`); weigh that for sessions.
 2. W6: the owner re-runs `spike/setup-host/` (README) and pastes the lines; the finding records
    the result; then P23 (coder), owner steps, P25.
 3. Coder passes, value order: P32 golden sessions (`08-implementation-plan-golden-sessions.md`);
    P28 then P29 (`08-implementation-plan-engine-stream.md`, migration `0004`); P30, P31
    (`08-implementation-plan-canonical.md`); the three p10 remainders; Git Bash stayed waiting.
-4. Hatchery: Land the five branches there (`carry-back` skill); then `update-from-hatchery` here
-   and delete the five ideas plus the two Hatchery-idea files (now on `hatchery/main`).
+4. Hatchery: Land the five branches there; then `update-from-hatchery` here; delete the seven ideas.
 5. The `auto` spike (tester, the owner's login, spends the plan): only on the owner's word.
 
 ## Waiting on user
