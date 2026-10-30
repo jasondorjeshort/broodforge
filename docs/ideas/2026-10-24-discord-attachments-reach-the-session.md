@@ -1,6 +1,7 @@
 ---
 date: 2026-10-24
 kind: feature
+related: [2026-10-29-the-game-files-its-own-tickets.md]  # that one is a report posted by software; this one carries a person's attachment
 ---
 
 # Discord attachments reach the session

@@ -1,6 +1,7 @@
 ---
 date: 2026-10-14
 kind: feature
+related: [2026-10-29-cross-host-lanes-run-a-check-on-the-other-instance.md]  # that one is one instance asking another; this one is where a session runs
 ---
 
 # Sessions run remote-controlled off box, from the host-management checkout

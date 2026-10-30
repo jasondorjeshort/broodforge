@@ -1,6 +1,7 @@
 ---
 date: 2026-10-24
 kind: feature
+related: [2026-10-29-a-session-remembers-across-weeks.md]  # that one writes for the next resume; this one writes for the venue
 ---
 
 # A turn ending on a tool call could prompt the engine once for a closing message
