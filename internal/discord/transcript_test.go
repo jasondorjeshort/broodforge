@@ -30,6 +30,29 @@ func TestTranscriptDecisionNamesItsCallAndDepth(t *testing.T) {
 	}
 }
 
+// TestTranscriptStoreFailureIsNoDecision: a store failure mid-turn is an internal-error event,
+// printed as `- internal: <error>` at its call's depth, never as an empty decision.
+func TestTranscriptStoreFailureIsNoDecision(t *testing.T) {
+	evs := []session.Event{
+		{Type: session.EventTurnStarted, Turn: 1},
+		{Type: session.EventInternalError, Turn: 1, Summary: "store: disk I/O error"},
+		{Type: session.EventInternalError, Turn: 1, Tool: "Read", Target: "go.mod", Parent: "toolu_a", Depth: 1,
+			Summary: "store: database is locked"},
+	}
+	tr := Transcript("s0001", evs, func(u string) string { return u })
+	if strings.Contains(tr, "  -  ()") {
+		t.Fatalf("a store failure reads as an empty decision:\n%s", tr)
+	}
+	for _, want := range []string{
+		"\n  - internal: store: disk I/O error\n",
+		"\n    - internal: store: database is locked\n",
+	} {
+		if !strings.Contains("\n"+tr, want) {
+			t.Errorf("transcript lacks %q:\n%s", want, tr)
+		}
+	}
+}
+
 func TestTranscriptSubagentTextHasNoTrailingSpace(t *testing.T) {
 	got := Transcript("s0001", []session.Event{
 		{Type: session.EventText, Text: "One.\n\nTwo.\n", Parent: "toolu_a", Depth: 1},

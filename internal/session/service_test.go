@@ -271,6 +271,44 @@ func TestPolicyTurnAgainstBasic(t *testing.T) {
 	}
 }
 
+// A store write failing mid-turn (here the meter's, refused by a trigger) is an internal-error
+// event carrying the error, never a permission-decision, and the turn runs on to its end.
+func TestStoreFailureMidTurnIsInternalError(t *testing.T) {
+	h := newHarness(t, "", true)
+	exec(t, h.st, `CREATE TRIGGER meter_fails BEFORE INSERT ON credential_meter BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END`)
+	ctx := context.Background()
+	if _, err := h.svc.Start(ctx, StartRequest{Channel: "100", As: "1001", Roles: "10", Fixture: "basic"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.svc.Submit(ctx, SendRequest{Session: "s0001", As: "1001", Text: "Read hello.txt."}); err != nil {
+		t.Fatal(err)
+	}
+	seen := waitTurn(t, h.svc, "s0001", 1)
+	internal, decisions := 0, 0
+	for _, ev := range seen {
+		//exhaustive:ignore
+		switch ev.Type {
+		case EventInternalError:
+			internal++
+			if !strings.HasPrefix(ev.Summary, "store: ") || !strings.Contains(ev.Summary, "disk I/O error") || ev.Tool != "" || ev.Turn != 1 {
+				t.Errorf("internal-error: %+v", ev)
+			}
+		case EventPermissionDecision:
+			decisions++
+			if ev.Decision == "" || strings.HasPrefix(ev.Summary, "store: ") {
+				t.Errorf("a store failure as a decision: %+v", ev)
+			}
+		case EventTurnEnded:
+			if ev.Result != ResultCompleted {
+				t.Errorf("turn-ended: %+v", ev)
+			}
+		}
+	}
+	if internal != 1 || decisions != 1 {
+		t.Errorf("%d internal-error and %d permission-decision events, want 1 and 1: %+v", internal, decisions, seen)
+	}
+}
+
 func TestQueuedMessageJoinsAsContributor(t *testing.T) {
 	h := newHarness(t, delayed(t, 20*time.Millisecond), true)
 	ctx := context.Background()

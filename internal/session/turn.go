@@ -588,8 +588,7 @@ func (s *Service) toolResult(l *live, n int, tr engine.ToolResultEvent) {
 			return nil
 		})
 		if err != nil {
-			l.log.add(Event{Time: now, Type: EventPermissionDecision, Turn: n, ToolUseID: tr.ToolUseID, Tool: c.tool,
-				Summary: "store: " + err.Error()})
+			l.log.add(storeFailed(now, n, tr.ToolUseID, c, err))
 		} else {
 			l.log.add(Event{Time: now, Type: EventPermissionDecision, Turn: n, ToolUseID: tr.ToolUseID, Tool: c.tool,
 				Target: c.target, Decision: cl.Decision, DecidedBy: cl.DecidedBy, Reason: cl.Reason,
@@ -784,8 +783,7 @@ func (s *Service) subagentResult(l *live, n int, tr engine.ToolResultEvent, c ca
 		return err
 	})
 	if err != nil {
-		l.log.add(Event{Time: s.stamp(), Type: EventPermissionDecision, Turn: n, ToolUseID: tr.ToolUseID, Tool: c.tool,
-			Summary: "store: " + err.Error()})
+		l.log.add(storeFailed(s.stamp(), n, tr.ToolUseID, c, err))
 	}
 }
 
@@ -800,6 +798,13 @@ func (s *Service) saveMeter(l *live, n int, r engine.RateLimitEvent) {
 		SevenDayUtilization: r.SevenDay.Utilization, SevenDayResetsAt: r.SevenDay.ResetsAt,
 		OverageStatus: r.OverageStatus, IsUsingOverage: r.IsUsingOverage})
 	if err != nil {
-		l.log.add(Event{Time: s.stamp(), Type: EventPermissionDecision, Turn: n, Summary: "store: " + err.Error()})
+		l.log.add(storeFailed(s.stamp(), n, "", call{}, err))
 	}
+}
+
+// storeFailed is the internal-error event of a store write failing mid-turn: the failure does not end the turn.
+// c and toolUseID are the call it happened in, zero outside one.
+func storeFailed(at string, n int, toolUseID string, c call, err error) Event {
+	return Event{Time: at, Type: EventInternalError, Turn: n, ToolUseID: toolUseID, Tool: c.tool, Target: c.target,
+		Parent: c.parent, Depth: c.depth, Summary: "store: " + err.Error()}
 }

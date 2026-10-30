@@ -213,9 +213,10 @@ func (v *View) Handle(ev session.Event) {
 		// line of a handoff the stop cut short goes.
 		v.closed = true
 		v.endingDone()
-	case session.EventMessageQueued, session.EventMessageDropped, session.EventParticipantInvited:
+	case session.EventMessageQueued, session.EventMessageDropped, session.EventParticipantInvited, session.EventInternalError:
 		// The hourglass on a queued message is the gateway's (it holds the message's Discord
-		// id); a dropped message and an invitation post nothing in 04.
+		// id); a dropped message and an invitation post nothing in 04, nor does an internal
+		// error (the transcript and session tail show it).
 	}
 }
 

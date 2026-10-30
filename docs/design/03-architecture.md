@@ -62,11 +62,10 @@ never `needs-login` (a rejected key is replaced). The bot never reads a config d
 3. `session` writes the turn row (`started`) and calls `Engine.startTurn` with a `TurnRequest`.
 4. `engine` has `spawn` start the process with ADR 0022's credential delivery, git identity and
    hook variables, writes the stream-json user message, closes stdin, parses stdout into `EngineEvent`s.
-5. `session` maps them to `SessionEvent`s (`text`, `tool-call`, `tool-result`,
-   `waiting-for-answer`, `turn-ended`) and writes a `permission decision` row per tool call seen:
-   allowed by policy, denied by the hook (the deny text's prefix), failed in the hook (the `hook:`
-   prefix), deferred, dropped (a parallel call, below), or decided by the engine alone (`decidedBy`
-   `config`: the hook was bypassed, `03-hook-contract.md`). The hook writes nothing; the stream is the record.
+5. `session` maps them to `SessionEvent`s (`text`, `tool-call`, `tool-result`, `waiting-for-answer`, `turn-ended`;
+   `internal-error` for its own failure mid-turn, below) and writes a `permission decision` row per tool call seen: allowed
+   by policy, denied by the hook (the deny text's prefix), failed in the hook (the `hook:` prefix), deferred, dropped (a parallel
+   call, below), or decided by the engine alone (`decidedBy` `config`: the hook was bypassed, `03-hook-contract.md`). The hook writes nothing; the stream is the record.
 6. `discord` renders: one working message per turn edited through the coalescer (at most one
    create or edit per second per session and 50 REST requests per second per bot across all, nothing dropped, overflow split or attached, R-20 to
    R-22); a new message for a turn end, a wait or an error (R-23). The outbound mask: all posted
@@ -297,4 +296,5 @@ The last column names a 04 flow, not its wording.
 | `store` | Locked, corrupt, schema newer than the binary | refusal at start, exit 1 (ADR 0021) | operator |
 | `config` | Invalid at start or reload | last-good or refusal (ADR 0021) | notice channel |
 | `session` | Idle timeout | the end-of-session sequence; a refused handoff keeps the tree | session-ended |
+| `session` | A store write fails mid-turn (a decision row, an audit event, the meter) | the failure does not end the turn; an `internal-error` event carries `store: <err>` and the call's tool, target and depth; `session tail` and the transcript show it, Discord posts nothing | none |
 | `backup` | Snapshot or rehearsal fails | the nightly job's exit code; `status` shows the last good snapshot's age | notice channel |

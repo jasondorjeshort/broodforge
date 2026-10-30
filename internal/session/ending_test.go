@@ -541,3 +541,34 @@ func TestEndingEvent(t *testing.T) {
 }
 
 func ptr(n int) *int { return &n }
+
+// TestStoreFailureOnDropIsOneInternalError: the dropped row of a call still waiting as the
+// session ends fails to write; one internal-error carries it, at the call, and the dropped
+// event and the turn's end still follow.
+func TestStoreFailureOnDropIsOneInternalError(t *testing.T) {
+	h := waitingWithQueue(t, StartRequest{})
+	exec(t, h.st, `CREATE TRIGGER drop_fails BEFORE INSERT ON permission_decision WHEN NEW.decision = 'dropped' BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END`)
+	if _, err := h.svc.End(context.Background(), EndRequest{ActRequest: ActRequest{Session: "s0001", As: "1001"}}); err != nil {
+		t.Fatal(err)
+	}
+	evs, _ := h.svc.Events("s0001", 0)
+	internal, after, dropped, ended := 0, false, false, false
+	for _, ev := range evs {
+		//exhaustive:ignore
+		switch ev.Type {
+		case EventInternalError:
+			internal++
+			if ev.ToolUseID != "toolu_01NmkmkiJgpriuU7yQrtDWYi" || ev.Turn != 1 || !strings.Contains(ev.Summary, "disk I/O error") {
+				t.Errorf("internal-error: %+v", ev)
+			}
+			after = true
+		case EventPermissionDecision:
+			dropped = dropped || (after && ev.Decision == DecisionDropped)
+		case EventTurnEnded:
+			ended = ended || (after && ev.Turn == 1 && ev.Summary == "the session ended")
+		}
+	}
+	if internal != 1 || !dropped || !ended {
+		t.Errorf("internal-error %d (want 1), dropped after it %v, turn-ended after it %v: %v", internal, dropped, ended, summaries(evs))
+	}
+}

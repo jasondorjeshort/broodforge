@@ -155,7 +155,8 @@ blocked, bypassed or failed), `waiting-for-answer` (`<tool use id> [<tool>] <tar
 `timeout-changed` (04's `Ends after <n> without activity.` or `Never ends for inactivity.`), `turn-ended` (the stop
 reason, or `interrupted`), `handoff-refused`, `session-ending` (`<n> commits`, `1 commit` or `commits unknown`:
 the tree's count over its base as the handoff starts), `session-ended` (`Session <id> ended by <name>.`, or
-04's `Session <id> ended: no activity for <n>.`), `session-interrupted`. A decision row's
+04's `Session <id> ended: no activity for <n>.`), `session-interrupted`, `internal-error` (`store: <err>`: a store
+write failed mid-turn and the turn went on; the call's `tool`, `target` and `depth` when inside one). A decision row's
 decider is `policy` (the hook answered from the table; also the `deferred` row, and the `dropped`
 row of every other call of that message, C28), `participant` or `prompt-timeout` (an answer),
 `instance` (dropped as its session ended), `hook` (it failed: exit 2, `hook:`, audited `action-refused` with actor `hook`), `config` (the
@@ -193,7 +194,8 @@ instance it lands in the outbox. An ended session's `session tail <id> --json --
 bot stops, is a golden session's input (`05-debug-interface-discord.md`, Golden sessions).
 Observe. `session show`, `session tail --json` (every field: tool, target, decision, decided by,
 reason, result; `commits` on `session-ending`, absent when unknown; `end.log`, each handed-off commit's
-`hash` and `subject`, and `end.title`, the pull request's, on `session-ended`), `audit --kind permission-decision --session <id>`, the fake's
+`hash` and `subject`, and `end.title`, the pull request's, on `session-ended`; a mid-turn store failure as `internal-error`, never
+as a `permission-decision`), `audit --kind permission-decision --session <id>`, the fake's
 `sessions/<id>/fake/received-<n>.json` (the exact `TurnRequest`, plus `args`, the flags it sets
 on the real engine: `--append-system-prompt-file <root>/workflow/<id>/instructions.md` always,
 `--agents <root>/workflow/<id>/agents.json` when the copy has agents, never

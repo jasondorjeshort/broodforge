@@ -109,5 +109,4 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-30-the-base-tends-itself.md` | feature | Moonshot: Hatchery as a Broodforge project that lands carry-backs on a sibling push and opens the update in each sibling |
 | `2026-10-30-the-bot-files-its-own-findings.md` | feature | Moonshot: a refusal or warning in the serve log opens a scratch session that reproduces it on the fake engine and posts a finding with a repro |
 | `2026-10-30-owner-less-weeks.md` | feature | Moonshot: overnight, memory, pool, self-findings and golden sessions combined so the owner is asked only for wording and money |
-| `2026-10-30-a-store-failure-inside-a-turn-is-logged-as-a-permission-decision.md` | bug | A store failure in `turn.go` is a permission-decision event with only a summary, rendered as `  -  ()`; whether internal errors get their own event type is the owner's |
 | `2026-10-30-importfixture-rewrites-a-minted-credential-id-to-cred-dev.md` | chore | `importfixture --events` rewrites a minted `cred-` id to `cred-dev` like the session id, so a recapture of `dev-read` does not churn four places; re-blesses it once |

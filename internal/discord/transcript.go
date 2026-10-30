@@ -92,6 +92,8 @@ func Transcript(id string, events []session.Event, who func(user string) string)
 				reason = ": " + ev.Reason
 			}
 			line(session.Indent(ev.Depth, "  - "+ev.Decision+" ("+by+")"+call+reason))
+		case session.EventInternalError:
+			line(session.Indent(ev.Depth, "  - internal: "+ev.Summary))
 		case session.EventToolResult:
 			onCall = true
 			if strings.Contains(ev.Summary, " -> ") {

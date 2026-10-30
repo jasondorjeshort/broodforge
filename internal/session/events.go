@@ -24,6 +24,11 @@ const (
 	EventWaitingForAnswer   EventType = "waiting-for-answer"
 	EventTurnEnded          EventType = "turn-ended"
 	EventSessionInterrupted EventType = "session-interrupted"
+	// EventInternalError is the bot's own failure inside a turn that does not end it (a store
+	// write failing mid-turn, 03 Failure modes): Summary is the error (`store: <err>`), unindented;
+	// Tool, Target, Parent and Depth are the call's when it happened inside one. The transcript
+	// shows it at its depth; Discord posts nothing for it.
+	EventInternalError EventType = "internal-error"
 )
 
 // Event is one SessionEvent as `session tail` prints it: `<seq>  <time>  <type>  <summary>`,

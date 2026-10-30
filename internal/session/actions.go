@@ -569,9 +569,11 @@ func endCause(reason string) string {
 func (s *Service) discardLocked(l *live, actor, cause string) {
 	if p := l.pending; p != nil {
 		c := l.calls[p.ToolUseID]
-		_ = s.cfg.Store.Write(func(tx *store.Tx) error {
+		if err := s.cfg.Store.Write(func(tx *store.Tx) error {
 			return s.decisionTx(tx, l, l.turn, p.ToolUseID, c, DecisionDropped, DecidedByInstance, ActorInstance, "", cause+" before an answer", "")
-		})
+		}); err != nil {
+			l.log.add(storeFailed(s.stamp(), l.turn, p.ToolUseID, c, err))
+		}
 		l.log.add(Event{Time: s.stamp(), Type: EventPermissionDecision, Turn: l.turn, ToolUseID: p.ToolUseID, Tool: c.tool,
 			Target: c.target, Decision: DecisionDropped, DecidedBy: DecidedByInstance, Reason: cause,
 			Summary: c.indent(DecisionDropped + " " + TraceLine(c.tool, c.target) + " (" + DecidedByInstance + ")")})
@@ -580,11 +582,13 @@ func (s *Service) discardLocked(l *live, actor, cause string) {
 		l.log.add(ended)
 	}
 	for _, q := range l.queue {
-		_ = s.cfg.Store.Write(func(tx *store.Tx) error {
+		if err := s.cfg.Store.Write(func(tx *store.Tx) error {
 			_, err := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindActionRefused, Actor: actor, Session: l.id, Registration: q.user,
 				Details: details("action", "message", "reason", "message-dropped", "message", cause, "text", firstRunes(q.text, summaryRunes))})
 			return err
-		})
+		}); err != nil {
+			l.log.add(storeFailed(s.stamp(), l.turn, "", call{}, err))
+		}
 		l.log.add(Event{Time: s.stamp(), Type: EventMessageDropped, User: q.user, Reason: cause,
 			Summary: cause + ": " + firstRunes(q.text, summaryRunes)})
 	}
