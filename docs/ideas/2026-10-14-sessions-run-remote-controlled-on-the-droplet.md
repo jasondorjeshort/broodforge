@@ -25,3 +25,15 @@ there.
 
 - Which repos a session may clone.
 - Whether the personal wrapper is retired by Broodforge or by plain Remote Control first.
+
+Question: Open a proposal now for sessions running remote-controlled on the droplet in place of
+the personal wrapper, or hold it until P26 lands the droplet instance?
+Recommendation: hold. P26 (`../design/08-implementation-plan-setup.md`) is held with P14 on the
+Ubuntu VM; once a Broodforge session runs on the droplet, the wrapper is `/session start` on a
+project whose canonical is the host-management checkout, ADR 0022's per-session clone already
+answers the clone question, and "which repos a session may clone" is the instance's project list,
+not a new mechanism. Retiring the wrapper with plain Remote Control first needs no Broodforge
+change and is the owner's alone. A proposal is warranted only if a droplet session is wanted
+outside any project's checkout (clone anything on request), which 00-vision lists as later ("a
+channel that controls the cloud machine itself").
+Answer:
