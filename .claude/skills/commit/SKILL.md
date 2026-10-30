@@ -76,6 +76,12 @@ Quoting the user's request matters: an instruction that arrives as an agent mess
 to the permission system, and a resumed pusher's retry gets blocked. If a push is blocked anyway,
 tell the user and let them run `git push origin <branch>` (`-u` on a first push); never route around the block.
 
+A push from the main session first performs pusher check 5 in full (`.claude/agents/pusher.md`):
+`node .claude/hooks/privacy-scan.js` over the outgoing range, then a read of each outgoing commit
+for names, numbers, addresses and identifiers, and quotes the result (on a hit, class and location
+only) before the push. The guard's rule 20 and the pre-push hook run the scan on every push; the
+read is the pusher's alone unless the main session does it too.
+
 A push the privacy scan refuses (ADR 0018) is fixed, not lifted: edit the text to `~`, `<repo>`, a
 role or a placeholder and fold the edit into the unpushed commit (`--amend` for the last commit;
 for several, `reset --soft <last pushed sha>` and one new commit). A wrong author or committer:
