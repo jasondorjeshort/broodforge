@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,7 +41,9 @@ var discordRender = Command{
 	Expect: true,
 	Flags: []Flag{
 		{Name: "events", Kind: FlagString, Value: "<jsonl>", Usage: "a file of SessionEvents, one per line, as session tail --json prints them"},
-		{Name: "clock", Kind: FlagString, Default: "real", Value: "fake|real", Usage: "fake steps a virtual clock from one due post to the next"},
+		{Name: "clock", Kind: FlagString, Value: "fake|real", Usage: "fake steps a virtual clock from one due post to the next; default real"},
+		{Name: "golden", Kind: FlagString, Value: "<dir>", Usage: "render <dir>/events.jsonl on the fake clock and compare with the golden's blessed output"},
+		{Name: "update", Kind: FlagBool, Usage: "with --golden: write the golden's output files instead of comparing"},
 	},
 	Columns: discord.OutboxColumns,
 	Local:   runDiscordRender,
@@ -101,7 +104,6 @@ const CodeDiscordMissing = "discord-missing"
 
 func init() {
 	commands = append(commands, &discordCheck, &discordRender, &discordInject, &sessionOutbox, &sessionTranscript)
-	required[&discordRender] = []string{"events"}
 	positionals[&discordInject] = []string{injectArgs}
 	variadic[&discordInject] = true
 	positionals[&sessionOutbox] = []string{"id"}
@@ -109,14 +111,140 @@ func init() {
 	renderers[&sessionTranscript] = renderTranscript
 }
 
+// CodeGoldenDiffers is `discord render --golden` finding the render differ from the blessed files.
+const CodeGoldenDiffers = "golden-differs"
+
+// renderExclusive is the one usage error of `discord render`'s input flags: --golden stands alone,
+// and one of --events and --golden is needed.
+const renderExclusive = "discord render: give --events <jsonl> [--clock fake|real], or --golden <dir> [--update] alone"
+
 func runDiscordRender(_ context.Context, env *Env) error {
-	clock := env.String("clock")
+	events, golden, clock := env.String("events"), env.String("golden"), env.String("clock")
+	switch {
+	case golden != "" && (events != "" || clock != ""),
+		golden == "" && (events == "" || env.Bool("update")):
+		return &usageError{renderExclusive}
+	case golden != "":
+		events, clock = filepath.Join(golden, discord.GoldenEvents), "fake"
+	case clock == "":
+		clock = "real"
+	}
 	if clock != "fake" && clock != "real" {
 		return &usageError{"discord render: --clock " + clock + ": want fake or real"}
 	}
-	f, err := os.Open(env.String("events"))
+	evs, err := readReplayEvents(events)
+	if err != nil {
+		return err
+	}
+	if golden == "" {
+		return printRender(env, discord.Replay(evs, clock == "fake"))
+	}
+	res, got, err := discord.RenderGolden(evs)
+	if err != nil {
+		// The events name a session that cannot name a transcript file: the input is bad.
+		return control.NewError(control.CodeBadArgs, err.Error())
+	}
+	dir := filepath.ToSlash(golden)
+	if env.Bool("update") {
+		// A write failure is an I/O error, `internal`, as scratch and backup report theirs.
+		if err := discord.WriteGolden(golden, got); err != nil {
+			return err
+		}
+		b, err := json.Marshal(map[string]string{"result": "golden", "golden": "updated", "dir": dir})
+		if err != nil {
+			return err
+		}
+		return env.Out.Record(b, []string{"result", "golden", "dir"})
+	}
+	want, err := discord.ReadGolden(golden)
 	if err != nil {
 		return control.NewError(control.CodeBadArgs, err.Error())
+	}
+	diffs := discord.CompareGolden(got, want)
+	if len(diffs) == 0 {
+		return printRender(env, res)
+	}
+	if err := printPosts(env, res); err != nil {
+		return err
+	}
+	if env.JSON {
+		// --json: the result line as without --golden, then one golden object per file.
+		if err := printResult(env, res); err != nil {
+			return err
+		}
+	}
+	var names []string
+	for _, d := range diffs {
+		names = append(names, d.File)
+		if err := printGoldenDiff(env, d); err != nil {
+			return err
+		}
+	}
+	// The error line is golden-differs whatever --expect asked: --expect judges the pacing token
+	// of an equal render only (05-debug-interface-discord.md, Golden sessions).
+	e := control.NewError(CodeGoldenDiffers, dir+": "+strings.Join(names, ", ")+"; --update, then git diff tests/discord/golden/, shows the whole")
+	if env.JSON {
+		b, err := json.Marshal(e)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(env.Stderr, string(b))
+	} else {
+		fmt.Fprintf(env.Stderr, "error: %s: %s\n", e.Code, e.Message)
+	}
+	return &exitError{ExitFailure}
+}
+
+// printGoldenDiff prints one differing file: in text its first differing line as a golden and a
+// now record, then `<file>  more  <n>` when further lines differ; in --json one golden object.
+func printGoldenDiff(env *Env, d discord.GoldenDiff) error {
+	if env.JSON {
+		b, err := encodeDiscord(goldenRecord{Golden: d})
+		if err != nil {
+			return err
+		}
+		return env.Out.Record(b, nil)
+	}
+	cols := []string{"file", "line", "side", "text"}
+	for _, side := range []struct{ name, text string }{{"golden", d.Golden}, {"now", d.Now}} {
+		b, err := encodeDiscord(goldenSide{File: d.File, Line: strconv.Itoa(d.Line), Side: side.name, Text: side.text})
+		if err != nil {
+			return err
+		}
+		if err := env.Out.Record(b, cols); err != nil {
+			return err
+		}
+	}
+	if d.More == 0 {
+		return nil
+	}
+	b, err := encodeDiscord(goldenSide{File: d.File, Line: "more", Side: strconv.Itoa(d.More)})
+	if err != nil {
+		return err
+	}
+	return env.Out.Record(b, cols[:3])
+}
+
+// goldenSide is one text record of a differing file: `<file>  <line>  golden|now  <text>`, or
+// `<file>  more  <n>`.
+type goldenSide struct {
+	File string `json:"file"`
+	Line string `json:"line"`
+	Side string `json:"side"`
+	Text string `json:"text"`
+}
+
+// goldenRecord is `discord render --golden --json`'s line per differing file.
+type goldenRecord struct {
+	Golden discord.GoldenDiff `json:"golden"`
+}
+
+// readReplayEvents reads a file of ReplayEvents, one JSON object per line; blank and `#` lines
+// are skipped.
+func readReplayEvents(path string) ([]discord.ReplayEvent, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, control.NewError(control.CodeBadArgs, err.Error())
 	}
 	defer f.Close()
 	var events []discord.ReplayEvent
@@ -129,22 +257,37 @@ func runDiscordRender(_ context.Context, env *Env) error {
 		}
 		var ev discord.ReplayEvent
 		if err := json.Unmarshal(line, &ev); err != nil {
-			return control.NewError(control.CodeBadArgs, fmt.Sprintf("%s line %d: %v", filepath.ToSlash(env.String("events")), n, err))
+			return nil, control.NewError(control.CodeBadArgs, fmt.Sprintf("%s line %d: %v", filepath.ToSlash(path), n, err))
 		}
 		events = append(events, ev)
 	}
 	if err := sc.Err(); err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+// printRender prints the posts, then the pacing line whose first column is the --expect token.
+func printRender(env *Env, res discord.ReplayResult) error {
+	if err := printPosts(env, res); err != nil {
 		return err
 	}
-	res := discord.Replay(events, clock == "fake")
-	token := renderOK
+	return printResult(env, res)
+}
+
+// renderToken is the pacing outcome: the per-session limit held, or which one broke.
+func renderToken(res discord.ReplayResult) string {
 	switch {
 	case res.MaxPerSession > 1:
-		token = renderPerSession
+		return renderPerSession
 	case res.MaxPerBot > discord.GlobalBudget:
-		token = renderPerBot
+		return renderPerBot
 	}
-	env.Out.SetToken(token)
+	return renderOK
+}
+
+func printPosts(env *Env, res discord.ReplayResult) error {
+	env.Out.SetToken(renderToken(res))
 	for _, p := range res.Posts {
 		b, err := encodeDiscord(p)
 		if err != nil {
@@ -154,10 +297,14 @@ func runDiscordRender(_ context.Context, env *Env) error {
 			return err
 		}
 	}
+	return nil
+}
+
+func printResult(env *Env, res discord.ReplayResult) error {
 	b, err := json.Marshal(struct {
 		Result string `json:"result"`
 		discord.ReplayResult
-	}{token, res})
+	}{renderToken(res), res})
 	if err != nil {
 		return err
 	}
@@ -165,7 +312,7 @@ func runDiscordRender(_ context.Context, env *Env) error {
 }
 
 // encodeDiscord is json.Marshal without HTML escaping, so `->` and `<@1001>` print as written.
-func encodeDiscord[T discord.Post | discord.Reply | discord.Panel | []discord.Post | transcriptResult](v T) (json.RawMessage, error) {
+func encodeDiscord[T discord.Post | discord.Reply | discord.Panel | []discord.Post | transcriptResult | goldenSide | goldenRecord](v T) (json.RawMessage, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)

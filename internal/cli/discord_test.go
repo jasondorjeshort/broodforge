@@ -15,13 +15,70 @@ import (
 
 // TestProofDiscordRender: P11's render Proof on the binary.
 func TestProofDiscordRender(t *testing.T) {
-	r := clitest.Run(t, nil, "discord", "render", "--events", "../../tests/discord/burst.jsonl", "--clock", "fake", "--expect", "edits<=1/s")
+	r := clitest.Run(t, nil, "discord", "render", "--events", "../../tests/discord/golden/burst/events.jsonl", "--clock", "fake", "--expect", "edits<=1/s")
 	if r.Code != 0 || r.Stderr != "" || !strings.Contains(r.Stdout, "  create  m5  106  <@1002> Permission needed · turn 1\n") ||
 		!strings.HasPrefix(lastLine(r.Stdout), "edits<=1/s  ") {
 		t.Errorf("render: exit %d\n%s%s", r.Code, r.Stdout, r.Stderr)
 	}
-	want(t, clitest.Run(t, nil, "discord", "render", "--events", "../../tests/discord/burst.jsonl", "--clock", "slow"), 2, "",
+	want(t, clitest.Run(t, nil, "discord", "render", "--events", "../../tests/discord/golden/burst/events.jsonl", "--clock", "slow"), 2, "",
 		"error: usage: discord render: --clock slow: want fake or real\n")
+}
+
+// TestGoldenFlagsExclusive: --golden stands alone (it sets the events file and the fake clock),
+// and a render needs --events or --golden; each is the one usage error, exit 2.
+func TestGoldenFlagsExclusive(t *testing.T) {
+	const usage = "error: usage: discord render: give --events <jsonl> [--clock fake|real], or --golden <dir> [--update] alone\n"
+	const dir = "../../tests/discord/golden/burst"
+	for _, args := range [][]string{
+		{"--golden", dir, "--events", dir + "/events.jsonl"},
+		{"--golden", dir, "--clock", "fake"},
+		{"--golden", dir, "--clock", "real"},
+		{},
+		{"--update"},
+		{"--clock", "fake"},
+	} {
+		want(t, clitest.Run(t, nil, append([]string{"discord", "render"}, args...)...), 2, "", usage)
+	}
+}
+
+// TestGoldenRender: an unchanged golden renders with the pacing line last; one changed character
+// in the blessed outbox is golden-differs, exit 1, whatever --expect asked, with the golden and
+// now records naming the file and the line; --update re-blesses it.
+func TestGoldenRender(t *testing.T) {
+	r := clitest.Run(t, nil, "discord", "render", "--golden", "../../tests/discord/golden/burst", "--expect", "edits<=1/s")
+	if r.Code != 0 || r.Stderr != "" || !strings.HasPrefix(lastLine(r.Stdout), "edits<=1/s  ") {
+		t.Fatalf("render --golden: exit %d\n%s%s", r.Code, r.Stdout, r.Stderr)
+	}
+	dir := t.TempDir()
+	for _, name := range []string{"events.jsonl", "outbox.jsonl", "transcript-s0001.md", "transcript-s0002.md"} {
+		b, err := os.ReadFile(filepath.Join("../../tests/discord/golden/burst", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if name == "outbox.jsonl" {
+			b = []byte(strings.Replace(string(b), "Allowed by Sam Example", "Allowed by Sam Exampel", 1))
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r = clitest.Run(t, nil, "discord", "render", "--golden", dir, "--expect", "edits<=1/s")
+	slash := filepath.ToSlash(dir)
+	if r.Code != 1 || r.Stderr != "error: golden-differs: "+slash+": outbox.jsonl; --update, then git diff tests/discord/golden/, shows the whole\n" ||
+		!strings.Contains(r.Stdout, "\noutbox.jsonl  14  golden  {\"time\":\"2026-10-16T10:00:06.500Z\",\"op\":\"edit\"") ||
+		!strings.Contains(r.Stdout, "\noutbox.jsonl  14  now  {\"time\":\"2026-10-16T10:00:06.500Z\",\"op\":\"edit\"") ||
+		strings.Contains(r.Stdout, "  more  ") || strings.Contains(r.Stdout, "edits<=1/s  ") {
+		t.Errorf("differs: exit %d\n%s%s", r.Code, r.Stdout, r.Stderr)
+	}
+	r = clitest.Run(t, nil, "--json", "discord", "render", "--golden", dir)
+	if r.Code != 1 || !strings.Contains(r.Stdout, "\n{\"golden\":{\"file\":\"outbox.jsonl\",\"line\":14,") ||
+		!strings.Contains(r.Stdout, "\n{\"result\":\"edits\\u003c=1/s\",") || !strings.Contains(r.Stderr, `"code":"golden-differs"`) {
+		t.Errorf("differs --json: exit %d\n%s%s", r.Code, r.Stdout, r.Stderr)
+	}
+	want(t, clitest.Run(t, nil, "discord", "render", "--golden", dir, "--update"), 0, "golden  updated  "+slash+"\n", "")
+	if r := clitest.Run(t, nil, "discord", "render", "--golden", dir); r.Code != 0 {
+		t.Errorf("after --update: exit %d\n%s", r.Code, r.Stderr)
+	}
 }
 
 func lastLine(s string) string {

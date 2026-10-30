@@ -26,6 +26,9 @@ paths:
   `Kind` so `exhaustive` checks every switch. Never a type switch for them.
 - Tests use `testing` only, beside the code as `_test.go`; fixtures and scripts live under
   `tests/` and `fixtures/`.
+- Write or append Go source with the Write or Edit tool, never a Bash heredoc: the heredoc
+  collapses `\\` to `\`, which silently changes a regexp or a JSON-escaped path and the test
+  written beside it (`docs/hatchery/reference/claude-code-on-windows.md`, Shells).
 - Tests do not depend on `BROODFORGE_*` in the process environment (a developer inside a session has
   it set): build the child's environment with `clitest.Environ`, or `t.Setenv(name, "")`. Check with
   `BROODFORGE_SESSION=s0001 go test -count=1 ./...`: the test cache does not track a child's environment, so a cached

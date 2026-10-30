@@ -7,7 +7,7 @@ renderer and its rendered outbox and transcripts compared line by line against t
 the golden was made, so a render or wording regression is a diff an agent reads from the terminal and
 every test line runs. The design is `05-debug-interface-discord.md` (Golden sessions); the idea is
 `../ideas/2026-10-30-golden-sessions-replay-recorded-sessions-against-the-new-build.md`, deleted in
-the pass's commit (the queue rule). The pass reads that section, the renderer section above it,
+the pass's commit (the queue rule) [no-check: the idea is deleted by P32's commit]. The pass reads that section, the renderer section above it,
 `internal/engine/golden_test.go` (the parser goldens' `-update` shape, which this pass mirrors) and
 P1's rewrite and independent-read rules before its Implements line. The bot is never in the loop: a
 golden replays through `discord.Replay` with the fake clock, standalone, and takes no root. A replay

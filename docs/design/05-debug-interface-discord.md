@@ -28,7 +28,7 @@ run the adapter's own handlers (command parsing, the
 key-paste scan, role check, custom-id parsing) with the roles given in place of a guild lookup;
 all are refused on a live instance.
 Observe. `session outbox`; `discord check --json`; `audit --kind action-refused`.
-Reproduce. `discord render --events tests/discord/burst.jsonl --clock fake --expect
+Reproduce. `discord render --events tests/discord/golden/burst/events.jsonl --clock fake --expect
 'edits<=1/s'`; an inbound bug is one `discord inject` line.
 Isolation. Dry-run opens no connection; `check` is the only command besides `serve` that
 connects, and only to the guild it is told. Not exercisable without a guild the owner creates:
@@ -162,7 +162,7 @@ classify; the owner decides on the report. The engine's words about this reposit
 event are repository content: the read says so and the owner decides.
 Observe. `discord render --golden <dir>`; `git diff tests/discord/golden/` after `--update`;
 `go test ./internal/discord -run TestGolden`.
-Reproduce. `bash tests/repro/golden-sessions.sh` [no-check: created by P32] runs `discord render
+Reproduce. `bash tests/repro/golden-sessions.sh` runs `discord render
 --golden <dir> --expect 'edits<=1/s'` on every directory under `tests/discord/golden/`, prints
 `ok  <name>` or `differs  <name>` per golden with the records of each that differs, and exits 0
 only when every golden matches; it needs no root and does not run under `scratch run`, since the

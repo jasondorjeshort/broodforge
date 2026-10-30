@@ -11,14 +11,14 @@ import (
 	"github.com/jasondorjeshort/broodforge/internal/session"
 )
 
-// TestReplaySubagentEnd: tests/discord/subagent-end.jsonl, the subagent fixture's turn as
+// TestReplaySubagentEnd: tests/discord/golden/subagent-end/events.jsonl, the subagent fixture's turn as
 // `session tail --json` printed it and an end handing off two commits. The subagent's call sits
 // indented under its Agent line in the final message (04, The turn loop); the venue says
 // `Ending: checking and handing off 2 commits...` while the handoff runs, and that line is deleted
 // once the summary is posted after it; the summary lists each commit's short hash and subject
 // and the pull request's title (04, Ending a session). P11 remainder, items 1, 2 and 6.
 func TestReplaySubagentEnd(t *testing.T) {
-	res := Replay(readReplay(t, "../../tests/discord/subagent-end.jsonl"), true)
+	res := Replay(readReplay(t, "../../tests/discord/golden/subagent-end/events.jsonl"), true)
 	var final, ending, summary string
 	endingAt, summaryAt, deletedAt := -1, -1, -1
 	for i, p := range res.Posts {

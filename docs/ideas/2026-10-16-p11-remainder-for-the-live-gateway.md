@@ -22,5 +22,5 @@ Discord layer. P12 built the hourglass, deleting a pasted key, the venue's delet
 
 2026-10-30: items 1 (the `session-ending` event and the venue's `Ending:` line), 2 (each commit's
 hash and subject, the pull request's title, `venue.summaryChannel`), 6 (a subagent's calls
-indented in the rendered turn, `tests/discord/subagent-end.jsonl`) and 8 (the `panel` store
+indented in the rendered turn, `tests/discord/golden/subagent-end/events.jsonl`) and 8 (the `panel` store
 record, loaded at start) landed; the three above remain, untriaged.

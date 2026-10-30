@@ -4,6 +4,7 @@
 // rewriting every PC home and spike-root path to a placeholder (docs/design/08-implementation-plan.md, P1).
 //
 //	go run ./internal/tools/importfixture [--force] [--user <pc user>] <src> <dst>
+//	go run ./internal/tools/importfixture --events <file> [--user <pc user>]
 //
 // <src> is a spike fixture, C:/Users/<pc user>/AppData/Local/Temp/bf-spike/fx/<name>, or a
 // directory engine record wrote. The PC user is --user, else read from the source path's
@@ -11,6 +12,12 @@
 // from the spike's meta-<n>.json when every turn has one, else it is the source's own fixture.json,
 // rewritten like the turns. The rewrite is textual: every byte outside a rewritten path token or
 // project slug is kept, so the fake replays the real stream.
+//
+// --events rewrites one captured `session tail --json --all` file in place (a golden session's
+// events.jsonl, 05-debug-interface-discord.md, Golden sessions): the same path and slug rewrite,
+// the PC user being --user, else the one the file's first PC home path names (a file with none
+// gets no home rewrite), and every whole-token occurrence of the captured session id, read from
+// the session-started line, rewritten to s0001.
 // Exit codes: 0 done, 1 failure with one line on stderr, 2 usage.
 package main
 
@@ -65,12 +72,25 @@ func run(args []string) int {
 	fs := flag.NewFlagSet("importfixture", flag.ContinueOnError)
 	force := fs.Bool("force", false, "write into a non-empty <dst>, replacing its turn files and fixture.json")
 	user := fs.String("user", "", "the PC user whose home the source's paths name (default: read from <src>)")
+	events := fs.String("events", "", "rewrite this captured events file in place instead of importing a fixture directory")
 	fs.SetOutput(os.Stderr)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: importfixture [--force] [--user <pc user>] <src> <dst>")
+		fmt.Fprintln(os.Stderr, "       importfixture --events <file> [--user <pc user>]")
 	}
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	if *events != "" {
+		if fs.NArg() != 0 || *force {
+			fs.Usage()
+			return 2
+		}
+		if err := rewriteEvents(*events, *user); err != nil {
+			fmt.Fprintln(os.Stderr, "error: "+err.Error())
+			return 1
+		}
+		return 0
 	}
 	if fs.NArg() != 2 {
 		fs.Usage()
@@ -297,7 +317,7 @@ var leakPatterns = []struct {
 // scanLeak refuses output that still contains the PC user name in any form, case-insensitively,
 // or any user's home path or slug: the rewrite covers known path forms of one user only.
 func scanLeak(user string, outs map[string][]byte) error {
-	needle := []byte(strings.ToLower(user))
+	needle := []byte(strings.ToLower(user)) // none when the user is unknown (an events file with no home path)
 	names := make([]string, 0, len(outs))
 	for name := range outs {
 		names = append(names, name)
@@ -306,7 +326,7 @@ func scanLeak(user string, outs map[string][]byte) error {
 	for _, name := range names {
 		b := outs[name]
 		low := bytes.ToLower(b)
-		if k := bytes.Index(low, needle); k >= 0 {
+		if k := bytes.Index(low, needle); len(needle) > 0 && k >= 0 {
 			line := bytes.Count(low[:k], []byte("\n")) + 1
 			return fmt.Errorf("the PC user name survives the rewrite in %s line %d; extend the rewrite", name, line)
 		}
@@ -528,4 +548,104 @@ func isSegmentByte(b byte) bool {
 		return false
 	}
 	return true
+}
+
+// goldenSession is the id every captured events file is rewritten to.
+const goldenSession = "s0001"
+
+// startedSummary reads the session id from a session-started summary: `Session <id> on ...`.
+var startedSummary = regexp.MustCompile(`^Session (\S+) on `)
+
+// homeInText finds a PC home path in any form the rewrite knows: a drive with / or a run of
+// backslashes, or the MSYS /<drive>/Users/; the user is the segment after Users.
+var homeInText = regexp.MustCompile(`(?i)(?:^|[^a-z0-9_])(?:[a-z]:(?:/|\\{1,4})|/[a-z]/)Users(?:/|\\{1,4})([^/\\\s"'` + "`" + `,;:*?<>|()\[\]{}]+)`)
+
+// rewriteEvents rewrites one captured events file in place: the PC paths and slugs, then every
+// whole-token occurrence of the captured session id to s0001. Everything is rewritten and
+// scanned in memory first, so a refusal leaves the file untouched.
+func rewriteEvents(path, user string) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	id, err := capturedSession(raw)
+	if err != nil {
+		return fmt.Errorf("%s: %w", filepath.ToSlash(path), err)
+	}
+	if user == "" {
+		if m := homeInText.FindSubmatch(raw); m != nil {
+			user = string(m[1])
+		}
+	}
+	out := raw
+	if user != "" {
+		out = newRewriter(user).rewrite(out)
+	}
+	if id != goldenSession {
+		out = rewriteToken(out, []byte(id), []byte(goldenSession))
+	}
+	if err := scanLeak(user, map[string][]byte{filepath.Base(path): out}); err != nil {
+		return err
+	}
+	// A temporary file beside it, then a rename: a failure mid-write leaves the capture whole.
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, out, 0o644); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// capturedSession is the session id of the file's session-started line: its `session` key when
+// it has one (a replay file's), else the id its summary names (`session tail --json` has no key).
+func capturedSession(raw []byte) (string, error) {
+	for _, line := range bytes.Split(raw, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 || line[0] == '#' {
+			continue
+		}
+		var ev struct {
+			Type    string `json:"type"`
+			Session string `json:"session"`
+			Summary string `json:"summary"`
+		}
+		if json.Unmarshal(line, &ev) != nil || ev.Type != "session-started" {
+			continue
+		}
+		if ev.Session != "" {
+			return ev.Session, nil
+		}
+		if m := startedSummary.FindStringSubmatch(ev.Summary); m != nil {
+			return m[1], nil
+		}
+		return "", errors.New("the session-started line names no session id")
+	}
+	return "", errors.New("no session-started line")
+}
+
+// rewriteToken replaces every occurrence of from that is not preceded or followed by a letter or
+// digit (so s0002 in `bf:s0002:end`, `#s0002-ada` and `broodforge/scratch/s0002`, never in s00021).
+func rewriteToken(in, from, to []byte) []byte {
+	var out bytes.Buffer
+	i := 0
+	for {
+		k := bytes.Index(in[i:], from)
+		if k < 0 {
+			out.Write(in[i:])
+			return out.Bytes()
+		}
+		at, end := i+k, i+k+len(from)
+		if (at > 0 && isAlnum(in[at-1])) || (end < len(in) && isAlnum(in[end])) {
+			out.Write(in[i : at+1])
+			i = at + 1
+			continue
+		}
+		out.Write(in[i:at])
+		out.Write(to)
+		i = end
+	}
 }

@@ -12,9 +12,10 @@ Implements: `04-ux.md` (every screen and text); `03-architecture.md` (`discord` 
 outbox`, `transcript`, `panel`). Files: `internal/discord/` (03's `discord` row without the gateway:
 renderer, coalescer with the injectable clock and a global budget of 50 requests per second per bot
 beneath the per-session one, mask, custom ids, command parsing, `inject`; disgo's types appear here
-and nowhere else); `internal/cli/{discord,panel}.go`; `tests/discord/burst.jsonl`; the two repro
+and nowhere else); `internal/cli/{discord,panel}.go`; `tests/discord/golden/burst/events.jsonl` (P32 moved
+it from `tests/discord/`); the two repro
 scripts of P10 gain their `session outbox` checks (the buttons post, the timeout trace line). Proof:
-`discord render --events tests/discord/burst.jsonl --clock fake --expect 'edits<=1/s'`; `discord
+`discord render --events tests/discord/golden/burst/events.jsonl --clock fake --expect 'edits<=1/s'`; `discord
 inject message --channel 100 --user 1001 --roles 10 "sk-ant-..."` yields the refusal and an
 `action-refused` event with no key text; a scratch session shows 04's working message, footer,
 buttons post and summary in `session outbox`, which the owner reads. Depends on: P10.

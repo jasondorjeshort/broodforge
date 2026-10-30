@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -286,5 +287,87 @@ func TestDestinationRefusedWhenNotEmpty(t *testing.T) {
 	left, _ := os.ReadDir(dst)
 	if len(left) != 1 || left[0].Name() != "keep.txt" {
 		t.Fatalf("after --force: %v", left)
+	}
+}
+
+// TestEventsRewritesEverySessionID: a captured session-tail file of s0002 holds no s0002 token
+// after --events (the summaries, start.branch, end.branch, a custom id and a worktree path in a
+// tool target), its PC home paths are the placeholder, read from the file without --user, and
+// every other byte is kept (s00021 and xs0002 are not the token; the comment line's is).
+func TestEventsRewritesEverySessionID(t *testing.T) {
+	const tmpl = `# {ID} captured
+{"seq":1,"time":"2026-10-30T10:00:00Z","type":"session-started","summary":"Session {ID} on Scratch, branch broodforge/scratch/{ID}, driver Ada Example.","user":"1001","start":{"channel":"100","branch":"broodforge/scratch/{ID}","driver":"1001","driverName":"Ada Example"}}
+{"seq":2,"time":"2026-10-30T10:00:01Z","type":"tool-call","summary":"[Read] {HOME}/AppData/Local/Temp/bf-scratch-1/sessions/{ID}/tree/hello.txt","tool":"Read","target":"{ESC}\\AppData\\Local\\Temp\\bf-scratch-1\\sessions\\{ID}\\tree\\hello.txt"}
+{"seq":3,"time":"2026-10-30T10:00:02Z","type":"waiting-for-answer","summary":"bf:{ID}:toolu_1:allow #{ID}-ada s00021 xs0002"}
+{"seq":4,"time":"2026-10-30T10:00:03Z","type":"session-ended","summary":"Session {ID} ended.","end":{"branch":"broodforge/scratch/{ID}","by":"Ada Example"}}
+`
+	fill := func(id, home, esc string) string {
+		return strings.NewReplacer("{ID}", id, "{HOME}", home, "{ESC}", esc).Replace(tmpl)
+	}
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	// The target is the JSON-escaped form `session tail --json` writes: two backslashes a separator.
+	if err := os.WriteFile(path, []byte(fill("s0002", "C:/Users/"+user, `C:\\Users\\`+user)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := run([]string{"--events", path}); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Replace(fill("s0001", "/home/user", "/home/user"), `/home/user\\AppData\\Local\\Temp\\bf-scratch-1\\sessions\\s0001\\tree\\hello.txt`,
+		"/home/user/AppData/Local/Temp/bf-scratch-1/sessions/s0001/tree/hello.txt", 1)
+	if string(got) != want {
+		t.Errorf("rewrite\n got %s\nwant %s", got, want)
+	}
+	if strings.Contains(strings.NewReplacer("s00021", "", "xs0002", "").Replace(string(got)), "s0002") {
+		t.Errorf("an s0002 token survives:\n%s", got)
+	}
+
+	// A file with no PC home path gets no home rewrite and is not an error.
+	plain := filepath.Join(t.TempDir(), "events.jsonl")
+	if err := os.WriteFile(plain, []byte(`{"type":"session-started","summary":"Session s0003 on X, branch b/s0003."}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := run([]string{"--events", plain}); code != 0 {
+		t.Fatalf("no home path: exit %d", code)
+	}
+	if b, _ := os.ReadFile(plain); string(b) != `{"type":"session-started","summary":"Session s0001 on X, branch b/s0001."}`+"\n" {
+		t.Errorf("no home path: %s", b)
+	}
+	if code := run([]string{"--events", plain, "a", "b"}); code != 2 {
+		t.Errorf("--events with <src> <dst>: exit %d, want 2", code)
+	}
+}
+
+// TestEventsReadsUserFromAnyHomeForm: without --user, the PC user comes from the file's first home
+// path in the JSON-escaped form `session tail --json` writes as well as with forward slashes, and
+// a user name may hold an s; the rewrite then leaves no Users path, and no .tmp file is left.
+func TestEventsReadsUserFromAnyHomeForm(t *testing.T) {
+	bs := strings.Repeat(string(rune(92)), 2)
+	for name, home := range map[string]string{
+		"escaped backslashes": "C:" + bs + "Users" + bs + "alice" + bs + "x.txt",
+		"forward slashes":     "C:/Users/alice/x.txt",
+	} {
+		path := filepath.Join(t.TempDir(), "events.jsonl")
+		body := `{"type":"session-started","summary":"Session s0002 on X."}` + "\n" +
+			`{"type":"tool-call","summary":"[Read] x","target":"` + home + `"}` + "\n"
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if code := run([]string{"--events", path}); code != 0 {
+			t.Errorf("%s: exit %d, want 0", name, code)
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(b), "Users") {
+			t.Errorf("%s: a Users path survives: %s", name, b)
+		}
+		if _, err := os.Stat(path + ".tmp"); err == nil {
+			t.Errorf("%s: the temporary file is left", name)
+		}
 	}
 }

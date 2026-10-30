@@ -399,9 +399,9 @@ func TestViewOverflow(t *testing.T) {
 	}
 }
 
-// TestReplayBurst: tests/discord/burst.jsonl keeps every session to one create or edit a second.
+// TestReplayBurst: tests/discord/golden/burst/events.jsonl keeps every session to one create or edit a second.
 func TestReplayBurst(t *testing.T) {
-	res := Replay(readReplay(t, "../../tests/discord/burst.jsonl"), true)
+	res := Replay(readReplay(t, "../../tests/discord/golden/burst/events.jsonl"), true)
 	if res.MaxPerSession != 1 || res.MaxPerBot > GlobalBudget {
 		t.Errorf("per session %d, per bot %d", res.MaxPerSession, res.MaxPerBot)
 	}
@@ -438,12 +438,12 @@ func readReplay(t *testing.T, path string) []ReplayEvent {
 	return events
 }
 
-// TestReplayTurnEnd: tests/discord/turn-end.jsonl. The working header names the step (a call
+// TestReplayTurnEnd: tests/discord/golden/turn-end/events.jsonl. The working header names the step (a call
 // outstanding by its tool, the agent's text as writing, none between steps), and a completed
 // turn's footer says Idle, with `ended on a tool call, no closing message` when its last entry
 // is a call (owner, 2026-10-24).
 func TestReplayTurnEnd(t *testing.T) {
-	res := Replay(readReplay(t, "../../tests/discord/turn-end.jsonl"), true)
+	res := Replay(readReplay(t, "../../tests/discord/golden/turn-end/events.jsonl"), true)
 	heads := map[string][]string{}
 	finals := map[string]string{}
 	for _, p := range res.Posts {
