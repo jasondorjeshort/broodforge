@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -41,10 +40,6 @@ func newSetupWorld(t *testing.T) *setupWorld {
 	if err := os.MkdirAll(stub, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	name := "claude"
-	if runtime.GOOS == "windows" {
-		name = "claude.exe"
-	}
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -53,8 +48,11 @@ func newSetupWorld(t *testing.T) *setupWorld {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(stub, name), b, 0o755); err != nil {
-		t.Fatal(err)
+	// Both names: setup looks up its host's engine name, and this test does not branch on the host.
+	for _, name := range []string{"claude", "claude.exe"} {
+		if err := os.WriteFile(filepath.Join(stub, name), b, 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	var r [6]byte
 	if _, err := rand.Read(r[:]); err != nil {

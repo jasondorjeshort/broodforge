@@ -84,7 +84,6 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-21-carry-back-adr-amendments-section.md` | chore | Departure row: the adr skill's dated `## Amendments` section; carry it back |
 | `2026-10-21-carry-back-brief-boundary-escape-classes.md` | chore | Departure row: a reviewer brief for a path or name boundary lists the escape classes; carry it back |
 | `2026-10-21-carry-back-windows-reference-go-and-junction-facts.md` | question | Whether the base's Windows reference wants the scanner-quarantine and junction facts this project's copy carried |
-| `2026-10-21-go-rules-become-a-lint-test.md` | chore | The mechanical rules of `go.md` (SPDX, host branching, `any`, imports) become one test under `tests/lint/` [no-check: created by the pass]; the import exceptions moved to 03's `cli` row on 2026-10-30, the test remains |
 | `2026-10-22-discord-layer-trace-for-debugging-the-live-bot.md` | feature | `serve --trace`: a stderr line per REST call and gateway state change beside the inbound log, on any root (designed 2026-10-30); what a second bot cannot see; the coder half waits on P12d |
 | `2026-10-23-handoff-main-lands-a-session-on-the-default-branch.md` | feature | A third `handoff` value, `main`: check, rebase, fast-forward push to the default branch, falling back to the session branch; gated on a role group; waits on the owner's ADR |
 | `2026-10-23-session-land-pushes-to-main-mid-session.md` | feature | `/session land` runs the `main` handoff's steps on the commits so far and keeps the session open; waits on the owner's ADR |

@@ -20,7 +20,8 @@ paths:
 - Before editing `internal/control`, `internal/spawn` or `internal/hook`, read
   `docs/reference/go-on-windows.md` and `docs/reference/go-dependencies.md` (named pipes,
   junctions, gcc on `PATH`, antivirus quarantine of `bin/`).
-- No `interface{}` or `any` outside `internal/engine`'s raw stream layer.
+- No `interface{}` or `any` outside `internal/engine`'s raw stream layer (`parse.go`
+  and its test's oracle).
 - Sum types are a struct with a `Kind` enum field and a pointer payload per kind, switched on
   `Kind` so `exhaustive` checks every switch. Never a type switch for them.
 - Tests use `testing` only, beside the code as `_test.go`; fixtures and scripts live under
@@ -36,5 +37,6 @@ paths:
   elevated part and hidden terminal input are host code by nature; no other file of `setup` branches).
 - One package per component of `docs/design/03-architecture.md`'s table, under `internal/`; a
   package imports only the components its row names, and the `cli` row lists that package's
-  exceptions (the standalone and `(file)` subcommands), nothing beyond them. A library is imported
-  only by the component ADR 0023 names; `docs/reference/go-dependencies.md` changes with `go.mod`.
+  exceptions (the standalone and `(file)` subcommands), nothing beyond them; test files excepted;
+  the harnesses are imported by tests only. A library is imported only by the component ADR 0023
+  names; `docs/reference/go-dependencies.md` changes with `go.mod`.

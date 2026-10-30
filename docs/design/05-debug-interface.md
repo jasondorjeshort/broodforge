@@ -178,7 +178,7 @@ Reproduce. A failing parse is a fixture: copy the offending `turn-<n>.jsonl` int
 result, got no-result`.
 Isolation. The fake reads the fixture directory and writes only `received-<n>.json` there (`--received-dir <dir>` for a read-only
 tree); `engine record` needs a real credential, not scratch; the tests drive `--real` and `record` against
-`internal/spawn/spawntest`, the test binary standing in for the engine.
+`internal/spawn/spawntest`, the test binary standing in for the engine; `internal/workflow/workflowtest` makes the workflow tests' canonicals from `fixtures/workflow/`.
 
 ## The PreToolUse hook
 
