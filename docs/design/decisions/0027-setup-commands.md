@@ -7,8 +7,8 @@ surface a coder implements from, under `../05-cli-conventions.md`. Source: `../p
 ## `broodforge setup`
 
 `broodforge setup [<step>] [--root <path>] [--instance <name>] [--repo <url>] [--project <id>]
-[--guild <id>] [--channels yes|no] [--create-role yes|no] [--role <name>] [--from <export>] [--check]
-[--yes] [--wait <seconds>] [--json]`. Every prompt has a flag; `--yes` takes every shown default
+[--guild <id>] [--channels yes|no] [--create-role yes|no] [--role <name>] [--from <export>]
+[--discord live|dry-run] [--check] [--yes] [--wait <seconds>] [--json]`. Every prompt has a flag; `--yes` takes every shown default
 and refuses `needs-input-<step>` where there is no default:
 
 | Flag | The prompt it answers | Default shown | With `--yes` and no flag |
@@ -22,6 +22,7 @@ and refuses `needs-input-<step>` where there is no default:
 | `--role <name>` | none: the role name `setup` looks up or creates | `Trusted` | taken |
 | `--wait <seconds>` | none: the bound on every poll | 900; `0` is unbounded | taken |
 | `--from <export>` | none: `config import` first, then only the host-bound and secret steps ask | none | - |
+| `--discord live\|dry-run` | none: whether the Discord steps call Discord (`live`) or write the development placeholders and call nothing (`dry-run`, The dry-run form below) | `live` | taken |
 
 Off a terminal every question is refused `needs-input-<step>` naming its flag, so a token on stdin
 needs `--yes`, with three exceptions: the git-credential question is deferred, not refused (it writes
@@ -103,6 +104,33 @@ Steps, in order:
 - `check`: `config check`, `spawn preflight`, `discord check`, each line echoed.
 - `next`: the one closing line.
 
+## The dry-run form (`--discord dry-run`)
+
+The development instance's form (`../05-debug-interface-dev-instance.md`; P27), amendment of
+2026-10-30. The five Discord steps call nothing: `token`, `application` and `guild` print `skip
+<step>  dry-run`; `channels`, when the project file has no channel, writes two placeholder channels,
+`100` (reach `code`, mode `prompt`, harness `fake`) and `200` (reach `code`, mode `prompt`, harness
+`claude-code`), `start`, `contribute` and `answer` all `trusted`, `venue.category` left empty, and
+writes `engine.fakeFixtures` as `fixtures/engine` under the effective install directory (the parent
+of `bin/`, as the spawn backend resolves an empty `paths.install`: the binary built in a checkout);
+`ok  channels  dry-run 100 fake, 200 claude-code; fixtures <path>`. No `fixtures/engine` there is
+`fix  channels  build the binary in a checkout: no fixtures/engine beside bin/`, not waiting, so the
+run ends `refused-channels` (the inject route cannot pass a fixture path, so the form has no half
+state). `role`, when `roleGroups.trusted` is empty, writes the placeholder role `["10"]` (`ok  role
+dry-run 10`). The ids `100`, `200` and `10` are the scratch template's, never Discord's (a snowflake
+has 17 digits or more), which is how a later run tells them from the owner's. Under the form the
+`engine` step looks on `PATH` first and at the pinned place (`%ProgramData%\Broodforge\engine\`) last,
+the reverse of the live order, so a development root keeps the owner's own engine after `setup host`
+has pinned one. `check` has no `discord check` line; `discord.mode` stays `dry-run`; `next` prints the
+dry-run closing text. On a root whose `discord.mode` is `live` the flag is refused `live-instance` in
+`Run`, beside the scripted-Discord check, before the control address is bound and before `root` writes
+anything; a `--from` export whose instance is live is refused the same way. Another value is a usage
+error, exit 2, as for `--channels`; set beside `BROODFORGE_SETUP_FAKE_DISCORD`, `dry-run` wins and the
+script is not read; `--check` and `setup <step>` take the flag with the same meaning. The flag maps to
+the runner's no-Discord path (`Env.Discord` nil) plus the writes above; the one rule outside the form is
+the rerun rule's placeholder entry: a `--discord live` run replaces the placeholders without asking and
+without `old` and `new` records, `--yes` or not, since setup wrote them itself.
+
 ## The rerun rule, per key
 
 - A config key: absent, written; present and the host or guild agrees, `skip`; present and they
@@ -124,6 +152,11 @@ Steps, in order:
   settled; held, the removal `fix` is printed and polled to `--wait` (`--check`: printed only). A
   Ctrl-C during the wait is caught by the next run.
 - A channel or role it found is never deleted or renamed.
+- The placeholders of the dry-run form (channel ids `100` and `200`, role id `10`): on a `--discord
+  live` run they count as no id, never `mismatch`: `channels` finds by name or creates, writes the
+  lobby and drops them as it drops gone non-lobby ids; `role` writes the real id in their place;
+  neither asks, prints `old` and `new`, or waits on `--yes`. The one case a plain run replaces a
+  present value, because setup wrote it itself as a placeholder and it was never the owner's.
 
 ## Refusals
 
@@ -143,7 +176,7 @@ Each is one stderr line `error: <code>: <message>`, exit 1 (`--json`: the wire e
 | `key-in-use` | `credentials/store.json holds <n> entries under the present key; restore it from your password manager or remove them first` | the owner |
 | `socket-path` | `<the host's Listen failure>; choose a shorter --root` (pending the owner's review) | a shorter `--root` |
 | `refused-project` | `<git's line>; add the token with setup git-credential and rerun` | the owner, then a rerun |
-| `live-instance` | `the scripted Discord (BROODFORGE_SETUP_FAKE_DISCORD) is refused on a live instance` (pending the owner's review) | a root whose `discord.mode` is `dry-run` |
+| `live-instance` | `the scripted Discord (BROODFORGE_SETUP_FAKE_DISCORD) is refused on a live instance`; for the flag, `--discord dry-run is refused on a live instance` (both pending the owner's review) | a root whose `discord.mode` is `dry-run` |
 | `bad-config` | `<file>: <part and key the schema rejects>` (an export under `config import`, an instance file that does not parse; an OS read error is `internal`) (pending the owner's review) | the owner fixes the file |
 | `mismatch-config` | `export <file> has <part: problem>, ...; fix the file or export it again with this version` (a refused `--from` export; interim, pending the owner's review) | the owner fixes the file or exports again, from any shell |
 | `no-config` | `<file> is missing; run setup` (the instance file or the project's, on a run that writes; `--check` prints a `fix` line instead) | `setup`, from the shell that runs it |
@@ -171,6 +204,9 @@ kind:subscription; then here: broodforge setup login <credential id>" (was "next
 In Discord: ..."; pending the owner's re-approval). Refusal `running`: "error:
 running: a bot answers at <address>; stop it with broodforge stop in this shell (every open session
 is interrupted) or use setup --check" ("in this shell" added); the other refusal texts as the table.
+Closing under `--discord dry-run` (2026-10-30, interim wording, the owner's review pending): "ok  next
+the dry-run instance is ready: broodforge serve --discord dry-run starts it; a rerun with --discord live
+adds Discord".
 
 ## On the PC: which shell
 
@@ -258,3 +294,7 @@ application per instance). State and secrets stay 0021's backup and restore.
   two owner texts await re-approval; now four (see The owner's texts). Decision 4's refusal-code list
   lacks `socket-path`, `live-instance`, `bad-config`, `mismatch-config`, `no-config`, `key-unreadable`
   and `bad-args`. Decision 3's "`fix` otherwise" is now a fix line, then `mismatch-role`, exit 1.
+- 2026-10-30: `--discord live|dry-run` and The dry-run form, for the PC development instance (the
+  owner's decision of 2026-10-30; ADR 0027 Amendments; `../05-debug-interface-dev-instance.md`; P27 of
+  `../08-implementation-plan.md`). The flag table, the rerun rule (the placeholder entry), the
+  refusal table's `live-instance` row and The owner's texts (the dry-run closing line) gained theirs.

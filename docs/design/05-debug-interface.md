@@ -15,7 +15,7 @@ and JSONL output rules, the N-07 exit codes and what `--expect` compares, the sc
 (`scratch new|run|delete|prune`, channels `100` and `200`, credential `cred-scratch`; a kept
 root is named on stderr as `scratch root kept: <path>`), and the
 shared isolation rules (no command prints a secret; `error: live-instance` for a debug flag
-that widens a live session), the hidden probe `control echo`. Sections below give only what differs; `setup` is `05-debug-interface-setup.md`.
+that widens a live session), the hidden probe `control echo`. Sections below give only what differs; `setup` is `05-debug-interface-setup.md`; the kept development instance on the PC, the root the `run` skill drives, is `05-debug-interface-dev-instance.md`.
 
 ## Bot lifecycle
 

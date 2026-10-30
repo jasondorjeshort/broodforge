@@ -147,3 +147,21 @@ Windows (ADR 0022's trigger).
   done; the PC count stays 18 or falls.
 - Prediction, check when P23 lands: W3a holds (the profile exists after the inner `setup`, no
   sign-out) and the task runs the bot at boot with `PT0S` read back.
+
+## Amendments
+
+- 2026-10-30: the PC development instance (the owner, 2026-10-30: getting Broodforge runnable on
+  the PC to debug through the debug interface is an early milestone and need not depend on the
+  Discord interface; `../05-debug-interface-dev-instance.md`; P27 of `../08-implementation-plan.md`).
+  Decision 2's flag list ("Prompts with a flag: ...") gains `--discord live|dry-run`, default `live`,
+  a flag with no prompt: under `dry-run` the five Discord steps call nothing and write the
+  companion's dry-run form (placeholder channels `100`, the fake, and `200`, the real engine;
+  placeholder role `10`; `engine.fakeFixtures`), `discord.mode` stays `dry-run`, and a later `live`
+  run on such a root replaces the placeholders without asking. That replacement is the one
+  exception to Decision 4's "A rerun never overwrites a present config key": the value is setup's
+  own placeholder, never the owner's. The instance this serves is the Decision's "development and
+  scratch backend only" case of `same-account`: a root under the owner's account, no `setup host`,
+  no service, the owner's own engine, kept dry-run for good (the live form under the owner's
+  account is a second root and instance); the Windows gap of ADR 0022 applies to it, and the owner
+  accepted it for development on that instance on 2026-10-30, a real turn still running on the
+  owner's word only. Counts in Consequences are unchanged (the dev instance is not an owner instance).

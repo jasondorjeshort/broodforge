@@ -8,7 +8,7 @@ rule per key, the refusal table and the owner's texts are there and are not repe
 
 Drive. `broodforge setup [<step>] [--root <path>] [--instance <name>] [--repo <url>] [--project
 <id>] [--guild <id>] [--channels yes|no] [--create-role yes|no] [--role <name>] [--from <export>]
-[--check] [--yes] [--wait <seconds>] [--json]` runs the steps in the companion's order (`root`,
+[--discord live|dry-run] [--check] [--yes] [--wait <seconds>] [--json]` runs the steps in the companion's order (`root`,
 `config`, `key`, `engine`, `token`, `application`, `guild`, `channels`, `role`, `git-credential`,
 `project`, `defaults`, `check`, `next`), one line each: `ok  <step>  <detail>`, `skip  <step>
 <already>` or `fix  <step>  <what the owner does>`; `--json` one object each,
@@ -29,7 +29,18 @@ token step's `fix` line names the Developer Portal steps. A waiting `fix` may ad
 before its poll (`waiting for the bot to join` after the invite; none under `--json`). Once a run
 has filled the Discord ids, `discord.mode` is switched from `dry-run` to `live`. The role goes to
 the guild's `owner_id`, not to whoever runs setup; the `role` line names it: `ok  role  <name>
-<role id>  held by <member id>`.
+<role id>  held by <member id>`. `--discord dry-run` (default `live`) is the development form
+(companion, The dry-run form; the instance it makes: `05-debug-interface-dev-instance.md`): no
+Discord call; `token`, `application` and `guild` print `skip  <step>  dry-run`; `channels` writes
+the placeholder channels `100` (harness `fake`) and `200` (`claude-code`) when the project has none,
+and `engine.fakeFixtures`; `role` writes the placeholder role `10` as `trusted` when the list is
+empty; the `engine` step looks on `PATH` before the pinned place; `check` has no `discord check`
+line; `discord.mode` stays `dry-run`; `next` is the dry-run closing line. On a live root it is
+refused `live-instance` before anything is written; another value is a usage error, exit 2; set
+beside `BROODFORGE_SETUP_FAKE_DISCORD`, `dry-run` wins. A later run with `--discord live` counts
+the placeholders as no id and replaces them, asking nothing, so a dry-run root the owner chooses
+to promote goes live with one more `setup` and no `mismatch` (the `dev` root itself is never
+promoted: `05-debug-interface-dev-instance.md`).
 
 Observe. `setup --check` prints every step's line, changes nothing, binds nothing, polls nothing,
 and exits 1 with `error: check-failed: <steps>` naming the steps that printed `fix`; it is
@@ -39,7 +50,9 @@ root fails `start-control`, a second `setup` is `setup-running`. A bot answering
 `running`, with the owner's text. Afterwards `config check` and `config show` read the files setup
 wrote, and `credential list` shows the git credential it added by id. The project file keeps the
 repository URL as the comment key `//url` of its `repo` object, which config ignores, so a rerun
-after a refused clone needs no `--repo`.
+after a refused clone needs no `--repo`. On a dry-run root, `setup --check` without the flag prints
+`fix` for the five Discord steps and no `mismatch` line (the placeholders count as no id), and
+`config show --project <id>` shows `100` and `200` under `channels`.
 
 Reproduce. Discord without Discord: `BROODFORGE_SETUP_FAKE_DISCORD=<script>` makes the five
 Discord steps and `check`'s `discord check` call a scripted Discord in place of the real one, the
@@ -58,7 +71,10 @@ with a bot on the root, a setup paused at the key (`start-control`, `setup-runni
 --expect setup`), `--json`, a server with channels under `--channels no` (`timeout-channels`,
 nothing created), two servers without `--guild` (`needs-input-guild`), the bot keeping Manage
 Roles (the removal `fix` on two runs), a configured channel gone (`mismatch-channels`), and the
-script on a live root (`live-instance`). The Go proofs: `go test ./internal/setup -run
+script on a live root (`live-instance`). The dry-run form and the placeholder rule: `bash
+tests/repro/dev-instance.sh` [no-check: written by P27] (a dry-run root made, driven, rerun, then
+turned live against the scripted Discord with `100`, `200` and `10` gone) and `go test
+./internal/setup -run 'TestDryRun|TestPlaceholders'`. The Go proofs: `go test ./internal/setup -run
 'TestSteps|TestRerun|TestRefusals|TestSingleWriter|TestJSON|TestDiscordSteps|TestRole|TestChannels'`,
 `go test ./internal/discord -run 'TestSetupAPI|TestInviteURL|TestFakeSetup'` and `go test
 ./internal/cli -run TestProofSetup`.

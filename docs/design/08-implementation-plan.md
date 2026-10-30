@@ -263,3 +263,37 @@ P7 to P10.
 The passes for ADR 0025, P15 to P19, are in `08-implementation-plan-session-workflow.md`. The passes for
 ADR 0027, P20 to P26, are in `08-implementation-plan-setup.md`: P13 is built there as P23 (its reference
 file, its Proof and C37), and P14 gains P26 as its host half.
+
+## P27. The PC development instance: `setup --discord dry-run`, the dev root, the `run` skill (medium; one owner step)
+
+Implements: ADR 0027 Amendments 2026-10-30 and its companion (`--discord live|dry-run`, The dry-run form, the rerun rule's placeholder
+entry, the `live-instance` row, the dry-run closing text); `05-debug-interface-setup.md`; `05-debug-interface-dev-instance.md` (all);
+`.claude/skills/run/SKILL.md` (written with the design; the coder corrects it against the code and runs it). Files [no-check: new code in named files]:
+`internal/cli/setup.go` (the flag; a value outside `live|dry-run` is a usage error, exit 2, as `--channels`; `dry-run` sets `Options.DryRun`
+and `Env.Discord` nil, the scripted Discord unread); `internal/setup/setup.go` (`Options.DryRun`; the `live-instance` refusal in `Run` beside
+the scripted-Discord check, before the bind, the `--from` export's instance included); `internal/setup/discord.go` (under `DryRun`: the three
+`skip  <step>  dry-run` lines, `channels` writing `config.DryRunChannels` and `engine.fakeFixtures` or its non-waiting `fix`, `role` writing
+`config.PlaceholderRole`; the placeholder rule on a live run in `channels` and `role`, no question, no `old`/`new`); `internal/setup/steps.go`
+(`findEngine`'s order under `DryRun`, `textNextDryRun`); `internal/config/setuptemplate.go` (`DryRunChannels`, `PlaceholderRole`, the constants
+`scratchtemplate.go` then shares); `internal/setup/setup_test.go` (`TestDryRun`: the form's lines and files, the rerun's `ok` and `skip`, the
+refusal on a live root; `TestPlaceholders`: a dry-run root turned live against the fake keeps no `100`, `200` or `10` and prints no `mismatch`);
+`tests/repro/dev-instance.sh` (a dry-run root under the OS temp directory with a generated instance name: the round trip of the skill's step 3
+on channel `100`, the rerun, the live turn against `BROODFORGE_SETUP_FAKE_DISCORD`, the root removed) and its `tests/README.md` row;
+`docs/operator/2026-10-30-dev-instance-credential.md` [no-check: filed by this pass] carrying the dev-instance doc's numbered commands in the
+operator README's shape. Proof: the build, check and test lines; `bash tests/repro/dev-instance.sh` exit 0; on the PC, from the main checkout,
+the `run` skill's steps 0 to 3 and 5 on the real dev root, output pasted without the key line: the tail's last line `turn-ended  end_turn`, the
+outbox's `channel` line and the header's `create`, `status` after `stop` printing `error: not-running`; the `setup` line a second time printing
+only `ok` and `skip`; then, when the brief says the owner's step follows, step 2b (the detached start; the PID file and log names reported) and
+the bot left running. Owner step: the numbered commands of `05-debug-interface-dev-instance.md` (the login, ending in `stop`), then `credential
+list` showing `usable`. Does not: call Discord; run a real turn; promote the dev root; touch `~/.claude`, `%ProgramData%` or anything of P23. Depends on: P22.
+
+## Milestones
+
+A row is a state of the software the owner can see, the passes that reach it and the step only the owner can do; where each stands is the handoff's.
+
+| Milestone | Passes | Owner step |
+|---|---|---|
+| The dev instance on the PC: an agent drives the bot, the real engine and this repository's workflow from a terminal | P27 | the dev credential's login |
+| The live form under the owner's account: a second root and instance, `dev-live`, answers in the owner's test guild (setup in few steps, development form; `dev` stays dry-run) | P22's owner step on the `dev-live` root | the invite, the Manage Roles removal |
+| The service instance on the PC: the `broodforge` account, the task, a session from Discord on the owner's subscription | P20 (W6), P23, P25 | `setup host`, `setup login` |
+| The droplet: the Linux backend and host (HELD with P14) | P14, P26 | the VM snapshot, then the droplet |
