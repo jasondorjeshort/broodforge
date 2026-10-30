@@ -4,11 +4,11 @@
 // functions. Spec: docs/hatchery/decisions/0002-hook-specs.md section 1, Parsing.
 //
 // parse(text, dialect) with dialect 'bash' or 'powershell' returns { commands, data }:
-//   commands  every simple command, in source order, as { words, opaque, text, stdin }: words are
+//   commands  every simple command, in source order, as { words, opaque, quoted, bare, text, stdin }: words are
 //             the dequoted words (redirections removed; an unknown substitution reads as SUBST);
 //             opaque[k] is true when word k holds an expansion whose value the reader cannot see
 //             (a variable, a substitution, a Bash brace expansion, a PowerShell splat); text is
-//             the source slice for messages; stdin the heredoc and here-string bodies fed to it.
+//             the source slice for messages; quoted[k] is true when any part of word k was quoted or escaped, bare[k] its unquoted characters; stdin the heredoc and here-string bodies fed to it.
 //             Commands inside $(...), backticks, <(...), (...) and, in PowerShell, $(...),
 //             @(...) and {...} script blocks are listed too, because they run.
 //   data      quoted strings and heredoc / here-string bodies. Not code unless a command hands
@@ -102,7 +102,7 @@ function expandable(src, start, dialect, out, stopAtQuote) {
 function lex(src, dialect, out) {
   const ps = dialect === 'powershell';
   const n = src.length;
-  const fresh = () => ({ words: [], opaque: [], text: '', stdin: [] });
+  const fresh = () => ({ words: [], opaque: [], quoted: [], bare: [], text: '', stdin: [] });
   let cur = fresh();
   let word = null;
   let quoted = false;
@@ -125,6 +125,8 @@ function lex(src, dialect, out) {
     } else {
       cur.words.push(w);
       cur.opaque.push(opq || (!ps && BRACE_EXPANSION.test(bare)));
+      cur.quoted.push(quoted);
+      cur.bare.push(bare);
     }
     quoted = false;
     opq = false;

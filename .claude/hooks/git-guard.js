@@ -764,13 +764,55 @@ function noteExports(cmd, env, vars) {
   return used;
 }
 
+// True when a command the parser produced names git. A git token (git, git.exe, git.cmd, a path
+// ending in one) counts in: an unquoted word (G=git, /usr/bin/git); the unquoted part of a partly
+// quoted word (g=git" push -f"); a quoted word that is git or a path ending in git; anywhere in the
+// quoted value of an assignment: Bash name=... in any position (g="x git", g="$(true)git",
+// export g='x git'), a PowerShell value after an assignment operator, method-call strings included
+// ($g = 'x git'.Substring(2)), any argument of a command that sets a variable (printf -v,
+// Set-Variable, read, ...); anywhere in a quoted command word (('x git').Split()); anywhere in a
+// heredoc or here-string body (read g <<< git); and anywhere in any quoted word when the line
+// assigns a substitution's output (g=$(echo 'x git' | cut -c3-)), since that output can be the
+// string. Otherwise a quoted argument that merely contains git (a regex, "git push" for grep, a
+// .git path part) does not count: no variable picks it up.
+const LOOSE_GIT = /(^|[^A-Za-z0-9_-])git(\.exe)?([^A-Za-z0-9_-]|$)/i;
+const QUOTED_GIT = /^(.*[\/\\])?git(\.exe)?$/is;
+const ASSIGN_WORD = /^\$?[A-Za-z_:][A-Za-z0-9_:]*(\[[^\]]*\])?\+?=/;
+const ASSIGN_OP = /^(\?\?|[-+*\/%])?=$/;
+const SETTERS = new Set(['read', 'mapfile', 'readarray', 'declare', 'typeset', 'local', 'export', 'readonly',
+  'set-variable', 'sv', 'new-variable', 'nv']);
+// True when cmd assigns a value holding a substitution (g=$(...), $g = $(...)).
+function capturesOutput(cmd) {
+  return cmd.words.some((w, k) => w.includes(SUBST) && (ASSIGN_WORD.test(w) || (k > 0 && ASSIGN_OP.test(cmd.words[k - 1]))));
+}
+function namesGit(cmd, captured) {
+  if ((cmd.stdin || []).some((s) => LOOSE_GIT.test(s))) return true;
+  const words = cmd.words;
+  let lead = 0;
+  while (lead < words.length && isEnvAssign(words[lead])) lead++;
+  const head = (words[lead] || '').toLowerCase();
+  // Every word is a value when the command sets a variable from its arguments.
+  let value = captured || SETTERS.has(head) || (head === 'printf' && words.includes('-v'));
+  for (let k = 0; k < words.length; k++) {
+    const w = words[k];
+    if (k > 0 && ASSIGN_OP.test(words[k - 1])) value = true;
+    if (!(cmd.quoted && cmd.quoted[k])) { if (LOOSE_GIT.test(w)) return true; continue; }
+    if (LOOSE_GIT.test((cmd.bare && cmd.bare[k]) || '') || QUOTED_GIT.test(w)) return true;
+    const m = ASSIGN_WORD.exec(w);
+    if (m && LOOSE_GIT.test(w.slice(m[0].length))) return true;
+    if ((value || k === lead) && LOOSE_GIT.test(w)) return true;
+  }
+  return false;
+}
+
 // A word that names GIT_DIR or GIT_WORK_TREE as a token (no whitespace in it, so a commit message
 // that mentions one is not counted).
 const REPO_ENV_WORD = /(^|[^A-Za-z0-9_])(GIT_DIR|GIT_WORK_TREE)([^A-Za-z0-9_]|$)/i;
 
 function decide(command, dialect, agent, cwd, loaded) {
   const cmds = commandsOf(command, dialect, cwd);
-  const mentionsGit = /(^|[^A-Za-z0-9_-])git(\.exe)?([^A-Za-z0-9_-]|$)/i.test(command);
+  const captured = cmds.some(({ cmd }) => capturesOutput(cmd));
+  const mentionsGit = cmds.some(({ cmd }) => namesGit(cmd, captured));
   const invs = [];
   const shellEnv = {};
   const shellVars = {};

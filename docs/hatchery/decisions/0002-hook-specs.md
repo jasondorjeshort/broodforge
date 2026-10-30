@@ -81,7 +81,16 @@ each subcommand's value-taking options drop their value (`VALUE_OPTS` in the cod
 remaining argument is, when a `-c`/`--config-env` value is, or when `xargs` runs it (xargs appends
 arguments from stdin). A command whose command word is opaque, in a line that names git, is an
 invocation with an unknown subcommand, unless it is a PowerShell assignment (`$h = git ...`) or the
-word ends in a literal file name that is not git (`$(dirname "$0")/check.sh`).
+word ends in a literal file name that is not git (`$(dirname "$0")/check.sh`). A line names git
+when a git token (`git`, `git.exe`, `git.cmd`, a path ending in one) is in an unquoted word or the
+unquoted part of a word; in a quoted word that is git or a path ending in git (`$g = 'git'`);
+anywhere in a quoted value a variable can take: an assignment's value (`g="x git"`,
+`g="$(true)git"`, `export g='x git'`, PowerShell's `$g = 'x git'.Substring(2)`), an argument of a
+command that sets a variable (`printf -v`, `read`, `Set-Variable`), a quoted command word
+(`('x git').Split()`), a heredoc or here-string body (`read g <<< git`); or anywhere in any quoted
+word of a line that assigns a substitution's output (`g=$(echo 'x git' | cut -c3-)`). Otherwise a
+quoted argument that merely contains git, such as a regex, `"git push"` for grep, or a `.git` path
+part, does not name git.
 
 An invocation is *first* when only `NAME=value`
 words or prefix words (`sudo`, `env`, `time`, `then`, `do`, ...) precede it and it did not come
