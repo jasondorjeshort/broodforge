@@ -53,8 +53,8 @@ func events(t *testing.T, stdout string) []event {
 
 func TestProofEngineRunUnknown(t *testing.T) {
 	r := engineRun(t, "basic", "1")
-	if n := strings.Count(r.Stdout, `"type":"unknown"`); r.Code != 0 || n != 3 || r.Stderr != "" {
-		t.Errorf("basic turn 1: exit %d, %d unknown lines, stderr %q; want 0, 3, none", r.Code, n, r.Stderr)
+	if n := strings.Count(r.Stdout, `"type":"unknown"`); r.Code != 0 || n != 2 || r.Stderr != "" {
+		t.Errorf("basic turn 1: exit %d, %d unknown lines, stderr %q; want 0, 2, none", r.Code, n, r.Stderr)
 	}
 	// Text and --json print the same JSONL.
 	if j := clitest.Run(t, nil, "--json", "engine", "run", "--fake", fixtures+"basic", "--prompt", "x", "--received-dir", t.TempDir()); j.Stdout != r.Stdout {

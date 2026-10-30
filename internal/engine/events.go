@@ -80,6 +80,7 @@ const (
 	KindToolResult EventKind = "tool-result"
 	KindResult     EventKind = "result"
 	KindExit       EventKind = "exit"
+	KindRateLimit  EventKind = "rate-limit"
 	KindUnknown    EventKind = "unknown"
 )
 
@@ -92,6 +93,7 @@ type EngineEvent struct {
 	ToolResult *ToolResultEvent
 	Result     *ResultEvent
 	Exit       *ExitEvent
+	RateLimit  *RateLimitEvent
 	Unknown    string
 }
 
@@ -139,6 +141,23 @@ type ExitEvent struct {
 	Code        *int   `json:"code"`
 	Signal      string `json:"signal,omitempty"`
 	Interrupted bool   `json:"interrupted"`
+}
+
+// RateLimitEvent is a rate_limit_event line's rate_limit_info: the plan meters of the account
+// the engine runs as (ADR 0020, Amendments 2026-10-30). An absent field is its zero value.
+type RateLimitEvent struct {
+	Status         string `json:"status"`
+	RateLimitType  string `json:"rateLimitType"`
+	FiveHour       Window `json:"fiveHour"`
+	SevenDay       Window `json:"sevenDay"`
+	OverageStatus  string `json:"overageStatus"`
+	IsUsingOverage bool   `json:"isUsingOverage"`
+}
+
+// Window is one of unifiedWindows' meters: Utilization a fraction, ResetsAt unix seconds.
+type Window struct {
+	Utilization float64 `json:"utilization"`
+	ResetsAt    int64   `json:"resetsAt"`
 }
 
 // Usage is an assistant message's input-side counts.
@@ -193,6 +212,8 @@ func (e EngineEvent) MarshalJSON() ([]byte, error) {
 		body, err = encodeJSON(e.Result)
 	case KindExit:
 		body, err = encodeJSON(e.Exit)
+	case KindRateLimit:
+		body, err = encodeJSON(e.RateLimit)
 	case KindUnknown:
 		body, err = encodeJSON(struct {
 			Raw string `json:"raw"`

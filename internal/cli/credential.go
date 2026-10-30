@@ -14,6 +14,7 @@ import (
 	"github.com/jasondorjeshort/broodforge/internal/control"
 	"github.com/jasondorjeshort/broodforge/internal/credentials"
 	"github.com/jasondorjeshort/broodforge/internal/discord"
+	"github.com/jasondorjeshort/broodforge/internal/store"
 )
 
 // The credential commands (05-debug-interface.md, Credentials). init is (file); list and show
@@ -61,7 +62,7 @@ var credentialList = Command{
 }
 
 // credentialShow is `broodforge credential show <id>`: the list line; --json the whole record,
-// which holds no store value.
+// which holds no store value, and its meter (null before any rate-limit event).
 var credentialShow = Command{
 	Name:    "credential show",
 	Class:   ClassRead,
@@ -129,6 +130,42 @@ func toRecord(r credentials.Record) credentialRecord {
 	}
 	return credentialRecord{ID: r.ID, Kind: r.Kind, Provider: r.Provider, User: opt(r.User), Label: r.Label,
 		Status: r.Status, AddedAt: r.AddedAt, LastUsedAt: opt(r.LastUsedAt), StoreRef: r.StoreRef}
+}
+
+// credentialShowRecord is credential show's JSON form: the record and its meter
+// (05-debug-interface.md, Credentials).
+type credentialShowRecord struct {
+	credentialRecord
+	Meter *meterRecord `json:"meter"`
+}
+
+// meterRecord is a credential's meter as credential show and usage --credential print it: the
+// latest rate-limit event of a turn it paid for (ADR 0021's credential_meter).
+type meterRecord struct {
+	Status         string      `json:"status"`
+	RateLimitType  string      `json:"rateLimitType"`
+	FiveHour       meterWindow `json:"fiveHour"`
+	SevenDay       meterWindow `json:"sevenDay"`
+	OverageStatus  string      `json:"overageStatus"`
+	IsUsingOverage bool        `json:"isUsingOverage"`
+	SeenAt         string      `json:"seenAt"`
+	Session        string      `json:"session"`
+}
+
+type meterWindow struct {
+	Utilization float64 `json:"utilization"`
+	ResetsAt    int64   `json:"resetsAt"`
+}
+
+// toMeter is a store meter row's JSON form; nil stays nil.
+func toMeter(m *store.MeterRow) *meterRecord {
+	if m == nil {
+		return nil
+	}
+	return &meterRecord{Status: m.Status, RateLimitType: m.RateLimitType,
+		FiveHour:      meterWindow{m.FiveHourUtilization, m.FiveHourResetsAt},
+		SevenDay:      meterWindow{m.SevenDayUtilization, m.SevenDayResetsAt},
+		OverageStatus: m.OverageStatus, IsUsingOverage: m.IsUsingOverage, SeenAt: m.SeenAt, Session: m.Session}
 }
 
 type initResult struct {
@@ -211,7 +248,11 @@ func runCredentialShow(_ context.Context, env *Env) error {
 	if err != nil {
 		return credentialError(err)
 	}
-	out, err := encodeAny(toRecord(rec))
+	m, err := store.Meter(r, rec.ID)
+	if err != nil {
+		return localError(err)
+	}
+	out, err := encodeAny(credentialShowRecord{toRecord(rec), toMeter(m)})
 	if err != nil {
 		return err
 	}
@@ -279,7 +320,15 @@ func CredentialHandlers(svc *credentials.Service) func(*control.Registry) {
 			}
 		}
 		reg.Handle("credential.show", byID(func(id string, _ bool) (json.RawMessage, error) {
-			return recordResult(svc.Show(id))
+			rec, err := svc.Show(id)
+			if err != nil {
+				return recordResult(rec, err)
+			}
+			m, err := svc.Meter(id)
+			if err != nil {
+				return nil, credentialError(err)
+			}
+			return encodeAny(credentialShowRecord{toRecord(rec), toMeter(m)})
 		}))
 		reg.Handle("credential.remove", byID(func(id string, _ bool) (json.RawMessage, error) {
 			return recordResult(svc.Remove(id))

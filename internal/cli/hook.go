@@ -174,7 +174,7 @@ func hookError(err error) error {
 
 // encodeAny is json.Marshal without HTML escaping, for the hook and credential commands'
 // results.
-func encodeAny[T tryResult | hook.CaseResult | credentialRecord | []credentialRecord | loginResult | initResult](v T) (json.RawMessage, error) {
+func encodeAny[T tryResult | hook.CaseResult | credentialRecord | credentialShowRecord | []credentialRecord | loginResult | initResult](v T) (json.RawMessage, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)

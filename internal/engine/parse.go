@@ -31,6 +31,25 @@ type rawLine struct {
 	PermissionDenials []json.RawMessage                     `json:"permission_denials"`
 	ModelUsage        map[string]map[string]json.RawMessage `json:"modelUsage"`
 	Usage             json.RawMessage                       `json:"usage"`
+	RateLimitInfo     *rawRateLimit                         `json:"rate_limit_info"`
+}
+
+// rawRateLimit is rate_limit_info's subset (03, the stream subset): the top-level
+// utilization and resetsAt, seven_day_overage_included and the other fields are not read.
+type rawRateLimit struct {
+	Status         string `json:"status"`
+	RateLimitType  string `json:"rateLimitType"`
+	OverageStatus  string `json:"overageStatus"`
+	IsUsingOverage bool   `json:"isUsingOverage"`
+	UnifiedWindows struct {
+		FiveHour rawWindow `json:"five_hour"`
+		SevenDay rawWindow `json:"seven_day"`
+	} `json:"unifiedWindows"`
+}
+
+type rawWindow struct {
+	Utilization float64 `json:"utilization"`
+	ResetsAt    int64   `json:"resetsAt"`
 }
 
 type rawMessage struct {
@@ -108,6 +127,8 @@ func ParseLine(line []byte) []EngineEvent {
 		}
 	case o.Type == "result":
 		return []EngineEvent{{Kind: KindResult, Result: result(&o)}}
+	case o.Type == "rate_limit_event":
+		return []EngineEvent{{Kind: KindRateLimit, RateLimit: rateLimit(o.RateLimitInfo)}}
 	}
 	return unknown
 }
@@ -194,6 +215,23 @@ func result(o *rawLine) *ResultEvent {
 		ev.Deferred = &DeferredTool{ToolUseID: id, Name: d.Name, Input: d.Input}
 	}
 	return ev
+}
+
+// rateLimit is the event of a rate_limit_event line; an absent rate_limit_info or field is
+// the zero value, so a line without unifiedWindows still records when it was seen.
+func rateLimit(r *rawRateLimit) *RateLimitEvent {
+	if r == nil {
+		return &RateLimitEvent{}
+	}
+	w := r.UnifiedWindows
+	return &RateLimitEvent{
+		Status:         r.Status,
+		RateLimitType:  r.RateLimitType,
+		FiveHour:       Window{Utilization: w.FiveHour.Utilization, ResetsAt: w.FiveHour.ResetsAt},
+		SevenDay:       Window{Utilization: w.SevenDay.Utilization, ResetsAt: w.SevenDay.ResetsAt},
+		OverageStatus:  r.OverageStatus,
+		IsUsingOverage: r.IsUsingOverage,
+	}
 }
 
 // blocks reads a content field as blocks; a string or anything else is no blocks.

@@ -230,6 +230,11 @@ func TestPolicyTurnAgainstBasic(t *testing.T) {
     AND actor = 'policy'`); n != 1 {
 		t.Errorf("%d permission-decision events, want 1", n)
 	}
+	// The turn's rate_limit_event is the payer's meter (P28): basic turn 1's values, no audit event.
+	if m, err := store.Meter(h.st, "cred-a"); err != nil || m == nil || m.Session != "s0001" || m.Status != "allowed" ||
+		m.FiveHourUtilization != 0.16 || m.SevenDayUtilization != 0.04 || m.SevenDayResetsAt != 1792728000 || m.SeenAt == "" {
+		t.Errorf("meter of cred-a: %+v, %v", m, err)
+	}
 	d, err := h.svc.Show("s0001")
 	if err != nil {
 		t.Fatal(err)

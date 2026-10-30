@@ -1,7 +1,7 @@
 ---
 date: 2026-10-30
 kind: feature
-related: [2026-10-16-rate-limit-events-carry-plan-usage-per-credential.md, 2026-10-29-broodforge-works-on-itself-overnight.md, 2026-10-30-owner-less-weeks.md]  # the first supplies the per-credential meters; the second is the unattended work this would route; the third is the combined weeks-away vision, which needs this piece
+related: [2026-10-29-broodforge-works-on-itself-overnight.md, 2026-10-30-owner-less-weeks.md]  # the first is the unattended work this would route; the second is the combined weeks-away vision, which needs this piece
 ---
 
 # Credential pool scheduling by headroom

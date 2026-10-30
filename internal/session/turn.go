@@ -366,6 +366,10 @@ func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan s
 				results[ev.ToolResult.ToolUseID] = true
 				s.toolResult(l, n, *ev.ToolResult)
 			}
+		case engine.KindRateLimit:
+			if ev.RateLimit != nil {
+				s.saveMeter(l, n, *ev.RateLimit)
+			}
 		case engine.KindResult, engine.KindExit, engine.KindUnknown:
 		}
 	}
@@ -782,5 +786,20 @@ func (s *Service) subagentResult(l *live, n int, tr engine.ToolResultEvent, c ca
 	if err != nil {
 		l.log.add(Event{Time: s.stamp(), Type: EventPermissionDecision, Turn: n, ToolUseID: tr.ToolUseID, Tool: c.tool,
 			Summary: "store: " + err.Error()})
+	}
+}
+
+// saveMeter records a rate-limit event as the session's credential's meter, replacing the one
+// it had, in its own short write transaction (ADR 0021 Amendments 2026-10-30). A reading, not
+// an action: no audit event. A store failure is shown as subagentResult shows one, never the
+// turn's end.
+func (s *Service) saveMeter(l *live, n int, r engine.RateLimitEvent) {
+	err := store.SaveMeter(s.cfg.Store, store.MeterRow{Credential: l.credential, SeenAt: s.stamp(), Session: l.id,
+		Status: r.Status, RateLimitType: r.RateLimitType,
+		FiveHourUtilization: r.FiveHour.Utilization, FiveHourResetsAt: r.FiveHour.ResetsAt,
+		SevenDayUtilization: r.SevenDay.Utilization, SevenDayResetsAt: r.SevenDay.ResetsAt,
+		OverageStatus: r.OverageStatus, IsUsingOverage: r.IsUsingOverage})
+	if err != nil {
+		l.log.add(Event{Time: s.stamp(), Type: EventPermissionDecision, Turn: n, Summary: "store: " + err.Error()})
 	}
 }

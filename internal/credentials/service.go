@@ -407,6 +407,10 @@ func (s *Service) List(user string) ([]Record, error) { return List(s.st, user) 
 
 func (s *Service) Show(id string) (Record, error) { return Show(s.st, id) }
 
+// Meter is the credential's plan meter from the bot's own store: the latest rate-limit event of
+// a turn it paid for, nil before one (ADR 0021 Amendments 2026-10-30).
+func (s *Service) Meter(id string) (*store.MeterRow, error) { return store.Meter(s.st, id) }
+
 const recordColumns = "id, kind, provider, coalesce(user_id, ''), label, status, added_at, coalesce(last_used_at, ''), store_ref"
 
 func scan(row *store.Row) Record {

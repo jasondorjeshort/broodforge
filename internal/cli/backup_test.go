@@ -46,11 +46,11 @@ func TestProofBackupSnapshotVerify(t *testing.T) {
 	snap := strings.Fields(r.Stdout)[1]
 
 	r = clitest.Run(t, nil, "--root", root, "backup", "verify", "--expect", "ok")
-	if r.Code != 0 || !strings.HasPrefix(r.Stdout, "ok\nmigration  3\naudit_event  0\n") || r.Stderr != "" {
+	if r.Code != 0 || !strings.HasPrefix(r.Stdout, "ok\nmigration  4\naudit_event  0\n") || r.Stderr != "" {
 		t.Errorf("verify: exit %d stdout %q stderr %q", r.Code, r.Stdout, r.Stderr)
 	}
 	r = clitest.Run(t, nil, "--root", root, "--json", "backup", "verify")
-	if r.Code != 0 || !strings.HasPrefix(r.Stdout, `{"result":"ok","path":"`+snap+`","migration":3,"tables":[{"table":"audit_event","rows":0},`) {
+	if r.Code != 0 || !strings.HasPrefix(r.Stdout, `{"result":"ok","path":"`+snap+`","migration":4,"tables":[{"table":"audit_event","rows":0},`) {
 		t.Errorf("verify --json: exit %d stdout %q", r.Code, r.Stdout)
 	}
 

@@ -93,12 +93,15 @@ func TestProofCredentials(t *testing.T) {
 	if err := json.Unmarshal([]byte(r.Stdout), &rec); err != nil {
 		t.Fatal(err)
 	}
-	for _, k := range []string{"id", "kind", "provider", "user", "label", "status", "addedAt", "lastUsedAt", "storeRef"} {
+	for _, k := range []string{"id", "kind", "provider", "user", "label", "status", "addedAt", "lastUsedAt", "storeRef", "meter"} {
 		if _, ok := rec[k]; !ok {
 			t.Errorf("show --json lacks %s", k)
 		}
 	}
-	if len(rec) != 9 {
+	if string(rec["meter"]) != "null" {
+		t.Errorf("show --json: meter %s before any rate-limit event, want null", rec["meter"])
+	}
+	if len(rec) != 10 {
 		t.Errorf("show --json has %d keys: %s", len(rec), r.Stdout)
 	}
 	want(t, clitest.Run(t, nil, "--root", root, "credential", "show", id), 0, id+"  api-key  1001  t  usable  -\n", "")

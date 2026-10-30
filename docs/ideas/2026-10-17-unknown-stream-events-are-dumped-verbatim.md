@@ -1,7 +1,6 @@
 ---
 date: 2026-10-17
 kind: bug
-related: [2026-10-16-rate-limit-events-carry-plan-usage-per-credential.md]
 ---
 
 # Unknown stream events are dumped verbatim, and the engine now sends large ones

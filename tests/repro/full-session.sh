@@ -130,6 +130,10 @@ done
 
 "$bf" session reach-report "$id" --expect code >/dev/null
 [ "$("$bf" usage --session "$id" --by turn | wc -l)" = 1 ] || fail "usage --by turn has not one turn"
+# The credential's meter (P28): the turn's rate_limit_event, fixtures/engine/basic/turn-1.jsonl's values.
+meter=$("$bf" usage --credential cred-scratch | tail -n 1)
+printf '%s\n' "$meter"
+grep -q -- '^meter  0\.16  0\.04  allowed  20[0-9-]*T[0-9:]*Z$' <<<"$meter" || fail "usage --credential has no meter line: $meter"
 # A reload with nothing changed writes nothing; one of a key the bot applies writes the event.
 [ "$("$bf" config reload)" = "reloaded  -" ] || fail "an unchanged reload did not print reloaded  -"
 # The scratch default is 0 (never) since 2026-10-23; any other value is a change the bot applies.

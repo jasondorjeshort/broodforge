@@ -97,7 +97,7 @@ shares `message.id` and `message.usage`, so deduplicate before counting; `is_err
 `false`, on success; the usage baseline is the last `result` row, never an interrupted one (S2); the
 finding's new unknown kinds (Next, plus S1's three) pass as `unknown` quietly. The fake is 03's; its
 `received-<n>.json` is ignored under `fixtures/`. Proof: `broodforge engine run --fake
-fixtures/engine/basic --turn 1 --prompt x` piped to `grep -c '"type":"unknown"'` gives 3; `parallel
+fixtures/engine/basic --turn 1 --prompt x` piped to `grep -c '"type":"unknown"'` gives 2 from P28 (3 before it: the `rate_limit_event` line is now parsed); `parallel
 --turn 1` yields `result.deferred` naming the second id and two `tool-use` blocks under one
 `messageId`. Depends on: P0, P1, P2.
 

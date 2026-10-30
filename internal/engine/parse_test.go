@@ -77,6 +77,8 @@ func oracle(t *testing.T, line []byte) (kinds []EventKind, toolErrors []bool) {
 		return []EventKind{KindAssistant}, nil
 	case typ == "result":
 		return []EventKind{KindResult}, nil
+	case typ == "rate_limit_event":
+		return []EventKind{KindRateLimit}, nil
 	case typ == "user":
 		msg, _ := o["message"].(map[string]any)
 		content, _ := msg["content"].([]any)
@@ -149,6 +151,10 @@ func TestEveryFixtureReplays(t *testing.T) {
 						if ev.Result.StopReason == "tool_deferred" && (ev.Result.Deferred == nil || ev.Result.Deferred.ToolUseID == "") {
 							t.Errorf("%s turn %d: tool_deferred result names no call", dir, turn.N)
 						}
+					case KindRateLimit:
+						if ev.RateLimit.Status == "" || ev.RateLimit.SevenDay.ResetsAt == 0 || ev.RateLimit.FiveHour.ResetsAt == 0 {
+							t.Errorf("%s turn %d line %d: rate-limit without status or windows: %+v", dir, turn.N, i+1, ev.RateLimit)
+						}
 					case KindExit, KindUnknown:
 					}
 				}
@@ -194,7 +200,8 @@ func TestToolResultMeta(t *testing.T) {
 	}
 }
 
-// TestProofEvents is the P3 Proof on the parser: basic turn 1 has three unknown lines, and
+// TestProofEvents is the P3 Proof on the parser: basic turn 1 has two unknown lines (three
+// before P28 read its rate_limit_event), and
 // parallel turn 1 defers the second of two tool-use blocks that share one message id (C28).
 func TestProofEvents(t *testing.T) {
 	unknown := 0
@@ -203,8 +210,8 @@ func TestProofEvents(t *testing.T) {
 			unknown++
 		}
 	}
-	if unknown != 3 {
-		t.Errorf("basic turn 1: %d unknown events, want 3", unknown)
+	if unknown != 2 {
+		t.Errorf("basic turn 1: %d unknown events, want 2", unknown)
 	}
 
 	var uses []Block
@@ -232,7 +239,7 @@ func TestProofEvents(t *testing.T) {
 }
 
 func TestParseLineNeverRefuses(t *testing.T) {
-	for _, line := range []string{"not json", "[1,2]", `"s"`, `{"type":"rate_limit_event"}`, `{"type":"system","subtype":"thinking_tokens"}`, `{"type":"user","message":{"content":"a prompt"}}`} {
+	for _, line := range []string{"not json", "[1,2]", `"s"`, `{"type":"system","subtype":"thinking_tokens"}`, `{"type":"user","message":{"content":"a prompt"}}`} {
 		evs := ParseLine([]byte(line))
 		if len(evs) != 1 || evs[0].Kind != KindUnknown || evs[0].Unknown != line {
 			t.Errorf("%s: %+v, want one unknown carrying the line", line, evs)
@@ -379,5 +386,77 @@ func TestInterruptedRowDeduplicates(t *testing.T) {
 	row := InterruptedRow(evs)["claude-haiku-5-5"]
 	if lines != 2 || row["inputTokens"] != float64(once.Input) || row["cacheReadInputTokens"] != float64(once.CacheRead) || row["cacheCreationInputTokens"] != float64(once.CacheWrite) {
 		t.Errorf("%d assistant lines, row %v, want one message's usage %+v", lines, row, once)
+	}
+}
+
+// TestRateLimit: the recorded line of recorded-read turn 1 (allowed_warning, seven-day 0.68)
+// is one rate-limit event; the top-level utilization and resetsAt and seven_day_overage_included
+// are not read; a line with no unifiedWindows, or no rate_limit_info, is one event of zeros (P28).
+func TestRateLimit(t *testing.T) {
+	var got []RateLimitEvent
+	for _, ev := range parseTurn(t, fixturesRoot+"/recorded-read", 1) {
+		if ev.Kind == KindRateLimit {
+			got = append(got, *ev.RateLimit)
+		}
+	}
+	want := RateLimitEvent{Status: "allowed_warning", RateLimitType: "seven_day",
+		FiveHour: Window{Utilization: 0.09, ResetsAt: 1792248000}, SevenDay: Window{Utilization: 0.68, ResetsAt: 1792728000},
+		OverageStatus: "rejected"}
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("recorded-read turn 1: rate-limit events %+v, want one %+v", got, want)
+	}
+	b, err := EngineEvent{Kind: KindRateLimit, RateLimit: &got[0]}.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := `{"type":"rate-limit","status":"allowed_warning","rateLimitType":"seven_day","fiveHour":{"utilization":0.09,"resetsAt":1792248000},"sevenDay":{"utilization":0.68,"resetsAt":1792728000},"overageStatus":"rejected","isUsingOverage":false}`; string(b) != w {
+		t.Errorf("got %s\nwant %s", b, w)
+	}
+	for _, line := range []string{
+		`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","rateLimitType":"five_hour","isUsingOverage":true,"utilization":0.5,"resetsAt":7}}`,
+		`{"type":"rate_limit_event"}`,
+		`{"type":"rate_limit_event","rate_limit_info":{"unifiedWindows":{"five_hour":"x"}}}`,
+	} {
+		evs := ParseLine([]byte(line))
+		if len(evs) != 1 || evs[0].Kind != KindRateLimit || evs[0].RateLimit == nil {
+			t.Fatalf("%s: %+v, want one rate-limit event", line, evs)
+		}
+		r := *evs[0].RateLimit
+		if r.FiveHour != (Window{}) || r.SevenDay != (Window{}) {
+			t.Errorf("%s: windows %+v %+v, want zeros", line, r.FiveHour, r.SevenDay)
+		}
+	}
+	if r := ParseLine([]byte(`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","rateLimitType":"five_hour","isUsingOverage":true}}`))[0].RateLimit; r.Status != "allowed" || r.RateLimitType != "five_hour" || !r.IsUsingOverage || r.OverageStatus != "" {
+		t.Errorf("no unifiedWindows: %+v", r)
+	}
+}
+
+// TestRateLimitMalformedNeverRefuses: a rate_limit_event whose info or fields have the wrong
+// type is still one rate-limit event, the mistyped fields at their zero value, and a bad field
+// beside good ones leaves the good ones read (ADR 0023: the stream is never refused).
+func TestRateLimitMalformedNeverRefuses(t *testing.T) {
+	for _, info := range []string{
+		`null`, `"x"`, `[1,2]`,
+		`{"unifiedWindows":null}`,
+		`{"unifiedWindows":{"five_hour":null,"seven_day":null}}`,
+		`{"unifiedWindows":{"five_hour":{"utilization":null}}}`,
+		`{"unifiedWindows":{"seven_day":{"resetsAt":"soon"}}}`,
+		`{"status":5}`,
+		`{"isUsingOverage":"yes"}`,
+		`{"unifiedWindows":{"five_hour":{"resetsAt":1.5}}}`,
+	} {
+		line := `{"type":"rate_limit_event","rate_limit_info":` + info + `}`
+		evs := ParseLine([]byte(line))
+		if len(evs) != 1 || evs[0].Kind != KindRateLimit || evs[0].RateLimit == nil || *evs[0].RateLimit != (RateLimitEvent{}) {
+			t.Errorf("%s: %+v, want one zero rate-limit event", line, evs)
+		}
+	}
+	line := `{"type":"rate_limit_event","rate_limit_info":{"status":5,"rateLimitType":"five_hour","overageStatus":"rejected","isUsingOverage":"yes",` +
+		`"unifiedWindows":{"five_hour":{"utilization":0.3,"resetsAt":"soon"},"seven_day":{"utilization":0.5,"resetsAt":1792728000}}}}`
+	evs := ParseLine([]byte(line))
+	want := RateLimitEvent{RateLimitType: "five_hour", OverageStatus: "rejected",
+		FiveHour: Window{Utilization: 0.3}, SevenDay: Window{Utilization: 0.5, ResetsAt: 1792728000}}
+	if len(evs) != 1 || evs[0].Kind != KindRateLimit || evs[0].RateLimit == nil || *evs[0].RateLimit != want {
+		t.Errorf("bad fields beside good: %+v, want %+v", evs, want)
 	}
 }

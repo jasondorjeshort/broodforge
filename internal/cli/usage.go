@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jasondorjeshort/broodforge/internal/audit"
@@ -19,8 +21,11 @@ import (
 // <id> | --project <id>] [--since <time>] [--by model|turn]` (05-debug-interface.md, Usage and
 // audit queries). By model: one line per model, `<model>  <turns>  <input>  <output>  <cache
 // read>  <cache write>  <interrupted turns>`, then the same columns for every model as the
-// `total` line, printed even when there is no usage. By turn: `<session>  <turn>  <model>
-// <input>  <output>  <cache read>  <cache write>  <interrupted>  <time>`, cut at --limit; --json
+// `total` line, printed even when there is no usage; with --credential the total is followed by
+// `meter  <five-hour utilization>  <seven-day utilization>  <status>  <seen at>`, or `meter  -`
+// before any rate-limit event (--json: {"meter": credential show's meter}). By turn: `<session>
+// <turn>  <model>  <input>  <output>  <cache read>  <cache write>  <interrupted>  <time>`, cut at
+// --limit; --json
 // adds the raw reports. A read command: the bot answers when it runs, the store file otherwise.
 var usageCmd = Command{
 	Name:  "usage",
@@ -99,7 +104,37 @@ func runUsage(_ context.Context, env *Env) error {
 			return err
 		}
 	}
-	return nil
+	if f.Credential == "" {
+		return nil
+	}
+	m, err := store.Meter(r, f.Credential)
+	if err != nil {
+		return localError(err)
+	}
+	line, err := meterLine(toMeter(m), env.JSON)
+	if err != nil {
+		return err
+	}
+	return env.Out.Record(line, nil)
+}
+
+// meterLine is usage --credential's last line: {"meter": ...} under --json, otherwise the text
+// line as one string column.
+func meterLine(m *meterRecord, jsonMode bool) (json.RawMessage, error) {
+	if jsonMode {
+		return encode(usageMeter{m})
+	}
+	text := "meter  -"
+	if m != nil {
+		text = strings.Join([]string{"meter", strconv.FormatFloat(m.FiveHour.Utilization, 'f', -1, 64),
+			strconv.FormatFloat(m.SevenDay.Utilization, 'f', -1, 64), orDash(m.Status), orDash(m.SeenAt)}, "  ")
+	}
+	return json.Marshal(text)
+}
+
+// usageMeter is usage --credential --json's meter line.
+type usageMeter struct {
+	Meter *meterRecord `json:"meter"`
 }
 
 // openStore opens the instance's store read-only for a command running without the bot.
@@ -133,7 +168,7 @@ func notRunning(env *Env) error {
 // encode is json.Marshal without HTML escaping, so paths and details print as stored.
 func encode[T []store.TurnUsage | store.UsageTotal | []store.Finding | backup.SnapshotResult |
 	backup.VerifyResult | backup.TableRows | auditText | verifyLine | backup.RehearseResult | store.Scratch |
-	scratchLine](v T) (json.RawMessage, error) {
+	scratchLine | usageMeter](v T) (json.RawMessage, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)

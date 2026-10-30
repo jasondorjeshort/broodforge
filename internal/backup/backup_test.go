@@ -94,7 +94,7 @@ func TestSnapshotAndVerify(t *testing.T) {
 	for _, tr := range v.Tables {
 		rows[tr.Table] = tr.Rows
 	}
-	if rows["audit_event"] != 1 || rows["migrations"] != store.Known() || len(rows) != 12 {
+	if rows["audit_event"] != 1 || rows["migrations"] != store.Known() || len(rows) != 13 {
 		t.Errorf("tables %+v", v.Tables)
 	}
 	// The snapshot is a rollback-journal file, so a read leaves nothing beside it.

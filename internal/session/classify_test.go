@@ -43,7 +43,7 @@ func fixtureResults(t *testing.T, name string, turn int) []struct {
 					tool string
 					tr   engine.ToolResultEvent
 				}{tools[ev.ToolResult.ToolUseID], *ev.ToolResult})
-			case engine.KindInit, engine.KindResult, engine.KindExit, engine.KindUnknown:
+			case engine.KindInit, engine.KindResult, engine.KindExit, engine.KindRateLimit, engine.KindUnknown:
 			}
 		}
 	}

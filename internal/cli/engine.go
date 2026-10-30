@@ -133,7 +133,7 @@ func streamTurnExit(env *Env, h engine.TurnHandle) (string, *engine.ExitEvent, e
 			if sessionID == "" {
 				sessionID = ev.Init.EngineSessionID
 			}
-		case engine.KindAssistant, engine.KindToolResult, engine.KindUnknown:
+		case engine.KindAssistant, engine.KindToolResult, engine.KindRateLimit, engine.KindUnknown:
 		}
 		if printErr != nil {
 			continue // drain the turn
