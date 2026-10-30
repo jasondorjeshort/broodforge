@@ -46,3 +46,14 @@ Discord through the same prompt path as `prompt` mode.
   owner's call, as is whether `auto` may be a channel default or only a session switch.
 - Whether this is a major choice for the proposal loop (an incompatible change to the `mode`
   values in configuration and the debug surface); likely yes, so triage routes it to the architect.
+
+Plan: tester, a spike on the PC against the real engine, written as a finding (`finding` skill, area
+`spike / permission modes`), no code change: `engine run --real` pins `--permission-mode default`
+(`internal/engine/claudecode.go`, `Args`), so run `claude -p --output-format stream-json --input-format
+stream-json --verbose --permission-mode auto` directly, from a scratch cwd with a scratch
+`CLAUDE_CONFIG_DIR` and a `--settings` file registering a shell `PreToolUse` hook that logs and exits 2
+for one tool, as the 2026-10-15 hook-flow spike did. One row per claim, the stream lines as evidence:
+(1) `auto` starts under `-p` on this account, or the refusal text; (2) the hook's exit 2 still blocks under
+`auto`, before any classifier allow; (3) what the stream shows when the classifier defers or refuses, under
+`--permission-prompts host` and `none`; (4) whether a deferred call still ends a subagent (the finding
+above). Out of scope: the third `mode` value, config keys, labels, the proposal; triage re-reads this then.
