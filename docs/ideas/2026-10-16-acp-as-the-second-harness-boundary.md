@@ -23,3 +23,13 @@ Anchor: `docs/design/03-architecture.md`, "The engine adapter" (the `Engine` int
 
 - Does ACP report per-model usage and a cumulative count the usage-delta rule can use?
 - Can the hook's pre-tool-use decision be expressed through ACP's permission request?
+
+Question: Open a proposal now for ACP as the boundary of the second harness (R-42, R-43), or
+leave it until a second harness is scheduled?
+Recommendation: leave it. R-42 and R-43 are `later` in `../design/01-requirements.md`; the
+`Engine` interface (`../design/03-architecture.md`, The engine adapter) is bespoke by ADRs 0020
+and 0023, and no current pass depends on the choice. When a second harness is scheduled, this
+file seeds the proposal and its two Open questions (usage deltas; the `defer` decision through
+ACP's permission request) are the first checks against the ACP spec and `claude-agent-acp` as they
+stand then; an answer gathered now would be stale by then.
+Answer:
