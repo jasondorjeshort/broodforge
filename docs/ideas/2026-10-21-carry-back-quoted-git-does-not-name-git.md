@@ -1,7 +1,7 @@
 ---
 date: 2026-10-21
 kind: bug
-related: [2026-10-16-git-guard-false-positives-beside-variable-expansions.md]
+related: [2026-10-16-git-guard-false-positives-beside-variable-expansions.md, 2026-10-30-git-guard-quoted-git-fix-let-built-git-tokens-through.md]
 ---
 
 # Carry back: a quoted string that merely contains git does not name git

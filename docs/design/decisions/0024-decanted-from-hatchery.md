@@ -50,8 +50,11 @@ no diff (ADR 0019).
 
 | Path | Reason | Carry-back |
 |---|---|---|
-| `.claude/skills/adr/SKILL.md` | "Amend without superseding": a dated `## Amendments` entry for a correction that keeps the Decision's core, as ADRs 0020 and 0022 carry | `docs/ideas/2026-10-21-carry-back-adr-amendments-section.md` |
-| `.claude/skills/brief/SKILL.md` | The reviewer bullet lists the escape classes for a path or name boundary | `docs/ideas/2026-10-21-carry-back-brief-boundary-escape-classes.md` |
+| `.claude/skills/adr/SKILL.md` | "Amend without superseding": a dated `## Amendments` entry for a correction that keeps the Decision's core, as ADRs 0020 and 0022 carry | `carry-back/adr-amendments at 09496ad` |
+| `.claude/skills/brief/SKILL.md` | The reviewer bullet lists the escape classes for a path or name boundary | `carry-back/brief-escape-classes at ce41cba` |
+| `CLAUDE.md` (Project rules); the commit skill's Pushing section | A main-session push runs pusher check 5 in full, the scan and the human read of each outgoing commit, and quotes the result before the push; the base's rule 20 scans every push but only the `pusher` reads | `carry-back/commit-skill-main-session-push-check-5 at de8173f` |
+| `.claude/hooks/git-guard.js` | A quoted string that contains git named git, so rule 19 refused expansion stages; this project's fix `5288955` was dropped at the update to `dc896c3` and main runs the base guard | `carry-back/git-guard-quoted-git at fffd564` |
+| `.claude/hooks/imports.js` | A backslash, `:` or device-name import escaped the tree on Windows; main runs the base copy | `carry-back/imports-js-backslash-device-outside at 1bf8c6f` |
 
 Given up to base at this update, with what the base's version does not carry:
 

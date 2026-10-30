@@ -40,7 +40,7 @@ time, so a pin that drops the windows is visible, not fatal.
 
 Plan: coder, pass P28 of `../design/08-implementation-plan-engine-stream.md`, which is the brief:
 `internal/engine/events.go` and `parse.go` (the kind, the parse, `MarshalJSON`), `parse_test.go`,
-the goldens regenerated and their diff read, the migration `0003-credential-meter.sql` and the
+the goldens regenerated and their diff read, the migration `0004-credential-meter.sql` and the
 store's upsert, the write in `internal/session/turn.go`, `credential show --json`'s `meter` and
 `usage --credential`'s `meter` line, `tests/repro/full-session.sh`'s new check, P3's Proof count in
 `08-implementation-plan.md`. Proof: the pass's. Out of scope stays: any cap (R-46, the owner's),
