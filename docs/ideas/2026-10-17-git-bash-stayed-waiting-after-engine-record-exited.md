@@ -30,15 +30,13 @@ engine's process inherits), `internal/engine/record.go` (what record holds open 
 
 - Whether it reproduces at all, and whether `--fake` piped to `tail` is the trigger rather than the recorder.
 
-Plan: coder, one pass, the reproduction first. From Git Bash on the PC, run the block's forms one
-at a time, three tries each, and note which leaves bash without a prompt: `bin/broodforge.exe
-engine run --fake fixtures/engine/basic --prompt x | tail -3` (no credential), the same without
-`tail`, `engine record` against the owner root with one short prompt, then the whole block pasted
-at once. The hypotheses to split: the recorder (`internal/engine/record.go` holds only the turn
-file), the pipeline to `tail`, and the kill-on-close job `spawn.JoinKillOnCloseJob` puts the CLI
-in (`internal/spawn/process_windows.go`): list what that job holds while a run is up. Steps that
-need the interactive `git-bash.exe` window go to the owner as one `docs/operator/` entry with the
-exact block. Reproduced: a finding with the root cause and the standing rule for
-`docs/hatchery/reference/claude-code-on-windows.md` (Shells). Not reproduced in any form: a short
-`status: open` finding naming what was tried. Either deletes this file. Out of scope: any change
-to `spawn` before a cause is known.
+Plan: coder, reproduction first. From Git Bash on the PC, run the block's forms, three tries each,
+noting which leave no prompt: `bin/broodforge.exe engine run --fake fixtures/engine/basic --prompt x
+| tail -3`, the same without `tail`, `engine record` against the owner root, then the whole block
+pasted at once. Split: the recorder (`internal/engine/record.go` holds only the turn file), the
+pipeline to `tail`, and the kill-on-close job `spawn.JoinKillOnCloseJob` puts the CLI in
+(`internal/spawn/process_windows.go`): list what that job holds during a run. Steps needing the
+interactive `git-bash.exe` window go to the owner as one `docs/operator/` entry. Reproduced: a
+finding with the root cause and the standing rule for
+`docs/hatchery/reference/claude-code-on-windows.md` (Shells). Not reproduced: a short open finding
+naming what was tried. Either deletes this file. Not a `spawn` change before a cause is known.

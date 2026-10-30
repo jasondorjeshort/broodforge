@@ -31,15 +31,13 @@ after the first assistant message, `status: allowed_warning`, `seven_day` 0.68, 
 plus `overageStatus` and `overageEnabled`. So it is emitted on an ordinary turn, not only near a
 limit; the per-turn frequency question above is half answered.
 
-Plan: architect, one pass, an amendment and no code. Amend `docs/design/03-architecture.md`
-(`EngineEvent`, and "Everything else is `unknown`") with a `rate-limit` kind parsed from
-`rate_limit_event`: `status`, `rateLimitType`, `unifiedWindows.five_hour` and `seven_day`
-(`utilization`, `resetsAt`), `overageStatus`, `isUsingOverage`; the shape is in
-`fixtures/engine/recorded-read/turn-1.jsonl` (engine 2.1.296), and an absent field stays zero
-under the parser's never-refuse rule. Decide where the latest event per credential lives (a
-table or columns on the credential row, an ADR 0021 amendment) and where it reads out (`usage
---credential`, `credential show`, `status --json`); `usage_record` stays token-based (R-44).
-Record a dated amendment of ADR 0020 (Usage and attribution) and the coder pass in
-`08-implementation-plan.md` with its proof command and the golden regeneration (`-update`).
-Out of scope: any cap (R-46, the owner's thresholds), Discord wording, and the `usage-gate`
-hook (Hatchery's; a carry-back idea once the meter exists).
+Plan: architect, an amendment, no code. Amend `docs/design/03-architecture.md` (`EngineEvent`, and
+"Everything else is `unknown`") with a `rate-limit` kind parsed from `rate_limit_event`: `status`,
+`rateLimitType`, `unifiedWindows.five_hour` and `seven_day` (`utilization`, `resetsAt`),
+`overageStatus`, `isUsingOverage`; shape in `fixtures/engine/recorded-read/turn-1.jsonl` (engine
+2.1.296), an absent field stays zero (never-refuse). Decide where the latest event per credential
+lives (a table or columns on the credential row, an ADR 0021 amendment) and where it reads (`usage
+--credential`, `credential show`, `status --json`); `usage_record` stays token-based (R-44). Record
+a dated ADR 0020 amendment and the coder pass in `08-implementation-plan.md` with proof command and
+golden regeneration (`-update`). Out of scope: any cap (R-46, the owner's), Discord wording, the
+`usage-gate` hook (Hatchery's; carry-back once the meter exists).

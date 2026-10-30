@@ -25,14 +25,13 @@ outside. The same two rules, with an IM case for each, would close it in the bas
 a token containing `\` is outside; after normalizing, a target with a `:` or a reserved device name
 is outside on Windows.
 
-Plan: coder, `carry-back` skill Send (steps 1 to 3 and 5; the runner 4 and 7, the pusher 6), in a
-worktree cut from `hatchery/main` (`../hatchery` sits at that sha; the base's `imports.js` is byte-identical
-to ours, so no departure row exists yet). In `targetOf`: a token containing `\` is outside; a normalized
-target with a `:` in any segment, or a segment that is a reserved device name (CON, PRN, AUX, NUL, COM1-9,
-LPT1-9, with or without an extension, any case), is outside on every host; the header comment (lines 15-17)
-says so. Harness, beside IM13: IM14 (`@.claude\..\..\outside.md` with `outside.md` beside the scratch root
-resolves `outside: true, exists: null`) and IM15 (`@a:b.md`, `@nul.md`). Spec: the "(`../x`, `~/x`, an
-absolute path)" sentence of `docs/hatchery/decisions/0016-update-procedure.md` gains both rules. Verify:
-`node .claude/hooks/test-hooks.js` green in the worktree on the PC; one commit `Carry-back: imports.js: a
-backslash or device-name import is outside the tree`; the row's Path is `.claude/hooks/imports.js`. Out of
-scope: this project's copy (it returns by `update-from-hatchery`) and the Go port, which has both rules.
+Plan: coder, `carry-back` skill Send (steps 1 to 3 and 5), in a worktree from `hatchery/main` (step
+1 fetches it). In `targetOf`: a token with `\` is outside; so is a target with a `:` in any segment
+or a device-name segment (CON, PRN, AUX, NUL, COM1-9, LPT1-9, any extension or case), on every host;
+header comment (15-17) says so. Harness, beside IM13: IM14 (`@.claude\..\..\outside.md`,
+`outside.md` beside the scratch root: `outside: true, exists: null`), IM15 (`@a:b.md`, `@nul.md`).
+`docs/hatchery/decisions/0016-update-procedure.md`: the "(`../x`, `~/x`, an absolute path)" sentence
+gains both rules. Verify: `node .claude/hooks/test-hooks.js` green; one commit `Carry-back:
+imports.js: a backslash or device-name import is outside the tree`. Not: this project's copy
+(returns by `update-from-hatchery`); the Go port (`internal/workflow/imports.go` line 24,
+`filepath.IsLocal`) refuses both on this host only; the base rule matches it on every host.

@@ -22,18 +22,13 @@ and the audit row keeps the parser's text.
 - The wording is the owner's (04, what humans see).
 - Whether a `bad-args` on a bot-posted component also posts to the project channel, since it is a bug.
 
-Plan: tester, one pass; the mechanism is settled, the wording is the owner's. Files:
-`internal/discord/adapter.go` (`click`: the three `bad-args` refusals before the kind switch keep
-the parser's text as the audit row's message, through `refuse` as now, and return a `refusal`
-whose message is the new text instead, so the audit and the reply part; the venue's session, if
-any, comes from `sessionOf(in.Channel)` and its state from `svc.Show`); `internal/discord/text.go`
-(`badComponentText(session, state string)`, marked `not 04`, drafted: `This button did nothing:
-Broodforge could not read it (a bot bug, logged). Session s000a is still open; /session end ends
-it.`, the second sentence dropped outside a venue); `internal/cli/discord_test.go` line 63 and the
-`inject click` tests, which pin the parser text today; `docs/design/05-debug-interface-discord.md`
-(lines 69 and 148: the reply is the drafted text, the audit row the parser's). Verify: `go test
-./internal/discord ./internal/cli`, then `audit --kind action-refused` after an `inject click
---custom-id bf:x` shows the parser text in the row and the new text on stdout. The text goes on
-the owner's list in `docs/HANDOFF.md` (Waiting on user) with the pass. Out of scope: a post to the
-project channel (the second Open point): the inbound log's `refused bad-args` line is the
-operator's signal; the owner may ask for more when reviewing the text.
+Plan: tester, after P12d (its "every refusal audited" step touches the same `click` refusals).
+`internal/discord/adapter.go` (`click`: the `bad-args` refusals audit the parser's text and return a
+`refusal` with the new; session via `sessionOf`, state via `svc.Show`); `internal/discord/text.go`
+(`badComponentText(session, state string)`, marked `not 04`: `This button did nothing: Broodforge
+could not read it (a bot bug, logged). Session s000a is still open; /session end ends it.`, second
+sentence dropped outside a venue); `internal/cli/discord_test.go` line 63 and the `inject click`
+tests; `05-debug-interface-discord.md` 69, 148. Verify: `go test ./internal/discord ./internal/cli`;
+`inject click --custom-id bf:x` shows the new text, `audit --kind action-refused` the parser's. Text
+goes on the owner's list (`docs/HANDOFF.md`). Not a channel post; the `refused bad-args` inbound
+line is P12d's, not present today.

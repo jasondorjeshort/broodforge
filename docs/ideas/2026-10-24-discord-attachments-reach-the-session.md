@@ -26,17 +26,12 @@ paths so it can read them with its usual tools.
 - The debug interface: the fake gateway's inbound message gains attachments, so a test can drive one.
 
 Question: Do you want attachments in v1 as files only (saved under the session's directory beside
-the tree, text-typed ones scanned like a pasted message with the same delete-and-refuse on a key,
-every type kept under Discord's own upload limit so nothing a person could post is refused for
-size alone, each saved path named to the agent in the turn's message, a skipped file named with its
-reason), with image content blocks on the engine stream left for later?
-Recommendation: yes, files only: one mechanism for every type, no `Engine` or `TurnRequest`
-change (`../design/03-architecture.md` sends one text block per turn), and the engine's own Read
-tool views an image from a path. It is a design change before any code, so the answer routes to
-the architect first: 03's data flow (step 1), the hook contract's path rule (`Read` under code
-reach is allowed only under the tree or the canonical today, `../design/03-hook-contract.md`, so
-`sessions/<id>/files` must join the allowed prefixes and the ADR 0022 companion's bind list), 04's
-texts for a skipped and a refused file (the owner's), and `discord inject message --attach <path>`
-in `../design/05-debug-interface-discord.md`; then one coder pass. The related moonshot (the game
-files its own tickets) waits on this.
+the tree, text-typed ones scanned like a pasted message, each path named in the turn's message, a
+skipped file named with its reason), with image content blocks left for later?
+Recommendation: yes, files only: one mechanism, no `Engine` or `TurnRequest` change (03 sends one
+text block per turn), and the engine's Read views an image from a path. The architect first settles
+03's data flow, the hook contract's path rule (`Read` under read-only reach is limited to the tree
+or the canonical, `../design/03-hook-contract.md` line 127, so `sessions/<id>/files` must join them
+and the ADR 0022 companion's bind list), 04's texts and `discord inject message --attach`; then one
+coder pass.
 Answer:

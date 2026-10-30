@@ -39,17 +39,13 @@ and rate limits, and reading the lines over the control pipe (`trace tail --foll
 - Whether it belongs in 05-debug-interface-discord.md as a new section (a design change goes through
   the proposal loop).
 
-Plan: coder, one pass. Files: `internal/cli/serve.go` (a `--trace` bool flag, any root, no
-refusal: the lines carry no text, URL or token); `internal/discord/gateway.go` (a decorator over
-`restAPI` installed when the flag is set, one line per call to `GatewayConfig.Log`: `<time>
-discord: rest <method name> <channel or message id, or -> -> <HTTP status|error, one line> <ms>`,
-never the URL, which carries interaction tokens, never a body; and, always on, `<time> discord:
-gateway ready|resumed|closed <reason, one line>` from the events and close handler disgo exposes,
-a rate limit visible only as the REST line's duration); `internal/discord/gateway_test.go` (the
-fake-REST harness: one `rest` line per call with the flag, none without, no token or text in the
-log); `docs/design/05-debug-interface-discord-live.md` (a paragraph under Inbound log: the two
-formats, the flag, and that the trace rides the inbound log's stderr, `serve.log` under `scratch
-run`). Verify: `go test ./internal/discord -run TestLive`, then the check line. Out of scope:
-a control-pipe read (`trace tail --follow`): the service instance's stderr location is P23's,
-and a pipe read is reconsidered with `audit --follow` (the related P10 idea) once P23 says where
-the log lives; disgo's own debug logging, which prints URLs.
+Plan: two sittings. Architect amends `05-debug-interface.md` (the `serve` line at 22 gains
+`--trace`) and `05-debug-interface-discord-live.md` (Inbound log), deciding whether `--trace`
+refuses a non-scratch root (the idea's constraint) or runs on any root (no text, URL or token). Then
+the coder, after P12d lands (the inbound half is P12d; the trace rides it): `internal/cli/serve.go`
+(`--trace`, root rule per the amendment); `internal/discord/gateway.go` (a `restAPI` decorator when
+flagged, a `GatewayConfig.Log` line per call: `<time> discord: rest <method name> <channel or
+message id, or -> -> <HTTP status|error> <ms>`, never URL or body; always on, `discord: gateway
+ready|resumed|closed <reason>`); `gateway_test.go` (a line per call flagged, none else, no token or
+text). Verify: `go test ./internal/discord -run TestLive`, check line. Not `trace tail --follow`
+(after P23); not disgo's debug logging (prints URLs).

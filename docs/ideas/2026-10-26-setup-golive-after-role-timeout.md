@@ -16,17 +16,13 @@ second run).
 
 Searched `docs/ideas/`, `docs/findings/` and `docs/HANDOFF.md` for overlap: none.
 
-Plan: tester, one pass; the test first. Files: `internal/setup/fakediscord_test.go` (`TestRole`
-gains "held on the second run goes live": a scripted guild whose roles already hold `Trusted`,
-`ownerRoles` empty, the bot without Manage Roles, `--create-role no`; the first run writes
-`roleGroups.trusted` and refuses `timeout-role`; `f.edit` gives the owner the role; the second
-run's line is `ok  role  Trusted  <id>  held by <owner>; discord.mode live` and the instance
-file's `discord.mode` reads `live`; this fails on the current tree); `internal/setup/discord.go`
-(`goLive`: drop the `s.wrote` gate; the switch is made in the role step of any run but `--check`
-in which the four ids are present, the role is held and the mode is `dry-run`; an owner who wants
-a configured instance dry for one run has `serve --discord dry-run`); the sentence "the run that
-fills the last Discord id" in `../design/decisions/0027-setup-commands.md` (a dated `## Amendments`
-line, `adr` skill) and under Drive in `../design/05-debug-interface-setup.md` becomes "the first
-run in which every Discord id is present and the role is held". Verify: `go test ./internal/setup
--run 'TestRole|TestRerun|TestDiscordSteps|TestDiscordGuards'`, then the check line. Out of scope:
-`next`'s text, right once the mode is live; the P20 W6 scheduled-task work.
+Plan: tester, test first. `internal/setup/fakediscord_test.go`: `TestRole` gains "held on the second
+run goes live" (roles hold `Trusted`, owner lacks it, `--create-role no`; run one writes
+`roleGroups.trusted`, refuses `timeout-role`; `f.edit` gives the role; run two prints `ok  role
+Trusted  <id>  held by <owner>; discord.mode live`, file reads `live`). `internal/setup/discord.go`:
+`goLive` drops the `s.wrote` gate and calls `markWrote` for the role step when it switches, since
+`passed()` (74-79) prints `ok` only for a step in `s.wrote`, else `skip ...; discord.mode live`.
+"The run that fills the last Discord id" in `../design/decisions/0027-setup-commands.md` and
+`../design/05-debug-interface-setup.md` becomes "the first run in which every Discord id is present
+and the role is held". Verify: `go test ./internal/setup -run
+'TestRole|TestRerun|TestDiscordSteps|TestDiscordGuards'`, check line. Not `next` or P20 W6.
