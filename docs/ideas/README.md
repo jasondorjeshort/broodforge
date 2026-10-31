@@ -131,3 +131,4 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-31-spectator-mirror-of-a-session.md` | feature | Not sanity checked: a driver opts a session into a read-only public mirror of its venue posts, buttons stripped, so people learn by watching |
 | `2026-10-31-a-changelog-channel-for-landings.md` | feature | Not sanity checked: each landing on the default branch posts the closing message, driver, branch and commits to a changelog channel |
 | `2026-10-31-the-simple-questions-channel.md` | feature | Not sanity checked: the vision's easiest feature, a read-only cheap-model session answering anyone's question about the code under its own cap |
+| `2026-10-31-an-ended-session-moves-to-an-ended-category.md` | feature | Not sanity checked: `/session end` moves the channel to an "Ended sessions" category so it stops distracting among live ones; removal could wait for the channel cap |
