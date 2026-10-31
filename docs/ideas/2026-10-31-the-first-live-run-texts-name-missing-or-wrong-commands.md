@@ -32,6 +32,15 @@ question to the coordinator.
    Enter to add later with setup git-credential):". "It" is the repository URL asked one line
    earlier; the owner did not connect them and asked what the token was for.
 
+5. (2026-10-31, later the same day.) The `canonical-diverged` refusal, `04-ux.md` Failure flows (marked
+   pending the owner's review): "the host's copy of main and the remote have diverged; the owner
+   reconciles it". The owner, hitting it after a rebase of the checkout's `main` rewrote the hashes
+   the bot's canonical had fetched: "a singularly unhelpful refusal". The design already names the
+   remedy (`05-debug-interface-git.md`, The fetch at session start: `git -C <canonical> branch -f
+   <branch> <remote>/<branch>`, or `reset --keep` while checked out); the venue line should carry it,
+   or the host should offer a one-word command for it (`canonical reset <project>`), and the line
+   should say why: the remote's history was rewritten under the host's copy, not "a pull is needed".
+
 Reproduce: `setup` with `--discord live` on a fresh root under the owner's account, no service; then in
 Discord `/register`, `/credential add kind:subscription`, Start. The texts are the owner's to word
 (`major-decisions.md`: what humans see), so this is a `Question:` for the texts once the owner has

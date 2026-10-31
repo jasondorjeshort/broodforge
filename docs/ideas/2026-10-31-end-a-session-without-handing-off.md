@@ -19,9 +19,17 @@ stops the turn, writes the summary with `discarded` in place of the push line, r
 `refs/sessions/<id>` without a push, and audits `session-discarded` with the commit count. The commits
 are gone with the tree, so it confirms once in the venue. Gate: the driver (ending is already theirs).
 
+The owner, 2026-10-31, in session s0008 (its edit was lost at the end, see
+`2026-10-31-ending-a-session-with-uncommitted-changes-loses-them.md`; refiled here): "another button
+'abort session' that discards the commits (well they can still stay recoverable on a tree
+somewhere)". So: the tree is removed but the commits stay reachable on an unpushed ref such as
+`refs/aborted/<id>`, a later `session restore <id>` brings them back, the confirm guards a reversible
+step, and the audit line names the ref.
+
 ## Open
 
 - Whether a discarded session's transcript still goes to the lobby (it did happen; the work did not).
+- How long an aborted session's ref is kept, and who prunes it.
 - Whether an interrupted session (ADR 0026) can be discarded the same way.
 
 Question: the venue shape and words are the owner's. A second button beside `[End session]` (`[End and
