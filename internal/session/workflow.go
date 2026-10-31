@@ -135,8 +135,8 @@ func ReadHeader(root, id string) (string, error) {
 
 // Review is rule 7's fact: the session's last commit as of the last bundle (refs/sessions/<id>,
 // which `worktree check` and the handoff refresh), and the newest `reviewer` subagent call whose
-// result's audit row (subagent-result, a result that is not an error) is timestamped after that
-// commit's committer time; nil ToolUseID is none. Error, when set, is why the fact could not be
+// result's audit row (subagent-result, a result that is not an error) names that commit as the
+// one the bot bundled at the reviewer's launch; nil ToolUseID is none. Error, when set, is why the fact could not be
 // read (the canonical moved, the configuration does not load): `review: error: <code>`.
 type Review struct {
 	Commit    string       `json:"commit"`
@@ -171,9 +171,11 @@ const (
 // (the session was handed off); a ref that cannot be read is a Review carrying the git error.
 // The rows counted are subagent-result events, written when a subagent call's tool result comes
 // (never at a person's answer), whose `agent` is reviewer and whose result is ok: a reviewer
-// allowed and then interrupted has no such row, and an errored or denied one is not ok.
+// allowed and then interrupted has no such row, and an errored or denied one is not ok. The
+// fact holds only when the newest such row's `commit` (Refresh's sha at the launch) equals the
+// ref's sha; a row with `commitError` never counts. No time enters the comparison.
 func ReviewFact(ctx context.Context, q store.Querier, gs git.Session) (*Review, error) {
-	sha, at, found, err := git.SessionTip(ctx, gs)
+	sha, found, err := git.SessionTip(ctx, gs)
 	var ge *git.Error
 	switch {
 	case errors.As(err, &ge):
@@ -184,19 +186,25 @@ func ReviewFact(ctx context.Context, q store.Querier, gs git.Session) (*Review, 
 		return nil, nil
 	}
 	r := &Review{Commit: sha}
-	err = q.Query(`SELECT details FROM audit_event WHERE session_id = ? AND kind = ? AND time > ? ORDER BY seq`,
-		[]store.Value{store.Text(gs.ID), store.Text(string(audit.KindSubagentResult)), store.Text(store.FormatTime(at))},
+	var newest struct{ ToolUseID, Commit, CommitError string }
+	err = q.Query(`SELECT details FROM audit_event WHERE session_id = ? AND kind = ? ORDER BY seq`,
+		[]store.Value{store.Text(gs.ID), store.Text(string(audit.KindSubagentResult))},
 		func(row *store.Row) error {
-			var d struct{ Tool, Agent, Result, ToolUseID string }
+			var d struct{ Tool, Agent, Result, ToolUseID, Commit, CommitError string }
 			if json.Unmarshal([]byte(row.Text(0)), &d) != nil {
 				return nil
 			}
 			if subagentTools[d.Tool] && d.Agent == reviewerAgent && d.Result == subagentResultOK && d.ToolUseID != "" {
-				id := d.ToolUseID
-				r.ToolUseID = &id
+				newest.ToolUseID, newest.Commit, newest.CommitError = d.ToolUseID, d.Commit, d.CommitError
 			}
 			return nil
 		})
+	// The newest ok reviewer row alone names the reviewed commit: an older row's match does not
+	// revive a fact a newer review of another commit, or a failed bundle, left void.
+	if err == nil && newest.CommitError == "" && newest.Commit != "" && newest.Commit == sha {
+		id := newest.ToolUseID
+		r.ToolUseID = &id
+	}
 	return r, err
 }
 

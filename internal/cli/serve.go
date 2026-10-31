@@ -350,6 +350,7 @@ func startBot(env *Env) (*bot, error) {
 		},
 		RemoveTree:     func(ctx context.Context, s git.Session) error { return git.Discard(ctx, b.backend, s) },
 		FetchCanonical: b.fetchCanonical,
+		Refresh:        func(ctx context.Context, s git.Session) (string, error) { return git.Refresh(ctx, b.backend, s) },
 		Workflow:       sessionWorkflow,
 		Commits:        b.wt.Commits,
 		ProjectRepo:    b.projectRepo,

@@ -7,13 +7,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jasondorjeshort/broodforge/internal/cli/clitest"
-	"github.com/jasondorjeshort/broodforge/internal/git/gittest"
 	"github.com/jasondorjeshort/broodforge/internal/workflow/workflowtest"
 )
 
@@ -125,12 +123,6 @@ func TestProofSessionInjectNone(t *testing.T) {
 	if r := run("session", "show", "s0001"); !strings.HasSuffix(r.Stdout, "\nreview: none since "+commit+"\n") {
 		t.Errorf("before the review:\n%s", r.Stdout)
 	}
-	// The review fact counts a row strictly after the commit's committer second: wait past it.
-	ct, err := strconv.ParseInt(strings.TrimSpace(gittest.Git(t, canonical, "show", "-s", "--format=%ct", commit)), 10, 64)
-	if err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(time.Until(time.Unix(ct+1, 0).Add(100 * time.Millisecond)))
 	want(t, run("session", "send", "s0001", "--as", "1001", "--wait", "Review it."), 0, "turn-ended  1  completed\n", "")
 	keys := receivedOf(t, root, "s0001")
 	var args []string
@@ -144,10 +136,10 @@ func TestProofSessionInjectNone(t *testing.T) {
 		strings.Contains(instr, "Contents of") {
 		t.Errorf("header alone: %q\ninstructions.md %q", r.Stdout, instr)
 	}
-	// The reviewer's Agent call came after the session's last commit (here the base).
+	// The bot bundled the tree at the reviewer's launch: no commits, so the ref is the base.
 	r := run("session", "show", "s0001")
 	t.Logf("$ broodforge session show s0001\n%s", r.Stdout)
-	if !strings.HasSuffix(r.Stdout, "\nworkflow: none (inject none)\nhooks: -\nreview: toolu_sub_agent after "+commit+"\n") {
+	if !strings.HasSuffix(r.Stdout, "\nworkflow: none (inject none)\nhooks: -\nreview: toolu_sub_agent at "+commit+"\n") {
 		t.Errorf("session show:\n%s", r.Stdout)
 	}
 	tail := run("session", "tail", "s0001").Stdout

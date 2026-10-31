@@ -205,34 +205,30 @@ func Base(ctx context.Context, s Session) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// SessionTip is refs/sessions/<id> in the canonical and its committer time: the session's last
-// commit as of the last bundle (`worktree check` and the handoff fetch it; before the first,
-// the base). The review fact of ADR 0025 rule 7 is measured against it. found is false only when
-// the canonical holds no such ref (the session was handed off); a canonical that cannot be read
-// (moved, not a repository) is an error, CodeSessionRef.
-func SessionTip(ctx context.Context, s Session) (sha string, at time.Time, found bool, err error) {
+// SessionTip is refs/sessions/<id> in the canonical: the session's last commit as of the last
+// bundle (`worktree check`, the handoff and a reviewer's launch fetch it, Refresh; before the
+// first, the base). The review fact of ADR 0025 rule 7 is measured against it. found is false
+// only when the canonical holds no such ref (the session was handed off); a canonical that
+// cannot be read (moved, not a repository) is an error, CodeSessionRef.
+func SessionTip(ctx context.Context, s Session) (sha string, found bool, err error) {
 	if err := s.check(); err != nil {
-		return "", time.Time{}, false, err
+		return "", false, err
 	}
 	// for-each-ref prints nothing and exits 0 for a missing ref, and fails for an unreadable
 	// repository, which rev-parse --quiet would not tell apart.
 	out, err := run(ctx, CodeSessionRef, s.Canonical, nil, "for-each-ref",
-		"--format=%(refname) %(objectname) %(committerdate:unix)", SessionRef(s.ID))
+		"--format=%(refname) %(objectname)", SessionRef(s.ID))
 	if err != nil {
-		return "", time.Time{}, false, err
+		return "", false, err
 	}
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		f := strings.Fields(line)
-		if len(f) != 3 || f[0] != SessionRef(s.ID) {
+		if len(f) != 2 || f[0] != SessionRef(s.ID) {
 			continue // a ref below refs/sessions/<id>/ would match the pattern too
 		}
-		n, perr := strconv.ParseInt(f[2], 10, 64)
-		if perr != nil {
-			return "", time.Time{}, false, &Error{Code: CodeSessionRef, Message: SessionRef(s.ID) + " is not a commit: " + line}
-		}
-		return f[1], time.Unix(n, 0).UTC(), true, nil
+		return f[1], true, nil
 	}
-	return "", time.Time{}, false, nil
+	return "", false, nil
 }
 
 // Discard undoes Create for a session whose start failed after the clone: the tree and its

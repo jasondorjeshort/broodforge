@@ -260,7 +260,7 @@ func runSessionShow(ctx context.Context, env *Env) error {
 // driver|contributor  <joined at>` per participant,
 // `worktree: <path>  <branch>  <state>` (or -), `pending: <tool use id>  <tool>  <target>  since
 // <time>  until <deadline>` (or -), then ADR 0025's `workflow: <commit> <date>` or `workflow:
-// none (...)` (or -), `hooks: <names>` (or -) and `review: <tool use id> after <commit>`,
+// none (...)` (or -), `hooks: <names>` (or -) and `review: <tool use id> at <commit>`,
 // `review: none since <commit>` (or -). With --header only the header, as the session got it.
 func renderSessionShow(env *Env, raw json.RawMessage) error {
 	var d session.Detail
@@ -723,7 +723,7 @@ func runReachReport(_ context.Context, env *Env) error {
 	return err
 }
 
-// reviewLine is the `review:` value (ADR 0025 rule 7): `<tool use id> after <commit>`, `none
+// reviewLine is the `review:` value (ADR 0025 rule 7): `<tool use id> at <commit>`, `none
 // since <commit>`, `error: <code>` when it cannot be read (the canonical moved, the configuration
 // does not load; --json has the message), or - once the session is handed off.
 func reviewLine(r *session.Review) string {
@@ -733,7 +733,7 @@ func reviewLine(r *session.Review) string {
 	case r.Error != nil:
 		return "error: " + r.Error.Code
 	case r.ToolUseID != nil:
-		return *r.ToolUseID + " after " + r.Commit
+		return *r.ToolUseID + " at " + r.Commit
 	}
 	return "none since " + r.Commit
 }

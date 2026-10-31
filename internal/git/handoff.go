@@ -77,7 +77,7 @@ func BundleStep(ctx context.Context, b spawn.Backend, s Session) (spawn.Bundle, 
 // (ADR 0026). A canonical without refs/sessions/<id> is already-handed-off, as BundleStep's; a
 // canonical that cannot be read is session-ref (SessionTip's).
 func Commits(ctx context.Context, b spawn.Backend, s Session) (int, error) {
-	_, _, found, err := SessionTip(ctx, s)
+	_, found, err := SessionTip(ctx, s)
 	if err != nil {
 		return 0, err
 	}
@@ -100,32 +100,53 @@ func Commits(ctx context.Context, b spawn.Backend, s Session) (int, error) {
 	return n, nil
 }
 
-// Collect runs steps 1 to 3 (ADR 0022 companion, Handoff at session end): worktree-bundle,
-// then in the canonical `git bundle verify` and `git fetch <bundle>
-// +<session branch>:refs/sessions/<id>`, then Check. The fetch is forced because the driver may
-// have had commits amended after a refused check; the ref is the bot's own. No commits since
-// the base sets the ref back to the base. The bot never opens the session's tree.
-func Collect(ctx context.Context, b spawn.Backend, s Session, a Attribution) (Collected, error) {
+// Refresh is steps 1 and 2 of the handoff (ADR 0022 companion, Handoff at session end):
+// worktree-bundle, then in the canonical `git bundle verify` and `git fetch <bundle>
+// +<session branch>:refs/sessions/<id>`, returning the commit the ref then holds. The fetch is
+// forced because the driver may have had commits amended after a refused check; the ref is the
+// bot's own. No commits since the base sets the ref back to the base, which is returned. The
+// bot never opens the session's tree. `worktree check`, the handoff and a reviewer's launch
+// (ADR 0025 rule 7, the review fact) run it.
+func Refresh(ctx context.Context, b spawn.Backend, s Session) (sha string, err error) {
 	bundle, base, err := BundleStep(ctx, b, s)
 	if err != nil {
-		return Collected{}, err
+		return "", err
 	}
-	c := Collected{Base: base, Commits: bundle.Commits}
 	if bundle.Commits == 0 {
-		_, err := run(ctx, CodeRefusedFetch, s.Canonical, nil, "update-ref", SessionRef(s.ID), base)
-		return c, err
+		if _, err := run(ctx, CodeRefusedFetch, s.Canonical, nil, "update-ref", SessionRef(s.ID), base); err != nil {
+			return "", err
+		}
+		return base, nil
 	}
 	if _, err := run(ctx, CodeRefusedBundleVerify, s.Canonical, nil, "bundle", "verify", "--quiet", bundle.Path); err != nil {
-		return c, err
+		return "", err
 	}
 	if _, err := run(ctx, CodeRefusedFetch, s.Canonical, nil, "fetch", "--quiet", "--no-tags", "--no-write-fetch-head",
 		bundle.Path, "+refs/heads/"+s.Branch()+":"+SessionRef(s.ID)); err != nil {
-		return c, err
+		return "", err
 	}
-	// The check's base is taken again after the fetch: a session that merged the default
-	// branch's newer commits forks from it later, and those commits are not the session's.
+	out, err := run(ctx, CodeRefusedFetch, s.Canonical, nil, "rev-parse", "--verify", "--quiet", SessionRef(s.ID)+"^{commit}")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// Collect runs steps 1 to 3 (ADR 0022 companion, Handoff at session end): Refresh, then Check
+// of the session's commits over the base.
+func Collect(ctx context.Context, b spawn.Backend, s Session, a Attribution) (Collected, error) {
+	sha, err := Refresh(ctx, b, s)
+	if err != nil {
+		return Collected{}, err
+	}
+	// The check's base is taken after the fetch: a session that merged the default branch's
+	// newer commits forks from it later, and those commits are not the session's.
+	var c Collected
 	if c.Base, err = Base(ctx, s); err != nil {
 		return c, err
+	}
+	if sha == c.Base {
+		return c, nil // no commits since the base
 	}
 	if c.Checks, err = Check(ctx, s, c.Base, a); err != nil {
 		return c, err

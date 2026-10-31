@@ -516,7 +516,7 @@ func HeldHandoffSentence(id string) string {
 // false when neither applies: then the handoff runs and reports what it finds.
 func (s *Service) heldEscape(ctx context.Context, l *live) (git.Outcome, bool) {
 	mode := l.ch.Repo.Handoff
-	_, _, ref, err := git.SessionTip(ctx, l.git)
+	_, ref, err := git.SessionTip(ctx, l.git)
 	if err == nil && !ref {
 		var stored *string
 		if err := s.cfg.Store.Query("SELECT end_outcome FROM session WHERE id = ?", []store.Value{store.Text(l.id)},

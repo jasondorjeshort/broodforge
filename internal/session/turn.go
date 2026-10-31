@@ -295,6 +295,9 @@ type call struct {
 	agent  string
 	parent string
 	depth  int
+	// commit is refs/sessions/<id>'s sha as the bot bundled it when a reviewer call launched,
+	// commitError why that bundle failed; both go into the subagent-result row.
+	commit, commitError string
 }
 
 // indent is s at the call's depth (session tail, 04's trace lines).
@@ -354,6 +357,9 @@ func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan s
 				case engine.BlockToolUse:
 					c := call{tool: b.Name, target: Target(b.Name, b.Input, l.tree), message: ev.Assistant.MessageID,
 						agent: subagentType(b.Name, b.Input), parent: parent, depth: depth}
+					if c.agent == reviewerAgent {
+						c.commit, c.commitError = s.refresh(l)
+					}
 					l.mu.Lock()
 					l.calls[b.ID] = c
 					l.mu.Unlock()
@@ -779,12 +785,27 @@ func (s *Service) subagentResult(l *live, n int, tr engine.ToolResultEvent, c ca
 	}
 	err := s.cfg.Store.Write(func(tx *store.Tx) error {
 		_, err := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindSubagentResult, Actor: ActorInstance, Session: l.id,
-			Details: details("turn", strconv.Itoa(n), "toolUseId", tr.ToolUseID, "tool", c.tool, "agent", c.agent, "result", result)})
+			Details: details("turn", strconv.Itoa(n), "toolUseId", tr.ToolUseID, "tool", c.tool, "agent", c.agent, "result", result,
+				"commit", c.commit, "commitError", c.commitError)})
 		return err
 	})
 	if err != nil {
 		l.log.add(storeFailed(s.stamp(), n, tr.ToolUseID, c, err))
 	}
+}
+
+// refresh is the bundle at a reviewer's launch (ADR 0025 rule 7): Config.Refresh for the
+// session's tree, the sha it fetched into refs/sessions/<id>, or the error's message. Nothing
+// without a Refresh closure.
+func (s *Service) refresh(l *live) (commit, commitError string) {
+	if s.cfg.Refresh == nil {
+		return "", ""
+	}
+	sha, err := s.cfg.Refresh(context.Background(), l.git)
+	if err != nil {
+		return "", err.Error()
+	}
+	return sha, ""
 }
 
 // saveMeter records a rate-limit event as the session's credential's meter, replacing the one

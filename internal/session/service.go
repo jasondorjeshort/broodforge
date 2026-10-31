@@ -155,6 +155,11 @@ type Config struct {
 	// git.Fetch in the canonical with the project's git credential, credentialID ("" none),
 	// read by the bot. nil fetches nothing and the session-started row has no canonical key.
 	FetchCanonical func(ctx context.Context, s git.Session, credentialID string) (git.FetchResult, error)
+	// Refresh bundles the session's tree and fetches refs/sessions/<id> as `worktree check`
+	// does, returning the ref's sha: git.Refresh through the spawn backend, run when a
+	// `reviewer` subagent call is launched (ADR 0025 rule 7, the review fact). nil records no
+	// commit, and such a review never counts.
+	Refresh func(ctx context.Context, s git.Session) (sha string, err error)
 	// RemoveTree undoes CreateTree for a start that fails after the clone: git.Discard.
 	RemoveTree func(ctx context.Context, s git.Session) error
 	// Handoff is the end of session's bundle, check and push or pull request (03; the bot's
@@ -917,7 +922,7 @@ FROM usage_record WHERE session_id = ? GROUP BY model`, []store.Value{store.Text
 // canonical unreadable, a gone tree (its row removed, or the path absent) is missing and the
 // count unknown, as end's escape will find it; else Config.Commits', nil when it cannot be read.
 func (s *Service) heldCommits(ctx context.Context, l *live, treeState string) (*int, bool) {
-	_, _, ref, err := git.SessionTip(ctx, l.git)
+	_, ref, err := git.SessionTip(ctx, l.git)
 	if err == nil && !ref {
 		return nil, false
 	}
