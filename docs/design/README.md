@@ -10,8 +10,9 @@ Planned documents (added as we go):
 | `00-vision.md` | What the app is, who it is for, what "done" looks like |
 | `01-requirements.md` | Functional and non-functional requirements |
 | `02-domain.md` | Core concepts, vocabulary, data model |
-| `03-architecture.md` | Components and boundaries, the per-turn data flow, the engine adapter, configuration format, git naming and attribution, the process model per host, failure modes |
-| `03-hook-contract.md` | Companion to 03: how the engine runs the PreToolUse hook and reads its exit codes, the hook environment, path checks, the policy table per reach and mode, the decision order |
+| `03-architecture.md` | Components and boundaries, the per-turn data flow, the engine adapter, configuration format, the process model per host, failure modes; the git section points to its companion |
+| `03-architecture-git.md` | Companion to 03: session ids, branches, trees and refs, attribution and the trailer rules, the check at handoff, the end of session per `handoff` value, and landing (ADR 0028: the one `Land` procedure, its gate, lock and refusal codes) |
+| `03-hook-contract.md` | Companion to 03: how the engine runs the PreToolUse hook and reads its exit codes, the hook environment, path checks, the policy table per reach and mode (the `reviewer` and `land` cells among them), the decision order, the resume with `updatedInput` |
 | `04-ux.md` | The Discord flows, venues, buttons and message wording, Ticket Tool as the reference; a proposal with every owner decision marked and collected at the end |
 | `04-ux-session-start.md` | Sibling of 04: the header the agent's prompt opens with (`session show --header`) and the not-started flow when a project hook's runtime is missing (ADR 0025) |
 | `04-ux-session-controls.md` | Sibling of 04: the driver's switches in the venue (policy mode, model and effort, the idle timeout) and the pinned header's three select menus for model, effort and mode |
@@ -33,6 +34,7 @@ Planned documents (added as we go):
 | `08-implementation-plan-engine-stream.md` | Companion to 08: the passes P28 and P29 from the 2026-10-29 triage (the `rate_limit_event` line as a `rate-limit` event with a per-credential meter; the unknown event shrunk to its type, subtype, length and head), under 08's conventions |
 | `08-implementation-plan-canonical.md` | Companion to 08: the passes P30 and P31 from the 2026-10-29 triage (the canonical fetched and fast-forwarded before the clone; the review fact of ADR 0025 rule 7 measured against the sha the bot bundled at the reviewer's launch), under 08's conventions |
 | `08-implementation-plan-golden-sessions.md` | Companion to 08: the pass P32 (golden sessions: a recorded session's events replayed through the dry-run renderer by `discord render --golden`, its outbox and transcript diffed against the blessed ones, `--update` to re-bless, one transcript per session, the P11 replay fixtures promoted and one golden captured on the dev root), under 08's conventions |
+| `08-implementation-plan-landing.md` | Companion to 08: the passes P33 to P37 that build ADR 0028 (the `reviewer` cell and the pin at the defer; `Land`, `handoff: main`, `roles.land` and `session land`; the `land` cell, the push-word parse and the resume with `updatedInput`; `/session land` in the venue; the subagent probe), under 08's conventions |
 | `proposals/` | Draft proposals for major choices; each gets a critic pass before becoming an ADR |
 | `decisions/` | Architecture decision records (ADRs), one per decision |
 
@@ -104,5 +106,17 @@ Decisions so far (this project's own; Hatchery's records are in
   elevated host part, on the PC creating the `broodforge` account with a generated password under
   `%ProgramData%`; `setup login`, `setup service`, `config export` and `setup --from`. Owner's
   answers 2026-10-26; amends 0022; a simple same-account PC default rejected.
+- [0028 Landing a session on the default branch](decisions/0028-landing-a-session-on-the-default-branch.md):
+  one land procedure in `internal/git`, run by the bot from the canonical, that the session end,
+  `/session land`, `session land <id>` and the push word from inside a session (a `Bash` `git push`
+  the hook answers `defer`, resumed `allow` with `updatedInput` on success, `deny` on refusal) all
+  call; `"handoff": "main"` as a fast-forward of the exact reviewed sha with `handoffFallback`; the
+  gate a per-channel `roles.land` and P31's review fact pinned at the reviewer `Agent` call's
+  `defer` (the bot bundles under its lock before the reviewer starts; a dirty tree never counts);
+  no bot-side rebase; the second review per `main` land named as a departure from `one-review.md`;
+  R-d (a bot-run review) and `git replay` deferred with triggers; amends 0025 rules 4, 7, 8 and the
+  0022 companion's Handoff. Companion
+  [refusals and push forms](decisions/0028-land-refusals-and-push-forms.md): the push forms, the
+  `land-*` refusals and lifts, the `config check` warnings, the venue lines (wording: owner).
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).

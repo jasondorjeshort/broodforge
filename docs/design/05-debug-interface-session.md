@@ -126,13 +126,20 @@ lines: `workflow: <commit> <date>` or `workflow: none (inject none)` or `none (<
 none since <commit>` (rule 7 as amended 2026-10-30, P31: `<commit>` is `refs/sessions/<id>`, the
 session's last commit as of the last bundle, which `worktree check` refreshes; the id is the newest
 `Agent` (or `Task`) call whose result's `subagent-result` audit row, written when the tool result
-comes and never at a person's answer, has `agent` `reviewer` and `result` `ok`, and the fact holds
+comes and never at a person's answer, has `agent` `reviewer`, `result` `ok` and a non-empty result
+text, and the fact holds
 only when that row's `commit`, the sha the bot itself got when it bundled the tree and fetched the
-ref on seeing the call launched, equals the ref's sha, so no committer time, which the session
+ref while answering the call's `defer` (ADR 0028, the `reviewer` cell, P33; before it, on seeing
+the call launched), equals the ref's sha, so no committer time, which the session
 writes, enters it: a reviewer allowed and then interrupted has no such row, an errored or denied one
 is `result` `error`, a bundle that failed at the launch leaves `commitError` in the row and the
-fact void, a commit, an amend or a reset after the review moves the ref and voids it, an older
-review of the sha reset to does not revive it; `-` once handed off, no ref left). A fact that cannot be read prints `review:
+fact void, as does a modified or deleted tracked file at the pin (`dirty tree at the reviewer's
+launch`), a commit, an amend or a reset after the review moves the ref and voids it, an older
+review of the sha reset to does not revive it; `-` once handed off, no ref left; `none since
+<commit>; last launch: <commitError>` when the newest reviewer row carries one). `session land <id>
+[--dry-run] [--expect <value>] [--as <user id>] [--roles <ids>]` lands the session's commits so far
+without ending it (ADR 0028): `05-debug-interface-git.md`, Landing, has the line, the `land-*`
+refusals and the push word's defer and resume. A fact that cannot be read prints `review:
 error: <code>`, the rest of the record still printed and `--json`'s `review.error` holding the
 message: `session-ref` when the canonical cannot be read (moved, not a repository),
 `unknown-channel` when the bot's configuration no longer holds the session's channel, and without

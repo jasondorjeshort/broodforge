@@ -74,7 +74,7 @@ Set by `spawn` on the engine process and inherited by the hook; the kept list in
 | `BROODFORGE_TREE` | absolute path of `sessions/<id>/tree`; tool-input paths are resolved against it |
 | `BROODFORGE_CANONICAL` | absolute path of the project's canonical checkout, read-only inside the session |
 | `BROODFORGE_ANSWER` | `<tool_use_id>:allow` or `<tool_use_id>:deny` on a resume after a click or a prompt timeout; else absent |
-| `BROODFORGE_ANSWER_REASON` | after a prompt timeout only: the deny reason text, written by `session` (04's `the prompt timed out after 5 minutes`) and returned by the hook verbatim; else absent |
+| `BROODFORGE_ANSWER_REASON` | after a prompt timeout: the deny reason text, written by `session` (04's `the prompt timed out after 5 minutes`) and returned by the hook verbatim; on a resume of a `land` cell call: the land's outcome line (with `allow`) or its refusal text (with `deny`), ADR 0028; else absent |
 | `BROODFORGE_SESSION_ALLOW` | comma-separated tool names a person allowed for the session; absent unless 04 adopts that button |
 | `BROODFORGE_HOOK_LOG` | `sessions/<id>/home/hook.log`, one line per decision, for debugging only, never audit |
 | `BROODFORGE_WORKFLOW` | absolute path of the session's copy, `workflow/<id>` (ADR 0025 rule 5); absent when nothing was copied or `inject` is `none`: the hook then runs no child (The child chain) |
@@ -126,8 +126,10 @@ the engine's own default mode asks for `WebFetch` too). `deny` uses ADR 0020's t
 |---|---|---|
 | `Read`, `Glob`, `Grep`, `LS`, `NotebookRead` | `allow` under the tree or the canonical, else `deny` | `allow` under the tree or the canonical; elsewhere `allow` too, since Bash reads it anyway, except the credential paths above |
 | `TodoWrite`, `Agent` (`Task` on an older engine pin) | `allow` (a subagent's own calls fire the hook) | `allow` |
+| `Agent` whose `tool_input.subagent_type` is `reviewer` (the `reviewer` cell, ADR 0028) | `defer` in both modes; the bot answers it itself (below) | `defer` in both modes; the bot answers it itself |
 | `WebFetch`, `WebSearch` | `web` | `web` |
 | `Edit`, `MultiEdit`, `Write`, `NotebookEdit` | `deny` | `ask` when the resolved path is under the tree, else `deny` |
+| `Bash` whose command's first words are `git push` or `broodforge session land` (the `land` cell, ADR 0028) | `deny` | `defer` in both modes, before the child chain; the bot answers it itself (below) |
 | `Bash` | `deny` | `ask` (the host is the boundary, ADR 0022; the PC's gap stands) |
 | anything else, `mcp__*` included | `deny` | `deny` |
 
@@ -135,7 +137,20 @@ the engine's own default mode asks for `WebFetch` too). `deny` uses ADR 0020's t
 
 In order: (1) the cell, after the path checks, is `deny`: deny; an answer cannot lift a reach
 deny, so the reach is checked first. (2) `BROODFORGE_ANSWER` names this `tool_use_id`: return
-that decision. (3) The cell is `allow`: allow. (4) The cell is `ask` or `web`: by mode as above.
+that decision; for a call the `land` cell matches, an `allow` is returned with `updatedInput`
+replacing `command` by `printf '%s\n' '<line>'`, `<line>` the value of `BROODFORGE_ANSWER_REASON`
+single-quoted for `sh`, the other input fields kept, so the model reads the land's outcome as a
+succeeded Bash call (the engine's documented resume pattern, ADR 0028; an engine pin that ignores
+`updatedInput` on a resume is caught by the resume fixture, and the fallback is a `deny` whose reason
+starts `Landed`). (3) The cell is `allow`: allow. (4) The cell is `ask` or `web`: by mode as above;
+`reviewer` and `land` are `defer` in both modes. The two bot-answered cells (ADR 0028): the hook
+defers as for a person's answer, but `session` answers them itself on `deferred_tool_use`, no venue
+prompt and no `waiting-for-answer`: for `reviewer` it bundles the tree under the session's lock,
+records the sha and the tree's cleanliness on the call and resumes `allow`; for `land` it parses the
+whole command (the hook keeps to first words), runs the land as the driver and resumes `allow` with
+the outcome line or `deny` with the refusal in `BROODFORGE_ANSWER_REASON`. A deferred call holds
+only for a call alone in its message (next paragraph), so the header says to launch the reviewer,
+and to issue the push word, as a call on its own.
 Parallel calls in prompt mode (C28, observed for a deferred pair; a message mixing allowed and
 deferred calls is unobserved): the engine runs the hook once per call, in order; when it has
 deferred two or more calls of one message it ends the turn naming only the last in
@@ -155,6 +170,9 @@ beside the first, `<install>/bin/broodforge hook post-tool-use`, empty matcher, 
 When. In code reach, after the Decision above when it is not `deny`, and only when
 `BROODFORGE_WORKFLOW` is set and `$BROODFORGE_WORKFLOW/hooks.json` exists; a variable naming no
 directory, or a `hooks.json` that does not read or parse, is a hook error. `post-tool-use` runs under the same three conditions.
+Not for the `land` cell: a land request returns before the chain on the defer and on the resume,
+because the land is the bot's and the project's say is `git.push.subagents`, read as data (ADR 0028);
+the `reviewer` cell keeps the chain, so `usage-gate` and `git-guard` judge the `Agent` call as today.
 Which. The entries of the hook's own event, in file order, whose `matcher` matches `tool_name` as
 the engine's hooks documentation reads it: empty or `*` matches every tool, anything else is a
 case-sensitive regular expression the whole name must match; an invalid one matches nothing and

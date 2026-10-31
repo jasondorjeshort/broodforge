@@ -33,5 +33,11 @@ main. The owner agreed to the shape, the fallback and the gate (2026-10-23).
 
 The owner, 2026-10-31: the wait is lifted ("Lift it.").
 
-Plan: built from the proposal `2026-10-23-session-land-pushes-to-main-mid-session.md` names, which
-covers both files and the review gate; this file's open points are that proposal's to settle.
+Plan: decided by ADR 0028 (`../design/decisions/0028-landing-a-session-on-the-default-branch.md`),
+which settles the open points: the gate is the channel's `roles.land` (not the project's); the end
+on a `main` project is the one `Land` procedure followed by the removal, fast-forward only, no rebase
+(a moved default branch is `land-not-fast-forward` and falls back to `handoffFallback`); `config
+check` warns rather than refuses (a remote that requires a request is a deferred refusal); the venue
+and `worktree handoff` lines are the companion's, wording the owner's; `"merge"` stays bad. Built by
+P34 of `../design/08-implementation-plan-landing.md` (`handoff: main`, `handoffFallback`, `roles.land`,
+`Land`, `session land`, the warnings) and P36 (the venue lines); P34's commit deletes this file.

@@ -179,10 +179,10 @@ once and never changed; a rename is a new file plus `worktree forget` for the ol
 { "id": "broodforge", "name": "Broodforge",
   "repo": { "canonical": "<root>/projects/broodforge", "remote": "origin", "defaultBranch": "main",
             "forge": "github", "gitCredentialId": "cred-…" },
-  "handoff": "pull-request", "workflow": { "inject": "repository", "hooks": ["PreToolUse", "PostToolUse"] },
+  "handoff": "pull-request", "handoffFallback": "push", "workflow": { "inject": "repository", "hooks": ["PreToolUse", "PostToolUse"] },
   "venue": { "category": "<category id>", "summaryChannel": null },
   "channels": { "<discord channel id>": {
-      "reach": "code", "roles": { "start": ["trusted"], "contribute": ["members"], "answer": ["driver"] },
+      "reach": "code", "roles": { "start": ["trusted"], "contribute": ["members"], "answer": ["driver"], "land": ["trusted"] },
       "mode": "prompt", "harness": "claude-code", "idleTimeoutMinutes": 60, "promptTimeoutMinutes": 5, "model": null, "effort": null } } }
 ```
 
@@ -191,7 +191,11 @@ Rules: a role list holds group names from `roleGroups` or raw role ids; `"driver
 from `defaults`) is never, the default: a session does not end for inactivity, a prompt waits for its answer (each is a
 timer of a year, the cap on any timeout); a negative value is an error; a value above 525600 (a year) is capped there
 with a warning from `config check`, `config reload` and `serve`. `harness` is `claude-code` or `fake`; `handoff` is
-`pull-request` (default) or `push`; `workflow.inject` is `repository` (default) or `none` and `workflow.hooks` lists
+`pull-request` (default), `push` or `main` (ADR 0028: a fast-forward of the reviewed sha onto `repo.defaultBranch`);
+`handoffFallback` is `push` (default) or `pull-request`, what a `main` end falls back to when the land refuses, an
+error with any other `handoff`; `roles.land` is the channel's list of who may land on the default branch, absent
+meaning nobody (`config check` warns on a `main` project whose channel has none, and on a path remote that is a
+checkout with the default branch checked out, which refuses every push to it); `workflow.inject` is `repository` (default) or `none` and `workflow.hooks` lists
 only `PreToolUse` and `PostToolUse`, none by default (ADR 0025 rule 6); `venue.category` is the category id sessions are
 created under, `venue.summaryChannel` optional, also receiving each summary and transcript; `discord.mode` is `live` or
 `dry-run`; `engine.fakeFixtures` is the `fake`'s fixture directory. The panel message id is recorded per project channel
@@ -201,43 +205,13 @@ config files (ADR 0021). `credentials.keyFile` names the store key (ADR 0022; th
 `--version` output (the leading dotted number of `2.1.296 (Claude Code)`), else a refusal naming both. A channel id in
 two project files is a `config check` error (R-07). Every credential id named must exist (ADR 0021).
 
-## Git: trees, branches, attribution, handoff
+## Git: trees, branches, attribution, handoff, landing
 
-Session id: `s` plus the base-36 session row id, at least four digits (`s0001`), unique per instance. Branch:
-`broodforge/<instanceName>/<session id>` (two instances pushing one remote cannot collide; the instance name matches the project-id
-pattern); tree: `sessions/<session id>/tree`; the canonical's ref: `refs/sessions/<session id>` (ADR 0022); the remote branch equals
-the local one; the base is the canonical's default branch after the fetch at session start (ADR 0022 companion, Clone step 0).
-Subagent worktrees are the engine's own, inside the clone; only the session branch is bundled, so subagent work reaches the push once
-merged or cherry-picked into it (R-31); unmerged subagent branches are listed in the end-of-session summary and removed with the tree.
-Attribution (R-32, R-33). Author and committer of every commit: the driver's registration,
-through the four git identity variables (ADR 0022). Trailers, one `Co-Authored-By: <name> <email>` each, in this order:
-every other participant who wrote a message before the commit's committer time, in join order; then every model with
-usage in the session whose first turn started before that time (the usage row lands at the turn's end), by display name
-with `noreply@anthropic.com`. Models used by subagents are contributors too: `modelUsage` from the engine's result
-covers them (ADR 0020, Amendments), so every model with non-zero usage in the session gets a line (an Opus agent that
-ran a Haiku subagent yields both). The display name comes from the map in `policy` (model id prefix to name); an
-unmapped id is used verbatim. A model that only compacted is a co-author: the stream cannot tell compaction from work.
-Two helps, neither the enforcement: the system prompt append says once that the `commit-msg` hook adds the trailer
-lines and lists none (a list there is stale from turn two, ADR 0025 rule 10), and `worktree-create` sets
-`core.hooksPath` in the clone to the Broodforge-owned hooks: `commit-msg` appends any line of the `trailers`
-file in the session's `home` directory under `sessions/<id>` that is missing (`pre-push`: ADR 0025 rule 4).
-
-The enforcement is the bot's check at handoff (ADR 0022 companion, step 3): for each commit in
-`<base>..refs/sessions/<id>`, author and committer equal the driver and the trailer set computed
-for the commit's time is present (extra trailers are fine). A failing commit is listed with what
-is missing, the push is refused, and the session stays open in waiting-for-input so the driver
-can ask the agent to amend and `end` again. The bot never rewrites history (ADR 0022 defers it).
-
-End of session: interrupt a running turn; when `handoff` is `pull-request` and the credential is
-usable, run one closing engine turn with a fixed prompt that returns the pull request title and
-body (skipped on `push` projects, on an auth error, or when the credential is marked needs-login;
-the fallback title is `Session <id>: <first message, truncated>`, the summary the body); then
-bundle, verify, fetch, check, and hand off per the project's `handoff` (default `pull-request`):
-`push` pushes `refs/sessions/<id>` to `refs/heads/<session branch>` on the remote; `pull-request`
-pushes the same and opens the request through the forge's HTTP API with the project's git
-credential in that one call (`forge: "github"` only in the first version; title and body are a 04
-flow). No commits: the tree is removed and the session says so. The tree is removed only after
-`done` on the push or the request (R-35); a refused or failed handoff keeps it and `status` lists it with its unpushed count.
+Moved by topic to `03-architecture-git.md` on 2026-10-31 (ADR 0028): the session id, branch, tree and
+ref names; attribution and the trailer rules; the check at handoff; the end of session per `handoff`
+(`pull-request`, `push`, and `main` with its fallback); and landing, the one `Land` procedure the end,
+`/session land`, `session land` and the push word call, with its gate (the `roles.land` role and the
+review fact pinned at the reviewer call's `defer`), its lock and its refusal codes.
 
 ## Process model per host
 
@@ -292,6 +266,8 @@ The last column names a 04 flow, not its wording.
 | `credentials`, `git` | Key file missing or store unreadable; id removed or `needs-login`; clone fails | start refused; session start refused naming the credential or the clone error, no tree recorded | session-refused |
 | `git` | Bundle, fetch or attribution check fails | handoff refused, tree kept, session stays open, commits listed | handoff-refused |
 | `git` | Push rejected, request API error | audit `failed`, tree kept, `status` lists it, retry by `worktree handoff` | handoff-failed |
+| `git`, `session` | A land refused: no land role, no review fact on the tip, the default branch moved, the canonical diverged, a push form that is not a landing form (ADR 0028) | nothing pushed, tree and session as they were; `land-not-allowed`, `land-unreviewed`, `land-not-fast-forward`, `land-canonical-diverged` or `land-bad-push` with its lift; on the push word a `deny` the model reads; at a `main` end the first two are final, the moved branch and a rejected push fall back to `handoffFallback` | land-refused (companion of ADR 0028) |
+| `git` | A `main` push rejected by the remote (a race, branch protection, a checkout with the branch checked out) | audit `land` `failed`, `land-rejected` with git's line; mid-session the session goes on, at the end the fallback; the `config check` warning names the remote's lifts | land-refused; handoff-failed |
 | `git` | The canonical's fetch fails at session start; its default branch has diverged from the remote | the session starts from the local branch, `session-started` carries `canonical` `stale`, `status --json` shows the last fetch (ADR 0022 companion, Clone step 0; a local branch ahead of the remote starts the same way, `canonical` `ahead <n>`, no venue line); diverged (neither contains the other): start refused `canonical-diverged`, nothing cloned, the row ended `refused: canonical-diverged` | canonical-stale; session-refused |
 | `store` | Locked, corrupt, schema newer than the binary | refusal at start, exit 1 (ADR 0021) | operator |
 | `config` | Invalid at start or reload | last-good or refusal (ADR 0021) | notice channel |

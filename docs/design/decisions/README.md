@@ -19,6 +19,8 @@ Hatchery's own records are in `../../hatchery/decisions/`, never edited here (AD
 | `0026-interrupted-sessions-held-after-a-restart.md` | Interrupted sessions loaded into memory at start so `end` works on them; every service refusal audited; one stderr line per inbound Discord event; every interaction acknowledged; the interrupted wording |
 | `0027-setup-in-few-steps.md` | `broodforge setup` does every scriptable step and asks the rest; the bot makes its channels and the `Trusted` role (Manage Roles default yes, removed at the end); `setup host` creates the PC account with a generated password; `setup login`, `config export`, `setup --from`; amends 0022 |
 | `0027-setup-commands.md` | Companion to 0027: the `setup` command line and its steps in order, `setup host` per host, `setup login`, `setup service`, `config export` and `setup --from` |
+| `0028-landing-a-session-on-the-default-branch.md` | One land procedure from four doors (the end, `/session land`, `session land`, the push word through the hook's `defer`); `handoff: main` fast-forward only with a fallback and a per-channel `land` role; the review fact pinned at the reviewer call's `defer`; the departure from one-review; amends 0025 rules 4, 7, 8 and the 0022 companion |
+| `0028-land-refusals-and-push-forms.md` | Companion to 0028: the push forms the land reads, the `land-*` refusals with their lifts, the `config check` warnings, the venue lines (wording: owner) |
 
 Template:
 

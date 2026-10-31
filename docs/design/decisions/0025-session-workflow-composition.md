@@ -166,3 +166,21 @@ wording in the agreement's advice), after the first injected session; the PC bou
   <commit>`, else `review: none since <commit>`. No clock enters the comparison: a commit or an
   amend after the review moves the ref and voids the fact; a tree-id comparison would need the
   same bundle and buy nothing more. Built by P31 (`../08-implementation-plan-canonical.md`).
+- 2026-10-31, ADR 0028 (`0028-landing-a-session-on-the-default-branch.md`), three rules amended.
+  Rule 4's "never a push" and "it refuses every push, whatever remote or path the push names": the
+  tree still never pushes, but a `Bash` call beginning `git push` or `broodforge session land` is a
+  land request: the hook's `land` cell answers `defer` before the project's child chain, the bot runs
+  the land from the canonical and resumes the call `allow` with `updatedInput` (the command replaced
+  by a `printf` of the outcome line) when done, `deny` with the refusal when not; `pre-push` still
+  refuses any push that reaches git, its text now naming the two landing forms. Rule 7's last
+  sentence as amended 2026-10-30 is tightened: the bundle moves from the `tool-use` read to the
+  `reviewer` cell's `defer`, answered by the bot after its own `Refresh` under the lock, with the
+  tree's cleanliness recorded (a modified or deleted tracked file is `commitError`, never counted);
+  the row counts only with a non-empty result text; a reviewer call the engine did not defer gets no
+  pin; `session show` reports `review: none since <commit>` with the newest row's `commitError`. The
+  land procedure, the fallback and the four doors are ADR 0028's Decision 1. Rule 8's "a reviewer
+  read and the pusher's checks outside the session stay the floor before anything reaches `main`"
+  gains: configuring `roles.land` on a PC instance is the owner's acceptance that the gate there is a
+  refusal, not a boundary; the audit tells a venue land (actor the Discord user) from a host land
+  (actor `host`, any `--as` value recorded as claimed) and cannot tell the owner's terminal from a
+  session's Bash. Built by P33 to P37 (`../08-implementation-plan-landing.md`).

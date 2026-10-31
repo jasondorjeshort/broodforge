@@ -27,6 +27,14 @@ parser already reads `parent_tool_use_id`, `internal/engine/parse.go`, and nothi
 - Whether the engine's session should add trailers for its subagents itself, by the hook, so no
   amend is ever needed.
 
+2026-10-31, ADR 0028 (`../design/decisions/0028-landing-a-session-on-the-default-branch.md`, Waits
+on the owner): the answer is needed before the first `main` land. The `trailers` file is per turn
+(ADR 0025 rule 10), so under the first reading the commits of the turn that first ran the reviewer
+lack its trailer and must be amended after the review, which voids the review fact for them: one
+re-review per session, not per land; the `commit-msg` hook would then add subagent trailers at
+commit time so no amend is needed. Recommended: the second reading, which needs
+`parent_tool_use_id` on the usage row.
+
 Question: credit a reviewer-only model on the commit (as now), or exempt models whose usage is a
 `reviewer` call's?
 Answer:

@@ -256,3 +256,17 @@ no `safe.directory` for anything engine-owned. On Windows the same five steps ru
   The fetch comes before the copy, so a session's rules are the remote's too. Built by P30
   (`../08-implementation-plan-canonical.md`); the venue line and refuse-or-warn on divergence are
   the owner's, pending in `../04-ux.md`.
+- 2026-10-31, ADR 0028 (`0028-landing-a-session-on-the-default-branch.md`): Handoff at session end,
+  step 4, "Push or pull request from `<canon>`: `git push origin refs/sessions/<id>:refs/heads/<session
+  branch>`", gains a third target: on a `main` project the refspec is
+  `refs/sessions/<id>:refs/heads/<default branch>`, pushed only after the land's gate (the driver's
+  land role, the review fact naming the tip, `<remote>/<default>` an ancestor of the tip, after a
+  fetch of the remote's default branch as Clone step 0 runs it), never `--force`; a refused gate or a
+  rejected push at the end falls back to the project's `handoffFallback` (`push` by default) and the
+  venue says why. After a done `main` push the canonical's default branch and its tracking ref are
+  fast-forwarded to the landed sha (`merge --ff-only` while checked out, else `update-ref`), the
+  tree untouched. Land mid-session: the same steps 1 to 4 run on request (`/session land`, `session
+  land <id>`, the push word) with step 5 left out; the session stays open, `refs/sessions/<id>`
+  stays, and the next land hands off only the commits after the landed sha. The reviewer pin, the land
+  and `worktree check` share one lock, since all three write `<sess>/out.bundle`. The bot still never
+  opens `<sess>/tree`. Built by P34 (`../08-implementation-plan-landing.md`).

@@ -131,3 +131,55 @@ commit in the canonical for an `ahead 1` start; the remote renamed away for a st
 pushed to the remote from the clone while the canonical keeps its own for a diverged refusal.
 Isolation. The bot's git runs in the canonical with `-c credential.helper=` and the askpass helper
 alone; a scratch remote is a local path and needs no credential.
+
+## Landing
+
+ADR 0028 and its companion (`decisions/0028-land-refusals-and-push-forms.md`); `03-architecture-git.md`
+(Landing); P33 to P37 of `08-implementation-plan-landing.md`.
+Drive. `session land <id> [--dry-run] [--expect <value>] [--as <user id>] [--roles <ids>]` runs
+`Land` from the canonical (the fetch and fast-forward of the default branch as session start runs
+them, `Refresh`, `Collect`, the attribution check, the push scan, then for a `main` project the gate
+and `merge-base --is-ancestor <remote>/<default> refs/sessions/<id>`, the push of
+`refs/sessions/<id>:refs/heads/<default>`, the canonical fast-forwarded) and prints `worktree
+handoff`'s line, `<outcome>  <remote>  <refspec>  <commits>  <url>  <request>`, outcome `landed`
+(a `main` push done), `pushed` or `pull-request` (a `push` or `pull-request` project: the session
+branch, the request opened on the first land and followed by later ones), `none` (no commits since
+the last land) or `dry-run` (everything but the push). The session stays open and its tree is
+untouched; the next land hands off the commits after the landed sha. `--as` and `--roles` make the
+gate reproducible (`--roles` absent, the role is unchecked; the fact is always checked), but the
+audit row's actor is `host` and the `--as` value is recorded as `claimed`, never as the actor; the
+venue says `landed from the host`. Refusals, exit 1, nothing pushed, tree and session as they were:
+`land-not-allowed` (the driver, or `--as`, has no role in the channel's `roles.land`, or the channel
+has none), `land-unreviewed` (`review: none since <sha>`, plus `last launch: <commitError>` when the
+newest reviewer row has one: commit, launch the reviewer as a call on its own, land again),
+`land-not-fast-forward` (`<default> moved by <n> commits`: fetch, rebase in the tree, review again,
+land again; the bot never rebases), `land-canonical-diverged` (the reconcile lift of The fetch at
+session start), `land-rejected` (git's one telling line: a race is landed again; branch protection
+or a checkout remote is the owner's, below), and the handoff's own `handoff-refused-*` and
+`handoff-failed-*` codes. At a `main` session end `land-not-fast-forward` and `land-rejected` fall
+back to `handoffFallback` and `session end` prints the fallback's line with the refusal before it.
+The push word: inside the session a `Bash` call `git push` (or `git push <remote> [HEAD|<branch>][:<default>|:<branch>]`,
+`broodforge session land`, each with `--dry-run` for the dry run; `-u`, `-q`, `-v` ignored) is
+deferred by the hook's `land` cell and answered by the bot with the same land; the model reads
+`Landed 3 commits on main at <sha>` as the command's stdout, or the refusal as a `Denied by
+Broodforge: not landed: ...` deny. Any other option, remote or refspec is `land-bad-push` naming the
+form that works (the companion's table); a push that reaches git (`cd x && git push`, `--no-verify`)
+meets the tree's `pre-push`, whose line names the two forms. `config check` warns on a `main`
+project whose channel has no `land` list and on a path remote that is a checkout with the default
+branch checked out (`rev-parse --is-bare-repository` false, `symbolic-ref HEAD` the branch,
+`receive.denyCurrentBranch` unset or `refuse`), naming the three lifts (a bare repository beside the
+checkout, `updateInstead`, GitHub as the remote); the first land on such a remote repeats it.
+Observe. `audit --kind land --json` (`attempted`, `done`, `failed`; `actor`, `claimed`, `outcome`,
+`commits`, `sha`); `audit --kind subagent-result --json` (`commit`, `dirty`, `commitError` on the
+reviewer's row); `session show` (`review:`); `git -C <root>/remote/scratch.git log --oneline -1 main`;
+`hook try --tool Bash --input '{"command":"git push --force"}' --expect defer`, then with `--answer
+<id>:allow --answer-reason 'Landed 1 commit on main at <sha>'` printing the `updatedInput`.
+Reproduce. `scratch run -- bash tests/repro/land.sh` [no-check: written by P34] (a `main` project with
+`roles.land`: unreviewed, not allowed, landed, moved base, the end's fallback, the `config check`
+warning) and `tests/repro/land-push-word.sh` [no-check: written by P35] (the `land-done` and
+`land-refused` fixtures through the hook's resume). A rejected push: a non-bare scratch remote with
+`main` checked out, `session land s0001 --expect land-rejected`.
+Isolation. The scratch remote is a local bare repository; the land's git runs in the canonical with
+`-c credential.helper=` and the askpass helper, never in the tree; the fake's fixtures carry the
+deferred `Agent` and `Bash` calls, so no real engine is needed below the three owner-word turns the
+passes name (V1, V11, V12).

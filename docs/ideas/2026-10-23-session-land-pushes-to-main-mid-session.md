@@ -38,8 +38,13 @@ The owner, 2026-10-31, after the first `dev-live` sessions: the wait is lifted (
 word should work mid-session, with a review phase by a subagent before the push, and `pull-request`
 or a direct push per project setting.
 
-Plan: one proposal (`proposal` skill) covering this file,
-`2026-10-23-handoff-main-lands-a-session-on-the-default-branch.md` and the review gate: how the bot
-knows a review happened before it lets a session's push through (an audit record, a trailer, or a
-reviewer launch it observed, P31's `review:` fact being the start). It amends ADR 0025 rule 4 ("never
-a push") and the pre-push hook's refusal, then the critic, the ADR, and the coder passes the ADR names.
+Plan: decided by ADR 0028 (`../design/decisions/0028-landing-a-session-on-the-default-branch.md`),
+which settles the open points: a running turn does not block a land (only committed, reviewed
+commits move); the end hands off only the commits after the landed sha (`refs/sessions/<id>` stays,
+`Base` becomes the landed sha); the tree is never rebased by the bot (a moved default branch is the
+session's to rebase, review again, land again); the review is P31's fact pinned at the reviewer
+call's `defer`; an agent's land is the push word (`git push` as a call on its own) deferred by the
+hook's `land` cell and run by the bot, the driver process's until the subagent probe passes. Built
+by P34 (`Land`, `session land`), P35 (the `land` cell, the push word's parse and resume), P36
+(`/session land` in the venue) and P37 (the subagent probe) of
+`../design/08-implementation-plan-landing.md`; P36's commit deletes this file.
