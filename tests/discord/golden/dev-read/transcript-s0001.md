@@ -1,7 +1,7 @@
 # Session s0001
 
 Session s0001 on broodforge, branch broodforge/dev/s0001, driver Ada Example.
-Mode: asks first. Reach: code. Credential: cred-2ha7apqowv.
+Mode: asks first. Reach: code. Credential: cred-dev.
 Started 2026-10-30T20:01:06Z.
 
 ## Turn 1 · 2026-10-30T20:01:11Z

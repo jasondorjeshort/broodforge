@@ -341,6 +341,53 @@ func TestEventsRewritesEverySessionID(t *testing.T) {
 	}
 }
 
+// TestEventsRewritesAShortMintedCredentialID: newID is base36 of 48 random bits, so about a third
+// of minted ids are nine characters or fewer; the one the session-started line names still
+// becomes cred-dev everywhere, and cred-scratch stays.
+func TestEventsRewritesAShortMintedCredentialID(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	body := `{"type":"session-started","summary":"Session s0002 on X.","start":{"credential":"cred-1x2y3z4w5"}}` + "\n" +
+		`{"type":"post","summary":"Credential: cred-1x2y3z4w5 (Claude subscription), not cred-scratch"}` + "\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := run([]string{"--events", path}); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"type":"session-started","summary":"Session s0001 on X.","start":{"credential":"cred-dev"}}` + "\n" +
+		`{"type":"post","summary":"Credential: cred-dev (Claude subscription), not cred-scratch"}` + "\n"
+	if string(got) != want {
+		t.Errorf("rewrite\n got %s\nwant %s", got, want)
+	}
+}
+
+// TestEventsRewritesMintedCredentialID: the id the session-started line names, in an event and in
+// a post, becomes cred-dev; cred-scratch, another id and longer or embedded look-alikes stay.
+func TestEventsRewritesMintedCredentialID(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	body := `{"type":"session-started","summary":"Session s0002 on X.","start":{"credential":"cred-2ha7apqowv"}}` + "\n" +
+		`{"type":"post","summary":"Credential cred-2ha7apqowv, also cred-scratch, cred-other12345, cred-2ha7apqowvx, xcred-2ha7apqowv"}` + "\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := run([]string{"--events", path}); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"type":"session-started","summary":"Session s0001 on X.","start":{"credential":"cred-dev"}}` + "\n" +
+		`{"type":"post","summary":"Credential cred-dev, also cred-scratch, cred-other12345, cred-2ha7apqowvx, xcred-2ha7apqowv"}` + "\n"
+	if string(got) != want {
+		t.Errorf("rewrite\n got %s\nwant %s", got, want)
+	}
+}
+
 // TestEventsReadsUserFromAnyHomeForm: without --user, the PC user comes from the file's first home
 // path in the JSON-escaped form `session tail --json` writes as well as with forward slashes, and
 // a user name may hold an s; the rewrite then leaves no Users path, and no .tmp file is left.

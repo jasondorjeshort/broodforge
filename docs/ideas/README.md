@@ -108,7 +108,6 @@ One line per file; the post-edit hook warns about an unlisted one.
 | `2026-10-30-the-base-tends-itself.md` | feature | Moonshot: Hatchery as a Broodforge project that lands carry-backs on a sibling push and opens the update in each sibling |
 | `2026-10-30-the-bot-files-its-own-findings.md` | feature | Moonshot: a refusal or warning in the serve log opens a scratch session that reproduces it on the fake engine and posts a finding with a repro |
 | `2026-10-30-owner-less-weeks.md` | feature | Moonshot: overnight, memory, pool, self-findings and golden sessions combined so the owner is asked only for wording and money |
-| `2026-10-30-importfixture-rewrites-a-minted-credential-id-to-cred-dev.md` | chore | `importfixture --events` rewrites a minted `cred-` id to `cred-dev` like the session id, so a recapture of `dev-read` does not churn four places; re-blesses it once |
 | `2026-10-30-carry-back-privacy-scan-at-commit-time.md` | chore | Run `privacy-scan.js --text` over staged files at commit time (a pre-commit hook or the runner's step), so a refused string is fixed before a rebase is needed; a carry-back |
 | `2026-10-30-serve-snapshots-the-store-before-a-migration.md` | feature | `serve` takes a `backup snapshot` before applying a schema migration and logs one line naming it; the 3 to 4 migration ran silently |
 | `2026-10-30-two-session-leftovers-a-sixth-store-site-and-the-agent-decision-order.md` | bug | `setEngineSession` still swallows its store error (`turn.go:527`); an `Agent` call's decision prints after its subagent's block |

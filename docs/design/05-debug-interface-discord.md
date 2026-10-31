@@ -149,7 +149,8 @@ printed, the `#` line prepended, then `go run ./internal/tools/importfixture --e
 <dir>/events.jsonl` (P1's token rewrite over one JSONL file in place: every PC home and root path
 form to `/home/user`, the project slug, and every whole-token occurrence of the captured session id
 to `s0001`, the summaries, `start.branch`, `end.branch`, the custom ids and the worktree paths in
-tool targets included; a file with no PC home path gets no home rewrite, which is not an error),
+tool targets included, and the credential id the session-started line's `start.credential` names to
+`cred-dev` unless it is `cred-scratch`; a file with no PC home path gets no home rewrite, which is not an error),
 then `discord render --golden <dir> --update`, then the read. The driver of every capture is the
 placeholder registration `1001 Ada Example`, on the dev root too: a start names the credential, not
 its user (`session start --channel 200 --as 1001 --roles 10 --credential cred-<dev>`), so a

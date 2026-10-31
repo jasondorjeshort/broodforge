@@ -17,7 +17,8 @@
 // events.jsonl, 05-debug-interface-discord.md, Golden sessions): the same path and slug rewrite,
 // the PC user being --user, else the one the file's first PC home path names (a file with none
 // gets no home rewrite), and every whole-token occurrence of the captured session id, read from
-// the session-started line, rewritten to s0001.
+// the session-started line, rewritten to s0001, and every whole-token occurrence of the credential
+// id its start.credential names rewritten to cred-dev (unless it is cred-scratch or cred-dev).
 // Exit codes: 0 done, 1 failure with one line on stderr, 2 usage.
 package main
 
@@ -561,7 +562,8 @@ var startedSummary = regexp.MustCompile(`^Session (\S+) on `)
 var homeInText = regexp.MustCompile(`(?i)(?:^|[^a-z0-9_])(?:[a-z]:(?:/|\\{1,4})|/[a-z]/)Users(?:/|\\{1,4})([^/\\\s"'` + "`" + `,;:*?<>|()\[\]{}]+)`)
 
 // rewriteEvents rewrites one captured events file in place: the PC paths and slugs, then every
-// whole-token occurrence of the captured session id to s0001. Everything is rewritten and
+// whole-token occurrence of the captured session id to s0001 and of the credential id the
+// session-started line's start.credential names (not cred-scratch) to cred-dev. Everything is rewritten and
 // scanned in memory first, so a refusal leaves the file untouched.
 func rewriteEvents(path, user string) error {
 	raw, err := os.ReadFile(path)
@@ -583,6 +585,9 @@ func rewriteEvents(path, user string) error {
 	}
 	if id != goldenSession {
 		out = rewriteToken(out, []byte(id), []byte(goldenSession))
+	}
+	if cred := capturedCredential(raw); cred != "" && cred != goldenCredential && cred != "cred-scratch" {
+		out = rewriteToken(out, []byte(cred), []byte(goldenCredential))
 	}
 	if err := scanLeak(user, map[string][]byte{filepath.Base(path): out}); err != nil {
 		return err
@@ -625,6 +630,31 @@ func capturedSession(raw []byte) (string, error) {
 		return "", errors.New("the session-started line names no session id")
 	}
 	return "", errors.New("no session-started line")
+}
+
+// goldenCredential is the id the session's credential is rewritten to.
+const goldenCredential = "cred-dev"
+
+// capturedCredential is the `start.credential` of the file's session-started line, or "" when
+// there is no such line or it names none.
+func capturedCredential(raw []byte) string {
+	for _, line := range bytes.Split(raw, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 || line[0] == '#' {
+			continue
+		}
+		var ev struct {
+			Type  string `json:"type"`
+			Start struct {
+				Credential string `json:"credential"`
+			} `json:"start"`
+		}
+		if json.Unmarshal(line, &ev) != nil || ev.Type != "session-started" {
+			continue
+		}
+		return ev.Start.Credential
+	}
+	return ""
 }
 
 // rewriteToken replaces every occurrence of from that is not preceded or followed by a letter or
