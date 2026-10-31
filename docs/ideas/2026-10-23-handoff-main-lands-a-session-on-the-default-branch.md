@@ -31,4 +31,7 @@ main. The owner agreed to the shape, the fallback and the gate (2026-10-23).
   the push's rejection.
 - `config_test.go` uses `"merge"` as its bad `handoff` value; it stays bad.
 
-Waits: the owner's proposal and ADR (2026-10-23: "I'll go through the ADR process later").
+The owner, 2026-10-31: the wait is lifted ("Lift it.").
+
+Plan: built from the proposal `2026-10-23-session-land-pushes-to-main-mid-session.md` names, which
+covers both files and the review gate; this file's open points are that proposal's to settle.

@@ -34,4 +34,12 @@ until the end (P15, `docs/design/03-architecture.md`, end of session).
 - An agent's land: how the bot knows the review happened (an audit record, a trailer), and
   whether the runner calls the same gated land path or a push the tree's hook lets through.
 
-Waits: the owner's proposal and ADR (2026-10-23: "I'll go through the ADR process later").
+The owner, 2026-10-31, after the first `dev-live` sessions: the wait is lifted ("Lift it."). The push
+word should work mid-session, with a review phase by a subagent before the push, and `pull-request`
+or a direct push per project setting.
+
+Plan: one proposal (`proposal` skill) covering this file,
+`2026-10-23-handoff-main-lands-a-session-on-the-default-branch.md` and the review gate: how the bot
+knows a review happened before it lets a session's push through (an audit record, a trailer, or a
+reviewer launch it observed, P31's `review:` fact being the start). It amends ADR 0025 rule 4 ("never
+a push") and the pre-push hook's refusal, then the critic, the ADR, and the coder passes the ADR names.
