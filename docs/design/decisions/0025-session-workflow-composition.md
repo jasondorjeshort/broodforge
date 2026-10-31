@@ -184,3 +184,44 @@ wording in the agreement's advice), after the first injected session; the PC bou
   refusal, not a boundary; the audit tells a venue land (actor the Discord user) from a host land
   (actor `host`, any `--as` value recorded as claimed) and cannot tell the owner's terminal from a
   session's Bash. Built by P33 to P37 (`../08-implementation-plan-landing.md`).
+- 2026-10-31, the live instance's session s000a (the owner asked for a commit; the `runner` on Haiku
+  made it; the end refused `handoff-refused-attribution` for the Haiku line, and the owner had to ask
+  for an amend) and the idea file
+  `../../ideas/2026-10-31-a-reviewer-subagents-model-must-be-credited-on-the-commit-it-read.md`
+  (s0005: the reviewer's model owed on the commit it read): rule 10's "the bot keeps the session's
+  `trailers` file current per turn and the hook appends what is missing" is replaced, and the moment
+  a model is owed from, which `../05-debug-interface-git.md` fixed as the `started_at` of its first
+  turn, moves. The two disagreed by construction: the file was written from the usage table at each
+  process start, a usage row lands at the turn's end, and the check owed the model from the turn's
+  start, so any model whose first use was mid-turn (a pinned subagent committing, the driver's own
+  model in turn 1, a reviewer launched after the commit) was owed on a commit the file could not have
+  credited. Now: (a) the bot records when it first saw each model (`model_seen`: at the turn's start
+  for the turn's own model when set, at an `Agent` launch for the model the call pins, at the first
+  `assistant` line naming any other) and rewrites the file at each of those moments and at every
+  process start, from the record and the usage table together; (b) the hook, on an `Agent` (or
+  `Task`) call it answers `allow` (a deferred call's resumed run included), appends the call's pinned
+  model itself, `tool_input.model` first, else the `model` of `subagent_type` in the copy's
+  `agents.json`, through `policy`'s alias table (an unpinned or unknown type adds nothing, the call's
+  `subagent-result` row says `model: none`; a failed write is one `hook.log` line and the decision
+  stands, the one error the hook logs instead of failing closed on, since the line is a help), so a
+  subagent's first commit carries its line however fast it commits, with no round trip and no defer:
+  a trailer line is a help, not a fact the bot trusts, so nothing has to be pinned before the launch
+  but the file's line, and the hook's own write is that. The hook and the bot are two writers of one
+  file, each by temp file and rename; a line one adds can be lost to the other's rename until the
+  next rewrite restores it, and the check owes from the record, not the file, so the loss is a
+  refusal at the end, never a wrong credit; (c) the check owes a model from the record's
+  moment, and only when the record has no row for it from the start of its first turn as before, the
+  one case left where the end asks for an amend (the record missed real work; the usage table stays
+  the truth of who worked). A reviewer launched after a commit, as the header says, is owed on later
+  commits only, so the amend-after-review loop of ADR 0028's Waits on the owner is gone under either
+  reading; the owner's remaining choice is whether a model seen only under `reviewer` calls is left
+  off later commits too, which is not free: `model_seen` keeps one row per model, its first sighting,
+  and cannot tell a model seen only under `reviewer` from one first seen there and later the driver's
+  own (`/model` in a later turn), so the exemption needs one row per model and launching agent type,
+  or per-call usage. Not taken:
+  an `agent` cell deferring every launch (the 0028 `reviewer` cell generalised: it closes the same
+  race at a process round trip per launch and C28's dropped parallel calls, and buys nothing the
+  hook's write does not; the `reviewer` cell stays, since a sha is a fact the bot must pin itself);
+  owing only what the record held at the commit's time (agreement by definition, but a model the
+  record missed would pass uncredited and the check would stop enforcing the usage truth). Built by
+  P38 (`../08-implementation-plan-landing.md`), before P33.

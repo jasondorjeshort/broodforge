@@ -35,6 +35,18 @@ re-review per session, not per land; the `commit-msg` hook would then add subage
 commit time so no amend is needed. Recommended: the second reading, which needs
 `parent_tool_use_id` on the usage row.
 
-Question: credit a reviewer-only model on the commit (as now), or exempt models whose usage is a
-`reviewer` call's?
+2026-10-31, later: ADR 0025 Amendments 2026-10-31 (rule 10; P38 of
+`../design/08-implementation-plan-landing.md`) owes a model from the bot's first record of it, and
+a reviewer's `Agent` launch is that record, so a commit made before the launch never owes the
+reviewer's model: the amend loop above is gone under either reading, and `parent_tool_use_id` on
+the usage row is no longer needed for the loop. The same defect hit the live instance's s000a the
+same day with a `runner` commit. What remains the owner's: whether a model seen only under
+`reviewer` calls is left off the later commits too (the second reading; not free: `model_seen`
+keeps one row per model, its first sighting, so the exemption needs one row per model and launching
+agent type, or per-call usage) or credited on them as any model is (the first reading as built;
+recommended, since nothing more is built and a reviewer whose findings drove the fix is a co-author
+of it).
+
+Question: credit a reviewer-only model on the commits made after its launch, as P38 builds it, or
+exempt it from those too?
 Answer:

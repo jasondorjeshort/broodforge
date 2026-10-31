@@ -18,8 +18,10 @@ merged or cherry-picked into it (R-31); unmerged subagent branches are listed in
 Attribution (R-32, R-33). Author and committer of every commit: the driver's registration,
 through the four git identity variables (ADR 0022). Trailers, one `Co-Authored-By: <name> <email>` each, in this order:
 every other participant who wrote a message before the commit's committer time, in join order; then every model with
-usage in the session whose first turn started before that time (the usage row lands at the turn's end), by display name
-with `noreply@anthropic.com`. Models used by subagents are contributors too: `modelUsage` from the engine's result
+usage in the session that the bot had recorded before that time (`model_seen`: the turn's start for the turn's own
+model, the launch for a model an `Agent` call pins, else its first `assistant` line; a model with usage the record
+missed is owed from its first turn's start, since the usage row lands at the turn's end; ADR 0025 rule 10 as amended
+2026-10-31), by display name with `noreply@anthropic.com`. Models used by subagents are contributors too: `modelUsage` from the engine's result
 covers them (ADR 0020, Amendments), so every model with non-zero usage in the session gets a line (an Opus agent that
 ran a Haiku subagent yields both). The display name comes from the map in `policy` (model id prefix to name); an
 unmapped id is used verbatim. A model that only compacted is a co-author: the stream cannot tell compaction from work.
@@ -27,7 +29,11 @@ Two helps, neither the enforcement: the system prompt append says once that the 
 lines and lists none (a list there is stale from turn two, ADR 0025 rule 10), and `worktree-create` sets
 `core.hooksPath` in the clone to the Broodforge-owned hooks: `commit-msg` appends any line of the `trailers`
 file in the session's `home` directory under `sessions/<id>` that is missing (`pre-push`: ADR 0025 rule 4 as amended
-by ADR 0028: a refusal naming the two landing forms, since the tree never pushes).
+by ADR 0028: a refusal naming the two landing forms, since the tree never pushes). The bot rewrites the `trailers`
+file at each first sighting of a model and at every process start, and the `pre-tool-use` hook appends an `Agent`
+call's pinned model to it before the subagent starts, so a pinned subagent's first commit carries what the check owes.
+Two writers, each by temp file and rename: a line one adds can be lost to the other's rename until the next rewrite
+restores it; the check owes from the record, not the file, so the loss is a refusal at the end, never a wrong credit.
 
 ## The check at handoff
 

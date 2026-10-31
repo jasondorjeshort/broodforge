@@ -47,7 +47,10 @@ still finds it; the fetch is forced for the same reason, and the check takes the
 after the fetch, so default-branch commits the session merged are not checked as its own. Required trailers at a commit's
 committer time: each other participant from `participant.joined_at` (R-13: a contributor joins
 on their first accepted message), in join order, then each model with non-zero usage from the
-`started_at` of its first turn (03, Attribution), by `policy`'s display name; the key matches without case, the
+moment the bot first recorded it (`model_seen`: the turn's start for the turn's own model, the
+`Agent` launch for the model a call pins, else its first `assistant` line), and from the
+`started_at` of its first turn only when the record has no row for it (03, Attribution; ADR 0025
+rule 10 as amended 2026-10-31), by `policy`'s display name; the key matches without case, the
 value exactly. The push scan (`internal/git/privacy.go`) ports the base's `privacy-scan.js` classes
 over author, committer, message and added lines (not file names, tags, transcripts or key shapes):
 `home-path`, `email`, `name` (an author or committer pair outside the identities, or as a whole
@@ -70,7 +73,13 @@ with `GIT_ASKPASS` and, when the project names `repo.gitCredentialId`, the value
 `error: no-git-credential: ...` and exits 1, so git reads no answer and the push fails. The hook
 appends each missing line of `sessions/<id>/home/trailers` through `git interpret-trailers`
 and never blocks a commit: with no binary beside `share/` it prints one `commit-msg: no ...`
-line and exits 0. The `pre-push` hook is the opposite: every push from the tree, whatever remote
+line and exits 0. The bot rewrites that file at each first sighting of a model and at every
+process start; the `pre-tool-use` hook, on an `Agent` call it answers `allow`, appends the call's
+pinned model's line itself (`tool_input.model`, else the copy's `agents.json` `model` for the
+type; an unpinned type adds nothing, and a failed write changes no decision, each one `hook.log`
+line: the one error the hook logs instead of failing closed on), so a subagent's first commit
+carries it. `hook try --tool Agent --input '{"subagent_type":"runner"}' --tree <tree> --workflow
+<copy>` prints the line in its `pin` column (`try` reads no environment and writes no file). The `pre-push` hook is the opposite: every push from the tree, whatever remote
 or path it names, prints `Broodforge: session <id> does not push. ...` (`cli.PrePushRefusal`,
 `<id>` from `BROODFORGE_SESSION`, `this tree` when unset; the script prints the same line first
 itself when the binary is absent, fails to start or prints something else) and exits 1, git's own `error: failed to push some refs` after it. `git push
@@ -170,8 +179,8 @@ branch checked out (`rev-parse --is-bare-repository` false, `symbolic-ref HEAD` 
 `receive.denyCurrentBranch` unset or `refuse`), naming the three lifts (a bare repository beside the
 checkout, `updateInstead`, GitHub as the remote); the first land on such a remote repeats it.
 Observe. `audit --kind land --json` (`attempted`, `done`, `failed`; `actor`, `claimed`, `outcome`,
-`commits`, `sha`); `audit --kind subagent-result --json` (`commit`, `dirty`, `commitError` on the
-reviewer's row); `session show` (`review:`); `git -C <root>/remote/scratch.git log --oneline -1 main`;
+`commits`, `sha`); `audit --kind subagent-result --json` (`model` on every row; `commit`, `dirty`,
+`commitError` on the reviewer's row); `session show` (`review:`); `git -C <root>/remote/scratch.git log --oneline -1 main`;
 `hook try --tool Bash --input '{"command":"git push --force"}' --expect defer`, then with `--answer
 <id>:allow --answer-reason 'Landed 1 commit on main at <sha>'` printing the `updatedInput`.
 Reproduce. `scratch run -- bash tests/repro/land.sh` [no-check: written by P34] (a `main` project with

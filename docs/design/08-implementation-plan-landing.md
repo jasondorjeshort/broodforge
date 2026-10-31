@@ -11,7 +11,72 @@ Each pass reads the ADR's Decision, the ADR 0022 companion (Handoff at session e
 its Implements line. The bot's git runs in the canonical only and never opens a session's tree (ADR
 0022); the tree never pushes (ADR 0025 rule 4 as amended); every text a person sees is the owner's and
 ships as the companion's placeholder until the owner words it. Three claims close by fixture, each on
-the owner's word for the one real turn it needs: V1 (P33), V11 (P35), V12 (P37).
+the owner's word for the one real turn it needs: V1 (P33), V11 (P35), V12 (P37). P38 (added 2026-10-31,
+ADR 0025 rule 10 as amended that day) is outside ADR 0028 and lands first: it fixes a refusal the live
+instance meets on every `runner` commit today, touches no landing code, and P34's land runs the same
+attribution check.
+
+## P38. Attribution owed from the bot's record; the model pin at an `Agent` launch (small; one real turn on the owner's word)
+
+Lands before P33: the `subagent-result` row already carries `commit` and `commitError` from the
+tool-use read (P31); this pass adds `model` to it, and P33 then moves `commit` to the defer and adds
+`dirty`. Implements: ADR 0025 Amendments 2026-10-31 (rule 10); `03-architecture-git.md`
+(Attribution); `05-debug-interface-git.md` (Required trailers; the two hooks); `03-hook-contract.md`
+(How the engine runs it: the pin write beside `hook.log`, the one error the hook logs instead of
+failing closed on). Files [no-check: the migration, tests and the fixture's new copy are created by
+this pass]: `internal/store/migrations/0005-model-seen.sql` (`model_seen`: `session_id`, `model`,
+`first_seen_at`, `via` `turn` | `pin` | `stream`, `tool_use_id`, `agent`; one row per session and
+model, the first sighting kept; schema 5); `internal/session/turn.go` (the record and the rewrite: at
+`startTurnLocked` the turn's model when set; at an `Agent` or `Task` `tool-use` block the pin,
+resolved as the hook resolves it from the copy's rendering the session holds (`l.wf`), kept on the
+`call` as `model` and written on its `subagent-result` row, `none` when nothing pins; at an
+`assistant` event whose `Model` has no row; each an insert-if-absent at the bot's clock, then
+`git.WriteTrailers`; `trailers()` reads the record and the usage table together in first-seen order,
+participants first as today); `internal/hook/hook.go` (after the decision and the chain, when the
+answer `pre-tool-use` returns is `allow` and the tool is `Agent` or `Task`, a deferred call's
+resumed run included: the pin from `tool_input.model`, else `$BROODFORGE_WORKFLOW/agents.json`'s
+`model` for `subagent_type`, through `policy.ResolveModel` and `ModelDisplayName`; the line
+appended to the session's `trailers` file (the `home` directory beside `BROODFORGE_TREE`, where
+`CommitMsg` reads it) when missing, by a temp-file-and-rename copy of its own, since
+`03-architecture.md`'s table has `hook` importing `policy` alone and `git` pulls in `spawn`,
+`credentials` and `audit` (the row stands); no pin, or a failed write, is one `hook.log` line and the
+decision stands, the one error the hook logs instead of failing closed on: a help never blocks);
+`internal/hook/cases.go` (`Try.Run` resolves the same pin from its `Tree` and `Workflow` fields and
+returns it; `try` writes nothing and logs nothing, as today); `internal/cli/hook.go` (`hook try`
+gains a `pin` column, the line it would append or empty); `internal/cli/worktree.go` (`Since` = `model_seen.first_seen_at`, else the first turn's
+`started_at`, else `recorded_at`); `internal/git/git_test.go` (`TestCheckOwedFromFirstSeen`: two
+commits a minute apart, a model whose Since lies between them owed on the second only; the trailers
+file rewritten between the commits by `WriteTrailers` and read by `CommitMsg` gives each commit its
+own set); `internal/hook/hook_test.go` and `tests/hook/pin/` (a copy directory whose `agents.json`
+pins `runner` to `haiku` and a `home/trailers` holding one Sonnet line: an `Agent` `runner` call
+leaves both lines; `tool_input.model` `opus` outranks the type; `general-purpose` and a type without
+`model` write nothing and log it; a `deny` writes nothing; no `BROODFORGE_WORKFLOW` with
+`tool_input.model` set still writes); `tests/hook/cases.jsonl` (the `Agent` rows unchanged: the pin
+changes no decision); `fixtures/engine/subagent-pinned/` (a copy of the hand-written `subagent`
+stream, which is all `claude-opus-5-5` with no `model` on the `Agent` input and so yields no distinct
+row: the `Agent` input gains `"model":"haiku"`, the lines carrying `parent_tool_use_id` say
+`claude-haiku-5-5`, the result's `modelUsage` names both models) and its README row;
+`internal/session/attribution_test.go` (a session started with model `opus` replaying
+`subagent-pinned`: a `turn` row for Opus at the turn's start, a `pin` row for Haiku stamped at the
+`Agent` line and the `subagent-result` row naming it, the trailers file holding both lines; a
+commit stamped before the pin is not owed Haiku, one after is; and under `workflow_test.go`'s copy,
+whose `agents.json` pins a type, an `Agent` call without `model` pins from the copy);
+`internal/cli/worktree_test.go` (a `model_seen` row later than the turn's start lets an earlier
+commit pass `worktree check`). Debug surface: `audit --kind subagent-result --json` (`model`);
+`worktree check <id>` (the per-commit line); `hook try --tool Agent --input
+'{"subagent_type":"runner"}' --tree <tree> --workflow <copy>` (`try` reads no environment: the
+flags stand for `BROODFORGE_TREE` and `BROODFORGE_WORKFLOW`; its `pin` column shows the line; the
+file itself is written only by `pre-tool-use`, checked in the hook test); `session show` unchanged. Proof: `go test ./internal/git ./internal/hook
+./internal/session ./internal/cli -run 'Trailer|Pin|FirstSeen|Attribution'`; `hook cases
+tests/hook/cases.jsonl` all `ok`; `tests/repro/full-session.sh` unchanged and passing on schema 5;
+then, on the owner's word, one real turn on the live instance: the owner asks a session to commit,
+the `runner` commits, `audit --kind subagent-result --json` shows `model` `Claude Haiku 5.5`, the
+commit's trailer block carries the Haiku line, and `worktree check <id>` prints that commit `ok`;
+recorded as a finding. Does not: change any hook decision or cell; defer any launch; drop a
+reviewer-only model from later commits (the owner's remaining choice; `model_seen` keeps one row per
+model, so that exemption needs one row per model and launching agent type, or per-call usage, when
+answered); change the push scan; rewrite history. Depends on: P31 (the
+`subagent-result` row); none of P33 to P37.
 
 ## P33. The `reviewer` cell and the pin at the defer (small; one real turn on the owner's word)
 

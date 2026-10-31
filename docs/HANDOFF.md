@@ -18,8 +18,8 @@ Updated: 2026-10-31 by main session (milestone 2 reached; proposal 0028 under re
 
 ## Next
 
-1. P33 (coder): the `reviewer` cell and the pin at the defer; then P34 to P37 in order
-   (`08-implementation-plan-landing.md`). P33's real turn only on the owner's word.
+1. P38 (coder): a model is owed from its first sighting, the hook writes a launch's pinned model
+   (ADR 0025 rule 10 amendment); then P33 to P37 (`08-implementation-plan-landing.md`). Real turns only on the owner's word.
 2. Live-run bugs and texts, the owner's words first: `docs/ideas/2026-10-31-the-first-live-run-texts-name-missing-or-wrong-commands.md`
    (item 3's wrong refusal is a code bug: tester), `2026-10-31-ending-a-session-with-uncommitted-changes-loses-them.md`.
 3. W6: the owner re-runs `spike/setup-host/` (README) and pastes the lines; then P23, P25.
