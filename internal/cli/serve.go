@@ -500,7 +500,8 @@ func (b *bot) fetchCanonical(ctx context.Context, s git.Session, credentialID st
 	if credentialID != "" {
 		v, err := b.creds.Secret(credentialID)
 		if err != nil {
-			return git.FetchResult{Stale: true, Error: "git credential " + credentialID + ": " + err.Error()}, nil
+			return git.FetchResult{Stale: true, Error: "git credential " + credentialID + ": " + err.Error(),
+				Commit: git.LocalCommit(ctx, s)}, nil
 		}
 		token = v
 	}

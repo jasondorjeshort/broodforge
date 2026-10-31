@@ -583,3 +583,22 @@ func TestFetchStalledRemoteHitsTheDeadline(t *testing.T) {
 		t.Errorf("Fetch took %v past a 500ms deadline", d)
 	}
 }
+
+// The fast-forward runs on a deadline of its own once the fetch has returned; one past it is
+// stale, named as the fast-forward's, the remote not blamed, and main is not moved.
+func TestFetchFastForwardPastItsDeadlineIsStale(t *testing.T) {
+	f := newFetchFixture(t)
+	before := f.rev(t, "main")
+	f.pushed(t, "new.txt")
+	defer git.SetFastForwardTimeout(time.Nanosecond)()
+	r, err := git.Fetch(context.Background(), f.sess, "", nil)
+	if err != nil || !r.Stale || r.Commit != before || !r.Fetched.IsZero() {
+		t.Fatalf("Fetch = %+v, %v; want stale at %s", r, err, before)
+	}
+	if r.Error != "the fast-forward of main ran past its deadline" {
+		t.Errorf("error %q, want the fast-forward's deadline", r.Error)
+	}
+	if got := f.rev(t, "main"); got != before {
+		t.Errorf("main moved to %s", got)
+	}
+}

@@ -672,7 +672,7 @@ func (s *Service) fetchCanonical(ctx context.Context, ch Channel, gs git.Session
 	var r git.FetchResult
 	var err error
 	if id := ch.Repo.GitCredentialID; id != "" && !credentials.Exists(s.cfg.Store)(id) {
-		r = git.FetchResult{Stale: true, Error: credentialMissing}
+		r = git.FetchResult{Stale: true, Error: credentialMissing, Commit: git.LocalCommit(ctx, gs)}
 	} else {
 		r, err = s.cfg.FetchCanonical(ctx, gs, id)
 	}

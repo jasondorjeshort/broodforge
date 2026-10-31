@@ -40,8 +40,16 @@ func Create(ctx context.Context, b spawn.Backend, s Session) (string, error) {
 	return base, nil
 }
 
-// FetchTimeout is the deadline of the fetch at session start and its fast-forward.
+// FetchTimeout is the deadline of the fetch at session start.
 const FetchTimeout = 30 * time.Second
+
+// localTimeout is the deadline of the canonical's own git after the fetch (the comparison
+// reads), and fastForwardTimeout the fast-forward's: each starts once the fetch has returned,
+// so a slow fetch never leaves a merge killed half-way (and its index.lock behind) by the
+// fetch's deadline. A variable so a test can expire it.
+const localTimeout = 10 * time.Second
+
+var fastForwardTimeout = 10 * time.Second
 
 // FetchResult is the fetch at session start (ADR 0022 companion, Clone at session start, step
 // 0). Commit is the default branch's commit the session starts from; Fetched when the fetch
@@ -58,8 +66,8 @@ type FetchResult struct {
 
 // Fetch is step 0 of clone at session start, in the canonical: `git -c credential.helper=
 // fetch --quiet --no-tags --no-write-fetch-head <remote> +refs/heads/<db>:refs/remotes/<remote>/<db>`
-// with the push's askpass and token (PushEnv), under FetchTimeout, then the local branch and the
-// fetched ref compared with `merge-base --is-ancestor` both ways. Behind is fast-forwarded
+// with the push's askpass and token (PushEnv), under FetchTimeout, then, under deadlines of their
+// own, the local branch and the fetched ref compared with `merge-base --is-ancestor` both ways. Behind is fast-forwarded
 // (`merge --ff-only` while HEAD is the branch, else `update-ref <ref> <new> <old>`); equal is
 // nothing; ahead is left alone with its count. Neither containing the other is an *Error with
 // code canonical-diverged naming both commits. A fetch or fast-forward that fails or times out
@@ -70,72 +78,89 @@ func Fetch(ctx context.Context, s Session, askpass string, token []byte) (FetchR
 	}
 	branch := "refs/heads/" + s.DefaultBranch
 	tracking := "refs/remotes/" + s.Remote + "/" + s.DefaultBranch
-	fctx, cancel := context.WithTimeout(ctx, FetchTimeout)
-	defer cancel()
-	stale := func(err error) (FetchResult, error) {
-		r := FetchResult{Stale: true, Error: messageOf(err)}
-		if errors.Is(fctx.Err(), context.DeadlineExceeded) {
-			r.Error = "no answer from " + s.Remote + " before the deadline"
-		}
-		// The commit the session starts from, read outside the spent deadline (the caller's
-		// may be spent too).
-		rctx, rcancel := context.WithTimeout(context.WithoutCancel(ctx), waitDelay)
-		defer rcancel()
-		if out, err := run(rctx, CodeFetch, s.Canonical, nil, "rev-parse", "--verify", "--quiet", branch+"^{commit}"); err == nil {
-			r.Commit = strings.TrimSpace(out)
-		}
-		return r, nil
+	stale := func(line string) (FetchResult, error) {
+		return FetchResult{Stale: true, Error: line, Commit: LocalCommit(ctx, s)}, nil
 	}
-	if _, err := run(fctx, CodeFetch, s.Canonical, PushEnv(askpass, token), "-c", "credential.helper=", "fetch", "--quiet",
-		"--no-tags", "--no-write-fetch-head", s.Remote, "+"+branch+":"+tracking); err != nil {
-		return stale(err)
+	fctx, cancel := context.WithTimeout(ctx, FetchTimeout)
+	_, err := run(fctx, CodeFetch, s.Canonical, PushEnv(askpass, token), "-c", "credential.helper=", "fetch", "--quiet",
+		"--no-tags", "--no-write-fetch-head", s.Remote, "+"+branch+":"+tracking)
+	timedOut := errors.Is(fctx.Err(), context.DeadlineExceeded)
+	cancel()
+	switch {
+	case err != nil && timedOut:
+		return stale("no answer from " + s.Remote + " before the deadline")
+	case err != nil:
+		return stale(messageOf(err))
 	}
 	fetched := time.Now().UTC()
-	local, err := run(fctx, CodeFetch, s.Canonical, nil, "rev-parse", "--verify", "--quiet", branch+"^{commit}")
+	// The steps after the fetch are the canonical's own: deadlines of their own, from the
+	// caller's context without its cancellation, so the fetch's time is not theirs.
+	lctx, lcancel := context.WithTimeout(context.WithoutCancel(ctx), localTimeout)
+	defer lcancel()
+	local, err := run(lctx, CodeFetch, s.Canonical, nil, "rev-parse", "--verify", "--quiet", branch+"^{commit}")
 	if err != nil {
-		return stale(&Error{Code: CodeFetch, Message: s.Canonical + " has no branch " + s.DefaultBranch})
+		return stale(s.Canonical + " has no branch " + s.DefaultBranch)
 	}
-	remote, err := run(fctx, CodeFetch, s.Canonical, nil, "rev-parse", "--verify", "--quiet", tracking+"^{commit}")
+	remote, err := run(lctx, CodeFetch, s.Canonical, nil, "rev-parse", "--verify", "--quiet", tracking+"^{commit}")
 	if err != nil {
-		return stale(&Error{Code: CodeFetch, Message: s.Remote + " has no branch " + s.DefaultBranch})
+		return stale(s.Remote + " has no branch " + s.DefaultBranch)
 	}
 	local, remote = strings.TrimSpace(local), strings.TrimSpace(remote)
 	if local == remote {
 		return FetchResult{Commit: local, Fetched: fetched}, nil
 	}
-	behind, err := isAncestor(fctx, s.Canonical, local, remote)
+	behind, err := isAncestor(lctx, s.Canonical, local, remote)
 	if err != nil {
-		return stale(err)
+		return stale(messageOf(err))
 	}
 	if behind {
-		head, herr := HeadBranch(fctx, s.Canonical)
+		head, herr := HeadBranch(lctx, s.Canonical)
+		mctx, mcancel := context.WithTimeout(context.WithoutCancel(ctx), fastForwardTimeout)
 		if herr == nil && head == s.DefaultBranch {
-			_, err = run(fctx, CodeFetch, s.Canonical, nil, "merge", "--ff-only", "--quiet", tracking)
+			_, err = run(mctx, CodeFetch, s.Canonical, nil, "merge", "--ff-only", "--quiet", tracking)
 		} else {
-			_, err = run(fctx, CodeFetch, s.Canonical, nil, "update-ref", branch, remote, local)
+			_, err = run(mctx, CodeFetch, s.Canonical, nil, "update-ref", branch, remote, local)
 		}
-		if err != nil {
-			return stale(err)
+		ffTimedOut := errors.Is(mctx.Err(), context.DeadlineExceeded)
+		mcancel()
+		switch {
+		case err != nil && ffTimedOut:
+			return stale("the fast-forward of " + s.DefaultBranch + " ran past its deadline")
+		case err != nil:
+			return stale("the fast-forward of " + s.DefaultBranch + " failed: " + messageOf(err))
 		}
 		return FetchResult{Commit: remote, Fetched: fetched}, nil
 	}
-	ahead, err := isAncestor(fctx, s.Canonical, remote, local)
+	ahead, err := isAncestor(lctx, s.Canonical, remote, local)
 	if err != nil {
-		return stale(err)
+		return stale(messageOf(err))
 	}
 	if !ahead {
 		return FetchResult{Commit: local, Fetched: fetched}, &Error{Code: CodeCanonicalDiverged,
 			Message: s.Canonical + " " + s.DefaultBranch + " is at " + local + ", " + s.Remote + " at " + remote + "; neither contains the other"}
 	}
-	out, err := run(fctx, CodeFetch, s.Canonical, nil, "rev-list", "--count", tracking+".."+branch)
+	out, err := run(lctx, CodeFetch, s.Canonical, nil, "rev-list", "--count", tracking+".."+branch)
 	if err != nil {
-		return stale(err)
+		return stale(messageOf(err))
 	}
 	n, err := strconv.Atoi(strings.TrimSpace(out))
 	if err != nil {
-		return stale(&Error{Code: CodeFetch, Message: "git rev-list --count: " + strings.TrimSpace(out)})
+		return stale("git rev-list --count: " + strings.TrimSpace(out))
 	}
 	return FetchResult{Commit: local, Fetched: fetched, Ahead: n}, nil
+}
+
+// LocalCommit is the canonical's default branch's commit, best effort: "" when it cannot be
+// read. A stale fetch's result carries it, under a deadline of its own, since the caller's
+// context may be spent.
+func LocalCommit(ctx context.Context, s Session) string {
+	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), waitDelay)
+	defer cancel()
+	out, err := run(rctx, CodeFetch, s.Canonical, nil, "rev-parse", "--verify", "--quiet", "refs/heads/"+s.DefaultBranch+"^{commit}")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
 }
 
 // isAncestor is `git merge-base --is-ancestor a b` in dir: exit 0 true, exit 1 false, anything
