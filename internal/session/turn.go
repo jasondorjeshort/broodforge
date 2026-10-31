@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jasondorjeshort/broodforge/internal/audit"
 	"github.com/jasondorjeshort/broodforge/internal/engine"
@@ -801,12 +802,23 @@ func (s *Service) refresh(l *live) (commit, commitError string) {
 	if s.cfg.Refresh == nil {
 		return "", ""
 	}
-	sha, err := s.cfg.Refresh(context.Background(), l.git)
+	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
+	defer cancel()
+	sha, err := s.cfg.Refresh(ctx, l.git)
 	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return "", "the bundle at the reviewer's launch passed its " + refreshTimeout.String() + " deadline: " + err.Error()
+		}
 		return "", err.Error()
 	}
 	return sha, ""
 }
+
+// refreshTimeout bounds refresh, as git.FetchTimeout bounds the fetch at session start, so a
+// hung git cannot stop the turn's event reader for good. It bounds the canonical's steps only
+// (bundle verify, the fetch, rev-parse, update-ref): the backend's worktree-bundle takes no
+// context, and a stall inside it still holds the reader until it returns.
+const refreshTimeout = 30 * time.Second
 
 // saveMeter records a rate-limit event as the session's credential's meter, replacing the one
 // it had, in its own short write transaction (ADR 0021 Amendments 2026-10-30). A reading, not

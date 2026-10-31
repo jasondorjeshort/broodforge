@@ -428,6 +428,41 @@ func TestCommits(t *testing.T) {
 	}
 }
 
+// TestRefreshFollowsTheSessionBranch: Refresh returns the commit it leaves refs/sessions/<id>
+// on (ADR 0025 rule 7, the review fact): the base with no commits, the session branch's tip
+// after a commit and after an amend, the branch alone when HEAD is on another, and the base
+// again after a reset to it.
+func TestRefreshFollowsTheSessionBranch(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	ref := func() string {
+		return strings.TrimSpace(gittest.Git(t, f.sess.Canonical, "rev-parse", git.SessionRef(f.sess.ID)))
+	}
+	base, err := git.Refresh(ctx, f.backend, f.sess)
+	if err != nil || base != ref() {
+		t.Fatalf("no commits: %s %v, ref %s", base, err, ref())
+	}
+	one := gittest.Commit(t, gittest.Driver, nil, f.tree, "a.txt", "a\n", msg("one", opus))
+	if got, err := git.Refresh(ctx, f.backend, f.sess); err != nil || got != one || ref() != one {
+		t.Fatalf("one commit: %s %v", got, err)
+	}
+	gittest.Git(t, f.tree, "commit", "--quiet", "--amend", "-m", msg("amended", opus))
+	amended := strings.TrimSpace(gittest.Git(t, f.tree, "rev-parse", "HEAD"))
+	if got, err := git.Refresh(ctx, f.backend, f.sess); err != nil || got != amended || ref() != amended {
+		t.Fatalf("amend: %s %v", got, err)
+	}
+	gittest.Git(t, f.tree, "checkout", "--quiet", "-b", "side")
+	gittest.Commit(t, gittest.Driver, nil, f.tree, "b.txt", "b\n", msg("side", opus))
+	if got, err := git.Refresh(ctx, f.backend, f.sess); err != nil || got != amended {
+		t.Fatalf("other branch: %s %v", got, err)
+	}
+	gittest.Git(t, f.tree, "checkout", "--quiet", f.sess.Branch())
+	gittest.Git(t, f.tree, "reset", "--quiet", "--hard", base)
+	if got, err := git.Refresh(ctx, f.backend, f.sess); err != nil || got != base || ref() != base {
+		t.Fatalf("reset: %s %v", got, err)
+	}
+}
+
 func TestAskpassAnswersOnlyUsernameAndPassword(t *testing.T) {
 	lookup := func(string) (string, bool) { return "tok", true }
 	for _, p := range []string{"Are you sure you want to continue connecting (yes/no)? ", "Enter passphrase for key 'k': ", ""} {
