@@ -1,19 +1,20 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-30 by main session (cred-dev rewrite, P30, P31 built and reviewed)
+Updated: 2026-10-31 by main session (milestone 1 reached; P31's live step done)
 
 ## Now
 
-- Account `jdorje`. Pushed at `2c62428`. Ahead of origin, reviewed, unpushed: the P29 handoff,
-  the `cred-dev` rewrite (`ee97d02`), P30 (`e7b3465`, fixes `2ae707b`), P31 (`238ea6d`, fixes in
-  the commit carrying this handoff); the three ideas they completed are deleted. Push on request.
-- P31's live-engine step is pending the owner's word: in a dev-root session with the real engine, a
-  commit then a `reviewer` launch gives `session show` `review: <id> at <commit>`; after `git commit
-  --amend --no-edit` in the tree and `worktree check`, `review: none since <new>`.
-- Dev instance: `%LOCALAPPDATA%\Broodforge\dev`, dry-run for good, bot stopped, schema 4, credential
-  `cred-2ha7apqowv`; channel 200 as the owner. The granted real turns are spent; the next needs a
-  fresh quoted go-ahead. Hatchery `main` at `61b6409`; five carry-back branches pushed (ADR 0024).
+- Account `jdorje`. Pushed at `8df7a64`. Ahead of origin, reviewed: this commit. Push on request.
+- Milestone 1 (`08-implementation-plan.md`, Milestones, first row) is reached, 2026-10-31:
+  `docs/findings/2026-10-31-milestone-1-reached-a-channel-200-session-committed-was-reviewed-and-landed.md`.
+  P31's live step held. The branch `broodforge/dev/s0005` sits in this checkout (the owner's to
+  delete). Two ideas from the run: the reviewer-model trailer (Question) and the git-guard amend
+  (untriaged, chore).
+- Dev instance: `%LOCALAPPDATA%\Broodforge\dev`, dry-run for good, bot stopped, no open session,
+  schema 4, credential `cred-2ha7apqowv`; channel 200 as the owner. The owner granted four real
+  turns on 2026-10-31 ("Go ahead with 4 real turns on the dev"); none was spent; a later run quotes a
+  fresh go-ahead. Hatchery `main` at `61b6409`; five carry-back branches pushed (ADR 0024).
 
 ## Next
 
@@ -28,8 +29,7 @@ Updated: 2026-10-30 by main session (cred-dev rewrite, P30, P31 built and review
 
 ## Waiting on user
 
-- Ten `Question:` blocks in `docs/ideas/` (new: the canonical-stale line's text); the `auto` spike;
-  P31's live step. Wording: dry-run and setup texts (companion, `05-debug-interface-setup.md`); four Discord strings
+- The `Question:` blocks in `docs/ideas/` (new: the reviewer-model trailer); the `auto` spike. Wording: dry-run and setup texts (companion, `05-debug-interface-setup.md`); four Discord strings
   (`05-debug-interface-discord.md`); two canonical rows in `04-ux.md` (P30 uses them as they stand)
   and refuse-or-warn; subagent text indent; the `pre-push` line (P15); P12a; "Never ends for
   inactivity."; the switch post; the hook no-answer phrase; R-17; `Waits:` blocks; `C:\elsewhere`;
