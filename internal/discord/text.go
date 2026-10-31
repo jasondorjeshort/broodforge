@@ -236,10 +236,31 @@ func credentialKindName(kind string) string {
 // not 04: the name in it is the full registered name (see the top of this file).
 func headerText(id string, st *session.StartInfo, m headerState) string {
 	return "Session " + id + " on " + st.ProjectName + ", branch " + st.Branch + ", driver " + st.DriverName + ".\n" +
+		canonicalStaleLine(st.CanonicalStale) +
 		"Mode: " + modeName(m.mode) + " (" + m.modeWhy + "). Credential: " + st.Credential + " (" + credentialKindName(st.CredentialKind) + ").\n" +
 		modelLine(m) + "\n" + // not 04: the line's place in the header
 		"Reach: " + st.Reach + ". " + idleSentence(m.idle) + " Who may answer prompts: " + roleList(st.Answer) + ".\n" +
 		"Write what you want done. Everyone who writes here is handed to the agent by name."
+}
+
+// canonicalStaleLine is the header's second line when the fetch at session start failed (04,
+// canonical-stale, wording pending the owner), "" otherwise. not 04: <when> is the store time of
+// the last fetch that succeeded, or "before the bot started" when this bot has made none.
+func canonicalStaleLine(st *session.CanonicalStale) string {
+	if st == nil {
+		return ""
+	}
+	when := st.LastFetched
+	if when == "" {
+		when = "before the bot started"
+	}
+	return "The project's " + st.Branch + " could not be fetched (" + firstOf(splitLines(st.Error)) +
+		"); this session starts from the copy on the host, last fetched " + when + ".\n"
+}
+
+// canonicalDivergedText is 04's canonical-diverged refusal (wording pending the owner).
+func canonicalDivergedText(branch string) string {
+	return couldNotStartText("the host's copy of " + branch + " and the remote have diverged; the owner reconciles it")
 }
 
 // idleSentence is the header's idle timeout (04-ux-session-controls.md, Idle timeout): `Ends

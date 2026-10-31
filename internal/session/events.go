@@ -99,6 +99,17 @@ type StartInfo struct {
 	// the tree is gone while refs/sessions/<id> is still in the canonical. The notice reads both.
 	Commits     *int `json:"commits,omitempty"`
 	TreeMissing bool `json:"treeMissing,omitempty"`
+	// CanonicalStale is set when the fetch at session start failed (ADR 0022 companion, Clone
+	// step 0): the venue's first post says so (04, canonical-stale). Never for ahead.
+	CanonicalStale *CanonicalStale `json:"canonicalStale,omitempty"`
+}
+
+// CanonicalStale is a stale start's facts: the default branch, the fetch's line or reason, and
+// when it was last fetched (a store time; "" when not since the bot started).
+type CanonicalStale struct {
+	Branch      string `json:"branch"`
+	Error       string `json:"error"`
+	LastFetched string `json:"lastFetched,omitempty"`
 }
 
 // The summaries of a session-interrupted event, its reason (05-debug-interface-session.md):

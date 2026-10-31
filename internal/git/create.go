@@ -3,9 +3,11 @@
 package git
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -36,6 +38,127 @@ func Create(ctx context.Context, b spawn.Backend, s Session) (string, error) {
 		return "", err
 	}
 	return base, nil
+}
+
+// FetchTimeout is the deadline of the fetch at session start and its fast-forward.
+const FetchTimeout = 30 * time.Second
+
+// FetchResult is the fetch at session start (ADR 0022 companion, Clone at session start, step
+// 0). Commit is the default branch's commit the session starts from; Fetched when the fetch
+// succeeded (zero when it did not); Ahead the local branch's commits past the remote's, left
+// alone; Stale a fetch or fast-forward that failed or ran past its deadline, Error git's
+// telling line or the reason, and the start goes on from the local branch.
+type FetchResult struct {
+	Commit  string
+	Fetched time.Time
+	Ahead   int
+	Stale   bool
+	Error   string
+}
+
+// Fetch is step 0 of clone at session start, in the canonical: `git -c credential.helper=
+// fetch --quiet --no-tags --no-write-fetch-head <remote> +refs/heads/<db>:refs/remotes/<remote>/<db>`
+// with the push's askpass and token (PushEnv), under FetchTimeout, then the local branch and the
+// fetched ref compared with `merge-base --is-ancestor` both ways. Behind is fast-forwarded
+// (`merge --ff-only` while HEAD is the branch, else `update-ref <ref> <new> <old>`); equal is
+// nothing; ahead is left alone with its count. Neither containing the other is an *Error with
+// code canonical-diverged naming both commits. A fetch or fast-forward that fails or times out
+// is a Stale result and no error. The canonical is never reset or cleaned.
+func Fetch(ctx context.Context, s Session, askpass string, token []byte) (FetchResult, error) {
+	if err := s.check(); err != nil {
+		return FetchResult{}, err
+	}
+	branch := "refs/heads/" + s.DefaultBranch
+	tracking := "refs/remotes/" + s.Remote + "/" + s.DefaultBranch
+	fctx, cancel := context.WithTimeout(ctx, FetchTimeout)
+	defer cancel()
+	stale := func(err error) (FetchResult, error) {
+		r := FetchResult{Stale: true, Error: messageOf(err)}
+		if errors.Is(fctx.Err(), context.DeadlineExceeded) {
+			r.Error = "no answer from " + s.Remote + " before the deadline"
+		}
+		// The commit the session starts from, read outside the spent deadline (the caller's
+		// may be spent too).
+		rctx, rcancel := context.WithTimeout(context.WithoutCancel(ctx), waitDelay)
+		defer rcancel()
+		if out, err := run(rctx, CodeFetch, s.Canonical, nil, "rev-parse", "--verify", "--quiet", branch+"^{commit}"); err == nil {
+			r.Commit = strings.TrimSpace(out)
+		}
+		return r, nil
+	}
+	if _, err := run(fctx, CodeFetch, s.Canonical, PushEnv(askpass, token), "-c", "credential.helper=", "fetch", "--quiet",
+		"--no-tags", "--no-write-fetch-head", s.Remote, "+"+branch+":"+tracking); err != nil {
+		return stale(err)
+	}
+	fetched := time.Now().UTC()
+	local, err := run(fctx, CodeFetch, s.Canonical, nil, "rev-parse", "--verify", "--quiet", branch+"^{commit}")
+	if err != nil {
+		return stale(&Error{Code: CodeFetch, Message: s.Canonical + " has no branch " + s.DefaultBranch})
+	}
+	remote, err := run(fctx, CodeFetch, s.Canonical, nil, "rev-parse", "--verify", "--quiet", tracking+"^{commit}")
+	if err != nil {
+		return stale(&Error{Code: CodeFetch, Message: s.Remote + " has no branch " + s.DefaultBranch})
+	}
+	local, remote = strings.TrimSpace(local), strings.TrimSpace(remote)
+	if local == remote {
+		return FetchResult{Commit: local, Fetched: fetched}, nil
+	}
+	behind, err := isAncestor(fctx, s.Canonical, local, remote)
+	if err != nil {
+		return stale(err)
+	}
+	if behind {
+		head, herr := HeadBranch(fctx, s.Canonical)
+		if herr == nil && head == s.DefaultBranch {
+			_, err = run(fctx, CodeFetch, s.Canonical, nil, "merge", "--ff-only", "--quiet", tracking)
+		} else {
+			_, err = run(fctx, CodeFetch, s.Canonical, nil, "update-ref", branch, remote, local)
+		}
+		if err != nil {
+			return stale(err)
+		}
+		return FetchResult{Commit: remote, Fetched: fetched}, nil
+	}
+	ahead, err := isAncestor(fctx, s.Canonical, remote, local)
+	if err != nil {
+		return stale(err)
+	}
+	if !ahead {
+		return FetchResult{Commit: local, Fetched: fetched}, &Error{Code: CodeCanonicalDiverged,
+			Message: s.Canonical + " " + s.DefaultBranch + " is at " + local + ", " + s.Remote + " at " + remote + "; neither contains the other"}
+	}
+	out, err := run(fctx, CodeFetch, s.Canonical, nil, "rev-list", "--count", tracking+".."+branch)
+	if err != nil {
+		return stale(err)
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(out))
+	if err != nil {
+		return stale(&Error{Code: CodeFetch, Message: "git rev-list --count: " + strings.TrimSpace(out)})
+	}
+	return FetchResult{Commit: local, Fetched: fetched, Ahead: n}, nil
+}
+
+// isAncestor is `git merge-base --is-ancestor a b` in dir: exit 0 true, exit 1 false, anything
+// else an *Error with git's telling line.
+func isAncestor(ctx context.Context, dir, a, b string) (bool, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "merge-base", "--is-ancestor", a, b)
+	cmd.Env = spawn.Environment(os.Environ(), []spawn.Var{{Name: "GIT_TERMINAL_PROMPT", Value: "0"}})
+	cmd.WaitDelay = waitDelay
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	var ee *exec.ExitError
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.As(err, &ee) && ee.ExitCode() == 1 && ctx.Err() == nil:
+		return false, nil
+	}
+	msg := tellingLine(stderr.String())
+	if msg == "" {
+		msg = err.Error()
+	}
+	return false, &Error{Code: CodeFetch, Message: "git merge-base: " + msg}
 }
 
 // CloneCanonical is a project's canonical checkout created by `broodforge setup` (ADR 0027):

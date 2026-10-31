@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -110,10 +111,12 @@ type Roles struct {
 }
 
 // Repo is the project's canonical checkout and its handoff mode (push or pull-request; "" reads
-// as the project's default).
+// as the project's default). GitCredentialID is repo.gitCredentialId, "" for none: the fetch at
+// session start carries it as the push does.
 type Repo struct {
 	Canonical, Remote, DefaultBranch string
 	Handoff                          string
+	GitCredentialID                  string
 }
 
 // Channel is one configured channel as the bot sees it, defaults merged in: the caller
@@ -148,6 +151,10 @@ type Config struct {
 	Engine   EngineFactory
 	// CreateTree is clone at session start: git.Create through the spawn backend.
 	CreateTree func(ctx context.Context, s git.Session) (base string, err error)
+	// FetchCanonical is the fetch at session start (ADR 0022 companion, Clone step 0):
+	// git.Fetch in the canonical with the project's git credential, credentialID ("" none),
+	// read by the bot. nil fetches nothing and the session-started row has no canonical key.
+	FetchCanonical func(ctx context.Context, s git.Session, credentialID string) (git.FetchResult, error)
 	// RemoveTree undoes CreateTree for a start that fails after the clone: git.Discard.
 	RemoveTree func(ctx context.Context, s git.Session) error
 	// Handoff is the end of session's bundle, check and push or pull request (03; the bot's
@@ -185,6 +192,9 @@ type Service struct {
 
 	mu   sync.Mutex
 	live map[string]*live
+	// fetches is the last fetch at a session start per project id (`status --json`'s projects),
+	// its Fetched the last one that succeeded.
+	fetches map[string]git.FetchResult
 }
 
 // New returns the service.
@@ -195,7 +205,7 @@ func New(cfg Config) *Service {
 	if cfg.Groups == nil {
 		cfg.Groups = func() map[string][]string { return nil }
 	}
-	return &Service{cfg: cfg, live: map[string]*live{}}
+	return &Service{cfg: cfg, live: map[string]*live{}, fetches: map[string]git.FetchResult{}}
 }
 
 func (s *Service) groups() map[string][]string { return s.cfg.Groups() }
@@ -538,19 +548,25 @@ func orDefault(s, d string) string {
 
 // Start stages, the reason an action-refused event names when a start fails after its row.
 const (
-	stageClone  = "clone"
-	stageHome   = "home"
-	stageEngine = "engine"
-	stageStore  = "store"
+	stageCanonical = "canonical"
+	stageClone     = "clone"
+	stageHome      = "home"
+	stageEngine    = "engine"
+	stageStore     = "store"
 )
 
-// open makes the workflow copy and probes its hooks (before the clone, so a refused probe
-// clones nothing), clones the tree, makes the session home, records the worktree and the
-// session's waiting state, and returns the live session. A failure after the clone removes the
+// open fetches the canonical (before the copy, so a session's rules are the remote's too; a
+// diverged canonical refuses), makes the workflow copy and probes its hooks (before the clone,
+// so a refused probe clones nothing), clones the tree, makes the session home, records the
+// worktree and the session's waiting state, and returns the live session. A failure after the clone removes the
 // tree and refs/sessions/<id> (RemoveTree), and the directories open made, so a failed start
 // leaves nothing behind; it returns the stage that failed.
 func (s *Service) open(ctx context.Context, ch Channel, gs git.Session, reg registration, credID string,
 	delivery engine.Delivery, mode, reach, fixture string, pick modelPick, req StartRequest) (*live, string, error) {
+	canonical, stale, err := s.fetchCanonical(ctx, ch, gs)
+	if err != nil {
+		return nil, stageCanonical, err
+	}
 	wf, err := s.makeWorkflow(ctx, ch, gs, reach, reg)
 	if err != nil {
 		return nil, stageWorkflow, err
@@ -616,7 +632,7 @@ func (s *Service) open(ctx context.Context, ch Channel, gs git.Session, reg regi
 		_, err := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindSessionStarted, Actor: actorOf(req.As), Session: gs.ID,
 			Registration: reg.User, Details: details("channel", ch.ID, "project", ch.Project, "credential", credID,
 				"mode", mode, "model", pick.model, "effort", pick.effort, "reach", reach, "harness", ch.Harness, "branch", gs.Branch(), "tree", tree, "fixture", fixture,
-				"workflow", wf.line, "hooks", strings.Join(wf.hooks, hooksSep))})
+				"workflow", wf.line, "hooks", strings.Join(wf.hooks, hooksSep), "canonical", canonical)})
 		return err
 	})
 	if err != nil {
@@ -632,8 +648,61 @@ func (s *Service) open(ctx context.Context, ch Channel, gs git.Session, reg regi
 		Summary: "Session " + gs.ID + " on " + ch.ProjectName + ", branch " + gs.Branch() + ", driver " + reg.Name + ".",
 		Start: &StartInfo{Channel: ch.ID, ProjectName: ch.ProjectName, Branch: gs.Branch(), Driver: reg.User, DriverName: reg.Name,
 			Mode: mode, ChannelMode: ch.Mode, Model: pick.model, ChannelModel: pick.channel, Effort: pick.effort, Reach: reach, Credential: credID, CredentialKind: kind,
-			IdleTimeout: IdleText(l.idleTimeout), Answer: append([]string{}, ch.Roles.Answer...)}})
+			IdleTimeout: IdleText(l.idleTimeout), Answer: append([]string{}, ch.Roles.Answer...), CanonicalStale: stale}})
 	return l, "", nil
+}
+
+// credentialMissing is a stale fetch's reason when repo.gitCredentialId names a credential the
+// store lacks (or holds removed): the fetch is skipped.
+const credentialMissing = "credential-missing"
+
+// fetchCanonical is the fetch at session start through FetchCanonical, kept per project as the
+// last fetch: the session-started row's canonical detail (`fetched`, `ahead <n>` or `stale:
+// <line>`; "" with no FetchCanonical) and, stale only, the venue's facts. A diverged canonical is
+// the error, which refuses the start.
+func (s *Service) fetchCanonical(ctx context.Context, ch Channel, gs git.Session) (string, *CanonicalStale, error) {
+	if s.cfg.FetchCanonical == nil {
+		return "", nil, nil
+	}
+	var r git.FetchResult
+	var err error
+	if id := ch.Repo.GitCredentialID; id != "" && !credentials.Exists(s.cfg.Store)(id) {
+		r = git.FetchResult{Stale: true, Error: credentialMissing}
+	} else {
+		r, err = s.cfg.FetchCanonical(ctx, gs, id)
+	}
+	kept := r
+	if err != nil {
+		kept.Error = err.Error()
+	}
+	s.mu.Lock()
+	if kept.Fetched.IsZero() {
+		kept.Fetched = s.fetches[ch.Project].Fetched
+	}
+	s.fetches[ch.Project] = kept
+	s.mu.Unlock()
+	switch {
+	case err != nil:
+		return "", nil, err
+	case r.Stale:
+		st := &CanonicalStale{Branch: gs.DefaultBranch, Error: r.Error}
+		if !kept.Fetched.IsZero() {
+			st.LastFetched = store.FormatTime(kept.Fetched)
+		}
+		return "stale: " + r.Error, st, nil
+	case r.Ahead > 0:
+		return "ahead " + strconv.Itoa(r.Ahead), nil, nil
+	}
+	return "fetched", nil, nil
+}
+
+// LastFetch is the last fetch at a session start for the project, its Fetched the last that
+// succeeded and its Error the last attempt's; false before the first start since the bot began.
+func (s *Service) LastFetch(project string) (git.FetchResult, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, ok := s.fetches[project]
+	return r, ok
 }
 
 // Shutdown is 03's shutdown for the sessions: no new messages, every running turn

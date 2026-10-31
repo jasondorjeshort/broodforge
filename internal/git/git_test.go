@@ -437,3 +437,149 @@ func TestAskpassAnswersOnlyUsernameAndPassword(t *testing.T) {
 		}
 	}
 }
+
+// fetchFixture is a canonical with its bare remote and a throwaway clone of the remote that
+// pushes to main, for the fetch at session start (ADR 0022 companion, Clone step 0).
+type fetchFixture struct {
+	canon, remote, clone string
+	sess                 git.Session
+}
+
+func newFetchFixture(t *testing.T) *fetchFixture {
+	t.Helper()
+	root := t.TempDir()
+	canon, remote := gittest.Project(t, root, "p")
+	clone := filepath.ToSlash(filepath.Join(root, "clone"))
+	gittest.Git(t, root, "clone", "--quiet", remote, clone)
+	return &fetchFixture{canon: canon, remote: remote, clone: clone,
+		sess: git.Session{Root: root, ID: "s0001", Instance: "test", Canonical: canon, Remote: "origin", DefaultBranch: "main"}}
+}
+
+// pushed is a commit made in the clone and pushed to the remote's main.
+func (f *fetchFixture) pushed(t *testing.T, file string) string {
+	t.Helper()
+	sha := gittest.Commit(t, gittest.Driver, nil, f.clone, file, file+"\n", "add "+file)
+	gittest.Git(t, f.clone, "push", "--quiet", "origin", "main")
+	return sha
+}
+
+func (f *fetchFixture) rev(t *testing.T, ref string) string {
+	t.Helper()
+	return strings.TrimSpace(gittest.Git(t, f.canon, "rev-parse", ref))
+}
+
+func TestFetchBehindFastForwardsTheCheckout(t *testing.T) {
+	f := newFetchFixture(t)
+	sha := f.pushed(t, "new.txt")
+	r, err := git.Fetch(context.Background(), f.sess, "", nil)
+	if err != nil || r.Stale || r.Ahead != 0 || r.Commit != sha || r.Fetched.IsZero() {
+		t.Fatalf("Fetch = %+v, %v; want commit %s fetched", r, err, sha)
+	}
+	if got := f.rev(t, "HEAD"); got != sha {
+		t.Errorf("HEAD %s, want %s", got, sha)
+	}
+	if !exists(filepath.Join(f.canon, "new.txt")) {
+		t.Error("the working tree did not follow the fast-forward")
+	}
+	if st := gittest.Git(t, f.canon, "status", "--porcelain"); st != "" {
+		t.Errorf("the checkout is not clean after the fast-forward: %q", st)
+	}
+}
+
+func TestFetchEqualIsANoOp(t *testing.T) {
+	f := newFetchFixture(t)
+	before := f.rev(t, "main")
+	r, err := git.Fetch(context.Background(), f.sess, "", nil)
+	if err != nil || r.Stale || r.Ahead != 0 || r.Commit != before || r.Fetched.IsZero() {
+		t.Fatalf("Fetch = %+v, %v; want commit %s fetched", r, err, before)
+	}
+	if got := f.rev(t, "main"); got != before {
+		t.Errorf("main moved to %s", got)
+	}
+}
+
+func TestFetchAheadIsLeftAlone(t *testing.T) {
+	f := newFetchFixture(t)
+	local := gittest.Commit(t, gittest.Driver, nil, f.canon, "local.txt", "l\n", "local")
+	gittest.Git(t, f.canon, "commit", "--quiet", "--allow-empty", "-m", "second local")
+	local2 := f.rev(t, "main")
+	r, err := git.Fetch(context.Background(), f.sess, "", nil)
+	if err != nil || r.Stale || r.Ahead != 2 || r.Commit != local2 {
+		t.Fatalf("Fetch = %+v, %v; want ahead 2 at %s", r, err, local2)
+	}
+	if local == local2 || f.rev(t, "main") != local2 {
+		t.Errorf("main is not the local commit %s", local2)
+	}
+}
+
+func TestFetchUpdatesTheRefAloneWhenHEADIsAnotherBranch(t *testing.T) {
+	f := newFetchFixture(t)
+	gittest.Git(t, f.canon, "checkout", "--quiet", "-b", "other")
+	sha := f.pushed(t, "new.txt")
+	r, err := git.Fetch(context.Background(), f.sess, "", nil)
+	if err != nil || r.Stale || r.Commit != sha {
+		t.Fatalf("Fetch = %+v, %v; want commit %s", r, err, sha)
+	}
+	if got := f.rev(t, "main"); got != sha {
+		t.Errorf("main %s, want %s", got, sha)
+	}
+	if head, err := git.HeadBranch(context.Background(), f.canon); err != nil || head != "other" {
+		t.Errorf("HEAD %q %v, want other", head, err)
+	}
+	if exists(filepath.Join(f.canon, "new.txt")) {
+		t.Error("the checkout of another branch changed")
+	}
+}
+
+func TestFetchDivergedIsTheError(t *testing.T) {
+	f := newFetchFixture(t)
+	theirs := f.pushed(t, "theirs.txt")
+	ours := gittest.Commit(t, gittest.Driver, nil, f.canon, "ours.txt", "o\n", "ours")
+	_, err := git.Fetch(context.Background(), f.sess, "", nil)
+	var ge *git.Error
+	if !errors.As(err, &ge) || ge.Code != git.CodeCanonicalDiverged {
+		t.Fatalf("Fetch error %v, want canonical-diverged", err)
+	}
+	want := f.canon + " main is at " + ours + ", origin at " + theirs + "; neither contains the other"
+	if ge.Message != want {
+		t.Errorf("message %q, want %q", ge.Message, want)
+	}
+	if got := f.rev(t, "main"); got != ours {
+		t.Errorf("main moved to %s", got)
+	}
+}
+
+func TestFetchMissingRemoteIsStale(t *testing.T) {
+	f := newFetchFixture(t)
+	before := f.rev(t, "main")
+	if err := os.Rename(filepath.FromSlash(f.remote), filepath.FromSlash(f.remote)+".away"); err != nil {
+		t.Fatal(err)
+	}
+	r, err := git.Fetch(context.Background(), f.sess, "", nil)
+	if err != nil || !r.Stale || r.Error == "" || r.Commit != before || !r.Fetched.IsZero() {
+		t.Fatalf("Fetch = %+v, %v; want stale at %s", r, err, before)
+	}
+	if !strings.HasPrefix(r.Error, "git fetch: ") {
+		t.Errorf("error %q is not git's line", r.Error)
+	}
+}
+
+func TestFetchStalledRemoteHitsTheDeadline(t *testing.T) {
+	f := newFetchFixture(t)
+	before := f.rev(t, "main")
+	// The local transport runs upload-pack through the shell; this one answers after the deadline.
+	gittest.Git(t, f.canon, "config", "remote.origin.uploadpack", "sleep 3; git-upload-pack")
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	r, err := git.Fetch(ctx, f.sess, "", nil)
+	if err != nil || !r.Stale || r.Commit != before {
+		t.Fatalf("Fetch = %+v, %v; want stale at %s", r, err, before)
+	}
+	if r.Error != "no answer from origin before the deadline" {
+		t.Errorf("error %q, want the deadline", r.Error)
+	}
+	if d := time.Since(start); d > 10*time.Second {
+		t.Errorf("Fetch took %v past a 500ms deadline", d)
+	}
+}

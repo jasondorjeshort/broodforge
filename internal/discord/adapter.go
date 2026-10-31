@@ -709,6 +709,12 @@ func (a *Adapter) start(ctx context.Context, in Inbound, channel, model string) 
 		return Reply{}, refusal(se.Code, couldNotStartText(reason))
 	case "worktree-create":
 		return Reply{}, refusal(se.Code, couldNotStartText("cloning the repository failed on the host: "+firstOf(splitLines(se.Message))))
+	case "canonical-diverged":
+		branch := "main"
+		if ch, ok := a.cfg.Channel(channel); ok && ch.Repo.DefaultBranch != "" {
+			branch = ch.Repo.DefaultBranch
+		}
+		return Reply{}, refusal(se.Code, canonicalDivergedText(branch))
 	}
 	return Reply{}, refusal(se.Code, couldNotStartText(se.Message))
 }

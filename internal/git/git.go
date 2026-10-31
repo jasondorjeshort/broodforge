@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jasondorjeshort/broodforge/internal/spawn"
 )
@@ -42,9 +43,15 @@ const (
 	CodeFailedPullRequest   = "handoff-failed-pull-request"
 	CodeNoCredential        = "no-git-credential"
 	CodeCommitMsg           = "commit-msg"
-	CodeSessionRef          = "session-ref" // refs/sessions/<id> cannot be read from the canonical
-	CodeClone               = "clone"       // setup could not clone a project's canonical (CloneCanonical)
+	CodeSessionRef          = "session-ref"        // refs/sessions/<id> cannot be read from the canonical
+	CodeClone               = "clone"              // setup could not clone a project's canonical (CloneCanonical)
+	CodeFetch               = "canonical-fetch"    // the fetch at session start failed (its result is stale, not this error)
+	CodeCanonicalDiverged   = "canonical-diverged" // the canonical's default branch and the remote's: neither contains the other
 )
+
+// waitDelay bounds the wait for a killed git's output pipes: a child git started (a remote
+// helper, upload-pack) may hold them open past the kill, which would outlast the deadline.
+const waitDelay = 5 * time.Second
 
 var sessionIDRE = regexp.MustCompile(`^s[0-9a-z]{4,}$`)
 
@@ -116,6 +123,7 @@ func run(ctx context.Context, code, dir string, extra []spawn.Var, args ...strin
 	full := append([]string{"-C", dir}, args...)
 	cmd := exec.CommandContext(ctx, "git", full...)
 	cmd.Env = spawn.Environment(os.Environ(), append([]spawn.Var{{Name: "GIT_TERMINAL_PROMPT", Value: "0"}}, extra...))
+	cmd.WaitDelay = waitDelay
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {

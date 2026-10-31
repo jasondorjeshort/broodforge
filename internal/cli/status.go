@@ -25,7 +25,9 @@ import (
 // `config: ok|last-good from <time>`, `discord: <mode> connected|disconnected`, `sessions: <open>
 // open, <waiting> waiting-for-answer, <interrupted> interrupted`, `worktrees: <kept> kept with
 // unpushed commits`, `backup: last good <age> ago|none`, `engine: <path> <version>`; --json
-// nests the same under those keys. The outcome token is the config value, ok or last-good.
+// nests the same under those keys and adds projects, the last fetch at a session start per
+// project (05-debug-interface-git.md, The fetch at session start). The outcome token is the
+// config value, ok or last-good.
 var statusCmd = Command{
 	Name:   "status",
 	Class:  ClassRead,
@@ -83,6 +85,22 @@ type statusResult struct {
 		Path    string `json:"path"`
 		Version string `json:"version"`
 	} `json:"engine"`
+	// Projects is --json's alone: the text form has no line for it.
+	Projects []statusProject `json:"projects"`
+}
+
+// statusProject is one configured project's canonical as the last fetch at a session start
+// left it: fetched is the last fetch that succeeded and error the last attempt's line, both
+// null when there is none; commit is "" and ahead 0 before the first start since the bot began.
+type statusProject struct {
+	ID        string `json:"id"`
+	Canonical struct {
+		Branch  string  `json:"branch"`
+		Commit  string  `json:"commit"`
+		Fetched *string `json:"fetched"`
+		Ahead   int     `json:"ahead"`
+		Error   *string `json:"error"`
+	} `json:"canonical"`
 }
 
 func (b *bot) status(_ context.Context, _ *control.Call) (json.RawMessage, error) {
@@ -116,6 +134,26 @@ func (b *bot) status(_ context.Context, _ *control.Call) (json.RawMessage, error
 	c := b.config()
 	r.Engine.Path, r.Engine.Version = c.Instance.Engine.Path, c.Instance.Engine.Version
 	r.InstanceName = c.Instance.InstanceName
+	r.Projects = []statusProject{}
+	for _, p := range c.Projects {
+		sp := statusProject{ID: p.ID}
+		sp.Canonical.Branch = p.Repo.DefaultBranch
+		if sp.Canonical.Branch == "" {
+			sp.Canonical.Branch = "main" // as the session's git.Session reads an unset one
+		}
+		if f, ok := b.svc.LastFetch(p.ID); ok {
+			sp.Canonical.Commit, sp.Canonical.Ahead = f.Commit, f.Ahead
+			if !f.Fetched.IsZero() {
+				t := store.FormatTime(f.Fetched)
+				sp.Canonical.Fetched = &t
+			}
+			if f.Error != "" {
+				e := f.Error
+				sp.Canonical.Error = &e
+			}
+		}
+		r.Projects = append(r.Projects, sp)
+	}
 	return json.Marshal(r)
 }
 

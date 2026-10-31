@@ -348,11 +348,12 @@ func startBot(env *Env) (*bot, error) {
 		Engine: b.engine, CreateTree: func(ctx context.Context, s git.Session) (string, error) {
 			return git.Create(ctx, b.backend, s)
 		},
-		RemoveTree:  func(ctx context.Context, s git.Session) error { return git.Discard(ctx, b.backend, s) },
-		Workflow:    sessionWorkflow,
-		Commits:     b.wt.Commits,
-		ProjectRepo: b.projectRepo,
-		Store:       b.st, Audit: b.aud,
+		RemoveTree:     func(ctx context.Context, s git.Session) error { return git.Discard(ctx, b.backend, s) },
+		FetchCanonical: b.fetchCanonical,
+		Workflow:       sessionWorkflow,
+		Commits:        b.wt.Commits,
+		ProjectRepo:    b.projectRepo,
+		Store:          b.st, Audit: b.aud,
 	})
 	b.adapter.Attach(b.svc)
 
@@ -475,7 +476,7 @@ func (b *bot) channel(id string) (session.Channel, bool) {
 		IdleTimeout: time.Duration(e.IdleTimeoutMinutes) * time.Minute, PromptTimeout: time.Duration(e.PromptTimeoutMinutes) * time.Minute,
 		Model: deref(e.Model), Effort: deref(e.Effort),
 		Repo: session.Repo{Canonical: p.Repo.Canonical, Remote: p.Repo.Remote, DefaultBranch: p.Repo.DefaultBranch,
-			Handoff: p.HandoffOrDefault()},
+			Handoff: p.HandoffOrDefault(), GitCredentialID: p.Repo.GitCredentialID},
 		Workflow: session.WorkflowKey{Inject: w.Inject, Hooks: w.Hooks}}, true
 }
 
@@ -487,7 +488,22 @@ func (b *bot) projectRepo(id string) (session.Repo, bool) {
 		return session.Repo{}, false
 	}
 	return session.Repo{Canonical: p.Repo.Canonical, Remote: p.Repo.Remote, DefaultBranch: p.Repo.DefaultBranch,
-		Handoff: p.HandoffOrDefault()}, true
+		Handoff: p.HandoffOrDefault(), GitCredentialID: p.Repo.GitCredentialID}, true
+}
+
+// fetchCanonical is the fetch at session start (session.Config.FetchCanonical): git.Fetch in
+// the canonical with the backend's askpass helper and the project's git credential's value, as
+// the push carries it. A value that cannot be read skips the fetch as stale with the reason.
+func (b *bot) fetchCanonical(ctx context.Context, s git.Session, credentialID string) (git.FetchResult, error) {
+	var token []byte
+	if credentialID != "" {
+		v, err := b.creds.Secret(credentialID)
+		if err != nil {
+			return git.FetchResult{Stale: true, Error: "git credential " + credentialID + ": " + err.Error()}, nil
+		}
+		token = v
+	}
+	return git.Fetch(ctx, s, b.backend.Askpass(), token)
 }
 
 // engine is the session service's engine factory: the fake per session (its turn counter is
