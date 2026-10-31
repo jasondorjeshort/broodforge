@@ -10,7 +10,7 @@
     "hold": 60,
     "deny": null,
     "fiveHour": { "hold": 60, "deny": null },
-    "sevenDay": { "hold": 98, "deny": null },
+    "sevenDay": { "hold": 97, "deny": null },
     "staleSeconds": 7200,
     "whenStale": "allow",
     "pool": null
