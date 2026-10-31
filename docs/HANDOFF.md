@@ -5,7 +5,7 @@ Updated: 2026-10-31 by main session (milestone 1 reached; P31's live step done)
 
 ## Now
 
-- Account `jdorje`. Pushed at `8df7a64`. Ahead of origin, reviewed: this commit. Push on request.
+- Account `jdorje`. Pushed at `60062ac`. Ahead: this commit (gcc on `PATH` for good). Push on request.
 - Milestone 1 (`08-implementation-plan.md`, Milestones, first row) is reached, 2026-10-31:
   `docs/findings/2026-10-31-milestone-1-reached-a-channel-200-session-committed-was-reviewed-and-landed.md`.
   P31's live step held. The branch `broodforge/dev/s0005` sits in this checkout (the owner's to

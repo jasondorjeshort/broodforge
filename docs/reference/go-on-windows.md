@@ -1,6 +1,6 @@
 ---
-verified: 2026-10-26
-source: observed (Go toolchain and mingw-w64 on the owner's Windows 11 PC, 2026-10-26)
+verified: 2026-10-31
+source: observed (Go toolchain and mingw-w64 on the owner's Windows 11 PC, 2026-10-31)
 ---
 
 # Go on the Windows PC
@@ -20,15 +20,18 @@ until the base's records moved to `docs/hatchery/` (ADR 0024).
   `C:\Program Files\Go`. `GOTOOLCHAIN=local` pins the installed 1.27.0, which works (`go list ./internal/setup`
   passes): `go 1.27` allows 1.27.0, and the `toolchain` line is a preference that auto mode follows by
   downloading. `CGO_ENABLED=0 go build ./...` and `go vet ./...` pass from the repo root.
-- The C compiler for the race detector is MSYS2 MinGW64 gcc, `C:\msys64\mingw64\bin\gcc.exe`; put
-  `C:\msys64\mingw64\bin` on `PATH` for the test line.
+- The C compiler for the race detector is MSYS2 MinGW64 gcc, `C:\msys64\mingw64\bin\gcc.exe`.
+  `C:\msys64\mingw64\bin` is the last entry of the owner's user `PATH` since 2026-10-31 (the owner's
+  rule: a missing tool is installed or put on `PATH` for good, never worked around per command), so
+  the test line runs as written in any terminal opened after that, or after Claude Code is
+  restarted; a shell started from a process older than the change inherits the old `PATH`.
 - With a compiler present cgo defaults on (`go env CGO_ENABLED` prints `1`), so the build line
   forces `CGO_ENABLED=0 go build ./...` and the test line sets `CGO_ENABLED=1 go test -race ./...`
   (ADR 0023).
 - `CGO_ENABLED=1 go test -race ./...` is the check that the compiler still works.
-- Without gcc on `PATH`, `go env CGO_ENABLED` prints `0` and `go test -race` fails with
-  `cgo: C compiler "gcc" not found`. Put the directory first on `PATH` for the one command.
-  PowerShell:
+- Without gcc on `PATH` (a shell whose parent predates the `PATH` change), `go env CGO_ENABLED`
+  prints `0` and `go test -race` fails with `cgo: C compiler "gcc" not found`. That is a gap to
+  report, not a reason to drop `-race`; the one-command prefix bridges such a shell only. PowerShell:
   `$env:Path = "C:\msys64\mingw64\bin;" + $env:Path; $env:CGO_ENABLED = "1"; go test -race ./...`.
   Git Bash: `PATH="/c/msys64/mingw64/bin:$PATH" CGO_ENABLED=1 go test -race ./...`.
 - Reinstall: `winget install --id MSYS2.MSYS2 -e` (elevated PowerShell); in the "MSYS2 MINGW64"
