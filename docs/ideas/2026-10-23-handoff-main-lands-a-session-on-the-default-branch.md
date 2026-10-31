@@ -1,7 +1,7 @@
 ---
 date: 2026-10-23
 kind: feature
-related: [2026-10-23-session-land-pushes-to-main-mid-session.md, 2026-10-29-broodforge-works-on-itself-overnight.md]  # the first lands mid-session; this is the end's handoff; the second runs unattended and accepts through it
+related: [2026-10-23-session-land-pushes-to-main-mid-session.md, 2026-10-29-broodforge-works-on-itself-overnight.md, 2026-10-31-a-changelog-channel-for-landings.md, 2026-10-31-broodforge-deploys-broodforge.md]  # the first lands mid-session; this is the end's handoff; the second runs unattended and accepts through it; the third announces each landing, the fourth builds and restarts the service after one
 ---
 
 # A `main` handoff lands a session on the default branch

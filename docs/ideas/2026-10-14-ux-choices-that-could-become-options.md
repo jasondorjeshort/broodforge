@@ -1,6 +1,7 @@
 ---
 date: 2026-10-14
 kind: feature
+related: [2026-10-31-spectator-mirror-of-a-session.md, 2026-10-31-zero-token-buttons-from-the-repository-workflow.md]  # this lists venue options; the first is one more (a read-only public mirror), the second adds repository-declared buttons
 ---
 
 # UX choices that could become user or channel options

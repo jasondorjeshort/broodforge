@@ -1,7 +1,7 @@
 ---
 date: 2026-10-24
 kind: feature
-related: [2026-10-29-a-session-remembers-across-weeks.md]  # that one writes for the next resume; this one writes for the venue
+related: [2026-10-29-a-session-remembers-across-weeks.md, 2026-10-31-a-changelog-channel-for-landings.md, 2026-10-31-the-agent-asks-the-venue-with-buttons.md]  # that one writes for the next resume; this one writes for the venue; the third would post this closing message to a changelog channel, the fourth gives the agent a way to ask mid-turn instead
 ---
 
 # A turn ending on a tool call could prompt the engine once for a closing message

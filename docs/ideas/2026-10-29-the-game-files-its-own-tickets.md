@@ -1,7 +1,7 @@
 ---
 date: 2026-10-29
 kind: feature
-related: [2026-10-24-discord-attachments-reach-the-session.md, 2026-10-30-the-bot-files-its-own-findings.md]  # the first carries a person's attachment; this one is a report posted by software; the last is the inward sibling, the bot reporting on itself
+related: [2026-10-24-discord-attachments-reach-the-session.md, 2026-10-30-the-bot-files-its-own-findings.md, 2026-10-31-preview-this-branch-in-the-game.md]  # the first carries a person's attachment; this one is a report posted by software; the last is the inward sibling, the bot reporting on itself; the preview idea deploys a session branch for play, this is the game reporting in
 ---
 
 # The game files its own tickets

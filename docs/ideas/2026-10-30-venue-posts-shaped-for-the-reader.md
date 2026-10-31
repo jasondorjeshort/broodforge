@@ -1,6 +1,7 @@
 ---
 date: 2026-10-30
 kind: feature
+related: [2026-10-31-a-since-you-left-line-on-return.md]  # this shapes every bot post; that one is one more post, the catch-up line on a person's return
 ---
 
 # Venue posts shaped for the reader

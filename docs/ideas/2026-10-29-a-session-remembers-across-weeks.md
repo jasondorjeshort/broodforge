@@ -1,7 +1,7 @@
 ---
 date: 2026-10-29
 kind: feature
-related: [2026-10-24-a-turn-ending-on-a-tool-call-could-prompt-the-engine-for-a-closing-message.md, 2026-10-30-owner-less-weeks.md]  # the first writes for the venue; this one writes for the next resume; the last is the combined weeks-away vision that needs it
+related: [2026-10-24-a-turn-ending-on-a-tool-call-could-prompt-the-engine-for-a-closing-message.md, 2026-10-30-owner-less-weeks.md, 2026-10-31-a-since-you-left-line-on-return.md, 2026-10-31-rewind-and-fork-a-session-at-a-turn.md]  # the first writes for the venue; this one writes for the next resume; the third is the combined weeks-away vision that needs it; the fourth is the person's catch-up line, not the agent's; the last moves the session back to an earlier turn
 ---
 
 # A session remembers across weeks

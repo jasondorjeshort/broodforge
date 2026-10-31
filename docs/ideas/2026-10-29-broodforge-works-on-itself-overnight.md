@@ -1,7 +1,7 @@
 ---
 date: 2026-10-29
 kind: feature
-related: [2026-10-23-handoff-main-lands-a-session-on-the-default-branch.md, 2026-10-30-owner-less-weeks.md, 2026-10-30-credential-pool-scheduling-by-headroom.md, 2026-10-30-the-base-tends-itself.md]  # that one is the accept button; this one runs unattended; the pool and base-tending ideas build on this
+related: [2026-10-23-handoff-main-lands-a-session-on-the-default-branch.md, 2026-10-30-owner-less-weeks.md, 2026-10-30-credential-pool-scheduling-by-headroom.md, 2026-10-30-the-base-tends-itself.md, 2026-10-31-broodforge-deploys-broodforge.md]  # that one is the accept button; this one runs unattended; the pool and base-tending ideas build on this; the last runs a landed change as the live service, which unattended end to end would need
 ---
 
 # Broodforge works on itself overnight

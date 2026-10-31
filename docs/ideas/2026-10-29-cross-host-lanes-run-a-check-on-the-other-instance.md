@@ -1,7 +1,7 @@
 ---
 date: 2026-10-29
 kind: feature
-related: [2026-10-14-sessions-run-remote-controlled-on-the-droplet.md]  # that one is where a session runs; this one is one instance asking another
+related: [2026-10-14-sessions-run-remote-controlled-on-the-droplet.md, 2026-10-31-preview-this-branch-in-the-game.md]  # that one is where a session runs; this one is one instance asking another; the last deploys a branch to a preview of the game, not a check on another instance
 ---
 
 # Cross-host lanes: a session runs a check on the other instance

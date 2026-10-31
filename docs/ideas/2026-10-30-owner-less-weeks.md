@@ -1,7 +1,7 @@
 ---
 date: 2026-10-30
 kind: feature
-related: [2026-10-29-broodforge-works-on-itself-overnight.md, 2026-10-29-a-session-remembers-across-weeks.md, 2026-10-30-credential-pool-scheduling-by-headroom.md, 2026-10-30-the-bot-files-its-own-findings.md]  # each is one piece; this one is the whole
+related: [2026-10-29-broodforge-works-on-itself-overnight.md, 2026-10-29-a-session-remembers-across-weeks.md, 2026-10-30-credential-pool-scheduling-by-headroom.md, 2026-10-30-the-bot-files-its-own-findings.md, 2026-10-31-a-since-you-left-line-on-return.md]  # each is one piece; this one is the whole; the last is a per-return line inside a session, this is a digest for the owner after unattended weeks
 ---
 
 # Owner-less weeks
