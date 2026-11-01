@@ -26,3 +26,10 @@ actions file would be read); `internal/discord/customid.go` (one custom id per a
   same as the agent's Bash, and the hook's path checks must apply to it.
 - Output goes to the venue or to the agent's next prompt or both.
 - Whether an action may run while a turn is running, on the same worktree.
+
+Question: Is this wanted, and as a proposal, since it runs repository-authored commands under the session's reach?
+`internal/workflow/copy.go` renders the per-session copy of the workflow (`Render`, extracting listed files into the
+session), so an actions file would be read there, but a command the repository wrote running with no engine turn
+is a security surface. Recommend a proposal after the landing passes.
+
+Answer:
