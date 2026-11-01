@@ -28,3 +28,10 @@ gate the swap); the `main` handoff of the related idea (the trigger).
 - A migration in the new binary runs against the live store; the snapshot idea
   (`2026-10-30-serve-snapshots-the-store-before-a-migration.md`) is a prerequisite.
 - A bad binary that starts and then fails: what decides to roll back, and how the owner hears.
+
+Question: Does the owner want the proposal for self-deployment queued after the first `main` land?
+Recommend yes, after P37 and one live landing (`docs/design/08-implementation-plan-landing.md`) and the
+store snapshot idea: the trigger does not exist until a landing does, and the proposal has real forks
+(replacing a running binary on Windows, the service restart on each host, rollback).
+
+Answer:
