@@ -27,3 +27,13 @@ Anchor: `.claude/hooks/privacy-scan.js` (`--json` output, the hit's `match`); `.
   refusal first, since there is no coordinator in the loop at all.
 - A name class hit must never be allowed by a button; only word, host and home, as the owner's
   user allow file already limits.
+
+Question: do you want the bot to edit `privacy.allow` on a button click? Hatchery's agreement makes the allow list the
+owner's, edited only after asking, and `privacy-scan.js` already separates classes (a name is never allowable), so the
+click would be a faithful ask; but it needs the scan's `--json` hit (exists) plus a bot edit of `.claude/hooks/policy.json`
+and a relaunched push, and `policy.json` is a base-shaped file in this project. Recommendation: not now: the round
+trips each pushed through the coordinator came from one false-positive class, and the rename idea
+(`2026-11-01-rename-the-session-home-directory-so-the-privacy-scan-stops-misreading-it.md`) removes the class at its
+source; if allows keep coming, build the bot-landing case first (no coordinator in that loop) and leave coordinator
+pushes as they are. Also a base-owned change (agreement and pusher), so a carry-back if wanted.
+Answer:
