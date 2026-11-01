@@ -24,3 +24,9 @@ actions file of the zero-token-buttons idea; the game's repository, not here.
   cloud box, now opened on every session, so the preview must run under the session's isolation.
 - A game with persistent state needs a copy of it per preview or a throwaway world.
 - Who may press it: the driver, or anyone in the channel who can see the venue.
+
+Question: Does the owner want this held until the zero-token buttons exist?
+Recommend not before: the preview is one action of `2026-10-31-zero-token-buttons-from-the-repository-workflow.md`
+and its hosting half lives in the game's repository, so there is nothing to build here until the actions file does.
+
+Answer:
