@@ -4,6 +4,7 @@ package discord
 
 import (
 	"errors"
+	"os"
 	"strings"
 	"unicode/utf8"
 
@@ -59,7 +60,7 @@ func (a *Adapter) credential(in Inbound, sl Slash) (Reply, error) {
 			if err != nil {
 				return Reply{}, a.credentialRefusal(in, err)
 			}
-			return ephemeral(subscriptionReadyText(info.ID)), nil
+			return a.added(in, info.ID, subscriptionReadyText(info.ID, a.isOwner(in.User), selfPath()))
 		case kindAPIKey:
 			return Reply{Reply: ReplyModal, Text: APIKeyModalPrefix + label}, nil
 		}
@@ -158,7 +159,32 @@ func (a *Adapter) apiKeySubmitted(in Inbound, value string) (Reply, error) {
 		}
 		return Reply{}, err
 	}
-	return ephemeral(apiKeyStoredText(info.ID, lastFour(value))), nil
+	return a.added(in, info.ID, apiKeyStoredText(info.ID, lastFour(value)))
+}
+
+// added answers a /credential add that stored id: a member with no default gets it as their
+// default, their first credential (the owner's answer 2026-10-31; a later one leaves the
+// default alone), and the reply says so. The add stands either way: a default that cannot be
+// read or set leaves the reply without the sentence, and /credential default sets it.
+func (a *Adapter) added(in Inbound, id, reply string) (Reply, error) {
+	reg, ok, err := a.svc.Registered(in.User)
+	if err != nil || !ok || (reg.DefaultCredential != nil && *reg.DefaultCredential != "") {
+		return ephemeral(reply), nil
+	}
+	if _, err := a.svc.SetDefault(in.User, id, in.User); err != nil {
+		return ephemeral(reply), nil
+	}
+	return ephemeral(withDefaultText(reply)), nil
+}
+
+// selfPath is the running binary's own path, the command the owner types on the host (never a
+// bare broodforge, which is on no PATH); "broodforge" only when the system cannot say.
+func selfPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return "broodforge"
+	}
+	return exe
 }
 
 func lastFour(s string) string {

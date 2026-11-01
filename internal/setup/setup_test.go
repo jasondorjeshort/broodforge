@@ -216,8 +216,44 @@ func TestSteps(t *testing.T) {
 	if b, err := os.ReadFile(filepath.Join(f.root, "config", "instance.json")); err != nil || !bytes.Contains(b, []byte(`"//"`)) {
 		t.Errorf("instance.json has no comments: %v", err)
 	}
-	if strings.Contains(out, "the bot is running.") != true {
-		t.Errorf("no closing line:\n%s", out)
+	// No service installed (the fixture's Env sets none): the closing line names the binary.
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "ok  next  Setup done. Nothing is running yet: start the bot with " + self +
+		" serve, then in Discord run /register and /credential add.\n"; !strings.HasSuffix(out, want) {
+		t.Errorf("closing line:\n%s\nwant %q", out, want)
+	}
+}
+
+// TestNextService: with a service installed the closing line says the bot is running (the
+// owner's answer 2026-10-31 keeps the old line there).
+func TestNextService(t *testing.T) {
+	f := newFixture(t)
+	var out syncBuffer
+	env := f.env(strings.NewReader(""), &out)
+	env.ServiceInstalled = func() bool { return true }
+	if err := setup.Run(context.Background(), f.opts(), env); err != nil {
+		t.Fatalf("setup: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "ok  next  the bot is running. ") {
+		t.Errorf("closing line:\n%s", out.String())
+	}
+}
+
+// TestGitCredentialPrompt: the hidden question names the repository URL the token pushes to.
+func TestGitCredentialPrompt(t *testing.T) {
+	f := newFixture(t)
+	var out, prompts syncBuffer
+	env := f.env(strings.NewReader("\n\n"), &out) // the key's Enter, then Enter defers the token
+	env.TTY, env.Stderr = true, &prompts
+	if err := setup.Run(context.Background(), f.opts(func(o *setup.Options) { o.Yes = false }), env); err != nil {
+		t.Fatalf("setup: %v\n%s", err, out.String())
+	}
+	want := "Token for pushes to " + f.repo + " (not shown; Enter to add later with setup git-credential):"
+	if !strings.Contains(prompts.String(), want) {
+		t.Errorf("prompts:\n%s\nwant %q", prompts.String(), want)
 	}
 }
 

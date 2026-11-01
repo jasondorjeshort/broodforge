@@ -163,6 +163,10 @@ type Env struct {
 	// FakeDiscord marks Discord as the scripted fake (BROODFORGE_SETUP_FAKE_DISCORD): refused
 	// live-instance on a live root, and discord.mode is left dry-run.
 	FakeDiscord bool
+	// ServiceInstalled reports whether a service (the scheduled task or the unit `setup
+	// service` installs) runs the bot on this root; the closing line depends on it. nil is
+	// cannot tell, read as no service: `setup service` (P23) is not built, so the CLI sets none.
+	ServiceInstalled func() bool
 }
 
 // pollEvery is how often a waiting fix is tried again.

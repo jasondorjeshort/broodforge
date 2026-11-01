@@ -200,10 +200,10 @@ create a role named Trusted in Server Settings, Roles, and give it to yourself; 
 on yes "fix  role  remove Manage Roles from the bot's role in Server Settings, Roles; setup is
 waiting". Channels: "This server already has channels. Create Sessions, #<project id> and
 #<project id>-notices in it? [y/N]". Repository: "Repository URL of the project (its canonical):".
-Git credential: "Token for pushes to it (not shown; Enter to add later with setup
-git-credential):". Closing: "ok  next  the bot is running. In Discord: /register, then /credential add
-kind:subscription; then here: broodforge setup login <credential id>" (was "next  the bot is running.
-In Discord: ..."; pending the owner's re-approval). Refusal `running`: "error:
+Git credential (owner's answer 2026-10-31): "Token for pushes to <repository URL> (not shown; Enter to add later with
+setup git-credential):". Closing with a service installed: "ok  next  the bot is running. In Discord: /register, then
+/credential add kind:subscription; then here: broodforge setup login <credential id>"; with none, or when setup cannot tell
+(owner's answer 2026-10-31; `<path>` the binary's own): "ok  next  Setup done. Nothing is running yet: start the bot with <path> serve, then in Discord run /register and /credential add.". Refusal `running`: "error:
 running: a bot answers at <address>; stop it with broodforge stop in this shell (every open session
 is interrupted) or use setup --check" ("in this shell" added); the other refusal texts as the table.
 Closing under `--discord dry-run` (2026-10-30, interim wording, the owner's review pending): "ok  next

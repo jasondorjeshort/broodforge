@@ -109,7 +109,7 @@ func sf(s string) snowflake.ID { return snowflake.MustParse(s) }
 
 func (f *fakeRest) GetBotApplicationInfo(...rest.RequestOpt) (*dg.Application, error) {
 	f.record("GetBotApplicationInfo", "")
-	return &dg.Application{ID: sf(testApp), Bot: &dg.User{ID: sf(testBot)}, Flags: dg.ApplicationFlagGatewayMessageContent}, nil
+	return &dg.Application{ID: sf(testApp), Bot: &dg.User{ID: sf(testBot)}, Owner: &dg.User{ID: sf("1001")}, Flags: dg.ApplicationFlagGatewayMessageContent}, nil
 }
 func (f *fakeRest) GetGuild(g snowflake.ID, _ bool, _ ...rest.RequestOpt) (*dg.RestGuild, error) {
 	f.record("GetGuild", "", g.String())

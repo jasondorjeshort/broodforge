@@ -155,6 +155,7 @@ type Gateway struct {
 	mu     sync.Mutex
 	gw     gateway.Gateway
 	bot    snowflake.ID
+	owner  snowflake.ID            // the application's owner, or its team's; 0 when Discord names none
 	msgs   map[string]msgRef       // the adapter's message id to Discord's channel and message
 	venues map[string]snowflake.ID // session id to its private channel
 	timers map[string]session.Timer
@@ -287,6 +288,12 @@ func (g *Gateway) prepare(ctx context.Context) error {
 	}
 	g.mu.Lock()
 	g.bot = app.Bot.ID
+	switch {
+	case app.Owner != nil:
+		g.owner = app.Owner.ID
+	case app.Team != nil:
+		g.owner = app.Team.OwnerID
+	}
 	g.mu.Unlock()
 	if _, err := g.rest.SetGuildCommands(g.app, g.guild, Commands(), opt); err != nil {
 		return fmt.Errorf("registering the slash commands in guild %s: %w", g.guild, err)
@@ -300,6 +307,17 @@ func (g *Gateway) report() {
 		return
 	}
 	g.a.co.Offer(Post{Op: OpCreate, Channel: g.notice.String(), MessageID: g.a.newID(), Body: Mask(g.cfg.Report)})
+}
+
+// ownerID is the owner of the bot's application as prepare read it, "" when none is known: the
+// owner who runs the host, so /credential add answers them with the host command.
+func (g *Gateway) ownerID() string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.owner == 0 {
+		return ""
+	}
+	return g.owner.String()
 }
 
 // Connected reports whether the gateway session is ready (status's `discord: live connected`).

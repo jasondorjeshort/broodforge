@@ -58,6 +58,10 @@ type Config struct {
 	// gateway learns its Discord id; nil records nothing.
 	Panels    []Panel
 	SavePanel func(Panel) error
+	// OwnerID is the owner's Discord user id where no live gateway reads it from the bot's
+	// application (a dry run, a test); "" is no owner known, so /credential add answers every
+	// caller in the member's form.
+	OwnerID string
 }
 
 // Credentials is what /credential needs of the credential store, which the adapter does not
@@ -699,7 +703,7 @@ func (a *Adapter) start(ctx context.Context, in Inbound, channel, model string) 
 	case session.CodeRefused:
 		return Reply{}, refusal(se.Code, startRolesText(channel))
 	case session.CodeNoCredential:
-		return Reply{}, refusal(se.Code, couldNotStartText("you have no default credential; add one with /credential add")) // not 04
+		return Reply{}, refusal(se.Code, noDefaultText(a.usableIDs(in.User)))
 	case session.CodeCredentialStatus:
 		id, status, _ := strings.Cut(se.Message, " is ")
 		reason := "your default credential " + id + " needs a login"
@@ -710,13 +714,62 @@ func (a *Adapter) start(ctx context.Context, in Inbound, channel, model string) 
 	case "worktree-create":
 		return Reply{}, refusal(se.Code, couldNotStartText("cloning the repository failed on the host: "+firstOf(splitLines(se.Message))))
 	case "canonical-diverged":
-		branch := "main"
-		if ch, ok := a.cfg.Channel(channel); ok && ch.Repo.DefaultBranch != "" {
-			branch = ch.Repo.DefaultBranch
+		ch, _ := a.cfg.Channel(channel)
+		branch, remote := ch.Repo.DefaultBranch, ch.Repo.Remote
+		if branch == "" {
+			branch = "main"
 		}
+		if remote == "" {
+			remote = "origin"
+		}
+		// The venue gets the plain line, the owner's notice channel the command that fixes it.
+		a.notice(canonicalDivergedNotice(ch.Project, branch, ch.Repo.Canonical, remote))
 		return Reply{}, refusal(se.Code, canonicalDivergedText(branch))
 	}
 	return Reply{}, refusal(se.Code, couldNotStartText(se.Message))
+}
+
+// notice posts text to the owner's notice channel (discord.noticeChannelId) through the
+// coalescer, as the gateway's start-up report goes, so the outbox shows it in a dry run too; no
+// notice channel posts nothing.
+func (a *Adapter) notice(text string) {
+	if a.cfg.Config == nil {
+		return
+	}
+	c := a.cfg.Config()
+	if c == nil || c.Instance.Discord.NoticeChannelID == "" {
+		return
+	}
+	a.co.Offer(Post{Op: OpCreate, Channel: c.Instance.Discord.NoticeChannelID, MessageID: a.newID(), Body: Mask(text)})
+}
+
+// usableIDs is the ids of user's credentials that are not removed, for the no-default refusal;
+// nil without the credential store or when it cannot be read.
+func (a *Adapter) usableIDs(user string) []string {
+	if a.cfg.Credentials == nil {
+		return nil
+	}
+	infos, err := a.cfg.Credentials.List(user)
+	if err != nil {
+		return nil
+	}
+	var ids []string
+	for _, c := range infos {
+		if c.Status != "removed" {
+			ids = append(ids, c.ID)
+		}
+	}
+	return ids
+}
+
+// isOwner reports whether user is the owner: on a live instance the owner of the bot's
+// application (the gateway reads it at its start), else Config.OwnerID.
+func (a *Adapter) isOwner(user string) bool {
+	owner := a.cfg.OwnerID
+	if g := a.live.Load(); g != nil {
+		owner = g.ownerID()
+	}
+	return owner != "" && owner == user
 }
 
 // PostPanel posts or refreshes a project channel's panel (04; `panel post <channel id>`): the

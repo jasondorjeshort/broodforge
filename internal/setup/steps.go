@@ -26,13 +26,38 @@ import (
 
 // The owner's texts (decisions/0027-setup-commands.md, The owner's texts), quoted as they stand.
 const (
-	textKeyPause      = "Copy the key into your password manager, then press Enter."
-	textRepo          = "Repository URL of the project (its canonical):"
-	textGitCredential = "Token for pushes to it (not shown; Enter to add later with setup git-credential):"
-	textNext          = "the bot is running. In Discord: /register, then /credential add kind:subscription; then here: broodforge setup login <credential id>"
+	textKeyPause = "Copy the key into your password manager, then press Enter."
+	textRepo     = "Repository URL of the project (its canonical):"
+	textNext     = "the bot is running. In Discord: /register, then /credential add kind:subscription; then here: broodforge setup login <credential id>"
 	// Under --discord dry-run (2026-10-30, interim wording, the owner's review pending).
 	textNextDryRun = "the dry-run instance is ready: broodforge serve --discord dry-run starts it; a rerun with --discord live adds Discord"
 )
+
+// gitCredentialPrompt is the git credential's question, naming the repository the token pushes
+// to (the owner's answer 2026-10-31); with no URL known, the project id stands in.
+func gitCredentialPrompt(url string) string {
+	return "Token for pushes to " + url + " (not shown; Enter to add later with setup git-credential):"
+}
+
+// nextText is the live form's closing line (the owner's answer 2026-10-31): with a service
+// installed the bot is running; without one, or when setup cannot tell, nothing is, and the
+// line names the running binary's own path to start it.
+func nextText(service bool, exe string) string {
+	if service {
+		return textNext
+	}
+	return "Setup done. Nothing is running yet: start the bot with " + exe + " serve, then in Discord run /register and /credential add."
+}
+
+// selfPath is the running binary's own path, the command the owner types (never a bare
+// broodforge, which is on no PATH); "broodforge" only when the system cannot say.
+func selfPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return "broodforge"
+	}
+	return exe
+}
 
 // Steps is the run in the companion's order; the Discord steps are in discord.go.
 func Steps() []Step {
@@ -613,7 +638,7 @@ func stepGitCredential(_ context.Context, s *State) (Line, error) {
 		if s.opt.Yes {
 			return deferred, nil // Enter, the shown default
 		}
-		value, err := s.prompt.Hidden(textGitCredential)
+		value, err := s.prompt.Hidden(gitCredentialPrompt(s.pushURL(pdoc)))
 		if err != nil {
 			return Line{}, err
 		}
@@ -633,7 +658,7 @@ func stepGitCredential(_ context.Context, s *State) (Line, error) {
 	// `setup git-credential`: the one secret of this command, hidden on a terminal, else stdin.
 	var value string
 	if s.prompt.tty {
-		value, err = s.prompt.Hidden(textGitCredential)
+		value, err = s.prompt.Hidden(gitCredentialPrompt(s.pushURL(pdoc)))
 	} else {
 		value, err = s.prompt.All()
 	}
@@ -668,6 +693,18 @@ func stepGitCredential(_ context.Context, s *State) (Line, error) {
 		return ok(step, rec.ID+"; "+cur+" removed"), nil
 	}
 	return ok(step, rec.ID), nil
+}
+
+// pushURL is the repository the git credential pushes to, as the prompt names it: the URL given
+// or asked in this run, else the one the project file keeps, else the project id.
+func (s *State) pushURL(pdoc *config.Doc) string {
+	if s.repoURL != "" {
+		return s.repoURL
+	}
+	if u := pdoc.String("repo", config.SetupURLKey); u != "" {
+		return u
+	}
+	return s.project
 }
 
 func deref(l *Line) Line {
@@ -978,5 +1015,6 @@ func stepNext(_ context.Context, s *State) (Line, error) {
 	if s.opt.DryRun {
 		return ok("next", textNextDryRun), nil
 	}
-	return ok("next", textNext), nil
+	service := s.env.ServiceInstalled != nil && s.env.ServiceInstalled()
+	return ok("next", nextText(service, selfPath())), nil
 }

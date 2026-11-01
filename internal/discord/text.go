@@ -258,9 +258,15 @@ func canonicalStaleLine(st *session.CanonicalStale) string {
 		"); this session starts from the copy on the host, last fetched " + when + ".\n"
 }
 
-// canonicalDivergedText is 04's canonical-diverged refusal (wording pending the owner).
+// canonicalDivergedText is 04's canonical-diverged refusal in the venue (the owner's answer
+// 2026-10-31); canonicalDivergedNotice is the line the notice channel gets beside it, with the
+// command that resets the host's copy (05-debug-interface-git.md, The fetch at session start).
 func canonicalDivergedText(branch string) string {
-	return couldNotStartText("the host's copy of " + branch + " and the remote have diverged; the owner reconciles it")
+	return "Could not start a session: the remote's " + branch + " history was rewritten, so the host's copy no longer matches. The owner needs to reset it."
+}
+
+func canonicalDivergedNotice(project, branch, canonical, remote string) string {
+	return project + ": host copy of " + branch + " diverged from the remote. Fix: git -C " + canonical + " branch -f " + branch + " " + remote + "/" + branch
 }
 
 // idleSentence is the header's idle timeout (04-ux-session-controls.md, Idle timeout): `Ends
@@ -559,9 +565,37 @@ func contributeRolesText(channel string) string {
 
 func couldNotStartText(reason string) string { return "Could not start a session: " + reason + "." }
 
-// subscriptionReadyText is 04's reply to /credential add kind:subscription (the relay off).
-func subscriptionReadyText(id string) string {
-	return "Your Claude login directory is ready (" + id + "); Broodforge never reads it. The owner finishes\nthe login on the host (`broodforge credential login " + id + "` prints the command), sends you the\nsign-in link, and you send back the code Anthropic shows. Once the owner marks it done, /credential list says usable."
+// subscriptionReadyText is 04's reply to /credential add kind:subscription (the relay off), in
+// two forms by who asks (the owner's answer 2026-10-31): the owner gets the host command with
+// the running binary's own path exe, a member what the owner does for them.
+func subscriptionReadyText(id string, owner bool, exe string) string {
+	if owner {
+		return id + " is added. Sign it in on the host: " + exe + " credential login " + id
+	}
+	return id + " is added. The owner signs it in on the host and sends you a link; reply with the code."
+}
+
+// withDefaultText adds to a /credential add reply that the credential became the member's
+// default, their first (the owner's answer 2026-10-31): a sentence of its own, on a line of its
+// own after a reply that ends in a command, so the command is copied alone.
+func withDefaultText(reply string) string {
+	if strings.HasSuffix(reply, ".") {
+		return reply + " It is your default."
+	}
+	return reply + "\nIt is your default."
+}
+
+// noDefaultText is the start refusal of a member with credentials and no default (the owner's
+// answer 2026-10-31); id is their one credential, or `<id>` when they have several. With none
+// the reason names /credential add instead (not 04).
+func noDefaultText(ids []string) string {
+	switch len(ids) {
+	case 0:
+		return couldNotStartText("you have no default credential; add one with /credential add")
+	case 1:
+		return couldNotStartText("you have no default credential; set one with /credential default id:" + ids[0])
+	}
+	return couldNotStartText("you have no default credential; set one with /credential default id:<id>")
 }
 
 // apiKeyStoredText is 04's reply to the API-key form.
