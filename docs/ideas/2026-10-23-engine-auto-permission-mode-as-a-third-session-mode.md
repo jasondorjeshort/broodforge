@@ -54,3 +54,12 @@ rows, a third value of `defaults.mode` and of `Channel.Mode`, both already in `i
 additive, so not an incompatible change under ADR 0012, which is why no separate proposal) and then a coder pass; no separate proposal.
 
 2026-10-31, spike run: `docs/findings/2026-10-31-spike-auto-permission-mode-starts-under-p-hook-still-blocks-classifier-never-fired.md` (starts under `-p`; the hook still blocks; the classifier's own defer or refuse not yet seen).
+
+Plan: `coder`, one pass, P39 of `docs/design/08-implementation-plan-auto-mode.md`; the design is settled (ADR 0020
+Amendments 2026-11-01, `03-hook-contract.md` Auto mode, `04-ux-session-controls.md`), and this idea is its source, not a
+second brief. Files and Verify: P39's own, its Files list and its Proof (including `hook cases`, the repro and the
+owner-gated real turn), not restated here. First step, before any file: C40a (a `Write` under `-p --permission-mode
+default` with a hook exiting 0 silently), on the owner's word; an allow stops the pass at the finding. Out of scope: the
+words people see (placeholders stay until the owner words them, 04 Owner 7); a relay of the classifier's refusal as a
+venue prompt (the owner accepts or rejects shape B first). Delete this file in the commit that lands P39; the Open items
+above are P39's or the finding's.
