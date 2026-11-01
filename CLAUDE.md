@@ -32,7 +32,8 @@ Branch: main
 - Path-scoped rules beyond the base's `docs.md`: `.claude/rules/go.md` (Go files, `go.mod`) and
   `.claude/rules/hooks.md` (`.claude/hooks/`).
 - The push scan's placeholders (`user`, `alice`, `bob`) and service accounts (`broodforge`,
-  `broodforge-engine`) are `privacy.allow` in `.claude/hooks/policy.json`; a person's name never is.
+  `broodforge-engine`) and the session-home segment `land-result` (a design path the home rule
+  misread, owner's allow 2026-11-01) are `privacy.allow` in `.claude/hooks/policy.json`; a person's name never is.
 - A main-session push first runs pusher check 5 (`node .claude/hooks/privacy-scan.js` over the
   outgoing range, then a read of each outgoing commit for names, numbers, addresses and
   identifiers) and quotes the result before pushing.
