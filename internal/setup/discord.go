@@ -49,6 +49,7 @@ const (
 	textDryRun       = "dry-run"
 	textNoFixtures   = "build the binary in a checkout: no fixtures/engine beside bin/"
 	categoryName     = "Sessions"
+	endedName        = "Ended sessions" // the owner's name, 2026-10-31
 	defaultRole      = "Trusted"
 )
 
@@ -507,7 +508,7 @@ func stepGuild(ctx context.Context, s *State) (Line, error) {
 	return ok(step, pick.ID+"  "+pick.Name), nil
 }
 
-// slot is one of the channels setup makes: the category, the lobby, the notice channel.
+// slot is one of the channels setup makes: the categories, the lobby, the notice channel.
 type slot struct {
 	label, name string
 	category    bool
@@ -558,10 +559,11 @@ func dropChannel(pdoc *config.Doc, id string) error {
 	return pdoc.Set("", b, "channels")
 }
 
-// stepChannels settles the category Sessions, the lobby #<project id> and #<project id>-notices:
-// a configured id present in the guild is kept whatever its name, one gone is mismatch-channels;
-// with no id, by name, then created (asked first when the guild has channels); the ids written to
-// venue.category, channels.<lobby id> and discord.noticeChannelId.
+// stepChannels settles the category Sessions, the lobby #<project id>, #<project id>-notices and
+// the category Ended sessions: a configured id present in the guild is kept whatever its name, one
+// gone is mismatch-channels; with no id, by name, then created (asked first when the guild has
+// channels, unless Ended sessions is the only one missing and --channels is not no); the ids written to
+// venue.category, channels.<lobby id>, discord.noticeChannelId and venue.endedCategory.
 func stepChannels(ctx context.Context, s *State) (Line, error) {
 	const step = "channels"
 	if s.opt.DryRun {
@@ -602,6 +604,7 @@ func stepChannels(ctx context.Context, s *State) (Line, error) {
 	cat := &slot{label: categoryName, name: categoryName, category: true, have: pdoc.String("venue", "category")}
 	lobby := &slot{label: "#" + id, name: id}
 	notice := &slot{label: "#" + id + "-notices", name: id + "-notices", have: inst.String("discord", "noticeChannelId")}
+	ended := &slot{label: endedName, name: endedName, category: true, have: pdoc.String("venue", "endedCategory")}
 	gone := func(label, cid string) error {
 		if !s.alone || s.check {
 			return mismatch(step, "channel "+cid+label, "no such channel in guild "+guild)
@@ -641,7 +644,7 @@ func stepChannels(ctx context.Context, s *State) (Line, error) {
 			lobby.have = cid
 		}
 	}
-	for _, sl := range []*slot{cat, notice} {
+	for _, sl := range []*slot{cat, notice, ended} {
 		if sl.have == "" {
 			continue
 		}
@@ -652,8 +655,12 @@ func stepChannels(ctx context.Context, s *State) (Line, error) {
 			sl.old, sl.have = sl.have, ""
 		}
 	}
-	slots := []*slot{cat, lobby, notice}
+	// Ended sessions last. When it is the only slot missing (a project set up before it existed)
+	// it is created without the question, whose default no would stop the upgrade; an explicit
+	// --channels no still stops it.
+	slots := []*slot{cat, lobby, notice, ended}
 	var missing []string
+	ask := false
 	for _, sl := range slots {
 		if sl.have != "" {
 			continue
@@ -666,6 +673,7 @@ func stepChannels(ctx context.Context, s *State) (Line, error) {
 		}
 		if sl.have == "" {
 			missing = append(missing, sl.label)
+			ask = ask || sl != ended
 		}
 	}
 	if s.check && (len(missing) > 0 || len(placeholders) > 0 || slices.ContainsFunc(slots, func(sl *slot) bool { return sl.set })) {
@@ -673,7 +681,7 @@ func stepChannels(ctx context.Context, s *State) (Line, error) {
 	}
 	if len(missing) > 0 {
 		create := true
-		if len(chans) > 0 {
+		if len(chans) > 0 && (ask || s.opt.Channels == "no") {
 			if create, err = s.channelsAnswer(id); err != nil {
 				return Line{}, err
 			}
@@ -746,6 +754,13 @@ func stepChannels(ctx context.Context, s *State) (Line, error) {
 	}
 	if cat.set {
 		if err := pdoc.Set("", config.RawValue(cat.have), "venue", "category"); err != nil {
+			return Line{}, toControl(err)
+		}
+		pchanged = true
+	}
+	if ended.set {
+		if err := pdoc.Set("The category an ended session's channel moves to; setup's channels step made it.",
+			config.RawValue(ended.have), "venue", "endedCategory"); err != nil {
 			return Line{}, toControl(err)
 		}
 		pchanged = true
@@ -1004,9 +1019,11 @@ func (s *State) discordEchoes(ctx context.Context) []Echo {
 	}
 	seen := map[string]bool{}
 	for _, p := range c.Projects {
-		if cat := p.Venue.Category; cat != "" && !seen[cat] {
-			seen[cat] = true
-			chans = append(chans, discord.CheckChannel{ID: cat, Reach: discord.CheckCategory})
+		for _, cat := range []string{p.Venue.Category, p.Venue.EndedCategory} {
+			if cat != "" && !seen[cat] {
+				seen[cat] = true
+				chans = append(chans, discord.CheckChannel{ID: cat, Reach: discord.CheckCategory})
+			}
 		}
 	}
 	res, err := api.Check(ctx, guild, chans)

@@ -48,12 +48,12 @@ func NewCoalescer(sink func(now time.Time, p Post)) *Coalescer {
 }
 
 // limited is whether a post counts against the per-session limit: every message write does;
-// a channel's creation and a delete count against the global budget only.
+// a channel's creation, move or lock and a delete count against the global budget only.
 func limited(op Op) bool {
 	switch op {
 	case OpCreate, OpEdit, OpAttach:
 		return true
-	case OpChannel, OpDelete:
+	case OpChannel, OpDelete, OpMove, OpLock:
 	}
 	return false
 }
@@ -89,7 +89,7 @@ func (c *Coalescer) Offer(p Post) {
 			keep = append(keep, held)
 		}
 		q.posts = keep
-	case OpChannel, OpCreate, OpAttach:
+	case OpChannel, OpCreate, OpAttach, OpMove, OpLock:
 	}
 	q.posts = append(q.posts, &p)
 	c.mu.Unlock()

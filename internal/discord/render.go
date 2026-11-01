@@ -53,6 +53,7 @@ type View struct {
 	confirmN    int    // the commit count the confirm names
 	over        bool   // session-ended handled
 	summaryTo   func(lobby string) string
+	endedTo     func(id, lobby string) string
 	prompt      string // the open prompt's message id
 	promptCall  string
 	promptTrace string
@@ -76,17 +77,20 @@ type part struct {
 
 // ViewConfig is what a View needs besides its session id. SummaryChannel is the project's
 // venue.summaryChannel for a project channel, "" for none (03, Configuration); nil is none.
+// EndedCategory is the venue.endedCategory of session id's project, the category its venue
+// moves to at the end, "" for none (the end then neither moves nor locks it); nil is none.
 type ViewConfig struct {
 	NewID          func() string
 	Name           func(user string) string
 	Offer          func(Post)
 	SummaryChannel func(lobby string) string
+	EndedCategory  func(id, lobby string) string
 }
 
 // NewView returns the view of session id.
 func NewView(id string, c ViewConfig) *View {
 	return &View{id: id, venue: id, newID: c.NewID, name: c.Name, offer: c.Offer, summaryTo: c.SummaryChannel,
-		bypass: map[string]session.Event{}}
+		endedTo: c.EndedCategory, bypass: map[string]session.Event{}}
 }
 
 // Lobby is the session's project channel, "" before its session-started event.
@@ -668,6 +672,22 @@ func (v *View) sessionEnded(ev session.Event, t time.Time) {
 		v.post(Post{Op: OpCreate, Channel: ch, MessageID: msg, Body: summary})
 		v.post(Post{Op: OpAttach, Channel: ch, MessageID: msg, File: v.id + ".md", First: v.id + ".md", Body: transcript})
 	}
+	v.moveEnded()
+}
+
+// moveEnded moves the ended session's venue under the project's venue.endedCategory and locks
+// it against sends for everyone but the bot (04-ux-session-end.md, Ending a session), after the
+// summaries, so they are not held behind it; with no category it does neither.
+func (v *View) moveEnded() {
+	if v.endedTo == nil {
+		return
+	}
+	cat := v.endedTo(v.id, v.lobby)
+	if cat == "" {
+		return
+	}
+	v.post(Post{Op: OpMove, MessageID: v.venue, First: cat})
+	v.post(Post{Op: OpLock, MessageID: v.venue, First: lockFirst})
 }
 
 // endingDone deletes the `Ending:` line once what it announced is posted: the summary, or the

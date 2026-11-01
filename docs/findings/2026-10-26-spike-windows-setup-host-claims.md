@@ -8,7 +8,7 @@ area: spike / setup host (Windows)
 
 ## Question
 
-P23's `setup host` and `setup service` (ADR 0027, `0027-setup-commands.md`, Windows) script the
+P23's `setup host` and `setup service` (ADR 0027, `0027-setup-commands-host.md`, Windows) script the
 PC's account, root, engine copy and task on claims no one has run. Each one decides what P23
 generates:
 

@@ -185,7 +185,7 @@ once and never changed; a rename is a new file plus `worktree forget` for the ol
   "repo": { "canonical": "<root>/projects/broodforge", "remote": "origin", "defaultBranch": "main",
             "forge": "github", "gitCredentialId": "cred-…" },
   "handoff": "pull-request", "handoffFallback": "push", "workflow": { "inject": "repository", "hooks": ["PreToolUse", "PostToolUse"] },
-  "venue": { "category": "<category id>", "summaryChannel": null },
+  "venue": { "category": "<category id>", "endedCategory": "<category id>", "summaryChannel": null },
   "channels": { "<discord channel id>": {
       "reach": "code", "roles": { "start": ["trusted"], "contribute": ["members"], "answer": ["driver"], "land": ["trusted"] },
       "mode": "prompt", "harness": "claude-code", "idleTimeoutMinutes": 60, "promptTimeoutMinutes": 5, "model": null, "effort": null } } }
@@ -203,7 +203,8 @@ error with any other `handoff`; `roles.land` is the channel's list of who may la
 meaning nobody (`config check` warns on a `main` project whose channel has none, and on a path remote that is a
 checkout with the default branch checked out, which refuses every push to it); `workflow.inject` is `repository` (default) or `none` and `workflow.hooks` lists
 only `PreToolUse` and `PostToolUse`, none by default (ADR 0025 rule 6); `venue.category` is the category id sessions are
-created under, `venue.summaryChannel` optional, also receiving each summary and transcript; `discord.mode` is `live` or
+created under, `venue.endedCategory` the one an ended session's channel moves to until its deletion (setup's
+`Ended sessions`; empty: it stays, `04-ux-session-end.md`), `venue.summaryChannel` optional, also receiving each summary and transcript; `discord.mode` is `live` or
 `dry-run`; `engine.fakeFixtures` is the `fake`'s fixture directory. The panel message id is recorded per project channel
 in the store when `panel post <channel id>` runs: a project has several channels, and the bot never writes the owner's
 config files (ADR 0021). `credentials.keyFile` names the store key (ADR 0022; the default per host and the

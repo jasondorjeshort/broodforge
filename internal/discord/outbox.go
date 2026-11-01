@@ -10,6 +10,7 @@ import (
 	"time"
 
 	dg "github.com/disgoorg/disgo/discord"
+	"github.com/disgoorg/snowflake/v2"
 )
 
 // Op is what one outbox post does: a REST call the gateway would make (P12).
@@ -26,7 +27,15 @@ const (
 	OpDelete Op = "delete"
 	// OpAttach attaches a file to a message (the transcript, 04 Owner 11).
 	OpAttach Op = "attach"
+	// OpMove moves an ended session's venue under venue.endedCategory, First the category id
+	// (04-ux-session-end.md, Ending a session).
+	OpMove Op = "move"
+	// OpLock denies Send Messages in an ended session's venue to every overwrite but the bot's.
+	OpLock Op = "lock"
 )
+
+// lockFirst is a lock post's first column: what the lock leaves.
+const lockFirst = "send: the bot only"
 
 // Button styles, Discord's.
 const (
@@ -90,8 +99,8 @@ const TimeLayout = "2006-01-02T15:04:05.000Z07:00"
 func (p *Post) finish() {
 	p.Length = len([]rune(p.Body))
 	switch p.Op {
-	case OpChannel, OpAttach:
-		// First is the channel name or the file name, set by the caller.
+	case OpChannel, OpAttach, OpMove, OpLock:
+		// First is the channel name, the file name or the category id, set by the caller.
 	case OpCreate, OpEdit, OpDelete:
 		p.First = p.Body
 		if i := strings.IndexByte(p.First, '\n'); i >= 0 {
@@ -111,7 +120,15 @@ func payload(p Post) json.RawMessage {
 		b, err = json.Marshal(messageCreate(p))
 	case OpEdit:
 		b, err = json.Marshal(messageUpdate(p))
-	case OpChannel, OpDelete, OpAttach:
+	case OpMove:
+		u, ok := moveUpdate(p)
+		if !ok {
+			return nil
+		}
+		b, err = json.Marshal(u)
+	case OpChannel, OpDelete, OpAttach, OpLock:
+		// The lock's body is the channel's own overwrites with Send Messages denied, known only
+		// once the gateway reads the channel.
 		return nil
 	}
 	if err != nil {
@@ -137,6 +154,48 @@ func messageUpdate(p Post) dg.MessageUpdate {
 		rows = []dg.LayoutComponent{}
 	}
 	return dg.MessageUpdate{Content: &content, Components: &rows}
+}
+
+// moveUpdate is a move post's body: the venue's new parent, the category in First. Its own
+// overwrites stay (no lock_permissions), so the driver keeps reading it; false when First is not
+// a Discord id.
+func moveUpdate(p Post) (dg.GuildTextChannelUpdate, bool) {
+	cat, err := snowflake.Parse(p.First)
+	if err != nil {
+		return dg.GuildTextChannelUpdate{}, false
+	}
+	return dg.GuildTextChannelUpdate{ParentID: &cat}, true
+}
+
+// lockBits are what the lock takes away: sending. Only Send Messages, a bit the bot holds
+// (categoryPerms), since Discord refuses an overwrite naming a permission the bot lacks.
+const lockBits = dg.PermissionSendMessages
+
+// lockedOverwrites are a venue's overwrites with Send Messages denied to every one but the bot's
+// own member overwrite, the rest of each kept (view and history stay), and an @everyone overwrite
+// denying it added when the channel has none.
+func lockedOverwrites(ows []dg.PermissionOverwrite, guild, bot snowflake.ID) []dg.PermissionOverwrite {
+	out := make([]dg.PermissionOverwrite, 0, len(ows)+1)
+	everyone := false
+	for _, o := range ows {
+		switch ow := o.(type) {
+		case dg.MemberPermissionOverwrite:
+			if ow.UserID != bot {
+				ow.Allow, ow.Deny = ow.Allow.Remove(lockBits), ow.Deny.Add(lockBits)
+			}
+			out = append(out, ow)
+		case dg.RolePermissionOverwrite:
+			everyone = everyone || ow.RoleID == guild
+			ow.Allow, ow.Deny = ow.Allow.Remove(lockBits), ow.Deny.Add(lockBits)
+			out = append(out, ow)
+		default:
+			out = append(out, o)
+		}
+	}
+	if !everyone {
+		out = append(out, dg.RolePermissionOverwrite{RoleID: guild, Deny: lockBits})
+	}
+	return out
 }
 
 // componentRows are a post's action rows: each select menu its own (min_values and max_values

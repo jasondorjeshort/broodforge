@@ -90,7 +90,7 @@ grep -qx 'fix  guild  Open this link, pick the server, Authorize: https://discor
 	fail "no invite line with Manage Roles"
 grep -qx 'waiting for the bot to join' "$work/err" || fail "no waiting line"
 grep -qx "fix  role  remove Manage Roles from the bot's role in Server Settings, Roles; setup is waiting" "$work/out" || fail "no removal line"
-grep -qx 'ok  channels  Sessions 9001, #scratch 9002, #scratch-notices 9003' "$work/out" || fail "the channels were not created"
+grep -qx 'ok  channels  Sessions 9001, #scratch 9002, #scratch-notices 9003, Ended sessions 9004' "$work/out" || fail "the channels were not created"
 grep -qx 'ok  check  discord check  guild  3000  Test' "$work/out" || fail "discord check is not echoed in check"
 grep -q '^skip  git-credential  deferred' "$work/out" || fail "git-credential is not deferred"
 grep -q "^ok  engine  .*/stub/claude[^/]*  2\.1\.296$" "$work/out" || fail "the engine is not the stand-in"

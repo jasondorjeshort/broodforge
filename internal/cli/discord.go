@@ -547,9 +547,11 @@ func runDiscordCheck(ctx context.Context, env *Env) error {
 	}
 	seen := map[string]bool{}
 	for _, p := range c.Projects {
-		if cat := p.Venue.Category; cat != "" && !seen[cat] {
-			seen[cat] = true
-			chans = append(chans, discord.CheckChannel{ID: cat, Reach: discord.CheckCategory})
+		for _, cat := range []string{p.Venue.Category, p.Venue.EndedCategory} {
+			if cat != "" && !seen[cat] {
+				seen[cat] = true
+				chans = append(chans, discord.CheckChannel{ID: cat, Reach: discord.CheckCategory})
+			}
 		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)

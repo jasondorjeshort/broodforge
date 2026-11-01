@@ -107,7 +107,8 @@ Decisions so far (this project's own; Hatchery's records are in
   owner at the end); `setup` holds the control address while it writes; `setup host` is the
   elevated host part, on the PC creating the `broodforge` account with a generated password under
   `%ProgramData%`; `setup login`, `setup service`, `config export` and `setup --from`. Owner's
-  answers 2026-10-26; amends 0022; a simple same-account PC default rejected.
+  answers 2026-10-26; amends 0022; a simple same-account PC default rejected. Companions
+  [setup commands](decisions/0027-setup-commands.md) and [`setup host`](decisions/0027-setup-commands-host.md).
 - [0028 Landing a session on the default branch](decisions/0028-landing-a-session-on-the-default-branch.md):
   one land procedure in `internal/git`, run by the bot from the canonical, that the session end,
   `/session land`, `session land <id>` and the push word from inside a session (a `Bash` `git push`

@@ -93,8 +93,8 @@ func TestDiscordSteps(t *testing.T) {
 	if l := line(out, "fix  role  "); l != "fix  role  remove Manage Roles from the bot's role in Server Settings, Roles; setup is waiting" {
 		t.Errorf("removal line %q", l)
 	}
-	for _, w := range []string{"ok  application  4000  message content on", "ok  guild  3000  Test", "ok  channels  Sessions 9001, #demo 9002, #demo-notices 9003",
-		"ok  role  Trusted  9004  held by 6000; discord.mode live", "ok  check  discord check  guild  3000  Test", "ok  check  discord check  9002  present  code  perms:ok",
+	for _, w := range []string{"ok  application  4000  message content on", "ok  guild  3000  Test", "ok  channels  Sessions 9001, #demo 9002, #demo-notices 9003, Ended sessions 9004",
+		"ok  role  Trusted  9005  held by 6000; discord.mode live", "ok  check  discord check  guild  3000  Test", "ok  check  discord check  9002  present  code  perms:ok",
 		"ok  check  discord check  message-content  present  intent  perms:ok"} {
 		if !strings.Contains(out, w+"\n") {
 			t.Errorf("no %q:\n%s", w, out)
@@ -109,16 +109,16 @@ func TestDiscordSteps(t *testing.T) {
 	}
 	d := cfg.Instance.Discord
 	if d.Mode != config.DiscordLive || d.ApplicationID != app || d.GuildID != guildID || d.NoticeChannelID != "9003" ||
-		!strings.HasPrefix(d.BotCredentialID, "cred-") || strings.Join(cfg.Instance.RoleGroups["trusted"], ",") != "9004" {
+		!strings.HasPrefix(d.BotCredentialID, "cred-") || strings.Join(cfg.Instance.RoleGroups["trusted"], ",") != "9005" {
 		t.Errorf("discord config %+v, trusted %v", d, cfg.Instance.RoleGroups["trusted"])
 	}
 	p := cfg.Projects[0]
-	if p.Venue.Category != "9001" || p.Channels["9002"].Reach != config.ReachCode || strings.Join(p.Channels["9002"].Roles.Start, ",") != "trusted" {
+	if p.Venue.Category != "9001" || p.Venue.EndedCategory != "9004" || p.Channels["9002"].Reach != config.ReachCode || strings.Join(p.Channels["9002"].Roles.Start, ",") != "trusted" {
 		t.Errorf("project %+v", p)
 	}
 	s := f.fake.Script()
 	if strings.Join(s.Calls, ",") != "UpdateCurrentApplication flags=524288,CreateGuildChannel Sessions,CreateGuildChannel demo,"+
-		"CreateGuildChannel demo-notices,CreateRole Trusted,AddMemberRole 6000 9004" {
+		"CreateGuildChannel demo-notices,CreateGuildChannel Ended sessions,CreateRole Trusted,AddMemberRole 6000 9005" {
 		t.Errorf("writes to Discord: %v", s.Calls)
 	}
 	if s.Guilds[0].Channels[1].Parent != "9001" || s.Guilds[0].Channels[2].Parent != "9001" {
@@ -234,10 +234,12 @@ func TestChannels(t *testing.T) {
 		}
 		f.edit(func(s *discord.FakeScript) { s.Guilds[0].Channels[0].Name = "Work" })
 		out, c := f.run("")
-		if c != "" || !strings.Contains(out, "skip  channels  Sessions 9001, #demo 9002, #demo-notices 9003\n") {
+		if c != "" || !strings.Contains(out, "skip  channels  Sessions 9001, #demo 9002, #demo-notices 9003, Ended sessions 9004\n") {
 			t.Errorf("renamed: code %q:\n%s", c, out)
 		}
-		f.edit(func(s *discord.FakeScript) { s.Guilds[0].Channels = s.Guilds[0].Channels[:2] })
+		f.edit(func(s *discord.FakeScript) {
+			s.Guilds[0].Channels = append(s.Guilds[0].Channels[:2:2], s.Guilds[0].Channels[3])
+		})
 		out, c = f.run("")
 		if c != "mismatch-channels" {
 			t.Fatalf("deleted: code %q:\n%s", c, out)
@@ -247,7 +249,7 @@ func TestChannels(t *testing.T) {
 		}
 		// setup channels finds by name or creates, then rewrites the id.
 		out, c = f.run("", func(o *setup.Options) { o.Step = "channels"; o.Channels = "yes" })
-		if c != "" || !strings.Contains(out, "old  9003\nnew  9005\n") || !strings.Contains(out, "ok  channels  Sessions 9001, #demo 9002, #demo-notices 9005\n") {
+		if c != "" || !strings.Contains(out, "old  9003\nnew  9006\n") || !strings.Contains(out, "ok  channels  Sessions 9001, #demo 9002, #demo-notices 9006, Ended sessions 9004\n") {
 			t.Errorf("setup channels: code %q:\n%s", c, out)
 		}
 		if n := calls(f, "Delete"); n != 0 {
@@ -266,7 +268,7 @@ func TestChannels(t *testing.T) {
 			t.Errorf("%d channels created under --channels no", n)
 		}
 		out, c = f.run("", func(o *setup.Options) { o.Channels = "yes" })
-		if c != "" || calls(f, "CreateGuildChannel") != 3 {
+		if c != "" || calls(f, "CreateGuildChannel") != 4 {
 			t.Errorf("--channels yes: code %q:\n%s", c, out)
 		}
 	})
@@ -275,8 +277,30 @@ func TestChannels(t *testing.T) {
 		s.Invite.Channels = []discord.FakeChannel{{ID: "800", Name: "sessions", Category: true}, {ID: "801", Name: "demo"}, {ID: "802", Name: "demo-notices", Parent: "800"}}
 		f := withFake(newFixture(t), s)
 		out, c := f.run(tokA + "\n")
-		if c != "" || !strings.Contains(out, "ok  channels  Sessions 800, #demo 801, #demo-notices 802\n") || calls(f, "CreateGuildChannel") != 0 {
+		// Ended sessions alone is created without the question (the default no would stop it).
+		if c != "" || !strings.Contains(out, "ok  channels  Sessions 800, #demo 801, #demo-notices 802, Ended sessions 9001\n") ||
+			calls(f, "CreateGuildChannel") != 1 {
 			t.Errorf("code %q:\n%s", c, out)
+		}
+	})
+	t.Run("a project set up before Ended sessions", func(t *testing.T) {
+		f := withFake(newFixture(t), fresh())
+		if out, c := f.run(tokA + "\n"); c != "" {
+			t.Fatalf("refused %s:\n%s", c, out)
+		}
+		f.edit(func(s *discord.FakeScript) { s.Guilds[0].Channels = s.Guilds[0].Channels[:3] })
+		f.setKey("projects/demo.json", `""`, "venue", "endedCategory")
+		out, c := f.run("", func(o *setup.Options) { o.Check = true })
+		if c != "check-failed" || line(out, "fix  channels  ") != "fix  channels  the channels are not configured; run setup" {
+			t.Errorf("--check: code %q:\n%s", c, out)
+		}
+		out, c = f.run("", func(o *setup.Options) { o.Step = "channels" })
+		if c != "" || line(out, "old  ") != "" || !strings.Contains(out, "ok  channels  Sessions 9001, #demo 9002, #demo-notices 9003, Ended sessions 9006\n") {
+			t.Errorf("setup channels: code %q:\n%s", c, out)
+		}
+		cfg, err := config.Load(f.root, config.AnyCredential)
+		if err != nil || cfg.Projects[0].Venue.EndedCategory != "9006" {
+			t.Errorf("venue %+v, %v", cfg.Projects[0].Venue, err)
 		}
 	})
 }
@@ -400,14 +424,14 @@ func TestChannelsOwnersChannels(t *testing.T) {
 			t.Fatalf("code %q:\n%s", c, out)
 		}
 		out, c = f.run("", func(o *setup.Options) { o.Step = "channels"; o.Channels = "yes" })
-		if c != "" || !strings.Contains(out, "old  9999\nnew  -\n") || !strings.Contains(out, "ok  channels  Sessions 9001, #demo 9002, #demo-notices 9003\n") {
+		if c != "" || !strings.Contains(out, "old  9999\nnew  -\n") || !strings.Contains(out, "ok  channels  Sessions 9001, #demo 9002, #demo-notices 9003, Ended sessions 9004\n") {
 			t.Fatalf("setup channels: code %q:\n%s", c, out)
 		}
 		out, c = f.run("")
 		if c != "" || !strings.Contains(out, "skip  channels  ") {
 			t.Errorf("the next run: code %q:\n%s", c, out)
 		}
-		if n := calls(f, "CreateGuildChannel"); n != 3 {
+		if n := calls(f, "CreateGuildChannel"); n != 4 {
 			t.Errorf("%d channels created", n)
 		}
 	})
@@ -421,7 +445,7 @@ func TestChannelsOwnersChannels(t *testing.T) {
 		}
 		f.setKey("projects/demo.json", readOnly, "channels", "701")
 		out, c := f.run("", func(o *setup.Options) { o.Channels = "yes" })
-		if c != "" || !strings.Contains(out, "ok  channels  Sessions 9001, #demo 9002, #demo-notices 9003\n") {
+		if c != "" || !strings.Contains(out, "ok  channels  Sessions 9001, #demo 9002, #demo-notices 9003, Ended sessions 9004\n") {
 			t.Fatalf("code %q:\n%s", c, out)
 		}
 		cfg, err := config.Load(f.root, config.AnyCredential)
@@ -502,7 +526,7 @@ func TestDiscordGuards(t *testing.T) {
 			t.Fatalf("code %q:\n%s", c, out)
 		}
 		out, c = f.run("", func(o *setup.Options) { o.Step = "role" })
-		if c != "" || !strings.Contains(out, "old  \"9004\"\nnew  9004\n") {
+		if c != "" || !strings.Contains(out, "old  \"9004\"\nnew  9005\n") {
 			t.Errorf("setup role: code %q:\n%s", c, out)
 		}
 	})
@@ -515,4 +539,20 @@ func TestDiscordGuards(t *testing.T) {
 			t.Errorf("code %q:\n%s", c, out)
 		}
 	})
+}
+
+// TestChannelsNoKeepsEnded: an explicit --channels no creates nothing, Ended sessions included,
+// when it is the only slot missing.
+func TestChannelsNoKeepsEnded(t *testing.T) {
+	f := withFake(newFixture(t), fresh())
+	if out, c := f.run(tokA + "\n"); c != "" {
+		t.Fatalf("refused %s:\n%s", c, out)
+	}
+	f.edit(func(s *discord.FakeScript) { s.Guilds[0].Channels = s.Guilds[0].Channels[:3] })
+	f.setKey("projects/demo.json", `""`, "venue", "endedCategory")
+	before := calls(f, "CreateGuildChannel")
+	out, c := f.run("", func(o *setup.Options) { o.Step = "channels"; o.Channels = "no" })
+	if n := calls(f, "CreateGuildChannel") - before; c != "timeout-channels" || n != 0 {
+		t.Errorf("--channels no: code %q, %d created:\n%s", c, n, out)
+	}
 }

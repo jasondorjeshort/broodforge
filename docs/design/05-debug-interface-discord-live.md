@@ -16,7 +16,7 @@ Drive. `serve --discord live` on a root whose `discord` keys are set: after the 
 checks the application behind the token against `discord.applicationId` and the
 message-content intent, registers 04's slash commands in `discord.guildId` (`/register`,
 top-level `/model`, `/session start|stop|end|mode|model|effort|timeout|invite`, `/credential add|list|remove|default|login`, `/usage`),
-binds the venues of earlier runs under each `venue.category` (a text channel whose topic is
+binds the venues of earlier runs under each `venue.category` and `venue.endedCategory` (a text channel whose topic is
 `<instanceName>:<session id>`, the mark every venue is created with: an open or interrupted
 session's is bound again, an ended one's is deleted ten minutes after its end; a channel
 without the mark or whose session the store does not know is left alone, and when two carry
@@ -25,7 +25,10 @@ posts 04's start-up report to the notice channel. Every post still passes the ma
 coalescer and lands in the outbox first, then goes out as its REST call: `channel` creates the
 private venue under the project's category with that topic (@everyone denied view; the bot,
 Manage Channels included, the driver and the channel's `contribute` and `answer` roles allowed), a pinned create is pinned, `attach` adds the
-transcript file to the summary; ten minutes after a session's last post the venue is deleted
+transcript file to the summary, `move` sets the venue's parent to `venue.endedCategory` (its own overwrites kept), `lock`
+reads the venue and writes its overwrites back with Send Messages denied to all but the bot's (a refusal of either is a
+`warning: discord: move|lock <id>: ...` line; Discord asks Manage Roles for an overwrite edit, which setup has the
+owner remove, so the first live end says whether the lock holds); ten minutes after a session's last post the venue is deleted
 on the adapter's clock. A message in a venue or lobby runs `discord inject message`'s handler:
 a pasted key is deleted where the bot may (an edited message gets the key scan alone), a queued message gets an hourglass reaction, and a
 reply or refusal goes to the writer by direct message (Discord has no ephemeral reply to a

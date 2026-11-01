@@ -41,8 +41,11 @@ type restAPI interface {
 	// The guild's slash commands.
 	SetGuildCommands(applicationID snowflake.ID, guildID snowflake.ID, commands []dg.ApplicationCommandCreate, opts ...rest.RequestOpt) ([]dg.ApplicationCommand, error)
 	// Venues: a session's private channel (created through setupREST), deleted ten minutes
-	// after its summary (04).
+	// after its summary (04); at the end moved under venue.endedCategory, then read and its
+	// overwrites written back locked (04-ux-session-end.md).
 	DeleteChannel(channelID snowflake.ID, opts ...rest.RequestOpt) error
+	GetChannel(channelID snowflake.ID, opts ...rest.RequestOpt) (dg.Channel, error)
+	UpdateChannel(channelID snowflake.ID, channelUpdate dg.ChannelUpdate, opts ...rest.RequestOpt) (dg.Channel, error)
 	// Posts: the outbox's create, edit, delete and attach, the pinned header and panel, the
 	// hourglass on a queued message, and deleting a pasted key.
 	CreateMessage(channelID snowflake.ID, messageCreate dg.MessageCreate, opts ...rest.RequestOpt) (*dg.Message, error)
@@ -360,18 +363,20 @@ func (g *Gateway) Close(ctx context.Context) {
 func (g *Gateway) venueTopic(id string) string { return g.cfg.Instance + ":" + id }
 
 // sweep finds the venues earlier runs of this instance created: text channels under a
-// project's venue.category whose topic is `<instance>:<session id>`. An open or interrupted
-// session's is bound again, so its messages and /session end reach it; an ended one's is deleted
-// VenueDeleteAfter after the session ended, now if that has passed (04: also across a restart).
-// A channel without the mark, or whose session the store does not know, is left alone; when
-// more than one channel carries a session's mark, none is bound or deleted and a warning names
-// them.
+// project's venue.category or venue.endedCategory whose topic is `<instance>:<session id>`. An
+// open or interrupted session's is bound again, so its messages and /session end reach it; an
+// ended one's is deleted VenueDeleteAfter after the session ended, now if that has passed (04:
+// also across a restart). A channel without the mark, or whose session the store does not know,
+// is left alone; when more than one channel carries a session's mark, none is bound or deleted
+// and a warning names them.
 func (g *Gateway) sweep(ctx context.Context) error {
 	cats := map[snowflake.ID]bool{}
 	if c := g.a.cfg.Config; c != nil {
 		for _, p := range c().Projects {
-			if id, err := snowflake.Parse(p.Venue.Category); err == nil {
-				cats[id] = true
+			for _, cat := range []string{p.Venue.Category, p.Venue.EndedCategory} {
+				if id, err := snowflake.Parse(cat); err == nil {
+					cats[id] = true
+				}
 			}
 		}
 	}
@@ -515,7 +520,39 @@ func (g *Gateway) send(p Post) {
 			_, err := g.rest.UpdateMessage(ref.channel, ref.message, attachUpdate(p), opt)
 			g.warn(what, err)
 		}
+	case OpMove, OpLock:
+		g.warn(what, g.endVenue(p, opt))
 	}
+}
+
+// endVenue is an ended session's move or lock (04-ux-session-end.md, Ending a session): the move
+// sets the venue's parent to venue.endedCategory and keeps its own overwrites; the lock reads the
+// venue and writes its overwrites back with Send Messages denied to every one but the bot's.
+func (g *Gateway) endVenue(p Post, opt rest.RequestOpt) error {
+	ch, err := g.channelOf(p)
+	if err != nil {
+		return err
+	}
+	why := rest.WithReason("session " + p.Session + " ended")
+	if p.Op == OpMove {
+		u, ok := moveUpdate(p)
+		if !ok {
+			return fmt.Errorf("venue.endedCategory %q is not a Discord id", p.First)
+		}
+		_, err = g.rest.UpdateChannel(ch, u, opt, why)
+		return err
+	}
+	c, err := g.rest.GetChannel(ch, opt)
+	if err != nil {
+		return err
+	}
+	gc, ok := c.(dg.GuildChannel)
+	if !ok {
+		return fmt.Errorf("channel %s is not a guild channel", ch)
+	}
+	ows := lockedOverwrites(gc.PermissionOverwrites(), g.guild, g.botID())
+	_, err = g.rest.UpdateChannel(ch, dg.GuildTextChannelUpdate{PermissionOverwrites: &ows}, opt, why)
+	return err
 }
 
 // attachUpdate is an attach post's body: the file added to the message (04, Owner 11).

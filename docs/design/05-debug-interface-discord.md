@@ -10,7 +10,7 @@ credential from the store (`discord.botCredentialId`, a `bot-token`; the guild d
 line per configured channel `<id>  present|missing  <reach>  perms:ok|missing:<names>`: each
 project channel with its reach (view, send, embed, attach, read-history, manage-messages for
 deleting a pasted key, pin for the panel), the notice channel as `notice` (view, send), each
-`venue.category` as `category` (those, add-reactions, and manage-channels for a private-channel
+`venue.category` and `venue.endedCategory` as `category` (those, add-reactions, and manage-channels for a private-channel
 venue; manage-threads later, the thread venue is not in the first version), then
 `message-content  present|missing  intent` for the privileged intent; it computes the bot's
 permissions from the guild's roles and the channel's overwrites, as Discord does. Any missing
@@ -79,19 +79,19 @@ loaded at start (`no-panel` before a post); a live create also records the messa
 there, so a restarted live bot edits that message (one with no Discord id is posted anew), and on a
 live instance `panel post --json` and `panel show --json` carry it as `discordMessageId`. An edit
 Discord answers Unknown Message (the panel deleted by hand) clears that id, so the next post creates it anew.
-Observe. `session outbox <id> [--channel <id>] [--follow] [--since <seq>] [--limit <n>|--all]`
-(the bot's memory, `not-running` without it) prints `<seq>  <time>  channel|create|edit|delete|attach
-<message id>  <length>  <first line>`: `channel` creates the venue (`#s0001-<first name>`),
-`delete` is 04's delete-and-replace (the final content is created first, then the working
-messages deleted), `attach` puts `<id>.md` on the project channel's summary. Times are UTC to
-the millisecond. `--json` adds the body, the buttons with their custom ids, the header's select menus
-(`selects`, The header's menus below), `pinned` and
-`payload`, the request body disgo builds for it (`MessageCreate` or `MessageUpdate`); the control
-wire escapes `<` and `>` in `--json` output as JSON's unicode escapes (backslash, `u003c`),
-so match a mention or an arrow in text mode. `--channel <id>` shows every post to one channel,
-the panel included, with the id `-` for any session. `--follow` ends when the session's last
-post is out. `session transcript <id> [--out <file>]` prints 04's Markdown
-transcript from the session's events.
+Observe. `session outbox <id> [--channel <id>] [--follow] [--since <seq>] [--limit <n>|--all]` (the bot's memory,
+`not-running` without it) prints `<seq>  <time>  channel|create|edit|delete|attach|move|lock  <message id>  <length>  <first
+line>`: `channel` creates the venue (`#s0001-<first name>`), `delete` is 04's delete-and-replace (the final content is
+created first, then the working messages deleted), `attach` puts `<id>.md` on the project channel's summary, and after it
+`move  <id>  0  <category id>` and `lock  <id>  0  send: the bot only` take an ended session's venue to
+`venue.endedCategory` and attempt its lock (`04-ux-session-end.md`; neither when the key is empty, a warning when `venue.category` is set;
+`tests/repro/ended-category.sh`). Times are UTC to the millisecond. `--json` adds the body, the buttons with their custom
+ids, the header's select menus (`selects`, The header's menus below), `pinned` and `payload`, the request body disgo
+builds for it (`MessageCreate`, `MessageUpdate`, or the move's `{"parent_id":"<category id>"}`; none for `channel`,
+`delete`, `attach` and `lock`); the control wire escapes `<` and `>` in `--json` output as JSON's unicode escapes
+(backslash, `u003c`), so match a mention or an arrow in text mode. `--channel <id>` shows every post to one channel, the
+panel included, with the id `-` for any session. `--follow` ends when the session's last post is out. `session
+transcript <id> [--out <file>]` prints 04's Markdown transcript from the session's events.
 Pacing. One create, edit or attach per second per session and 50 posts per second per bot; an
 edit merges into a queued create or edit of its message (the latest content wins), a delete
 drops that message's queued edits, nothing else is merged or dropped, and sessions take turns:

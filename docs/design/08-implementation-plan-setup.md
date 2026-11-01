@@ -170,7 +170,7 @@ delete or rename a channel or role; hold the token in memory past the step. Depe
 ## P23. `setup host` and `setup service` on Windows (medium; owner steps; P13 built here)
 
 Implements: ADR 0027 (Decision 5, Windows; 7's account amendment; Consequences, prediction 3); the companion
-(`setup host`, Windows; `setup service`, the task; On the PC: which shell); ADR 0022 (Windows, as amended, the
+(`setup service`, the task; On the PC: which shell) and `decisions/0027-setup-commands-host.md` (Windows); ADR 0022 (Windows, as amended, the
 directory ACL included); `03-architecture.md` (Process model, Windows column: the bot task, the nightly backup
 task, the Debug CLI row); P13 of 08 (its reference file and C37); P20's finding. Files [no-check: new files]:
 `internal/setup/host.go` (`setup host [--root <path>] [--instance <name>] [--engine-version <v>] [--from

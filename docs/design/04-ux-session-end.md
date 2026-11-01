@@ -2,7 +2,7 @@
 
 Date: 2026-11-01 (moved by topic from `04-ux.md` when the end gained the WIP commit and the discard;
 the first section's text is the one that stood there). Status: the moved text as 04 had it; the
-WIP commit and the discard are the owner's answers of 2026-10-31, their lines the owner's to edit on
+WIP commit, the discard and the move to `Ended sessions` are the owner's answers of 2026-10-31, their lines the owner's to edit on
 sight. A sibling of `04-ux.md`, which points here from Ending a session; its conventions apply
 (message text in fenced blocks exactly as posted, `<...>` a value filled in). The git side is
 `03-architecture-git.md` (End of session); the CLI side `05-debug-interface-git.md`.
@@ -32,6 +32,16 @@ when set, to the summary channel. A private channel is deleted ten minutes after
 title and body are written by the agent in one closing turn asked to summarize its changes (readable; costs a small
 turn); the summary shows the title. When the closing turn did not run (a `push` project, an auth error, or a credential
 that needs login) the title is `Session <id>: <first message, truncated>` and the body is the summary.
+
+After the summaries the venue moves to the category `Ended sessions` (`venue.endedCategory`, 03; setup's channels
+step makes it beside Sessions), so the driver still reads it away from the live ones (the owner's answer, 2026-10-31).
+The bot then attempts the lock the owner asked for, Send Messages denied on every overwrite but its own: Discord asks
+Manage Roles for an overwrite edit, which the bot does not hold (ADR 0027, removed at the end of setup), so the lock is
+refused with a `warning: discord: lock <id>: ...` line and the channel stays writable. A stray message there still gets
+`This session has ended.` by direct message. Whether to drop the lock or give the bot Manage Roles back (a reversal of
+ADR 0027) is the owner's pending call. The ten minutes are unchanged; removing ended channels only when the guild's cap
+needs the room is a later idea. A project set up before the category existed has the key empty: its venue stays where it
+is and the bot's stderr gets one `warning: discord: moving the venue of <id>: ...` line naming `setup channels`.
 
 A session interrupted by a restart ends the same way, from its header's `End session`, `/session end` or
 the host (ADR 0026): the summary's counts are the session's whole, the attached transcript holds only

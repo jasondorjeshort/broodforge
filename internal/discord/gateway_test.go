@@ -36,6 +36,7 @@ const (
 	testGuild = "3000"
 	testBot   = "5000"
 	testCat   = "900"
+	testEnded = "910"
 	testLobby = "100"
 )
 
@@ -55,6 +56,8 @@ type fakeRest struct {
 	noDM     bool
 	// memberRoles are the roles GetMember answers for any member (setup_test.go).
 	memberRoles []snowflake.ID
+	// overwrites are each created channel's, which GetChannel answers with.
+	overwrites map[snowflake.ID][]dg.PermissionOverwrite
 }
 
 func js(b []byte, err error) string {
@@ -130,11 +133,34 @@ func (f *fakeRest) SetGuildCommands(a, g snowflake.ID, cmds []dg.ApplicationComm
 func (f *fakeRest) CreateGuildChannel(g snowflake.ID, c dg.GuildChannelCreate, _ ...rest.RequestOpt) (dg.GuildChannel, error) {
 	f.record("CreateGuildChannel", js(json.Marshal(c)), g.String())
 	tc, _ := c.(dg.GuildTextChannelCreate)
-	return textChannel(f.id(), tc.Name, tc.Topic, tc.ParentID), nil
+	id := f.id()
+	f.mu.Lock()
+	if f.overwrites == nil {
+		f.overwrites = map[snowflake.ID][]dg.PermissionOverwrite{}
+	}
+	f.overwrites[id] = tc.PermissionOverwrites
+	f.mu.Unlock()
+	return textChannel(id, tc.Name, tc.Topic, tc.ParentID), nil
 }
 func (f *fakeRest) DeleteChannel(c snowflake.ID, _ ...rest.RequestOpt) error {
 	f.record("DeleteChannel", "", c.String())
 	return nil
+}
+func (f *fakeRest) GetChannel(c snowflake.ID, _ ...rest.RequestOpt) (dg.Channel, error) {
+	f.record("GetChannel", "", c.String())
+	f.mu.Lock()
+	ows := f.overwrites[c]
+	f.mu.Unlock()
+	raw := `{"id":"` + c.String() + `","type":0,"guild_id":"` + testGuild + `","name":"c","permission_overwrites":` + js(json.Marshal(ows)) + `}`
+	var ch dg.UnmarshalChannel
+	if err := json.Unmarshal([]byte(raw), &ch); err != nil {
+		return nil, err
+	}
+	return ch.Channel, nil
+}
+func (f *fakeRest) UpdateChannel(c snowflake.ID, u dg.ChannelUpdate, _ ...rest.RequestOpt) (dg.Channel, error) {
+	f.record("UpdateChannel", js(json.Marshal(u)), c.String())
+	return textChannel(c, "c", "", sf(testCat)), nil
 }
 func (f *fakeRest) CreateMessage(c snowflake.ID, m dg.MessageCreate, _ ...rest.RequestOpt) (*dg.Message, error) {
 	f.record("CreateMessage", js(json.Marshal(m)), c.String())
@@ -310,7 +336,7 @@ VALUES ('cred-x', 'api-key', 'anthropic', NULL, 'x', 'usable', '2026-10-21T00:00
 	cfg := &config.Config{
 		Instance: config.Instance{InstanceName: "test", RoleGroups: map[string][]string{"trusted": {"10"}},
 			Defaults: config.Defaults{Mode: config.ModePolicy, Harness: config.HarnessFake, IdleTimeoutMinutes: 60, PromptTimeoutMinutes: 5}},
-		Projects: []config.Project{{ID: "p", Name: "Project P", Venue: config.Venue{Category: testCat},
+		Projects: []config.Project{{ID: "p", Name: "Project P", Venue: config.Venue{Category: testCat, EndedCategory: testEnded},
 			Channels: map[string]config.Channel{testLobby: {Reach: config.ReachCode, Mode: &prompt,
 				Roles: config.Roles{Start: []string{"trusted"}, Contribute: []string{"trusted", "20"}, Answer: []string{"driver"}}}}}},
 	}
@@ -606,6 +632,37 @@ func TestLiveSession(t *testing.T) {
 	h.until("the transcript", h.saw("UpdateMessage", func(c restCall) bool {
 		return c.args[0] == testLobby && len(c.args) > 2 && c.args[2] == "file:s0001.md"
 	}))
+	// Then the venue moves under venue.endedCategory and is locked: Send Messages denied to every
+	// overwrite but the bot's, view kept (04-ux-session-end.md, Ending a session).
+	h.until("the venue locked", h.saw("UpdateChannel", func(c restCall) bool {
+		return c.args[0] == venueID && strings.Contains(c.body, "permission_overwrites")
+	}))
+	moved, _ := h.rest.find("UpdateChannel", func(c restCall) bool { return c.args[0] == venueID })
+	if moved.body != `{"parent_id":"`+testEnded+`"}` {
+		t.Errorf("the first channel update is not the move: %s\n%s", moved.body, h.rest.dump())
+	}
+	if _, ok := h.rest.find("GetChannel", func(c restCall) bool { return c.args[0] == venueID }); !ok {
+		t.Error("the lock did not read the venue")
+	}
+	locked, _ := h.rest.find("UpdateChannel", func(c restCall) bool { return strings.Contains(c.body, "permission_overwrites") })
+	var lb struct {
+		Overwrites []struct {
+			ID          string
+			Allow, Deny dg.Permissions
+		} `json:"permission_overwrites"`
+	}
+	if err := json.Unmarshal([]byte(locked.body), &lb); err != nil || len(lb.Overwrites) != 5 {
+		t.Fatalf("lock body %s: %v", locked.body, err)
+	}
+	for _, o := range lb.Overwrites {
+		send := !o.Deny.Has(dg.PermissionSendMessages) && o.Allow.Has(dg.PermissionSendMessages)
+		if send != (o.ID == testBot) {
+			t.Errorf("overwrite %s after the lock: allow %d deny %d", o.ID, o.Allow, o.Deny)
+		}
+		if o.ID == "1001" && !o.Allow.Has(dg.PermissionViewChannel|dg.PermissionReadMessageHistory) {
+			t.Errorf("the driver lost view or history: allow %d", o.Allow)
+		}
+	}
 	if _, ok := h.rest.find("DeleteChannel", nil); ok {
 		t.Fatal("the venue went before ten minutes")
 	}

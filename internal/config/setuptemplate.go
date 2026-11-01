@@ -124,6 +124,8 @@ func SetupProject(o SetupProjectOptions) *Doc {
 		RawValue(InjectRepository), "workflow", "inject")
 	d.set("The repository hook events the bot's hook runs as children: PreToolUse, PostToolUse.", RawValue([]string{}), "workflow", "hooks")
 	d.set("The category sessions are created under; setup's channels step writes it.", RawValue(""), "venue", "category")
+	d.set("The category an ended session's channel moves to until it is deleted; setup's channels step writes it.",
+		RawValue(""), "venue", "endedCategory")
 	d.set("A channel that also receives each summary, or null.", json.RawMessage("null"), "venue", "summaryChannel")
 	d.set("Discord channel ids to their reach, roles and mode; setup's channels step adds the lobby.",
 		json.RawMessage("{}"), "channels")

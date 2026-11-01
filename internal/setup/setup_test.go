@@ -877,7 +877,7 @@ func TestPlaceholders(t *testing.T) {
 	if strings.Contains(out, "mismatch") || line(out, "old  ") != "" || line(out, "new  ") != "" {
 		t.Errorf("the live run asked or printed a mismatch:\n%s", out)
 	}
-	for _, w := range []string{"ok  channels  Sessions 9001, #demo 9002, #demo-notices 9003", "ok  role  Trusted  9004  held by 6000; discord.mode live"} {
+	for _, w := range []string{"ok  channels  Sessions 9001, #demo 9002, #demo-notices 9003, Ended sessions 9004", "ok  role  Trusted  9005  held by 6000; discord.mode live"} {
 		if !strings.Contains(out, w+"\n") {
 			t.Errorf("no %q:\n%s", w, out)
 		}
@@ -886,8 +886,8 @@ func TestPlaceholders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config after the live run: %v", err)
 	}
-	if got := strings.Join(cfg.Instance.RoleGroups["trusted"], ","); got != "9004" {
-		t.Errorf("trusted %s, want 9004", got)
+	if got := strings.Join(cfg.Instance.RoleGroups["trusted"], ","); got != "9005" {
+		t.Errorf("trusted %s, want 9005", got)
 	}
 	p := cfg.Projects[0]
 	if _, ok := p.Channels["9002"]; !ok || len(p.Channels) != 1 {

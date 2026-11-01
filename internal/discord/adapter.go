@@ -267,7 +267,8 @@ func (a *Adapter) SessionStarted(id string) {
 	if a.live.Load() == nil {
 		a.bindVenue(id, id) // a dry run's venue is the session id; live, the gateway binds it
 	}
-	v := NewView(id, ViewConfig{NewID: a.newID, Name: a.name, Offer: a.co.Offer, SummaryChannel: a.summaryChannel})
+	v := NewView(id, ViewConfig{NewID: a.newID, Name: a.name, Offer: a.co.Offer, SummaryChannel: a.summaryChannel,
+		EndedCategory: a.endedCategory})
 	a.mu.Lock()
 	a.views[id] = v
 	a.mu.Unlock()
@@ -301,6 +302,25 @@ func (a *Adapter) summaryChannel(lobby string) string {
 		return ""
 	}
 	return *p.Venue.SummaryChannel
+}
+
+// endedCategory is the venue.endedCategory of the project whose channel lobby is, as the
+// configuration says now. When it is empty beside a venue.category (a project set up before the
+// category existed) session id's venue stays where it is, and one warning line says so and names
+// the step that makes it; with neither (the dry-run form) nothing is said.
+func (a *Adapter) endedCategory(id, lobby string) string {
+	if a.cfg.Config == nil {
+		return ""
+	}
+	p := a.cfg.Config().ChannelProject(lobby)
+	if p == nil {
+		return ""
+	}
+	if p.Venue.EndedCategory == "" && p.Venue.Category != "" {
+		a.warn("moving the venue of "+id, errors.New("project "+p.ID+" has no venue.endedCategory; "+
+			"the channel stays under venue.category (broodforge setup channels makes the category)"))
+	}
+	return p.Venue.EndedCategory
 }
 
 // viewOf is the session's View while its follow runs, nil otherwise.

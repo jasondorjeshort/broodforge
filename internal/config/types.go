@@ -133,9 +133,11 @@ type Repo struct {
 	GitCredentialID string `json:"gitCredentialId"`
 }
 
-// Venue is where sessions are created.
+// Venue is where sessions are created, and where an ended one's channel waits for its deletion
+// (EndedCategory, "" for none: the channel stays under Category).
 type Venue struct {
 	Category       string  `json:"category"`
+	EndedCategory  string  `json:"endedCategory"`
 	SummaryChannel *string `json:"summaryChannel"`
 }
 
