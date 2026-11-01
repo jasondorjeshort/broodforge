@@ -31,3 +31,11 @@ the button would be a new custom id in `internal/discord/customid.go`.
 - Whether a fork is a new session (its own worktree, branch and venue) or the same session moved
   back, and what the audit says about the turns it discards.
 - Whether the engine's fork keeps the permission answers given after the fork point.
+
+Question: Does the owner want a spike on engine forking before any design of the per-turn ref and rewind button?
+Recommend a spike first (one tester, the `spike` pattern in `docs/findings/`): the installed engine has a
+`--fork-session` flag ("when resuming, create a new session ID"), but the adapter passes only `--resume`
+(`internal/engine/claudecode.go`), so whether forking works under `-p` and keeps the transcript is unproved.
+Build the ref and button only after the finding says it does.
+
+Answer:
