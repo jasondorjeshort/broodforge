@@ -24,3 +24,9 @@ per person); R-05.
   small harmless sessions look like trust.
 - Which channel, which role sees it, and whether the person named sees their own line.
 - Whether an engine writes the digest (tokens, judgment) or the bot formats counts (free, blunt).
+
+Question: Is the digest wanted now, or after months of audit data?
+Recommend later (R-05 is marked later in `docs/design/01-requirements.md`, and counts mean little before there is history);
+when built, the bot formats counts with no engine, posted to a moderator channel the owner names.
+
+Answer:
