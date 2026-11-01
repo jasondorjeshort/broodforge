@@ -24,3 +24,13 @@ another form); `.claude/skills/brief/SKILL.md` (the reviewer bullet and the code
 - A reviewer that writes into the tree can no longer be said to have left it untouched; the runner's
   stage-by-name commits make that safe, but the agreement's wording needs the exception.
 - Whether the test file stays under the review name or is folded into the package's tests.
+
+Question: should the reviewer write its failing tests into the tree? The `reviewer` has no Write or Edit tool
+(`.claude/agents/reviewer.md`, tools: Read, Glob, Grep, Bash, Skill) and its Rules say it reports and does not fix, so
+this changes a base-owned agent and the one-review agreement (`.claude/agreement/one-review.md`), a carry-back request
+rather than a project edit, and it makes the reviewer a writer in a tree where two coders may work. Recommendation:
+keep the current rule, which already is the alternative: the finding gives the test as exact text ready for the coder
+to add verbatim (`.claude/agents/reviewer.md`, the failing-test Rule; ADR 0024 departure row 3), which removes the
+retyping without letting a reviewer write into a shared tree. If you do want tree writes, the carry-back states the
+exception and the runner stages the file by name.
+Answer:
