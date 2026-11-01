@@ -26,3 +26,10 @@ describes; `internal/policy/policy.go` (every write denied for that reach).
   cheaper and keeps context.
 - The cap is the owner's money: a number per question and per day.
 - The thousand-player tier is untrusted: the question is pasted text and gets the scan.
+
+Question: Is the simple-questions channel wanted in the next waves, and what are the per-question and per-day cap and the model?
+`ReachReadOnly` exists (`internal/policy/policy.go`) and `Reach` is a channel field in `internal/config/types.go`,
+so only the binding, the model and the cap are new. Recommend one session per question on a Haiku-class model,
+after the landing passes, with a short design section rather than a full proposal; the cap is the owner's money.
+
+Answer:
