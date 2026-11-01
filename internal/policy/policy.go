@@ -102,7 +102,21 @@ const (
 	CellAsk               // policy: allow; prompt: allow if session-allowed, else defer
 	CellWeb               // policy: deny; prompt: defer
 	CellDeny              // both modes, and no answer lifts it
+	// CellReviewer is the `reviewer` cell (ADR 0028): an Agent or Task call whose subagent_type
+	// is reviewer, defer in every mode and reach; the bot answers it itself after pinning the
+	// tree. One object of the table, never configuration.
+	CellReviewer
 )
+
+// ReviewerAgent is the subagent type the `reviewer` cell defers.
+const ReviewerAgent = "reviewer"
+
+// ReviewerCall is whether a call falls in the `reviewer` cell: the subagent tool (Agent, Task
+// on an older pin) whose tool_input.subagent_type is reviewer. The hook and session both ask
+// it, so the call the hook defers is the call the bot pins.
+func ReviewerCall(tool, subagentType string) bool {
+	return (tool == "Agent" || tool == "Task") && subagentType == ReviewerAgent
+}
 
 func (c Cell) String() string {
 	switch c {
@@ -114,6 +128,8 @@ func (c Cell) String() string {
 		return "web"
 	case CellDeny:
 		return "deny"
+	case CellReviewer:
+		return "reviewer"
 	}
 	return "unknown"
 }
@@ -181,6 +197,8 @@ type Request struct {
 	Answer    *Answer
 	// SessionAllow lists the tools a person allowed for the session (BROODFORGE_SESSION_ALLOW).
 	SessionAllow []string
+	// SubagentType is a subagent call's tool_input.subagent_type, "" for any other call.
+	SubagentType string
 }
 
 // Result is the decision with its reason and the cell it came from.
@@ -219,10 +237,12 @@ const AnswerDenyText = DenyPrefix + " a person in this session denied this call"
 
 // Allow and defer reasons; the engine shows them to nobody but the model.
 const (
-	reasonAllow        = "Broodforge: allowed by this channel's reach"
-	reasonSessionAllow = "Broodforge: allowed for this session by a person in it"
-	reasonAnswerAllow  = "Broodforge: allowed by a person in this session"
-	reasonDefer        = "Broodforge: waiting for a person in this session to answer"
+	reasonAllow         = "Broodforge: allowed by this channel's reach"
+	reasonSessionAllow  = "Broodforge: allowed for this session by a person in it"
+	reasonAnswerAllow   = "Broodforge: allowed by a person in this session"
+	reasonDefer         = "Broodforge: waiting for a person in this session to answer"
+	reasonReviewer      = "Broodforge: the bot records the tree before the reviewer starts"
+	reasonReviewerAllow = "Broodforge: the bot recorded the tree; the reviewer starts"
 )
 
 // CellFor is the table (03-hook-contract.md, Policy table) after the path checks: a credential
@@ -271,8 +291,13 @@ func CellFor(class Class, r Reach, paths []Path) Cell {
 
 // Decide is the decision order (03-hook-contract.md, Decision): a deny cell first, so an answer
 // cannot lift a reach deny; then a pending answer for this tool_use_id; then the cell by mode.
+// The `reviewer` cell replaces the row's cell after the path checks, before the answer, so a
+// resume with the bot's allow returns allow and a first call defers in every mode.
 func Decide(req Request) Result {
 	cell := CellFor(ClassOf(req.Tool), req.Reach, req.Paths)
+	if cell != CellDeny && ReviewerCall(req.Tool, req.SubagentType) {
+		cell = CellReviewer
+	}
 	if cell == CellDeny {
 		for _, p := range req.Paths {
 			if p.Credential || p.HoldsCredential {
@@ -282,6 +307,9 @@ func Decide(req Request) Result {
 		return Result{Deny, DenyText(req.Tool, firstDenied(req), req.Reach), cell}
 	}
 	if a := req.Answer; a != nil && a.ToolUseID == req.ToolUseID {
+		if a.Decision == Allow && cell == CellReviewer {
+			return Result{Allow, reasonReviewerAllow, cell}
+		}
 		if a.Decision == Allow {
 			return Result{Allow, reasonAnswerAllow, cell}
 		}
@@ -307,6 +335,8 @@ func Decide(req Request) Result {
 			return Result{Deny, DenyText(req.Tool, "", req.Reach), cell}
 		}
 		return Result{Defer, reasonDefer, cell}
+	case CellReviewer:
+		return Result{Defer, reasonReviewer, cell}
 	case CellDeny:
 	}
 	return Result{Deny, DenyText(req.Tool, "", req.Reach), CellDeny}

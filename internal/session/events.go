@@ -154,8 +154,12 @@ type EndInfo struct {
 	Log       []CommitLine `json:"log,omitempty"`
 	URL       string       `json:"url,omitempty"`
 	Title     string       `json:"title,omitempty"`
-	Author    string       `json:"author"`
-	CoAuthors []string     `json:"coAuthors"`
+	// WIP is the commit the end made of the tree's uncommitted changes; Ref is the ref a discard
+	// kept the commits on (04-ux-session-end.md). Both "" for none.
+	WIP       string   `json:"wip,omitempty"`
+	Ref       string   `json:"ref,omitempty"`
+	Author    string   `json:"author"`
+	CoAuthors []string `json:"coAuthors"`
 }
 
 // CommitLine is one commit the summary lists: its hash and its subject.

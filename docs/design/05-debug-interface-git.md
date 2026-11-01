@@ -40,6 +40,21 @@ line), `handoff-failed-pull-request` (`HTTP <status>: <message>`). A session id 
 `refs/sessions/<id>` is gone (handed off already) `already-handed-off`, with no audit row.
 `worktree list [--kept]` (a later pass) prints `<session id>  <path>  active|pushed|kept|removed
 <unpushed commits>  <missing since or ->`.
+`session end <id>` (05-debug-interface-session.md) runs the same handoff with one step before
+the bundle: a tree with uncommitted changes (`git status --porcelain` lists anything) is committed
+through the backend's worktree-wip (`git add --all`, then `git commit --no-verify` as the driver
+with the subject `WIP: uncommitted changes committed at end` and the trailers `Required` gives for
+now, `core.hooksPath` pinned to `<bf>/share/hooks`; a HEAD off the session branch refused), so its
+`--json` line carries `wip: <sha>` and the `session-ended` audit row a `wip` key; a failure is
+`handoff-refused-wip`, the session kept open. `worktree handoff` makes no WIP commit. `session end
+<id> --discard` ends without a handoff: the WIP commit, then the bundle, verify, fetch and check
+(which decides nothing here), `refs/aborted/<id>` set to `refs/sessions/<id>` when there are
+commits, the tree and `refs/sessions/<id>` removed, nothing pushed; it prints `discarded  <remote>
+refs/sessions/<id>:refs/aborted/<id>  <commits>  -  -` (the refspec `-` with no commits; `--json`
+adds `ref` and `wip`), audits `session-discarded` (`commits`, `ref`, `wip`) and `session-ended`
+with outcome `discarded`. A refusal is the handoff's code, or `handoff-refused-aborted-ref` when the ref cannot be written, the tree, `refs/sessions/<id>` and the session kept. The WIP status and add leave out every other worktree inside the tree (`git worktree list`; a subagent's is never a gitlink), and the status takes no optional lock. The Discord
+route is the header's `bf:<id>:discard`, which posts the confirm, then its `bf:<id>:discard-confirm`
+(`04-ux-session-end.md`).
 
 Rules the code fixes where the design was silent. The base is the merge base of
 `refs/sessions/<id>` and the default branch, so no column stores it and a retry after an amend
@@ -87,8 +102,8 @@ itself when the binary is absent, fails to start or prints something else) and e
 rule 4). A done handoff sets the worktree row `removed` and the session's
 end outcome to the branch or the request URL; a failed one sets the row `kept`.
 
-Observe. `worktree list` (later pass); `audit --session <id> --kind push,pull-request-opened,handoff-refused`;
-`git -C <root>/projects/scratch for-each-ref refs/sessions/`; `git -C <root>/remote/scratch.git
+Observe. `worktree list` (later pass); `audit --session <id> --kind push,pull-request-opened,handoff-refused,session-discarded`;
+`git -C <root>/projects/scratch for-each-ref refs/sessions/ refs/aborted/`; `git -C <root>/remote/scratch.git
 branch` for the pushed branch in scratch.
 
 Reproduce. In a scratch root, commit in the session tree with a wrong author (`git -C
@@ -182,7 +197,7 @@ branch checked out (`rev-parse --is-bare-repository` false, `symbolic-ref HEAD` 
 checkout, `updateInstead`, GitHub as the remote); the first land on such a remote repeats it.
 Observe. `audit --kind land --json` (`attempted`, `done`, `failed`; `actor`, `claimed`, `outcome`,
 `commits`, `sha`); `audit --kind subagent-result --json` (`model` on every row; `commit`, `dirty`,
-`commitError` on the reviewer's row); `session show` (`review:`); `git -C <root>/remote/scratch.git log --oneline -1 main`;
+`commitError` on the reviewer's row; `empty` on a row whose result has no text); `session show` (`review:`); `git -C <root>/remote/scratch.git log --oneline -1 main`;
 `hook try --tool Bash --input '{"command":"git push --force"}' --expect defer`, then with `--answer
 <id>:allow --answer-reason 'Landed 1 commit on main at <sha>'` printing the `updatedInput`.
 Reproduce. `scratch run -- bash tests/repro/land.sh` [no-check: written by P34] (a `main` project with

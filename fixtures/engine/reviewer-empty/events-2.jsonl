@@ -1,0 +1,7 @@
+{"type":"init","engineSessionId":"4e71e7e0-0000-4000-8000-000000000004","model":"claude-opus-5-5","tools":["Agent","Bash","Read"],"capabilities":["interrupt_receipt_v1"]}
+{"type":"assistant","messageId":"msg_rev_02","model":"claude-opus-5-5","parentToolUseId":"toolu_rev_agent","blocks":[{"kind":"tool-use","id":"toolu_rev_read","name":"Read","input":{"file_path":"hello.txt"}}],"usage":{"input":7,"cacheRead":0,"cacheWrite":0}}
+{"type":"tool-result","toolUseId":"toolu_rev_read","isError":false,"text":"hello","decidedBy":"hook"}
+{"type":"assistant","messageId":"msg_rev_03","model":"claude-opus-5-5","parentToolUseId":"toolu_rev_agent","blocks":[{"kind":"text"}],"usage":{"input":9,"cacheRead":0,"cacheWrite":0}}
+{"type":"tool-result","toolUseId":"toolu_rev_agent","isError":false,"text":"","decidedBy":"hook"}
+{"type":"assistant","messageId":"msg_rev_04","model":"claude-opus-5-5","blocks":[{"kind":"text","text":"The reviewer returned nothing."}],"usage":{"input":20,"cacheRead":0,"cacheWrite":0}}
+{"type":"result","stopReason":"end_turn","isError":false,"numTurns":3,"permissionDenials":[],"modelUsage":{"claude-opus-5-5":{"cacheCreationInputTokens":0,"cacheReadInputTokens":0,"inputTokens":48,"outputTokens":22}},"usage":{"input_tokens":36,"output_tokens":13}}

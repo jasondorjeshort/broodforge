@@ -113,13 +113,14 @@ func TestProofSessionWorkflow(t *testing.T) {
 
 // TestProofSessionInjectNone: inject none copies nothing: `workflow: none (inject none)`, the
 // file flag with the header alone, no --agents, no BROODFORGE_WORKFLOW; a subagent's calls are
-// indented under its Agent line in `session tail`.
+// indented under its Agent line in `session tail`. The reviewer's Agent call is the `reviewer`
+// cell's defer (fixture reviewer-defer), so the bot pins the tree before the resume (P33).
 func TestProofSessionInjectNone(t *testing.T) {
 	root, run := sessionRoot(t, nil, `{"inject":"none"}`)
 	canonical := filepath.Join(root, "projects", "scratch")
 	commit := headOf(t, canonical)
 	want(t, run("session", "start", "--channel", "100", "--as", "1001", "--roles", "10", "--credential", "cred-scratch",
-		"--mode", "policy", "--fixture", "subagent"), 0, "s0001\n", "")
+		"--mode", "policy", "--fixture", "reviewer-defer"), 0, "s0001\n", "")
 	if r := run("session", "show", "s0001"); !strings.HasSuffix(r.Stdout, "\nreview: none since "+commit+"\n") {
 		t.Errorf("before the review:\n%s", r.Stdout)
 	}
@@ -136,10 +137,11 @@ func TestProofSessionInjectNone(t *testing.T) {
 		strings.Contains(instr, "Contents of") {
 		t.Errorf("header alone: %q\ninstructions.md %q", r.Stdout, instr)
 	}
-	// The bot bundled the tree at the reviewer's launch: no commits, so the ref is the base.
+	// The bot bundled the tree while answering the reviewer's defer: no commits, so the ref is
+	// the base.
 	r := run("session", "show", "s0001")
 	t.Logf("$ broodforge session show s0001\n%s", r.Stdout)
-	if !strings.HasSuffix(r.Stdout, "\nworkflow: none (inject none)\nhooks: -\nreview: toolu_sub_agent at "+commit+"\n") {
+	if !strings.HasSuffix(r.Stdout, "\nworkflow: none (inject none)\nhooks: -\nreview: toolu_rev_agent at "+commit+"\n") {
 		t.Errorf("session show:\n%s", r.Stdout)
 	}
 	tail := run("session", "tail", "s0001").Stdout

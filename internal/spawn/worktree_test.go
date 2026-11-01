@@ -3,6 +3,7 @@
 package spawn
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -47,7 +48,7 @@ func TestWorktreeCreateBundleRemove(t *testing.T) {
 		t.Errorf("second create: %v, want exists", err)
 	}
 
-	b, err := s.WorktreeBundle(w)
+	b, err := s.WorktreeBundle(context.Background(), w)
 	if err != nil || b.Commits != 0 || b.Path != "" {
 		t.Fatalf("bundle with no commits: %+v %v", b, err)
 	}
@@ -60,7 +61,7 @@ func TestWorktreeCreateBundleRemove(t *testing.T) {
 	if _, err := os.Stat(w.BundlePath()); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("WorktreeCommits wrote a bundle: %v", err)
 	}
-	b, err = s.WorktreeBundle(w)
+	b, err = s.WorktreeBundle(context.Background(), w)
 	if err != nil || b.Commits != 2 || b.Path != w.BundlePath() {
 		t.Fatalf("bundle: %+v %v", b, err)
 	}
@@ -110,7 +111,7 @@ func TestWorktreeRefusesOtherDirectories(t *testing.T) {
 		if err := s.WorktreeCreate(w2); err == nil {
 			t.Errorf("create %q: no refusal", dir)
 		}
-		if _, err := s.WorktreeBundle(w2); err == nil {
+		if _, err := s.WorktreeBundle(context.Background(), w2); err == nil {
 			t.Errorf("bundle %q: no refusal", dir)
 		}
 		if _, err := s.WorktreeCommits(w2); err == nil {
@@ -124,7 +125,7 @@ func TestHeldBackendRefusesWorktrees(t *testing.T) {
 	if err := b.WorktreeCreate(Worktree{}); err == nil || !strings.Contains(err.Error(), "held") {
 		t.Errorf("create: %v", err)
 	}
-	if _, err := b.WorktreeBundle(Worktree{}); err == nil {
+	if _, err := b.WorktreeBundle(context.Background(), Worktree{}); err == nil {
 		t.Error("bundle: no refusal")
 	}
 	if err := b.WorktreeRemove(""); err == nil {

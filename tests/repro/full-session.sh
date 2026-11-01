@@ -104,7 +104,7 @@ done
 # The header's menus (P12b; 05-debug-interface-discord.md, The header's menus): the pinned create
 # carries model, effort and mode in that order; channel 100 sets no model and the start no effort,
 # so only mode, started acts-freely, marks a default; disgo's payload has one row per menu, then
-# the End session row.
+# the row of End session and End and discard.
 header=$("$bf" --json session outbox "$id" --all | grep -m 1 '"pinned":true') || fail "session outbox has no pinned header"
 menus=${header%%,\"pinned\":*}
 menus=${menus#*\"selects\":}
@@ -116,8 +116,8 @@ grep -q -- "},{\"customId\":\"bf:$id:mode\",\"options\":\[{\"label\":\"asks firs
 	fail "the header's last menu is not the mode's marking acts-freely: $menus"
 [ "$(grep -o '"default":true' <<<"$menus" | wc -l)" = 1 ] || fail "a menu other than mode marks a default: $menus"
 rows=$(grep -o '"custom_id":"[^"]*"' <<<"${header#*\"payload\":}" | tr '\n' ' ')
-[ "$rows" = "\"custom_id\":\"bf:$id:model\" \"custom_id\":\"bf:$id:effort\" \"custom_id\":\"bf:$id:mode\" \"custom_id\":\"bf:$id:end\" " ] ||
-	fail "the header's payload rows are not model, effort, mode, End session: $rows"
+[ "$rows" = "\"custom_id\":\"bf:$id:model\" \"custom_id\":\"bf:$id:effort\" \"custom_id\":\"bf:$id:mode\" \"custom_id\":\"bf:$id:end\" \"custom_id\":\"bf:$id:discard\" " ] ||
+	fail "the header's payload rows are not model, effort, mode, End session and End and discard: $rows"
 
 audit=$("$bf" audit --all)
 printf '%s\n' "$audit"

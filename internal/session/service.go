@@ -155,16 +155,24 @@ type Config struct {
 	// git.Fetch in the canonical with the project's git credential, credentialID ("" none),
 	// read by the bot. nil fetches nothing and the session-started row has no canonical key.
 	FetchCanonical func(ctx context.Context, s git.Session, credentialID string) (git.FetchResult, error)
-	// Refresh bundles the session's tree and fetches refs/sessions/<id> as `worktree check`
-	// does, returning the ref's sha: git.Refresh through the spawn backend, run when a
-	// `reviewer` subagent call is launched (ADR 0025 rule 7, the review fact). nil records no
-	// commit, and such a review never counts.
-	Refresh func(ctx context.Context, s git.Session) (sha string, err error)
+	// Refresh bundles the session's tree under its bundle lock and fetches refs/sessions/<id>
+	// as `worktree check` does, returning the ref's sha and the tree's tracked changes:
+	// git.PinReview through the spawn backend, run when the `reviewer` cell deferred a call
+	// (ADR 0028 Decision 3, the review fact). nil records no commit, and such a review never
+	// counts.
+	Refresh func(ctx context.Context, s git.Session) (git.Pin, error)
 	// RemoveTree undoes CreateTree for a start that fails after the clone: git.Discard.
 	RemoveTree func(ctx context.Context, s git.Session) error
 	// Handoff is the end of session's bundle, check and push or pull request (03; the bot's
 	// worktree handoff). nil hands nothing off: the outcome is none.
 	Handoff func(ctx context.Context, id string) (git.Outcome, error)
+	// Discard is the end without a handoff (`session end --discard`, 04-ux-session-end.md):
+	// the dirty tree WIP-committed, the commits kept on refs/aborted/<id>, nothing pushed, for
+	// actor (the bot's git.Handoff.Discard). nil discards nothing: the outcome is discarded.
+	Discard func(ctx context.Context, id, actor string) (git.Outcome, error)
+	// Pending is the commits an end would hand off, the dirty tree's WIP commit counted
+	// (git.Pending): the Ending line and the discard's confirm. nil falls back to Commits.
+	Pending func(ctx context.Context, id string) (*int, error)
 	Store   *store.Store
 	Audit   *audit.Writer
 	// Clock is the injectable clock the idle and prompt timeouts run on; nil is RealClock.

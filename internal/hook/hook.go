@@ -283,8 +283,16 @@ func Decide(in Input, s Settings) (policy.Result, error) {
 		}
 		paths = append(paths, f)
 	}
+	// The `reviewer` cell reads the subagent call's type (ADR 0028); null is no type, and any
+	// other value that is not a string is a hook error, as for a path field.
+	agent := ""
+	if v, ok := fields["subagent_type"]; ok && subagentTool(in.ToolName) && string(bytes.TrimSpace(v)) != "null" {
+		if json.Unmarshal(v, &agent) != nil {
+			return policy.Result{}, &Error{"tool_input.subagent_type is not a string"}
+		}
+	}
 	return policy.Decide(policy.Request{Tool: in.ToolName, ToolUseID: in.ToolUseID, Mode: s.Mode,
-		Reach: s.Reach, Paths: paths, Answer: s.Answer, SessionAllow: s.SessionAllow}), nil
+		Reach: s.Reach, Paths: paths, Answer: s.Answer, SessionAllow: s.SessionAllow, SubagentType: agent}), nil
 }
 
 // runsChain is whether the repository's PreToolUse children run after the bot's own result:

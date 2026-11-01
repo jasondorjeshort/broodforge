@@ -49,6 +49,9 @@ const (
 	// KindSubagentResult is a subagent call's tool result (Agent, Task on an older pin), the row
 	// the review fact of ADR 0025 rule 7 counts.
 	KindSubagentResult Kind = "subagent-result"
+	// KindSessionDiscarded is an end without a handoff: the commit count and the ref the
+	// commits are kept on (04-ux-session-end.md, Discarding).
+	KindSessionDiscarded Kind = "session-discarded"
 )
 
 // Phase marks an action outside the store: attempted before, done or failed after (ADR

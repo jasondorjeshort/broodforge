@@ -71,10 +71,10 @@ minutes, or a duration such as 90m or 2h.`
 ## The header's menus
 
 The owner, 2026-10-24: under the header's text sit three select menus (Discord's string selects), one action
-row each, in the order model, effort, mode, and under them the `End session` row. A menu is a dropdown that
+row each, in the order model, effort, mode, and under them the row of `End session` and `End and discard` (`04-ux-session-end.md`). A menu is a dropdown that
 shows one option closed and the list open:
 
-`[#s0001-jason] <the header's text>  [Sonnet ▾] [high ▾] [asks first ▾]  [End session]`
+`[#s0001-jason] <the header's text>  [Sonnet ▾] [high ▾] [asks first ▾]  [End session] [End and discard]`
 
 No menu has a label. Each marks the current value as its default option, so the closed menu reads as the
 setting and the header's text keeps the reason (`this channel's default`, `from turn 3`). Only a menu with

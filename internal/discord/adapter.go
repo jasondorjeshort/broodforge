@@ -629,6 +629,21 @@ func (a *Adapter) click(ctx context.Context, in Inbound) (Reply, error) {
 			return Reply{}, a.venueRefusal(cid.Session, err)
 		}
 		return none(cid.Session + " ended"), nil
+	case IDDiscard:
+		// 04-ux-session-end.md: one confirm in the venue, after the checks the end itself makes.
+		n, err := a.svc.DiscardCount(ctx, act)
+		if err != nil {
+			return Reply{}, a.venueRefusal(cid.Session, err)
+		}
+		if v := a.viewOf(cid.Session); v != nil {
+			v.ConfirmDiscard(n)
+		}
+		return none(cid.Session + " discard confirm posted"), nil
+	case IDDiscardConfirm:
+		if _, err := a.svc.End(ctx, session.EndRequest{ActRequest: act, Discard: true}); err != nil {
+			return Reply{}, a.venueRefusal(cid.Session, err)
+		}
+		return none(cid.Session + " discarded"), nil
 	case IDStart:
 		return a.start(ctx, in, cid.Channel, "")
 	}

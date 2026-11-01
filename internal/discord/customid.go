@@ -27,13 +27,18 @@ const (
 	IDModel
 	IDEffort
 	IDMode
+	// IDDiscard is the header's End and discard: `bf:<session id>:discard`, which posts the
+	// confirm; IDDiscardConfirm is the confirm's button, `bf:<session id>:discard-confirm`,
+	// which ends the session without a handoff (04-ux-session-end.md).
+	IDDiscard
+	IDDiscardConfirm
 )
 
 // CustomID is one button's or menu's custom id, parsed by the one function 03 names
 // (ParseCustomID).
 type CustomID struct {
 	Kind      CustomIDKind
-	Session   string // IDAnswer, IDStop, IDEnd, IDModel, IDEffort, IDMode
+	Session   string // IDAnswer, IDStop, IDEnd, IDModel, IDEffort, IDMode, IDDiscard, IDDiscardConfirm
 	Channel   string // IDStart
 	ToolUseID string // IDAnswer
 	Decision  string // IDAnswer: allow, deny or allow-session
@@ -52,7 +57,8 @@ var (
 )
 
 // sessionKinds are the three-part forms `bf:<session id>:<word>`.
-var sessionKinds = map[string]CustomIDKind{"stop": IDStop, "end": IDEnd, "model": IDModel, "effort": IDEffort, "mode": IDMode}
+var sessionKinds = map[string]CustomIDKind{"stop": IDStop, "end": IDEnd, "model": IDModel, "effort": IDEffort, "mode": IDMode,
+	"discard": IDDiscard, "discard-confirm": IDDiscardConfirm}
 
 // ErrBadCustomID is a custom id that is not one of 03's forms.
 var ErrBadCustomID = errors.New("not a Broodforge custom id")
@@ -109,6 +115,10 @@ func (c CustomID) String() string {
 		return "bf:" + c.Session + ":effort"
 	case IDMode:
 		return "bf:" + c.Session + ":mode"
+	case IDDiscard:
+		return "bf:" + c.Session + ":discard"
+	case IDDiscardConfirm:
+		return "bf:" + c.Session + ":discard-confirm"
 	}
 	return ""
 }
@@ -119,7 +129,7 @@ func (c CustomID) IsMenu() bool {
 	switch c.Kind {
 	case IDModel, IDEffort, IDMode:
 		return true
-	case IDAnswer, IDStop, IDEnd, IDStart:
+	case IDAnswer, IDStop, IDEnd, IDStart, IDDiscard, IDDiscardConfirm:
 	}
 	return false
 }

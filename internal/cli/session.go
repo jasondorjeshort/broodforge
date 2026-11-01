@@ -425,12 +425,13 @@ func SessionHandlers(svc *session.Service) func(*control.Registry) {
 			var a struct {
 				ID, As, Roles string
 				NoClosingTurn bool
+				Discard       bool
 			}
 			if err := json.Unmarshal(call.Args, &a); err != nil {
 				return nil, control.NewError(control.CodeBadArgs, err.Error())
 			}
 			out, err := svc.End(ctx, session.EndRequest{ActRequest: session.ActRequest{Session: a.ID, As: a.As, Roles: a.Roles},
-				NoClosingTurn: a.NoClosingTurn})
+				NoClosingTurn: a.NoClosingTurn, Discard: a.Discard})
 			if err != nil {
 				var ge *git.Error
 				if errors.As(err, &ge) && ge.Code == git.CodeRefusedAttribution {
@@ -621,15 +622,18 @@ var sessionInvite = Command{
 	Columns: session.RegistrationColumns,
 }
 
-// sessionEnd is `broodforge session end <id> [--no-closing-turn]`: the end-of-session sequence
-// (the `answer` list); prints the handoff's line as `worktree handoff` does, its failing commits
-// first on a refused attribution, after which the session stays open.
+// sessionEnd is `broodforge session end <id> [--no-closing-turn] [--discard]`: the end-of-session
+// sequence (the `answer` list); prints the handoff's line as `worktree handoff` does, its failing
+// commits first on a refused attribution, after which the session stays open. --discard ends
+// without a handoff: outcome `discarded`, the refspec column `refs/sessions/<id>:refs/aborted/<id>`
+// when there were commits (04-ux-session-end.md; 05-debug-interface-git.md).
 var sessionEnd = Command{
 	Name:   "session end",
 	Class:  ClassWrite,
 	Expect: true,
 	Flags: append([]Flag{
 		{Name: "no-closing-turn", Kind: FlagBool, Usage: "skip the closing turn that writes the pull request"},
+		{Name: "discard", Kind: FlagBool, Usage: "end without a handoff; the commits stay on refs/aborted/<id>"},
 		{Name: "id", Kind: FlagString, Value: "<session id>"},
 	}, actingFlags...),
 	EventColumns: commitColumns,
@@ -649,11 +653,13 @@ type endLine struct {
 	Request     *git.PullRequest `json:"request"`
 	Removed     bool             `json:"removed"`
 	RemoveError string           `json:"removeError,omitempty"`
+	WIP         string           `json:"wip,omitempty"` // the end's WIP commit of a dirty tree
+	Ref         string           `json:"ref,omitempty"` // a discard's refs/aborted/<id>
 }
 
 func endLineOf(o git.Outcome) endLine {
 	l := endLine{Outcome: o.Outcome, Mode: o.Mode, Remote: o.Remote, Refspec: o.Refspec, URL: o.URL, Request: o.Request,
-		Removed: o.Removed, RemoveError: o.RemoveError}
+		Removed: o.Removed, RemoveError: o.RemoveError, WIP: o.WIP, Ref: o.Ref}
 	if o.Commits != session.CommitsUnknown {
 		n := o.Commits
 		l.Commits = &n
@@ -724,8 +730,9 @@ func runReachReport(_ context.Context, env *Env) error {
 }
 
 // reviewLine is the `review:` value (ADR 0025 rule 7): `<tool use id> at <commit>`, `none
-// since <commit>`, `error: <code>` when it cannot be read (the canonical moved, the configuration
-// does not load; --json has the message), or - once the session is handed off.
+// since <commit>`, with `; last launch: <commitError>` when the newest reviewer row carries one
+// (ADR 0028 Decision 3), `error: <code>` when it cannot be read (the canonical moved, the
+// configuration does not load; --json has the message), or - once the session is handed off.
 func reviewLine(r *session.Review) string {
 	switch {
 	case r == nil:
@@ -734,6 +741,8 @@ func reviewLine(r *session.Review) string {
 		return "error: " + r.Error.Code
 	case r.ToolUseID != nil:
 		return *r.ToolUseID + " at " + r.Commit
+	case r.LastLaunch != "":
+		return "none since " + r.Commit + "; last launch: " + r.LastLaunch
 	}
 	return "none since " + r.Commit
 }

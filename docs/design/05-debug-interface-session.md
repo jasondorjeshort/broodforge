@@ -94,8 +94,9 @@ and `to`; held in the bot's memory, not the row. `session interrupt <id>` (the `
 running turn and prints `turn-ended  <n>  interrupted` once it ended; while a call waits for an
 answer it denies the call with the reason `interrupted` and ends the turn without a resume (the
 default until the owner decides); otherwise `no-running-turn`. `session end <id>
-[--no-closing-turn]` (the `answer` list) runs 03's end of session: a running turn interrupted,
-then the handoff, printing its line as `worktree handoff` does; a refused handoff
+[--no-closing-turn] [--discard]` (the `answer` list) runs 03's end of session: a running turn interrupted,
+then the handoff (a dirty tree WIP-committed first; `--discard` keeps the commits on `refs/aborted/<id>`
+and pushes nothing: `05-debug-interface-git.md`), printing its line as `worktree handoff` does; a refused handoff
 (`handoff-refused-*`, its failing commits streamed first) keeps the session open, waiting for
 input (after an idle end the idle timer waits for the next activity: one attempt); anything else
 ends it. On a held interrupted session `end` is the one action accepted: the same sequence, the
@@ -138,7 +139,8 @@ is `result` `error`, a bundle that failed at the launch leaves `commitError` in 
 fact void, as does a modified or deleted tracked file at the pin (`dirty tree at the reviewer's
 launch`), a commit, an amend or a reset after the review moves the ref and voids it, an older
 review of the sha reset to does not revive it; `-` once handed off, no ref left; `none since
-<commit>; last launch: <commitError>` when the newest reviewer row carries one). `session land <id>
+<commit>; last launch: <commitError>` when the newest reviewer row carries one, `--json`'s
+`review.lastLaunch`). `session land <id>
 [--dry-run] [--expect <value>] [--as <user id>] [--roles <ids>]` lands the session's commits so far
 without ending it (ADR 0028): `05-debug-interface-git.md`, Landing, has the line, the `land-*`
 refusals and the push word's defer and resume. A fact that cannot be read prints `review:

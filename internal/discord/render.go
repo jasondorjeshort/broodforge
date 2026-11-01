@@ -49,6 +49,9 @@ type View struct {
 	lastText  int        // the number of the turn's newest text, 0 before one
 
 	ending      string // the `Ending:` line's message id while the end's handoff runs
+	confirm     string // End and discard's confirm, while one stands with its button
+	confirmN    int    // the commit count the confirm names
+	over        bool   // session-ended handled
 	summaryTo   func(lobby string) string
 	prompt      string // the open prompt's message id
 	promptCall  string
@@ -266,8 +269,28 @@ func (v *View) editHeader() {
 		Selects: headerSelects(v.id, v.hdr)})
 }
 
+// endButton is the header's two end buttons side by side (04-ux-session-end.md): End session
+// and End and discard.
 func (v *View) endButton() []Button {
-	return []Button{{Label: "End session", CustomID: CustomID{Kind: IDEnd, Session: v.id}.String(), Style: StyleDanger}}
+	return []Button{{Label: "End session", CustomID: CustomID{Kind: IDEnd, Session: v.id}.String(), Style: StyleDanger},
+		{Label: "End and discard", CustomID: CustomID{Kind: IDDiscard, Session: v.id}.String(), Style: StyleDanger}}
+}
+
+// ConfirmDiscard posts End and discard's one confirm in the venue (04-ux-session-end.md):
+// `Discard session <id>? Its <n> commits stay recoverable.` with the Discard button; a confirm
+// posted earlier is deleted, so one stands. Nothing once the session ended.
+func (v *View) ConfirmDiscard(commits int) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.over || (v.closed && !v.held) {
+		return
+	}
+	if v.confirm != "" {
+		v.post(Post{Op: OpDelete, MessageID: v.confirm})
+	}
+	v.confirmN = commits
+	v.confirm = v.create(discardConfirmText(v.id, commits), []Button{{Label: "Discard",
+		CustomID: CustomID{Kind: IDDiscardConfirm, Session: v.id}.String(), Style: StyleDanger}})
 }
 
 // switched is a model, effort or idle timeout switch: its line (04's `From the next turn:` for
@@ -611,9 +634,13 @@ func (v *View) sessionEnded(ev session.Event, t time.Time) {
 		end = &session.EndInfo{Outcome: ev.Result}
 	}
 	// The header once more, without its menus and End session; its text stays as the record.
-	v.closed = true
+	v.closed, v.over = true, true
 	if v.header != "" && v.start != nil {
 		v.post(Post{Op: OpEdit, MessageID: v.header, Body: headerText(v.id, v.start, v.hdr)})
+	}
+	if v.confirm != "" { // a standing discard confirm keeps its text, not its button
+		v.post(Post{Op: OpEdit, MessageID: v.confirm, Body: discardConfirmText(v.id, v.confirmN)})
+		v.confirm = ""
 	}
 	if end.Reason == "idle" {
 		v.create(ev.Summary, nil)

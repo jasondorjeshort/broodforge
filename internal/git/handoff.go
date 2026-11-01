@@ -8,6 +8,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jasondorjeshort/broodforge/internal/audit"
 	"github.com/jasondorjeshort/broodforge/internal/spawn"
@@ -22,7 +23,11 @@ const (
 	OutcomePushed      = "pushed"       // push: the branch is on the remote
 	OutcomePullRequest = "pull-request" // pull-request: pushed and the request opened
 	OutcomeDryRun      = "dry-run"      // --dry-run: checked, nothing sent
+	OutcomeDiscarded   = "discarded"    // Discard: nothing sent, the commits kept on refs/aborted/<id>
 )
+
+// WIPSubject is the subject of the commit the end makes of a dirty tree (04-ux-session-end.md).
+const WIPSubject = "WIP: uncommitted changes committed at end"
 
 // CredentialEnv carries the git credential to the askpass helper, set only on the push and
 // request processes and never kept (ADR 0022 companion, Handoff step 4).
@@ -61,7 +66,7 @@ func BundleStep(ctx context.Context, b spawn.Backend, s Session) (spawn.Bundle, 
 	if err != nil {
 		return spawn.Bundle{}, "", err
 	}
-	bundle, err := b.WorktreeBundle(s.Worktree(base))
+	bundle, err := b.WorktreeBundle(ctx, s.Worktree(base))
 	if err != nil {
 		var se *spawn.Error
 		if errors.As(err, &se) {
@@ -100,36 +105,51 @@ func Commits(ctx context.Context, b spawn.Backend, s Session) (int, error) {
 	return n, nil
 }
 
+// Pending is the commits an end would hand off or a discard keep, read before it runs: Commits,
+// and one more when the tree has uncommitted changes, which the end commits first
+// (Handoff.CommitDirty, Discard). The tree is read through the backend (spawn's WorktreeDirty).
+func Pending(ctx context.Context, b spawn.Backend, s Session) (int, error) {
+	n, err := Commits(ctx, b, s)
+	if err != nil {
+		return 0, err
+	}
+	base, err := Base(ctx, s)
+	if err != nil {
+		return 0, err
+	}
+	dirty, err := b.WorktreeDirty(s.Worktree(base))
+	if err != nil {
+		var se *spawn.Error
+		if errors.As(err, &se) {
+			return 0, &Error{Code: CodeRefusedWIP, Message: se.Message}
+		}
+		return 0, err
+	}
+	if dirty {
+		n++
+	}
+	return n, nil
+}
+
 // Refresh is steps 1 and 2 of the handoff (ADR 0022 companion, Handoff at session end):
 // worktree-bundle, then in the canonical `git bundle verify` and `git fetch <bundle>
 // +<session branch>:refs/sessions/<id>`, returning the commit the ref then holds. The fetch is
 // forced because the driver may have had commits amended after a refused check; the ref is the
 // bot's own. No commits since the base sets the ref back to the base, which is returned. The
-// bot never opens the session's tree. `worktree check`, the handoff and a reviewer's launch
-// (ADR 0025 rule 7, the review fact) run it.
+// bot never opens the session's tree. `worktree check` and the handoff run it; the reviewer pin
+// runs the same body (PinReview). It holds the session's bundle lock throughout (ADR 0028
+// Decision 1), waiting no longer than ctx.
 func Refresh(ctx context.Context, b spawn.Backend, s Session) (sha string, err error) {
+	unlock, err := LockBundle(ctx, s.ID)
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
 	bundle, base, err := BundleStep(ctx, b, s)
 	if err != nil {
 		return "", err
 	}
-	if bundle.Commits == 0 {
-		if _, err := run(ctx, CodeRefusedFetch, s.Canonical, nil, "update-ref", SessionRef(s.ID), base); err != nil {
-			return "", err
-		}
-		return base, nil
-	}
-	if _, err := run(ctx, CodeRefusedBundleVerify, s.Canonical, nil, "bundle", "verify", "--quiet", bundle.Path); err != nil {
-		return "", err
-	}
-	if _, err := run(ctx, CodeRefusedFetch, s.Canonical, nil, "fetch", "--quiet", "--no-tags", "--no-write-fetch-head",
-		bundle.Path, "+refs/heads/"+s.Branch()+":"+SessionRef(s.ID)); err != nil {
-		return "", err
-	}
-	out, err := run(ctx, CodeRefusedFetch, s.Canonical, nil, "rev-parse", "--verify", "--quiet", SessionRef(s.ID)+"^{commit}")
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out), nil
+	return fetchBundle(ctx, s, bundle, base)
 }
 
 // Collect runs steps 1 to 3 (ADR 0022 companion, Handoff at session end): Refresh, then Check
@@ -167,6 +187,10 @@ type Outcome struct {
 	// Removed is false when the tree outlived a done handoff; RemoveError says why.
 	Removed     bool   `json:"removed"`
 	RemoveError string `json:"removeError,omitempty"`
+	// WIP is the commit the end made of the tree's uncommitted changes (Handoff.CommitDirty,
+	// Discard), "" when the tree was clean; Ref is the ref a discard kept the commits on.
+	WIP string `json:"wip,omitempty"`
+	Ref string `json:"ref,omitempty"`
 	// Log is the commits handed off, oldest first, for the end-of-session summary (04, Ending a
 	// session); `worktree handoff` does not print it.
 	Log []CommitLine `json:"-"`
@@ -194,19 +218,38 @@ type Handoff struct {
 	Forge        PullRequester // nil: GitHub{}
 	API          string        // "": GitHubAPI
 	Title, Body  string        // the pull request's
-	// Record writes one audit event (push, pull-request-opened, handoff-refused); nil records nothing.
+	// Record writes one audit event (push, pull-request-opened, handoff-refused, session-discarded); nil records nothing.
 	Record func(audit.Event) error
 	Actor  string
+	// CommitDirty is a session's end (04-ux-session-end.md): before the bundle, the tree's
+	// uncommitted changes become one WIP commit through the backend (commitDirty), so the end
+	// loses nothing. `worktree handoff` leaves it false.
+	CommitDirty bool
 }
 
 // Run hands the session off. Refusals keep the tree; a done push or request removes it through
 // worktree-remove and deletes refs/sessions/<id> (R-35). dryRun stops after the check: the
 // attribution check, then, with every commit passing it, the push scan.
 func (h *Handoff) Run(ctx context.Context, dryRun bool) (Outcome, error) {
-	s := h.Session
 	if h.Mode != ModePush && h.Mode != ModePullRequest {
 		return Outcome{}, &Error{Code: CodeBadSession, Message: "handoff is " + strconv.Quote(h.Mode) + ", want push or pull-request"}
 	}
+	var wip string
+	if h.CommitDirty && !dryRun {
+		var err error
+		if wip, err = h.commitDirty(ctx); err != nil {
+			h.refused(err)
+			return Outcome{}, err
+		}
+	}
+	out, err := h.run(ctx, dryRun)
+	out.WIP = wip
+	return out, err
+}
+
+// run is Run after the WIP commit: the five steps of the ADR 0022 companion.
+func (h *Handoff) run(ctx context.Context, dryRun bool) (Outcome, error) {
+	s := h.Session
 	c, err := Collect(ctx, h.Backend, s, h.Attribution)
 	if err == nil {
 		if failing := c.Failing(); len(failing) > 0 {
@@ -265,6 +308,81 @@ func (h *Handoff) Run(ctx context.Context, dryRun bool) (Outcome, error) {
 		}
 		out.Outcome, out.URL = OutcomePullRequest, &url
 	}
+	h.remove(ctx, &out)
+	return out, nil
+}
+
+// commitDirty makes the end's WIP commit of the tree's uncommitted changes through the backend
+// (spawn's WorktreeWIP; the bot's git never opens the tree, ADR 0022) and returns its hash, ""
+// for a clean tree. Author and committer are the driver and the trailers those the check
+// requires of a commit made now (Attribution.Required), so the commit passes the check as the
+// session's own commits do (03-architecture-git.md, Attribution). A canonical without
+// refs/sessions/<id> is already-handed-off, as BundleStep's.
+func (h *Handoff) commitDirty(ctx context.Context) (string, error) {
+	s := h.Session
+	if _, found, err := SessionTip(ctx, s); err != nil {
+		return "", err
+	} else if !found {
+		return "", &Error{Code: CodeAlreadyHandedOff,
+			Message: s.Canonical + " holds no " + SessionRef(s.ID) + ": the session was handed off or never started"}
+	}
+	base, err := Base(ctx, s)
+	if err != nil {
+		return "", err
+	}
+	msg := WIPSubject + "\n"
+	if lines := h.Attribution.Required(time.Now()); len(lines) > 0 {
+		msg += "\n" + strings.Join(lines, "\n") + "\n"
+	}
+	sha, err := h.Backend.WorktreeWIP(s.Worktree(base), spawn.WIP{Name: h.Attribution.Driver.Name,
+		Email: h.Attribution.Driver.Email, Message: msg})
+	if err != nil {
+		var se *spawn.Error
+		if errors.As(err, &se) {
+			return "", &Error{Code: CodeRefusedWIP, Message: se.Message}
+		}
+		return "", err
+	}
+	return sha, nil
+}
+
+// Discard is the end without a handoff (`session end <id> --discard`, 04-ux-session-end.md):
+// the WIP commit of a dirty tree, then Collect (bundle, verify, fetch into refs/sessions/<id>,
+// the check, whose result decides nothing here), then refs/aborted/<id> set to the session's
+// tip when it has commits, the `session-discarded` audit row, and step 5's removal of the tree
+// and refs/sessions/<id>. Nothing is pushed; the commits stay recoverable in the canonical. A
+// refusal keeps the tree, as Run's do.
+func (h *Handoff) Discard(ctx context.Context) (Outcome, error) {
+	s := h.Session
+	wip, err := h.commitDirty(ctx)
+	if err != nil {
+		h.refused(err)
+		return Outcome{}, err
+	}
+	c, err := Collect(ctx, h.Backend, s, h.Attribution)
+	if err != nil {
+		h.refused(err)
+		return Outcome{WIP: wip}, err
+	}
+	out := Outcome{Outcome: OutcomeDiscarded, Mode: h.Mode, Remote: s.Remote, Commits: c.Commits, WIP: wip}
+	for _, ch := range c.Checks {
+		out.Log = append(out.Log, CommitLine{Hash: ch.Hash, Subject: ch.Subject})
+	}
+	details := map[string]string{"commits": strconv.Itoa(c.Commits)}
+	if c.Commits > 0 {
+		ref := AbortedRef(s.ID)
+		if _, err := run(ctx, CodeRefusedAbortedRef, s.Canonical, nil, "update-ref", ref, SessionRef(s.ID)); err != nil {
+			// A refusal: the tree and refs/sessions/<id> are kept, the session stays open.
+			h.refused(err)
+			return Outcome{WIP: wip}, err
+		}
+		out.Ref, out.Refspec = ref, SessionRef(s.ID)+":"+ref
+		details["ref"] = ref
+	}
+	if wip != "" {
+		details["wip"] = wip
+	}
+	h.record(audit.KindSessionDiscarded, audit.PhaseNone, details)
 	h.remove(ctx, &out)
 	return out, nil
 }

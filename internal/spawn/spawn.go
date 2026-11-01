@@ -3,6 +3,7 @@
 package spawn
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -60,9 +61,14 @@ type Backend interface {
 	// counts those commits without writing the bundle (a held session's notice, ADR 0026);
 	// WorktreeRemove deletes the tree and the bundle (worktree.go; ADR 0022 companion).
 	WorktreeCreate(w Worktree) error
-	WorktreeBundle(w Worktree) (Bundle, error)
+	WorktreeBundle(ctx context.Context, w Worktree) (Bundle, error)
 	WorktreeCommits(w Worktree) (int, error)
 	WorktreeRemove(session string) error
+	// WorktreeDirty reports whether the tree has uncommitted changes; WorktreeWIP commits them
+	// as one commit on the session branch and returns its hash, "" for a clean tree, at a
+	// session's end (worktree_wip.go): the bot's git never opens the tree (ADR 0022).
+	WorktreeDirty(w Worktree) (bool, error)
+	WorktreeWIP(w Worktree, c WIP) (string, error)
 	// WorktreePrePush reads the session tree's core.hooksPath through git, as the other
 	// worktree operations run it, and reports whether it is HooksDir with its pre-push hook
 	// present (ADR 0025, rule 4); the bot's own git never opens the tree (ADR 0022).

@@ -39,6 +39,8 @@ const (
 	CodeRefusedFetch        = "handoff-refused-fetch"
 	CodeRefusedAttribution  = "handoff-refused-attribution"
 	CodeRefusedPrivacy      = "handoff-refused-privacy"
+	CodeRefusedWIP          = "handoff-refused-wip"         // the end's WIP commit of a dirty tree could not be made
+	CodeRefusedAbortedRef   = "handoff-refused-aborted-ref" // a discard could not write refs/aborted/<id>
 	CodeFailedPush          = "handoff-failed-push"
 	CodeFailedPullRequest   = "handoff-failed-pull-request"
 	CodeNoCredential        = "no-git-credential"
@@ -73,6 +75,10 @@ func Branch(instance, id string) string { return "broodforge/" + instance + "/" 
 
 // SessionRef is the canonical's ref for the session, refs/sessions/<id> (ADR 0022).
 func SessionRef(id string) string { return "refs/sessions/" + id }
+
+// AbortedRef is the canonical's ref a discarded session's commits are kept on,
+// refs/aborted/<id>, until a later `session prune` (04-ux-session-end.md, Discarding).
+func AbortedRef(id string) string { return "refs/aborted/" + id }
 
 // SessionDir is <root>/sessions/<id>.
 func SessionDir(root, id string) string {

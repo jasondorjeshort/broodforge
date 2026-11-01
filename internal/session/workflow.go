@@ -136,12 +136,15 @@ func ReadHeader(root, id string) (string, error) {
 // Review is rule 7's fact: the session's last commit as of the last bundle (refs/sessions/<id>,
 // which `worktree check` and the handoff refresh), and the newest `reviewer` subagent call whose
 // result's audit row (subagent-result, a result that is not an error) names that commit as the
-// one the bot bundled at the reviewer's launch; nil ToolUseID is none. Error, when set, is why the fact could not be
+// one the bot bundled while answering the `reviewer` cell's defer; nil ToolUseID is none.
+// LastLaunch, with none, is the newest reviewer row's commitError (`review: none since <commit>;
+// last launch: <commitError>`). Error, when set, is why the fact could not be
 // read (the canonical moved, the configuration does not load): `review: error: <code>`.
 type Review struct {
-	Commit    string       `json:"commit"`
-	ToolUseID *string      `json:"toolUseId"`
-	Error     *ReviewError `json:"error,omitempty"`
+	Commit     string       `json:"commit"`
+	ToolUseID  *string      `json:"toolUseId"`
+	LastLaunch string       `json:"lastLaunch,omitempty"`
+	Error      *ReviewError `json:"error,omitempty"`
 }
 
 // ReviewError is a review fact that could not be read.
@@ -170,10 +173,13 @@ const (
 // ReviewFact reads rule 7's fact for gs: nil only when the canonical holds no refs/sessions/<id>
 // (the session was handed off); a ref that cannot be read is a Review carrying the git error.
 // The rows counted are subagent-result events, written when a subagent call's tool result comes
-// (never at a person's answer), whose `agent` is reviewer and whose result is ok: a reviewer
-// allowed and then interrupted has no such row, and an errored or denied one is not ok. The
-// fact holds only when the newest such row's `commit` (Refresh's sha at the launch) equals the
-// ref's sha; a row with `commitError` never counts. No time enters the comparison.
+// (never at a person's answer), whose `agent` is reviewer, whose result is ok, with result text
+// (no `empty`) and no `commitError` (a failed bundle, a dirty tree): a reviewer allowed and then
+// interrupted has no such row, and an errored or denied one is not ok. The fact holds only when
+// the newest such row's `commit` (the pin taken at the `reviewer` cell's defer, ADR 0028
+// Decision 3) equals the ref's sha; a reviewer call the engine did not defer has no commit and
+// so voids it. No time enters the comparison. With no fact, the newest reviewer row's
+// commitError, of any result, is LastLaunch.
 func ReviewFact(ctx context.Context, q store.Querier, gs git.Session) (*Review, error) {
 	sha, found, err := git.SessionTip(ctx, gs)
 	var ge *git.Error
@@ -186,24 +192,33 @@ func ReviewFact(ctx context.Context, q store.Querier, gs git.Session) (*Review, 
 		return nil, nil
 	}
 	r := &Review{Commit: sha}
-	var newest struct{ ToolUseID, Commit, CommitError string }
+	var newest struct{ ToolUseID, Commit string }
+	lastLaunch := ""
 	err = q.Query(`SELECT details FROM audit_event WHERE session_id = ? AND kind = ? ORDER BY seq`,
 		[]store.Value{store.Text(gs.ID), store.Text(string(audit.KindSubagentResult))},
 		func(row *store.Row) error {
-			var d struct{ Tool, Agent, Result, ToolUseID, Commit, CommitError string }
+			var d struct{ Tool, Agent, Result, ToolUseID, Commit, CommitError, Empty string }
 			if json.Unmarshal([]byte(row.Text(0)), &d) != nil {
 				return nil
 			}
-			if subagentTools[d.Tool] && d.Agent == reviewerAgent && d.Result == subagentResultOK && d.ToolUseID != "" {
-				newest.ToolUseID, newest.Commit, newest.CommitError = d.ToolUseID, d.Commit, d.CommitError
+			if !subagentTools[d.Tool] || d.Agent != reviewerAgent {
+				return nil
+			}
+			lastLaunch = d.CommitError
+			// A row with no result text or with commitError (a failed bundle, a dirty tree) is
+			// never a candidate (ADR 0028 Decision 3): it is skipped, not a void.
+			if d.Result == subagentResultOK && d.ToolUseID != "" && d.Empty == "" && d.CommitError == "" {
+				newest.ToolUseID, newest.Commit = d.ToolUseID, d.Commit
 			}
 			return nil
 		})
-	// The newest ok reviewer row alone names the reviewed commit: an older row's match does not
-	// revive a fact a newer review of another commit, or a failed bundle, left void.
-	if err == nil && newest.CommitError == "" && newest.Commit != "" && newest.Commit == sha {
+	// The newest candidate alone names the reviewed commit: an older row's match does not revive
+	// a fact a newer review of another commit (or one with no pin) left void.
+	if err == nil && newest.Commit != "" && newest.Commit == sha {
 		id := newest.ToolUseID
 		r.ToolUseID = &id
+	} else if err == nil {
+		r.LastLaunch = lastLaunch
 	}
 	return r, err
 }

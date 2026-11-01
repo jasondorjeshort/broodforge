@@ -16,6 +16,7 @@ Planned documents (added as we go):
 | `04-ux.md` | The Discord flows, venues, buttons and message wording, Ticket Tool as the reference; a proposal with every owner decision marked and collected at the end |
 | `04-ux-session-start.md` | Sibling of 04: the header the agent's prompt opens with (`session show --header`) and the not-started flow when a project hook's runtime is missing (ADR 0025) |
 | `04-ux-session-controls.md` | Sibling of 04: the driver's switches in the venue (policy mode, model and effort, the idle timeout) and the pinned header's three select menus for model, effort and mode |
+| `04-ux-session-end.md` | Sibling of 04: ending a session (the sequence, the summary and transcript, the interrupted session's summaries), the WIP commit of a dirty tree at the end, and `[End and discard]` with its confirm, `refs/aborted/<id>` and the discard's summary |
 | `05-debug-interface.md` | How agents drive, observe, and reproduce every feature from a terminal |
 | `05-debug-interface-discord.md` | Companion to 05: the Discord adapter's drive, observe, reproduce and isolation, including the `discord` commands |
 | `05-debug-interface-discord-live.md` | Sibling of the Discord companion: `serve --discord live` (the gateway, the sweep, the REST surface), the one stderr line per inbound event and its outcomes, every interaction acknowledged, the held interrupted sessions (ADR 0026) |

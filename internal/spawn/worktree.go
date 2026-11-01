@@ -4,6 +4,7 @@ package spawn
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Codes of the worktree operations.
@@ -40,10 +42,13 @@ func (w Worktree) BundlePath() string {
 	return filepath.ToSlash(filepath.Join(w.Session, "out.bundle"))
 }
 
-// Bundle is what worktree-bundle wrote: Path is "" when the session has no commits.
+// Bundle is what worktree-bundle wrote: Path is "" when the session has no commits. Status is
+// the tree's `git status --porcelain` beside it, untracked lines included, "" for a clean tree:
+// the reviewer pin's cleanliness (ADR 0028 Decision 3).
 type Bundle struct {
 	Path    string
 	Commits int
+	Status  string
 }
 
 // sessionDirName is git.ValidSessionID's form; git imports spawn, so spawn keeps this one copy.
@@ -92,12 +97,26 @@ func checkWorktree(w Worktree) error {
 // runGit runs git with the bot's environment minus the stripped names (Environment), never a
 // terminal prompt, and returns stdout; a failure carries git's stderr.
 func runGit(code string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	return runGitContext(context.Background(), code, args...)
+}
+
+// gitWaitDelay bounds the wait for a killed git's output pipes, as git's own waitDelay does: a
+// child git it started (pack-objects under `bundle create`) may hold them open past the kill,
+// which would outlast the deadline.
+const gitWaitDelay = 5 * time.Second
+
+// runGitContext is runGit killed when ctx ends; the failure then names ctx's error.
+func runGitContext(ctx context.Context, code string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Env = Environment(os.Environ(), []Var{{"GIT_TERMINAL_PROMPT", "0"}})
+	cmd.WaitDelay = gitWaitDelay
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
 		msg := strings.TrimSpace(stderr.String())
+		if cerr := ctx.Err(); cerr != nil {
+			msg = cerr.Error()
+		}
 		if msg == "" {
 			msg = err.Error()
 		}
@@ -106,11 +125,14 @@ func runGit(code string, args ...string) (string, error) {
 	return stdout.String(), nil
 }
 
-// subcommand is the git subcommand after any -C or -c options, for messages.
+// subcommand is the git subcommand after any -C, -c or --<option> global options, for messages.
 func subcommand(args []string) string {
 	for i := 0; i < len(args); i++ {
 		if args[i] == "-C" || args[i] == "-c" {
 			i++
+			continue
+		}
+		if strings.HasPrefix(args[i], "--") { // a global option such as --no-optional-locks
 			continue
 		}
 		return args[i]
@@ -163,25 +185,39 @@ func (s *SameAccount) WorktreeCreate(w Worktree) error {
 }
 
 // WorktreeBundle writes <sess>/out.bundle of <base>..<branch> (`git -C <sess>/tree bundle
-// create`); a session with no commits since the base writes nothing, removes a stale bundle and
-// reports zero.
-func (s *SameAccount) WorktreeBundle(w Worktree) (Bundle, error) {
-	n, err := s.WorktreeCommits(w)
-	if err != nil {
+// create`) and reads the tree's `status --porcelain` into Status; a session with no commits
+// since the base writes nothing, removes a stale bundle and reports zero. Every git it runs is
+// killed when ctx ends, so a hung git cannot hold a reviewer's resume.
+func (s *SameAccount) WorktreeBundle(ctx context.Context, w Worktree) (Bundle, error) {
+	if err := checkWorktree(w); err != nil {
 		return Bundle{}, err
 	}
 	tree, rng := w.Tree(), commitRange(w)
+	out, err := runGitContext(ctx, CodeBundle, "-C", tree, "rev-list", "--count", rng)
+	if err != nil {
+		return Bundle{}, err
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(out))
+	if err != nil {
+		return Bundle{}, &Error{CodeBundle, "rev-list --count: " + err.Error()}
+	}
+	// --no-optional-locks: the status never refreshes the index, so it takes no index.lock a
+	// running turn's git in the tree could meet (`worktree check` runs mid-turn).
+	status, err := runGitContext(ctx, CodeBundle, "--no-optional-locks", "-C", tree, "status", "--porcelain")
+	if err != nil {
+		return Bundle{}, err
+	}
 	path := w.BundlePath()
 	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return Bundle{}, &Error{CodeBundle, err.Error()}
 	}
 	if n == 0 {
-		return Bundle{}, nil
+		return Bundle{Status: status}, nil
 	}
-	if _, err := runGit(CodeBundle, "-C", tree, "bundle", "create", "--quiet", path, rng); err != nil {
+	if _, err := runGitContext(ctx, CodeBundle, "-C", tree, "bundle", "create", "--quiet", path, rng); err != nil {
 		return Bundle{}, err
 	}
-	return Bundle{Path: path, Commits: n}, nil
+	return Bundle{Path: path, Commits: n, Status: status}, nil
 }
 
 // commitRange is the session's commits since the base, <base>..refs/heads/<branch>.

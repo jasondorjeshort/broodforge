@@ -2,6 +2,8 @@
 
 package spawn
 
+import "context"
+
 // LinuxSudoBwrap is the droplet backend of ADR 0022 and its companion (sudo into bubblewrap,
 // the bind list, engine-entry). It is held until the droplet rows of the spike findings land
 // (08-implementation-plan.md, P14): every operation refuses with preflight-backend: held.
@@ -35,13 +37,21 @@ func (LinuxSudoBwrap) Preflight() []Check {
 func (LinuxSudoBwrap) WorktreeCreate(Worktree) error { return held() }
 
 // WorktreeBundle refuses: held.
-func (LinuxSudoBwrap) WorktreeBundle(Worktree) (Bundle, error) { return Bundle{}, held() }
+func (LinuxSudoBwrap) WorktreeBundle(context.Context, Worktree) (Bundle, error) {
+	return Bundle{}, held()
+}
 
 // WorktreeCommits refuses: held.
 func (LinuxSudoBwrap) WorktreeCommits(Worktree) (int, error) { return 0, held() }
 
 // WorktreeRemove refuses: held.
 func (LinuxSudoBwrap) WorktreeRemove(string) error { return held() }
+
+// WorktreeDirty refuses: held.
+func (LinuxSudoBwrap) WorktreeDirty(Worktree) (bool, error) { return false, held() }
+
+// WorktreeWIP refuses: held.
+func (LinuxSudoBwrap) WorktreeWIP(Worktree, WIP) (string, error) { return "", held() }
 
 // WorktreePrePush refuses: held.
 func (LinuxSudoBwrap) WorktreePrePush(string) (bool, error) { return false, held() }

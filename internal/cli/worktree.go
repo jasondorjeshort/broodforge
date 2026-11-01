@@ -323,6 +323,13 @@ func (s *WorktreeService) bundle(ctx context.Context, _ *control.Call, id string
 	if err != nil {
 		return nil, err
 	}
+	// The session's bundle lock, as Refresh and the reviewer pin take it: all write
+	// <sess>/out.bundle (ADR 0028 Decision 1).
+	unlock, err := git.LockBundle(ctx, sess.git.ID)
+	if err != nil {
+		return nil, gitError(err)
+	}
+	defer unlock()
 	b, _, err := git.BundleStep(ctx, s.Backend, sess.git)
 	if err != nil {
 		return nil, gitError(err)
@@ -334,7 +341,7 @@ func (s *WorktreeService) bundle(ctx context.Context, _ *control.Call, id string
 }
 
 func (s *WorktreeService) handoff(ctx context.Context, call *control.Call, id string, dryRun bool) (json.RawMessage, error) {
-	out, err := s.runHandoff(ctx, id, dryRun, actorHostCLI)
+	out, err := s.runHandoff(ctx, id, dryRun, false, actorHostCLI)
 	if err != nil {
 		var ge *git.Error
 		if errors.As(err, &ge) && ge.Code == git.CodeRefusedAttribution {
@@ -363,8 +370,9 @@ const ActorBot = "instance"
 
 // runHandoff is the companion's five steps for one session: the tree's state and the
 // session's outcome recorded as `worktree handoff` records them. A git refusal is returned as
-// the *git.Error, its failing commits with it.
-func (s *WorktreeService) runHandoff(ctx context.Context, id string, dryRun bool, actor string) (git.Outcome, error) {
+// the *git.Error, its failing commits with it. commitDirty is the end's WIP commit of a dirty
+// tree (git.Handoff.CommitDirty), which `worktree handoff` does not make.
+func (s *WorktreeService) runHandoff(ctx context.Context, id string, dryRun, commitDirty bool, actor string) (git.Outcome, error) {
 	sess, err := s.load(id)
 	if err != nil {
 		return git.Outcome{}, err
@@ -375,7 +383,7 @@ func (s *WorktreeService) runHandoff(ctx context.Context, id string, dryRun bool
 	}
 	h := &git.Handoff{Backend: s.Backend, Session: sess.git, Mode: sess.project.HandoffOrDefault(),
 		Attribution: sess.attr, Privacy: p, CredentialID: sess.project.Repo.GitCredentialID, Secret: s.Secret,
-		Forge: s.Forge, API: s.API, Title: sess.title, Record: s.record, Actor: actor}
+		Forge: s.Forge, API: s.API, Title: sess.title, Record: s.record, Actor: actor, CommitDirty: commitDirty}
 	out, err := h.Run(ctx, dryRun)
 	if err != nil {
 		var ge *git.Error
@@ -588,8 +596,44 @@ func (s *WorktreeService) Commits(ctx context.Context, id string) (*int, error) 
 	return &n, nil
 }
 
+// Pending is the commits session id's end would hand off or keep: Commits, and one more when
+// the tree has uncommitted changes, which the end commits first (git.Pending). The session
+// service's Config.Pending: the Ending line and the discard's confirm.
+func (s *WorktreeService) Pending(ctx context.Context, id string) (*int, error) {
+	sess, err := s.load(id)
+	if err != nil {
+		return nil, err
+	}
+	n, err := git.Pending(ctx, s.Backend, sess.git)
+	if err != nil {
+		return nil, err
+	}
+	return &n, nil
+}
+
 // Handoff is the handoff of session id as `worktree handoff` runs it, for the end of session
-// (the session service's Handoff): the outcome, or the git refusal with its failing commits.
+// (the session service's Handoff): the tree's uncommitted changes committed first, then the
+// outcome, or the git refusal with its failing commits.
 func (s *WorktreeService) Handoff(ctx context.Context, id string) (git.Outcome, error) {
-	return s.runHandoff(ctx, id, false, ActorBot)
+	return s.runHandoff(ctx, id, false, true, ActorBot)
+}
+
+// Discard is the end of session id without a handoff (`session end --discard`; the session
+// service's Discard): git.Handoff.Discard for actor, the worktree row then `removed`. A refusal
+// keeps the tree and the row.
+func (s *WorktreeService) Discard(ctx context.Context, id, actor string) (git.Outcome, error) {
+	sess, err := s.load(id)
+	if err != nil {
+		return git.Outcome{}, err
+	}
+	h := &git.Handoff{Backend: s.Backend, Session: sess.git, Mode: sess.project.HandoffOrDefault(),
+		Attribution: sess.attr, Record: s.record, Actor: actor}
+	out, err := h.Discard(ctx)
+	if err != nil {
+		return out, err
+	}
+	if out.Removed {
+		s.setWorktreeState(id, store.WorktreeRemoved)
+	}
+	return out, nil
 }

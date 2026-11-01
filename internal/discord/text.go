@@ -463,7 +463,7 @@ func summaryText(id string, end *session.EndInfo, ended time.Time) string {
 		by = "the idle timeout" // not 04
 	}
 	head := "Session " + id + " ended by " + by
-	if end.Commits == 0 && (end.Outcome == "none" || end.Outcome == "") {
+	if end.Commits == 0 && (end.Outcome == "none" || end.Outcome == "" || end.Outcome == "discarded") {
 		return head + " · 0 commits · nothing to push; the tree was removed."
 	}
 	started, err := time.Parse(time.RFC3339, end.StartedAt)
@@ -478,12 +478,25 @@ func summaryText(id string, end *session.EndInfo, ended time.Time) string {
 	lines := []string{head + length + " · " + plural(end.Turns, "turn", "turns") + " · " + tokens(end.In) + " in / " + tokens(end.Out) + " out" + model}
 	switch {
 	case end.Outcome == "pull-request":
-		lines = append(lines, "Branch "+end.Branch+" -> pull request "+pullNumber(end.URL)+end.URL)
+		branch := "Branch " + end.Branch + " -> pull request " + pullNumber(end.URL) + end.URL
+		if end.WIP != "" {
+			branch += " " + wipNote // not 04: the owner's note on the request's line
+		}
+		lines = append(lines, branch)
 		if end.Title != "" {
 			lines = append(lines, "Title: "+cutRunes(end.Title, summaryTitleRunes)) // not 04: 04 says the summary shows the title, not how
 		}
+	case end.Outcome == "pushed" && end.WIP != "":
+		// 04-ux-session-end.md: the owner's line in place of the branch line.
+		lines = append(lines, plural(end.Commits, "commit", "commits")+" · pushed to "+end.Branch+" "+wipNote)
 	case end.Outcome == "pushed":
 		lines = append(lines, "Branch "+end.Branch+" -> pushed") // not 04
+	case end.Outcome == "discarded":
+		// 04-ux-session-end.md: the owner's line in place of the branch line, then the ref.
+		lines = append(lines, plural(end.Commits, "commit", "commits")+" · discarded; recoverable on request")
+		if end.Ref != "" {
+			lines = append(lines, "Kept as "+end.Ref+" in the project's canonical.") // not 04
+		}
 	case end.Outcome == session.OutcomeTreeMissing:
 		// 04, Ending a session: a held session's tree gone, its commits still on the host.
 		lines = append(lines, "Branch "+end.Branch+" -> not handed off: its tree is missing on the host; the owner can recover refs/sessions/"+
@@ -544,6 +557,25 @@ func cutRunes(s string, n int) string {
 	}
 	return string(r[:n-3]) + "..."
 }
+
+// discardConfirmText is End and discard's confirm (04-ux-session-end.md; the owner's line,
+// 2026-10-31): `Discard session <id>? Its <n> commits stay recoverable.`. not 04: `Its 1
+// commit stays` in the singular, as the interrupted notice's `1 commit`, and `Its commits` when
+// the count could not be read.
+func discardConfirmText(id string, commits int) string {
+	what := "Its commits stay"
+	switch {
+	case commits == 1:
+		what = "Its 1 commit stays"
+	case commits >= 0:
+		what = "Its " + strconv.Itoa(commits) + " commits stay"
+	}
+	return "Discard session " + id + "? " + what + " recoverable."
+}
+
+// wipNote is the end's WIP commit in the summary (04-ux-session-end.md; the owner's line,
+// 2026-10-31): `(WIP: uncommitted changes committed at end)`.
+const wipNote = "(WIP: uncommitted changes committed at end)"
 
 // endingText is 04's line while the end's handoff runs (Ending a session): `Ending: checking
 // and handing off 3 commits...`. not 04: `the commits` when the count could not be read.

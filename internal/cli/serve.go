@@ -346,13 +346,13 @@ func startBot(env *Env) (*bot, error) {
 	b.svc = session.New(session.Config{
 		Root: root, Instance: c.Instance.InstanceName, DryRun: b.discord == config.DiscordDryRun, Started: b.adapter.SessionStarted,
 		Groups:  func() map[string][]string { return b.config().Instance.RoleGroups },
-		Channel: b.channel, Fixtures: fixturesDir(c), Handoff: b.wt.Handoff,
+		Channel: b.channel, Fixtures: fixturesDir(c), Handoff: b.wt.Handoff, Discard: b.wt.Discard, Pending: b.wt.Pending,
 		Engine: b.engine, CreateTree: func(ctx context.Context, s git.Session) (string, error) {
 			return git.Create(ctx, b.backend, s)
 		},
 		RemoveTree:     func(ctx context.Context, s git.Session) error { return git.Discard(ctx, b.backend, s) },
 		FetchCanonical: b.fetchCanonical,
-		Refresh:        func(ctx context.Context, s git.Session) (string, error) { return git.Refresh(ctx, b.backend, s) },
+		Refresh:        func(ctx context.Context, s git.Session) (git.Pin, error) { return git.PinReview(ctx, b.backend, s) },
 		Workflow:       sessionWorkflow,
 		Commits:        b.wt.Commits,
 		ProjectRepo:    b.projectRepo,

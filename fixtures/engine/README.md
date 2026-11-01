@@ -2,11 +2,13 @@
 
 Recorded Claude Code stream-json turns, replayed by the fake engine. Each directory holds
 `turn-<n>.jsonl` (the engine's stdout, verbatim but for paths) and `fixture.json` (`claim`,
-`engineVersion`, `recorded`, and `turns: [{n, exit, engineSessionId}]`). All but the hand-written `subagent*` fixtures were
+`engineVersion`, `recorded`, and `turns: [{n, exit, engineSessionId}]`). All but the hand-written `subagent*` and `reviewer-*` fixtures were
 recorded on the PC with engine 2.1.296, by the spike or by `engine record` (claim `recorded`); the
 import rewrote the PC home to `/home/user`, the spike root to `/home/user/bf-spike`, and the
 engine's project slugs to match, and changed nothing else. `subagent` and its copies `subagent-pinned` and `subagent-pinned-denied` (claim `hand-written`) are
-written by hand in the stream's shape until a real subagent turn is recorded (ADR 0025, check C6).
+written by hand in the stream's shape until a real subagent turn is recorded (ADR 0025, check C6);
+`reviewer-defer` and `reviewer-empty` likewise until the engine is seen deferring an `Agent` call
+(ADR 0028, V1).
 A hand-written fixture carries no `engineVersion` and no `recorded`: no engine produced it. Its
 shape is assumed, not observed: that a subagent's own lines carry `parent_tool_use_id`, and that
 its results carry `tool_result_meta` with `source: hook` (the bot's hook deciding a subagent's
@@ -42,3 +44,5 @@ from the source path's `C:/Users/<user>` prefix. Read the result as `docs/design
 | `subagent` | hand-written | 1 | The driver launches the `reviewer` through `Agent`; the subagent's `Read` and text carry `parent_tool_use_id`, then the `Agent` result: `session tail`'s indentation and `session show`'s `review:` line (ADR 0025). |
 | `subagent-pinned` | hand-written | 1 | `subagent` with the `Agent` input pinning `"model":"haiku"`, the lines carrying `parent_tool_use_id` naming `claude-haiku-5-5`, and the result's `modelUsage` split between Opus and Haiku: the `pin` row of `model_seen`, the `subagent-result` row's `model`, both trailer lines (ADR 0025 rule 10 as amended 2026-10-31, P38). |
 | `subagent-pinned-denied` | hand-written | 1 | `subagent-pinned` whose `Agent` launch the hook denies (`Denied by Broodforge:`, in `permission_denials`), with no Haiku lines and Opus alone in `modelUsage`: a denied launch credits nothing, its `pin` row deleted and the Haiku line gone from the trailers file (P38). |
+| `reviewer-defer` | hand-written | 2 | Turn 1 ends `tool_deferred` on an `Agent` call whose `subagent_type` is `reviewer` (the `reviewer` cell); turn 2 is the bot's resume with `allow`: the subagent's `Read` and text under `parent_tool_use_id`, the `Agent` result `No findings.`: the pin at the defer, `session show`'s `review: <id> at <commit>` (ADR 0028 Decision 3, P33). |
+| `reviewer-empty` | hand-written | 2 | `reviewer-defer` whose `Agent` result has no text: the row is written with `empty` and the fact stays `review: none since <commit>` (P33). |

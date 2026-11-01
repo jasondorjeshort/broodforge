@@ -69,10 +69,10 @@ func TestSelectHeaderMenus(t *testing.T) {
 		"low=low,medium=medium,high=high,xhigh=xhigh,max=max,asks first=asks-first,acts freely (within reach)=acts-freely"; got != want {
 		t.Errorf("options\n got %s\nwant %s", got, want)
 	}
-	if len(create.Buttons) != 1 || create.Buttons[0].CustomID != "bf:s0001:end" {
+	if len(create.Buttons) != 2 || create.Buttons[0].CustomID != "bf:s0001:end" || create.Buttons[1].CustomID != "bf:s0001:discard" {
 		t.Errorf("create's buttons %+v", create.Buttons)
 	}
-	// The disgo payload: one action row per menu, in order, then the button row.
+	// The disgo payload: one action row per menu, in order, then the row of the two end buttons.
 	var body struct {
 		Components []struct {
 			Type       int
@@ -95,11 +95,15 @@ func TestSelectHeaderMenus(t *testing.T) {
 				t.Errorf("%s min/max %v %v", c.CustomID, c.MinValues, c.MaxValues)
 			}
 		}
-		if len(r.Components) != 1 {
+		want := 1
+		if r.Components[0].Type == 2 {
+			want = 2 // End session and End and discard, side by side
+		}
+		if len(r.Components) != want {
 			t.Errorf("a row of %d components", len(r.Components))
 		}
 	}
-	if got := strings.Join(rows, " "); got != "bf:s0001:model bf:s0001:effort bf:s0001:mode bf:s0001:end" {
+	if got := strings.Join(rows, " "); got != "bf:s0001:model bf:s0001:effort bf:s0001:mode bf:s0001:end bf:s0001:discard" {
 		t.Errorf("payload rows %s: %s", got, payload(create))
 	}
 
@@ -127,7 +131,7 @@ func TestSelectHeaderMenus(t *testing.T) {
 	if got := selectsLine(edit); got != "bf:s0001:model[]=sonnet bf:s0001:effort[]=high bf:s0001:mode[]=asks-first" {
 		t.Errorf("after asks-first: %s", got)
 	}
-	if !strings.Contains(edit.Body, "\nMode: asks first (from turn 1).") || len(edit.Buttons) != 1 {
+	if !strings.Contains(edit.Body, "\nMode: asks first (from turn 1).") || len(edit.Buttons) != 2 {
 		t.Errorf("mode edit %+v", edit)
 	}
 	v.Handle(ev(session.EventSessionEnded, 4*time.Second, func(e *session.Event) {
@@ -165,7 +169,7 @@ func TestSelectResyncAndEnd(t *testing.T) {
 				v.Resync()
 				re := (*posts)[len(*posts)-1]
 				if re.Op != OpEdit || re.MessageID != create.MessageID || re.Body != create.Body ||
-					selectsLine(re) != selectsLine(create) || len(re.Buttons) != 1 {
+					selectsLine(re) != selectsLine(create) || len(re.Buttons) != 2 {
 					t.Errorf("resync %+v", re)
 				}
 				v.Handle(ended)
@@ -298,7 +302,7 @@ func TestSelectLive(t *testing.T) {
 	if !ok {
 		t.Fatalf("no header\n%s", h.rest.dump())
 	}
-	if got, want := componentsLine(t, create.body), "bf:s0001:model=- | bf:s0001:effort=- | bf:s0001:mode=acts-freely | bf:s0001:end"; got != want {
+	if got, want := componentsLine(t, create.body), "bf:s0001:model=- | bf:s0001:effort=- | bf:s0001:mode=acts-freely | bf:s0001:end bf:s0001:discard"; got != want {
 		t.Errorf("the header's components\n got %s\nwant %s", got, want)
 	}
 
@@ -310,7 +314,7 @@ func TestSelectLive(t *testing.T) {
 	h.until("the header's edit", h.saw("UpdateMessage", func(c restCall) bool { return isHeader(c) && strings.Contains(content(c), "Effort: high.") }))
 	edits := h.rest.all("UpdateMessage", isHeader)
 	edit := edits[len(edits)-1]
-	if got, want := componentsLine(t, edit.body), "bf:s0001:model=- | bf:s0001:effort=high | bf:s0001:mode=acts-freely | bf:s0001:end"; got != want {
+	if got, want := componentsLine(t, edit.body), "bf:s0001:model=- | bf:s0001:effort=high | bf:s0001:mode=acts-freely | bf:s0001:end bf:s0001:discard"; got != want {
 		t.Errorf("the edit's components\n got %s\nwant %s", got, want)
 	}
 	if _, ok := h.rest.find("CreateFollowupMessage", func(c restCall) bool { return c.args[1] == "tok-31" }); ok {

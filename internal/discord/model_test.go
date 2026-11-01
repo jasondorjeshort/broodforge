@@ -153,8 +153,8 @@ func TestViewModelSwitch(t *testing.T) {
 		t.Errorf("venue lines %q", lines)
 	}
 	if !strings.Contains(last.Body, "\nMode: acts freely (from turn 2). Credential: ") ||
-		!strings.Contains(last.Body, "\nModel: Fable (from turn 2). Effort: max.\nReach: ") || len(last.Buttons) != 1 ||
-		last.Buttons[0].CustomID != "bf:s0001:end" {
+		!strings.Contains(last.Body, "\nModel: Fable (from turn 2). Effort: max.\nReach: ") || len(last.Buttons) != 2 ||
+		last.Buttons[0].CustomID != "bf:s0001:end" || last.Buttons[1].CustomID != "bf:s0001:discard" {
 		t.Errorf("header edit %+v", last)
 	}
 	if got := headerOf(v.events); got.model != "claude-fable-5-1" || got.effort != "max" || got.why != "from turn 2" {

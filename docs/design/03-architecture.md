@@ -89,7 +89,8 @@ Auto mode: the hook passes the `ask` cell to the engine's classifier and `spawn`
 `TurnRequest.PermissionMode`, set from the session's mode at each process start; the classifier's ask and refusal, and
 the `engine` decider, are `03-hook-contract.md`'s (Auto mode; What the bot sees).
 Custom ids (buttons and the header's select menus), parsed by one function in `discord`:
-`bf:<session id>:<tool_use_id>:<allow|deny|allow-session>` for a permission answer, `bf:<session id>:stop`, `bf:<session id>:end`,
+`bf:<session id>:<tool_use_id>:<allow|deny|allow-session>` for a permission answer, `bf:<session id>:stop`, `bf:<session id>:end`, `bf:<session id>:discard|discard-confirm`
+(End and discard and its confirm, `04-ux-session-end.md`),
 `bf:<channel id>:start` on the panel, and `bf:<session id>:model|effort|mode` on the header's menus (the pick is the interaction's value, never in the id).
 
 ## The engine adapter

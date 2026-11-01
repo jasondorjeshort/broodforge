@@ -430,9 +430,11 @@ type call struct {
 	agent  string
 	parent string
 	depth  int
-	// commit is refs/sessions/<id>'s sha as the bot bundled it when a reviewer call launched,
-	// commitError why that bundle failed; both go into the subagent-result row.
-	commit, commitError string
+	// commit is refs/sessions/<id>'s sha as the bot bundled it while answering the `reviewer`
+	// cell's defer, dirty the tree's tracked changes then, commitError why that bundle failed or
+	// `dirty tree at the reviewer's launch`; all go into the subagent-result row (ADR 0028
+	// Decision 3). A reviewer call the engine did not defer has none.
+	commit, dirty, commitError string
 	// model is a subagent call's pinned model by display name, `none` when nothing pins
 	// (policy.Pin); the subagent-result row's model.
 	model string
@@ -498,9 +500,6 @@ func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan s
 				case engine.BlockToolUse:
 					c := call{tool: b.Name, target: Target(b.Name, b.Input, l.tree), message: ev.Assistant.MessageID,
 						agent: subagentType(b.Name, b.Input), parent: parent, depth: depth}
-					if c.agent == reviewerAgent {
-						c.commit, c.commitError = s.refresh(l)
-					}
 					var pin policy.Pinned
 					if subagentTools[b.Name] {
 						pin = l.pinOf(b.Input)
@@ -528,13 +527,20 @@ func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan s
 		case engine.KindResult, engine.KindExit, engine.KindUnknown:
 		}
 	}
+	// A call the `reviewer` cell deferred is pinned here, before l.mu, so the bundle never
+	// holds the session's lock; deferLocked records it and resumes.
+	var pin *reviewPin
+	if r := lastResult(evs); r != nil && r.Deferred != nil && policy.ReviewerCall(r.Deferred.Name, subagentType(r.Deferred.Name, r.Deferred.Input)) {
+		p := s.pinReview(l)
+		pin = &p
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.running, l.turnDone = nil, nil
 	if esid == "" {
 		esid = l.engineSessionID
 	}
-	s.processEndedLocked(l, n, k, esid, evs, results)
+	s.processEndedLocked(l, n, k, esid, evs, results, pin)
 }
 
 // lastResult is the process's result line, nil when it ended without one.
@@ -549,16 +555,17 @@ func lastResult(evs []engine.EngineEvent) *engine.ResultEvent {
 }
 
 // processEndedLocked records a process's end. A result that defers a call keeps the turn
-// open, waiting for an answer; anything else ends the turn. Its usage is measured against the
-// engine session's last result, never an interrupted row (S2). l.mu is held.
-func (s *Service) processEndedLocked(l *live, n, k int, esid string, evs []engine.EngineEvent, results map[string]bool) {
+// open, waiting for an answer, or for a call the `reviewer` cell deferred (pin set) resumes it
+// at once; anything else ends the turn. Its usage is measured against the engine session's last
+// result, never an interrupted row (S2). l.mu is held.
+func (s *Service) processEndedLocked(l *live, n, k int, esid string, evs []engine.EngineEvent, results map[string]bool, pin *reviewPin) {
 	u := engine.UsageOf(evs, l.baselines[esid])
 	r := lastResult(evs)
 	if u.Cumulative != nil {
 		l.baselines[esid] = u.Cumulative
 	}
 	if r != nil && r.Deferred != nil && l.state == StateRunningTurn && l.interruptedBy == "" && !s.closing.Load() {
-		s.deferLocked(l, n, k, esid, u, r, results)
+		s.deferLocked(l, n, k, esid, u, r, results, pin)
 		return
 	}
 	ended := s.endTurnLocked(l, n, r, u, "", usageRef{esid: esid, k: k})
@@ -595,14 +602,19 @@ func (s *Service) settleLocked(l *live, ended Event) {
 // deferLocked is a process that ended deferring a call (prompt mode): its usage, the
 // `deferred` row for the call the result names and a `dropped` row for every other call of
 // that message without a result (C28), then waiting-for-answer with the prompt and idle
-// timers running. l.mu is held.
-func (s *Service) deferLocked(l *live, n, k int, esid string, u engine.TurnUsage, r *engine.ResultEvent, results map[string]bool) {
+// timers running. A call the `reviewer` cell deferred (pin set) is the bot's own to answer
+// (ADR 0028 Decision 3): the pin kept on the call, its `allow` row by instance in the same
+// write, and the resume at once, no prompt and no waiting-for-answer. l.mu is held.
+func (s *Service) deferLocked(l *live, n, k int, esid string, u engine.TurnUsage, r *engine.ResultEvent, results map[string]bool, pin *reviewPin) {
 	d := r.Deferred
 	c, ok := l.calls[d.ToolUseID]
 	if !ok {
-		c = call{tool: d.Name, target: Target(d.Name, d.Input, l.tree)}
-		l.calls[d.ToolUseID] = c
+		c = call{tool: d.Name, target: Target(d.Name, d.Input, l.tree), agent: subagentType(d.Name, d.Input)}
 	}
+	if pin != nil {
+		c.commit, c.dirty, c.commitError = pin.commit, pin.dirty, pin.commitError
+	}
+	l.calls[d.ToolUseID] = c
 	var dropped []string
 	for id, other := range l.calls {
 		if id != d.ToolUseID && other.message != "" && other.message == c.message && !results[id] {
@@ -625,6 +637,9 @@ func (s *Service) deferLocked(l *live, n, k int, esid string, u engine.TurnUsage
 				return err
 			}
 		}
+		if pin != nil {
+			return s.decisionTx(tx, l, n, d.ToolUseID, c, DecisionAllow, DecidedByInstance, ActorInstance, "", "", "")
+		}
 		_, err := tx.Exec("UPDATE session SET state = ? WHERE id = ?", store.Text(StateWaitingForAnswer), store.Text(l.id))
 		return err
 	})
@@ -641,6 +656,10 @@ func (s *Service) deferLocked(l *live, n, k int, esid string, u engine.TurnUsage
 		}
 		l.log.add(Event{Time: stamp, Type: EventPermissionDecision, Turn: n, ToolUseID: id, Tool: dc.tool, Target: dc.target,
 			Decision: dec, DecidedBy: DecidedByPolicy, Summary: dc.indent(dec + " " + TraceLine(dc.tool, dc.target) + " (" + DecidedByPolicy + ")")})
+	}
+	if pin != nil {
+		s.resumeReviewerLocked(l, n, d.ToolUseID, c)
+		return
 	}
 	// Never is a year (effectiveTimeout): the deadline is always real.
 	until := store.FormatTime(now.Add(effectiveTimeout(l.promptTimeout)))
@@ -926,10 +945,22 @@ func exitOf(evs []engine.EngineEvent) string {
 	return ""
 }
 
+// emptyResult is the subagent-result row's `empty` value: "true" when the result carries no
+// text but space, else "" (the key is left out). A review fact counts only a row with text
+// (ADR 0028 Decision 3).
+func emptyResult(tr engine.ToolResultEvent) string {
+	if strings.TrimSpace(tr.Text) == "" {
+		return "true"
+	}
+	return ""
+}
+
 // subagentResult writes the subagent-result row of a subagent call's tool result (ADR 0025
 // rule 7, the review fact): which subagent, and whether its result was an error (a denial
-// included). It is written for every result of the subagent tool, a person's answer or not; a
-// call that never returns a result has none. A store failure is shown as toolResult shows one.
+// included), with the pin of a reviewer call the bot answered (commit, dirty, commitError) and
+// `empty` when the result has no text. It is written for every result of the subagent tool, a
+// person's answer or not; a call that never returns a result has none. A store failure is shown
+// as toolResult shows one.
 func (s *Service) subagentResult(l *live, n int, tr engine.ToolResultEvent, c call) {
 	if !subagentTools[c.tool] {
 		return
@@ -941,7 +972,7 @@ func (s *Service) subagentResult(l *live, n int, tr engine.ToolResultEvent, c ca
 	err := s.cfg.Store.Write(func(tx *store.Tx) error {
 		_, err := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindSubagentResult, Actor: ActorInstance, Session: l.id,
 			Details: details("turn", strconv.Itoa(n), "toolUseId", tr.ToolUseID, "tool", c.tool, "agent", c.agent, "result", result,
-				"commit", c.commit, "commitError", c.commitError, "model", c.model)})
+				"commit", c.commit, "dirty", c.dirty, "commitError", c.commitError, "model", c.model, "empty", emptyResult(tr))})
 		return err
 	})
 	if err != nil {
@@ -949,30 +980,56 @@ func (s *Service) subagentResult(l *live, n int, tr engine.ToolResultEvent, c ca
 	}
 }
 
-// refresh is the bundle at a reviewer's launch (ADR 0025 rule 7): Config.Refresh for the
-// session's tree, the sha it fetched into refs/sessions/<id>, or the error's message. Nothing
-// without a Refresh closure.
-func (s *Service) refresh(l *live) (commit, commitError string) {
+// reviewPin is what the bot records on a call the `reviewer` cell deferred (ADR 0028 Decision
+// 3): the sha Refresh left refs/sessions/<id> on, the tree's tracked changes, or why the pin
+// does not count.
+type reviewPin struct {
+	commit, dirty, commitError string
+}
+
+// dirtyPin is the commitError of a pin taken over a modified or deleted tracked file: the
+// reviewer read a tree that is not the commit, so the row never counts.
+const dirtyPin = "dirty tree at the reviewer's launch"
+
+// pinReview is the bundle while answering a reviewer call's defer: Config.Refresh (the bundle
+// lock, worktree-bundle with the tree's status, the fetch) bounded by refreshTimeout. Nothing
+// without a Refresh closure: the call still resumes, and its row never counts.
+func (s *Service) pinReview(l *live) reviewPin {
 	if s.cfg.Refresh == nil {
-		return "", ""
+		return reviewPin{}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
 	defer cancel()
-	sha, err := s.cfg.Refresh(ctx, l.git)
+	p, err := s.cfg.Refresh(ctx, l.git)
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return "", "the bundle at the reviewer's launch passed its " + refreshTimeout.String() + " deadline: " + err.Error()
+			return reviewPin{commitError: "the bundle at the reviewer's launch passed its " + refreshTimeout.String() + " deadline: " + err.Error()}
 		}
-		return "", err.Error()
+		return reviewPin{commitError: err.Error()}
 	}
-	return sha, ""
+	rp := reviewPin{commit: p.Commit, dirty: p.Dirty}
+	if p.Dirty != "" {
+		rp.commitError = dirtyPin
+	}
+	return rp
 }
 
-// refreshTimeout bounds refresh, as git.FetchTimeout bounds the fetch at session start, so a
-// hung git cannot stop the turn's event reader for good. It bounds the canonical's steps only
-// (bundle verify, the fetch, rev-parse, update-ref): the backend's worktree-bundle takes no
-// context, and a stall inside it still holds the reader until it returns.
+// refreshTimeout bounds pinReview, as git.FetchTimeout bounds the fetch at session start, so a
+// hung git cannot hold the reviewer's resume for good: the lock, worktree-bundle and the
+// canonical's steps all run under it.
 const refreshTimeout = 30 * time.Second
+
+// resumeReviewerLocked is the bot's answer to the `reviewer` cell's defer, its row already
+// written: the allow event by instance, then the resume with BROODFORGE_ANSWER `<id>:allow`, as
+// a person's allow resumes (answerLocked) but with no prompt, no pending call and no
+// waiting-for-answer. l.mu is held.
+func (s *Service) resumeReviewerLocked(l *live, n int, id string, c call) {
+	l.answers[id] = answerRec{decision: DecisionAllow}
+	l.log.add(Event{Time: s.stamp(), Type: EventPermissionDecision, Turn: n, ToolUseID: id, Tool: c.tool, Target: c.target,
+		Decision: DecisionAllow, DecidedBy: DecidedByInstance,
+		Summary: c.indent(DecisionAllow + " " + TraceLine(c.tool, c.target) + " (" + DecidedByInstance + ")")})
+	_ = s.startProcessLocked(l, "", &engine.TurnAnswer{ToolUseID: id, Decision: DecisionAllow}, "") // a failure ends the turn and publishes it
+}
 
 // saveMeter records a rate-limit event as the session's credential's meter, replacing the one
 // it had, in its own short write transaction (ADR 0021 Amendments 2026-10-30). A reading, not

@@ -365,6 +365,9 @@ func (s *Service) Invite(req InviteRequest) (Registration, error) {
 type EndRequest struct {
 	ActRequest
 	NoClosingTurn bool
+	// Discard ends without a handoff (`--discard`, the header's End and discard after its
+	// confirm; 04-ux-session-end.md): Config.Discard in place of Config.Handoff.
+	Discard bool
 }
 
 // End is SessionService.end (03, End of session): a running turn is interrupted, a pending
@@ -382,7 +385,49 @@ func (s *Service) End(ctx context.Context, req EndRequest) (git.Outcome, error) 
 		return git.Outcome{}, err
 	}
 	summary := "Session " + l.id + " ended by " + who + "." // 04, Ending a session
-	return s.end(ctx, l, actorOf(req.As), who, "end", summary, noGen)
+	return s.endWith(ctx, l, actorOf(req.As), who, "end", summary, noGen, req.Discard)
+}
+
+// DiscardCount is the header's End and discard before its confirm (04-ux-session-end.md): the
+// same checks End makes (the `answer` list, a session neither ending nor ended, an interrupted
+// one only when held), audited as `discard` refusals, then the commits the discard would keep,
+// the dirty tree's WIP commit counted (Config.Pending), CommitsUnknown when it cannot be read.
+func (s *Service) DiscardCount(ctx context.Context, req ActRequest) (int, error) {
+	l, _, err := s.acting(req)
+	if err != nil {
+		return 0, err
+	}
+	if err := s.checkAnswerList(l, req, "discard"); err != nil {
+		return 0, err
+	}
+	l.mu.Lock()
+	closed := l.state == StateEnded || l.state == StateEnding || (l.state == StateInterrupted && !l.held)
+	state := l.state
+	l.mu.Unlock()
+	if closed {
+		return 0, s.refuse(actorOf(req.As), l.id, "discard", "closed", &Error{CodeSessionClosed, l.id + " is " + state})
+	}
+	if n := s.pending(ctx, l); n != nil {
+		return *n, nil
+	}
+	return CommitsUnknown, nil
+}
+
+// pending is Config.Pending, else Config.Commits; nil when neither is set or the count cannot
+// be read.
+func (s *Service) pending(ctx context.Context, l *live) *int {
+	count := s.cfg.Pending
+	if count == nil {
+		count = s.cfg.Commits
+	}
+	if count == nil {
+		return nil
+	}
+	n, err := count(ctx, l.id)
+	if err != nil {
+		return nil
+	}
+	return n
 }
 
 // end runs the end-of-session sequence for an actor and a reason (end, idle).
@@ -394,6 +439,12 @@ func (s *Service) End(ctx context.Context, req EndRequest) (git.Outcome, error) 
 const noGen = -1
 
 func (s *Service) end(ctx context.Context, l *live, actor, who, reason, summary string, idleGen int) (git.Outcome, error) {
+	return s.endWith(ctx, l, actor, who, reason, summary, idleGen, false)
+}
+
+// endWith is end, with discard running Config.Discard in place of the handoff: no Ending line,
+// the same refusals keeping the session open, the outcome discarded (04-ux-session-end.md).
+func (s *Service) endWith(ctx context.Context, l *live, actor, who, reason, summary string, idleGen int, discard bool) (git.Outcome, error) {
 	l.mu.Lock()
 	switch l.state {
 	case StateEnded, StateEnding:
@@ -438,9 +489,18 @@ func (s *Service) end(ctx context.Context, l *live, actor, who, reason, summary 
 			return esc, nil
 		}
 	}
-	if s.cfg.Handoff != nil {
-		s.ending(ctx, l)
-		out, err := s.cfg.Handoff(ctx, l.id)
+	handoff := s.cfg.Handoff
+	if discard {
+		handoff = nil
+		if s.cfg.Discard != nil {
+			handoff = func(ctx context.Context, id string) (git.Outcome, error) { return s.cfg.Discard(ctx, id, actor) }
+		}
+	}
+	if handoff != nil {
+		if !discard {
+			s.ending(ctx, l)
+		}
+		out, err := handoff(ctx, l.id)
 		if err != nil {
 			var ge *git.Error
 			if errors.As(err, &ge) && strings.HasPrefix(ge.Code, CodeHandoffState) && before == StateInterrupted {
@@ -449,7 +509,7 @@ func (s *Service) end(ctx context.Context, l *live, actor, who, reason, summary 
 				l.mu.Lock()
 				l.state = StateInterrupted
 				_ = s.setState(l.id, StateInterrupted)
-				text := strings.TrimSuffix(ge.Message, ".") + ". " + HeldHandoffSentence(l.id)
+				text := strings.TrimSuffix(ge.Message, ".") + ". " + heldRetry(l.id, ge.Code, discard)
 				l.log.add(Event{Time: s.stamp(), Type: EventHandoffRefused, Result: ge.Code, Summary: firstRunes(ge.Message, summaryRunes), Text: text})
 				l.mu.Unlock()
 				return out, err
@@ -474,19 +534,18 @@ func (s *Service) end(ctx context.Context, l *live, actor, who, reason, summary 
 		return out, nil
 	}
 	out.Outcome = git.OutcomeNone
+	if discard {
+		out.Outcome = git.OutcomeDiscarded
+	}
 	s.closeSession(l, actor, reason, before, out.Outcome, summary, out, who)
 	return out, nil
 }
 
-// ending publishes session-ending before the handoff runs: the tree's commit count over its base
-// through Config.Commits, nil when there is none or it cannot be read.
+// ending publishes session-ending before the handoff runs: the tree's commit count over its base,
+// the dirty tree's WIP commit counted, through Config.Pending (else Config.Commits), nil when
+// there is none or it cannot be read.
 func (s *Service) ending(ctx context.Context, l *live) {
-	var n *int
-	if s.cfg.Commits != nil {
-		if c, err := s.cfg.Commits(ctx, l.id); err == nil {
-			n = c
-		}
-	}
+	n := s.pending(ctx, l)
 	summary := "commits unknown"
 	if n != nil {
 		summary = strconv.Itoa(*n) + " commits"
@@ -504,7 +563,26 @@ const OutcomeTreeMissing = "tree-missing"
 // HeldHandoffSentence ends a refused handoff's text on a held session (04, Failure flows:
 // handoff-refused, interrupted session; owner-approved 2026-10-24).
 func HeldHandoffSentence(id string) string {
-	return "The session was interrupted, so no agent can amend them; the owner can fix the tree and retry with broodforge worktree handoff " + id + "."
+	return heldRetrySentence("broodforge worktree handoff " + id)
+}
+
+// heldRetrySentence is HeldHandoffSentence naming another retry: `worktree handoff` makes no WIP
+// commit and pushes, so a refused WIP commit retries with `session end <id>` and a refused
+// discard with `session end <id> --discard` (04-ux-session-end.md; not 04: the owner's sentence,
+// its command changed).
+func heldRetrySentence(retry string) string {
+	return "The session was interrupted, so no agent can amend them; the owner can fix the tree and retry with " + retry + "."
+}
+
+// heldRetry is the retry a refusal on a held session names (heldRetrySentence).
+func heldRetry(id, code string, discard bool) string {
+	switch {
+	case discard:
+		return heldRetrySentence("broodforge session end " + id + " --discard")
+	case code == git.CodeRefusedWIP:
+		return heldRetrySentence("broodforge session end " + id)
+	}
+	return HeldHandoffSentence(id)
 }
 
 // heldEscape is end's two escapes on a held session, in 05's order, so every held session can be
@@ -614,8 +692,12 @@ func (s *Service) closeSession(l *live, actor, reason, before, outcome, summary 
 			store.Text(StateEnded), store.Text(now), store.Text(outcome), store.Text(l.id)); err != nil {
 			return err
 		}
+		kv := []string{"reason", reason, "outcome", outcome, "state", before}
+		if out.WIP != "" {
+			kv = append(kv, "wip", out.WIP) // the end's WIP commit of a dirty tree (04-ux-session-end.md)
+		}
 		_, err := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindSessionEnded, Actor: actor, Session: l.id,
-			Details: details("reason", reason, "outcome", outcome, "state", before)})
+			Details: details(kv...)})
 		return err
 	})
 	l.state = StateEnded
@@ -745,7 +827,7 @@ func Reach(q store.Querier, id string) (ReachReport, error) {
 func (s *Service) endInfo(l *live, reason, outcome string, out git.Outcome, by string) *EndInfo {
 	info := &EndInfo{By: by, Reason: reason, StartedAt: l.startedAt, Turns: l.turn, In: l.sessIn, Out: l.sessOut,
 		Model: topModel(l.sessionModels, l.model), Branch: l.git.Branch(), Outcome: outcome, Commits: out.Commits,
-		Author: l.driver.Name, CoAuthors: []string{}}
+		WIP: out.WIP, Ref: out.Ref, Author: l.driver.Name, CoAuthors: []string{}}
 	// The opened request's web URL (04's `pull request #42 <url>`); before it opens, as on a
 	// failed request, the API URL it was posted to.
 	switch {
