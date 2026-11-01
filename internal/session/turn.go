@@ -479,7 +479,7 @@ func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan s
 		case engine.KindInit:
 			if ev.Init != nil && ev.Init.EngineSessionID != "" {
 				esid = ev.Init.EngineSessionID
-				s.setEngineSession(l, esid)
+				s.setEngineSession(l, n, esid)
 			}
 		case engine.KindAssistant:
 			if ev.Assistant == nil {
@@ -691,17 +691,20 @@ ON CONFLICT (session_id, request_id) DO UPDATE SET turn_seq = excluded.turn_seq,
 	return err
 }
 
-func (s *Service) setEngineSession(l *live, id string) {
+func (s *Service) setEngineSession(l *live, n int, id string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.engineSessionID == id {
 		return
 	}
 	l.engineSessionID = id
-	_ = s.cfg.Store.Write(func(tx *store.Tx) error {
+	err := s.cfg.Store.Write(func(tx *store.Tx) error {
 		_, err := tx.Exec("UPDATE session SET engine_session_id = ? WHERE id = ?", store.Text(id), store.Text(l.id))
 		return err
 	})
+	if err != nil {
+		l.log.add(storeFailed(s.stamp(), n, "", call{}, err))
+	}
 }
 
 // toolResult writes the call's permission decision row and audit events in one transaction,

@@ -617,3 +617,34 @@ func TestQueuedTurnThatCannotStart(t *testing.T) {
 		t.Errorf("after the failed turn: %+v, %v", d, err)
 	}
 }
+
+// The engine session id's store write failing is an internal-error event at the turn, like the
+// other store sites, and the turn runs on to its end.
+func TestEngineSessionWriteFailureIsInternalError(t *testing.T) {
+	h := newHarness(t, "", true)
+	exec(t, h.st, `CREATE TRIGGER engine_session_fails BEFORE UPDATE OF engine_session_id ON session BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END`)
+	ctx := context.Background()
+	if _, err := h.svc.Start(ctx, StartRequest{Channel: "100", As: "1001", Roles: "10", Fixture: "basic"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.svc.Submit(ctx, SendRequest{Session: "s0001", As: "1001", Text: "Read hello.txt."}); err != nil {
+		t.Fatal(err)
+	}
+	seen := waitTurn(t, h.svc, "s0001", 1)
+	internal, ended := 0, false
+	for _, ev := range seen {
+		//exhaustive:ignore
+		switch ev.Type {
+		case EventInternalError:
+			internal++
+			if !strings.HasPrefix(ev.Summary, "store: ") || !strings.Contains(ev.Summary, "disk I/O error") || ev.Turn != 1 {
+				t.Errorf("internal-error: %+v", ev)
+			}
+		case EventTurnEnded:
+			ended = ev.Result == ResultCompleted
+		}
+	}
+	if internal != 1 || !ended {
+		t.Errorf("%d internal-error events (want 1), turn completed %v: %+v", internal, ended, seen)
+	}
+}
