@@ -50,3 +50,18 @@ proposed them, and a `Plan:` for item 3's wrong refusal, which is a code bug aga
 
 - Item 1: one line keyed on whether a service exists, or a third form for "live, no service"?
 - Item 3: does `/credential add` set the default when the member has none?
+
+Question: Which of these five lines do you accept (edit any), and does `/credential add` set the default when the member has none (item 3's Open)?
+
+Recommendation: accept all five and make the first credential the default, since a member with one credential and
+no default can only be confused. The lines are drafted from the anchors (`internal/setup/steps.go` `textNext` and
+`textGitCredential`, `internal/discord/text.go` `subscriptionReadyText`, `internal/discord/adapter.go`
+`couldNotStartText`, `04-ux.md` `canonical-diverged`); the texts are yours, so none ships unworded.
+- Item 1 (live, no service; a service keeps the old line): `Setup done. Start the bot with broodforge serve, then in Discord /register and /credential add kind:subscription, then run broodforge credential login <id>.`
+- Item 2: `<id> is ready. The owner runs broodforge credential login <id> in a terminal on the host, sends you the sign-in link; you reply with the code.`
+- Item 3 (the no-default refusal): `Could not start a session: you have no default credential; set one with /credential default id:<id>.`
+- Item 4: `Token for pushes to <repository URL> (not shown; Enter to add later with setup git-credential):`
+- Item 5: `Could not start a session: the host's <branch> and the remote's have diverged, usually after a history rewrite; the owner resets the host's copy.`
+Item 3's wrong refusal (a credential that needs a login should print 04's "your default credential <id> needs a login",
+not this text) is a code bug against 04, built regardless of this answer (`docs/HANDOFF.md`, Next 2: tester).
+Answer:
