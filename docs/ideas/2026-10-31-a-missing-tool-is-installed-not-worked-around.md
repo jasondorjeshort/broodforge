@@ -22,3 +22,15 @@ updated.
 ## Open
 
 - Whether the rule sits in `delegation.md` (one sentence) or in each agent file's rules.
+
+Plan: tester, then the carry-back Send (`.claude/skills/carry-back/SKILL.md`). Already done on this PC:
+`C:\msys64\mingw64\bin` is on the user `PATH` (`where.exe gcc` finds it) and `docs/reference/go-on-windows.md`
+already says so; what remains of its per-command prefix is the line for a shell older than the change,
+which it calls a gap, so leave it.
+- Decision on the Open item: one sentence in `.claude/agreement/delegation.md` (nine lines today): an agent
+  that meets a missing tool stops and reports it as a gap to install, never substitutes a weaker command
+  for a documented check; the coordinator briefs a runner to install it or put it on `PATH` for good.
+- Add a departure row to `docs/design/decisions/0024-decanted-from-hatchery.md` for that agreement file,
+  then the carry-back Send. Out of scope: the agent files, the reference doc.
+- Verify: the sentence is in the file, the row is in the table, `CGO_ENABLED=1 go test -race ./...` runs
+  from a fresh shell with no `PATH` prefix.
