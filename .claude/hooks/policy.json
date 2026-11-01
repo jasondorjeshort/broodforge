@@ -22,7 +22,7 @@
   },
   "update": { "exclude": [] },
   "privacy": {
-    "allow": ["user", "alice", "bob", "broodforge", "broodforge-engine", "land-result"],
+    "allow": ["user", "alice", "bob", "broodforge", "broodforge-engine", "land-result", "trailers", "hook.log"],
     "identities": [{ "name": "Jason Dorje Short", "email": "jdorje@gmail.com" }]
   }
 }
