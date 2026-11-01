@@ -35,3 +35,14 @@ only `Reply` and `Text`, so it cannot hold a button.
   header; if so only the button is new.
 - The reply waits `venueWait` for the channel; if it times out there is no channel id and so no
   button, and the text-only fallback stays.
+
+Plan: coder. The Open items, answered from the tree 2026-10-31: `Reply` (`internal/discord/adapter.go:310`)
+has only `Reply` and `Text`; `Button` (`internal/discord/outbox.go`) has `Label`, `CustomID`, `Style`, no URL;
+`answer` (`internal/discord/gateway.go:855`) edits the response with content only. `SessionStarted` does not mention
+the driver (the header's `headerText` names `driver <name>` as plain text), so the mention is new too.
+Change: a link button (`URL`, no custom id) on `Reply`, drawn by `answer` as a Discord link button; the
+fake-gateway path and `Reply`'s JSON show it; label "Open session" (the owner's words); the URL is
+`https://discord.com/channels/<guild>/<venue channel>` and `startedText` stays unchanged. The venue's first post
+mentions the driver. When `venueWait` times out there is no channel id, so no button: text only. Verify: a golden
+or unit test of the start reply JSON with the button, and one of the timeout fallback; `go test ./internal/discord/...`.
+Out of scope: `discord://` deep links, client-side navigation.
