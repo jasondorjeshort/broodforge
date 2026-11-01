@@ -29,3 +29,12 @@ buttons); `docs/design/04-ux.md` (a new owner channel beside the notice channel)
   identity and which review it gets (ADR 0028 measures a land by its review).
 - A question whose answer needs an explanation first, as all six did today: the post carries the
   recommendation's reason, or a Discuss button opens a short session.
+
+Question: do you want the bot to post each `Question:` block to an owner channel with Accept, Edit and Later buttons, and
+commit the answer? It reads and writes a format that exists (`docs/ideas/README.md`) and reuses the button path
+(`internal/discord/customid.go`), but the commit is made by the bot outside any session onto the default branch, which
+ADR 0028 only allows as a reviewed land, and the file would have to be reachable from the host (the ideas live in the
+repository, the bot in a worktree). Recommendation: yes as a later feature, after P33 to P37, and not before a
+proposal settles the commit's identity and review (a docs-only land with the owner as the reviewer is the likely shape);
+the Discuss button for a question needing explanation is part of that proposal. Until then, no pass takes it.
+Answer:
