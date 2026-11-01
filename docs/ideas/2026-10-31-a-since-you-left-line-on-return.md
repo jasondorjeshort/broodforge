@@ -24,3 +24,12 @@ against the venue's last message from that person.
 - What counts as a long gap, and whether it is a channel setting.
 - A person who was away while another driver worked sees the other's turns summarised; that is
   the point, but it is also a second person's work restated by the bot.
+
+Question: Is the "since you left" line wanted, and is 24 hours the long gap (a channel setting later)?
+
+Recommendation: yes after `2026-10-30-venue-posts-shaped-for-the-reader.md`, since it is one of the bot's own lines and
+should take that shape; 24 hours as the gap, the setting later. Checked 2026-10-31: the store has no message-time
+per person, but `turn` carries `requester_id` and `started_at` (`internal/store/migrations/0001-initial.sql`) and
+`participant` carries `joined_at`, so the last time a person started a turn is a query away; a message that did not
+start a turn leaves no row, so "the gap" would mean their last turn. The line is the bot's text, so you word it.
+Answer:
