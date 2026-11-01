@@ -9,5 +9,6 @@ servers, devices, and every fix. When the gate blocks launches, the coordinator 
 does not do the delegated work itself.
 
 An agent that meets a missing tool stops and reports it as a gap to install; it never substitutes a
-weaker command for a documented check. The coordinator briefs a runner to install the tool, or to
+weaker command for a documented check, and never a per-command `PATH` prefix or other one-off
+workaround for a tool that should be installed or on the user `PATH` for good. The coordinator briefs a runner to install the tool, or to
 put its directory on the user `PATH` for good.
