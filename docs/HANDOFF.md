@@ -1,40 +1,40 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-31 by main session (milestone 2 reached; proposal 0028 under review)
+Updated: 2026-10-31 by main session (wave launched after triage and the six answers)
 
 ## Now
 
-- Account `jdorje`. Pushed at `38ebc03`. Ahead: this commit. A pusher stopped on `behind 2` today (a parallel
-  session pushed the policy and Hatchery commits); the rebase rewrote hashes under the live bot (the finding).
-- Milestone 2 reached, 2026-10-31:
-  `docs/findings/2026-10-31-milestone-2-reached-the-dev-live-bot-answers-in-the-owners-server.md`.
-  Live instance `%LOCALAPPDATA%\Broodforge\dev-live` (the owner's application and server, `handoff`
-  `push`, remote this checkout, `serve` by hand): the owner drives it from Discord; agents never touch
-  it. `dev`: dry-run, bot stopped, schema 4, `cred-2ha7apqowv`, four real turns granted, none spent.
-- ADR 0028 recorded (landing a session on the default branch; P33 to P37, `08-implementation-plan-landing.md`).
-  Dev-live's remote moves to GitHub (owner: `setup git-credential`, re-point the canonical's `origin`).
-  Branches here, the owner's to delete: `broodforge/dev/s0005`, `broodforge/dev-live/{s0002,s0004,s0005,s000b}` (all landed or empty).
+- Account `jdorje`. Pushed at `38ebc03`. Ahead: five earlier commits, the triage commits (`b027eaa`..`85355dd`), the
+  answers commit. A pusher stopped on `behind 2` earlier today (a parallel session): the rebase rewrote hashes under the live bot.
+- Triage 2026-10-31: 22 ideas read, 8 Plans, 14 Questions, no deletions; scan 0 fired, 0 due, tests green with `-race`.
+  Six answers recorded the same day (texts, trailer, WIP end, discard, ended category, auto); five are Plans now.
+- Wave in flight (lanes, each its own agent, disjoint files): L1 `tester` auto spike (finding); L2 `coder` the five
+  texts and the credential default; L3 `coder` P38; L4 `tester` three chores (run skill, `delegation.md` sentence,
+  `pre-commit` scan). Then: `reviewer` over the triage and answer commits, `pusher`.
+- Live instance `%LOCALAPPDATA%\Broodforge\dev-live` (the owner's; agents never touch it). `dev`: dry-run, bot stopped,
+  schema 4 (P38 makes it 5), `cred-2ha7apqowv`, four real turns granted, none spent.
 
 ## Next
 
-1. P38 (coder): a model is owed from its first sighting, the hook writes a launch's pinned model
-   (ADR 0025 rule 10 amendment); then P33 to P37 (`08-implementation-plan-landing.md`). Real turns only on the owner's word.
-2. Live-run bugs and texts, the owner's words first: `docs/ideas/2026-10-31-the-first-live-run-texts-name-missing-or-wrong-commands.md`
-   (item 3's wrong refusal is a code bug: tester), `2026-10-31-ending-a-session-with-uncommitted-changes-loses-them.md`.
-3. W6: the owner re-runs `spike/setup-host/` (README) and pastes the lines; then P23, P25.
-4. Coder passes, value order: the three p10 remainders (its idea); Git Bash stayed waiting.
-5. Hatchery: its `main` is at `efe0bba`; the five carry-back branches sit on this repo's `origin`,
-   unlanded there; `update-from-hatchery` landed here as `3af3c62`. Land them; delete the seven ideas.
+1. Auto mode (the owner's priority): on the spike's pass, `architect` amends ADR 0020 and 04's mode rows (third
+   value of `mode`, project and channel), then `coder`. On a fail, the idea waits for a later engine.
+2. Owner-answered Plans, `coder`, sequential (shared files): WIP commit at end plus the two-button discard
+   (`end-a-session-without-handing-off`, `ending-a-session-with-uncommitted-changes`); the Ended sessions category.
+3. P33 to P37 (`08-implementation-plan-landing.md`) after P38; P34 waits for Next 2 to clear `handoff.go`. Real turns
+   only on the owner's word. Then the carry-back Send for the two chores of L4 (ADR 0024 rows name the ideas).
+4. `tester`: the two session leftovers (after P38 leaves `turn.go`); the P11 remainder, serve snapshot and the
+   session-start link button (`coder`, Plans in `docs/ideas/`). Held: the web-reach proposal (Fable budget).
+5. W6: the owner re-runs `spike/setup-host/` (README); then P23, P25. Hatchery: land the five carry-back branches.
 
 ## Waiting on user
 
-- `Question:` blocks in `docs/ideas/` (today: end-without-handoff/abort, uncommitted-at-end, the
-  reviewer-model trailer, needed before the first `main` land; ADR 0028's "Waits on the owner"); the `auto` spike (spends the plan). The handoff import in sessions:
-  no answer, stays as is. Wording: the five live-run texts; 0028's venue lines; dry-run and setup texts;
-  four Discord strings; two canonical rows and refuse-or-warn; subagent indent; the `pre-push` line;
-  P12a; "Never ends for inactivity."; the switch post; the hook no-answer phrase; R-17; `C:\elsewhere`; W6's console window.
+- `Question:` blocks in `docs/ideas/` (fourteen new today, all later-wave features; none blocks the wave). Wording
+  the owner sees on sight: discard confirm and summary lines, the WIP end summary line (in the answers). The
+  `Waits:` ideas stay. Older: 0028's venue lines; dry-run and setup texts; four Discord strings; two canonical rows
+  and refuse-or-warn; subagent indent; the `pre-push` line; P12a; "Never ends for inactivity."; the switch post;
+  the hook no-answer phrase; R-17; `C:\elsewhere`; W6's console window.
 
 ## Open findings
 
-Thirteen (`node .claude/hooks/queue-list.js findings --status open`). Live: `docs/findings/2026-10-26-spike-windows-setup-host-claims.md` (Next 3); the 2026-10-23 and 2026-10-24 session findings (the handoff import gap seen again today); `2026-10-17-net-diff-privacy-scan-let-named-commits-go-public.md` (owner).
+`node .claude/hooks/queue-list.js findings --status open`. Live: `docs/findings/2026-10-26-spike-windows-setup-host-claims.md` (Next 5); the 2026-10-23 and 2026-10-24 session findings (the handoff import gap seen again today); `2026-10-17-net-diff-privacy-scan-let-named-commits-go-public.md` (owner).

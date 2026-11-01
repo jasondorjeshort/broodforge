@@ -53,13 +53,4 @@ value goes straight to an `architect` pass (ADR 0020 amendment, the `04-ux.md` h
 rows, the `mode` key's third value at the project level and in the channel override, both already in
 `internal/config/types.go`) and then a coder pass; no separate proposal.
 
-Plan: tester, a spike on the PC, real engine, as a finding (`finding` skill, area `spike /
-permission modes`), no code. It runs as the owner, existing login (no scratch `CLAUDE_CONFIG_DIR`;
-the 2026-10-15 hook-flow spike set none), so claim 1 tests `auto`, not login. `Args` pins `default`,
-so run `claude -p --output-format stream-json --input-format stream-json --verbose --permission-mode
-auto` directly, from a scratch cwd, `--settings` registering a shell `PreToolUse` hook that logs and
-exits 2 for one tool. One row per claim: (1) `auto` starts under `-p` here, or its refusal; (2) the
-hook's exit 2 still blocks under `auto`; (3) the stream when the classifier defers or refuses, under
-`--permission-prompts host` and `none`; (4) whether a deferred call ends a subagent. The pass does
-not delete this file: it replaces this Plan with a dated line giving the finding's path, so the file
-is untriaged again. Not the third `mode` value, config keys, labels, the proposal.
+2026-10-31, spike run: `docs/findings/2026-10-31-spike-auto-permission-mode-starts-under-p-hook-still-blocks-classifier-never-fired.md` (starts under `-p`; the hook still blocks; the classifier's own defer or refuse not yet seen).
