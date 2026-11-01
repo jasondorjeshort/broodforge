@@ -7,3 +7,7 @@ board, `CLAUDE.md`), and the wrap-up commits below. Everything that executes the
 subagents in `.claude/agents/`, even when it is one command: installs, pulls, builds, test runs,
 servers, devices, and every fix. When the gate blocks launches, the coordinator writes the handoff and stops; it
 does not do the delegated work itself.
+
+An agent that meets a missing tool stops and reports it as a gap to install; it never substitutes a
+weaker command for a documented check. The coordinator briefs a runner to install the tool, or to
+put its directory on the user `PATH` for good.
