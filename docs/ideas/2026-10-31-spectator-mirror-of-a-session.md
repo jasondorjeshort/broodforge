@@ -24,3 +24,9 @@ rendered posts); the opt-in is a session control beside those of
 - Pasted text and tool output can carry a secret the private venue was trusted with; the mirror
   needs the same scan as a push, or shows only the bot's own lines and the agent's text.
 - Whether a spectator may react or ask, and where that goes.
+
+Question: Is the spectator mirror wanted now?
+Recommend later; when built, the mirror carries only the bot's own lines and the agent's text, no tool output,
+which answers the secret-leak Open item without a second scan.
+
+Answer:
