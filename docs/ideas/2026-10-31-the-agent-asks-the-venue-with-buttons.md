@@ -31,3 +31,10 @@ Anchor: `docs/design/03-hook-contract.md` (the policy row that denies `mcp__*`);
 - A question is a permission prompt in another shape: whether it waits the way a prompt waits
   (forever, by the vision) and whether policy mode may answer it.
 - The agent reading its own budget invites it to economise in ways the owner did not ask for.
+
+Question: Should the proposal be queued now, or after the landing passes (P33 to P37)?
+It reverses the `mcp__*` deny of `docs/design/03-hook-contract.md`, so it needs the proposal loop before code.
+Recommend after the landing passes; the proposal should lead with the hook-intercepted shape (a tool the hook
+answers itself, no MCP server, the empty map kept), which is the smaller reversal.
+
+Answer:
