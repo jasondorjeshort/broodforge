@@ -30,15 +30,66 @@ func TestOwnersTexts20261031(t *testing.T) {
 		subscriptionReadyText("cred-7k2m", false, "C:/bf/bin/broodforge.exe"):                                               "cred-7k2m is added. The owner signs it in on the host and sends you a link; reply with the code.",
 		withDefaultText("cred-7k2m is added. The owner signs it in on the host and sends you a link; reply with the code."): "cred-7k2m is added. The owner signs it in on the host and sends you a link; reply with the code. It is your default.",
 		withDefaultText("cred-7k2m is added. Sign it in on the host: bf credential login cred-7k2m"):                        "cred-7k2m is added. Sign it in on the host: bf credential login cred-7k2m\nIt is your default.",
-		noDefaultText(nil):                                "Could not start a session: you have no default credential; add one with /credential add.",
-		noDefaultText([]string{"cred-7k2m"}):              "Could not start a session: you have no default credential; set one with /credential default id:cred-7k2m.",
-		noDefaultText([]string{"cred-7k2m", "cred-9q1x"}): "Could not start a session: you have no default credential; set one with /credential default id:<id>.",
-		canonicalDivergedText("main"):                     "Could not start a session: the remote's main history was rewritten, so the host's copy no longer matches. The owner needs to reset it.",
-		canonicalDivergedNotice("broodforge", "main", "C:/r/projects/broodforge", "origin"): "broodforge: host copy of main diverged from the remote. Fix: git -C C:/r/projects/broodforge branch -f main origin/main",
+		noDefaultText(nil, true):                                                    "Could not start a session: you have no default credential; add one with /credential add.",
+		noDefaultText(nil, false):                                                   "Could not start a session: you have no default credential; set one with /credential default id:<id>.",
+		noDefaultText([]string{"cred-7k2m"}, true):                                  "Could not start a session: you have no default credential; set one with /credential default id:cred-7k2m.",
+		noDefaultText([]string{"cred-7k2m", "cred-9q1x"}, true):                     "Could not start a session: you have no default credential; set one with /credential default id:cred-7k2m (or cred-9q1x).",
+		noDefaultText([]string{"cred-a", "cred-b", "cred-c"}, true):                 "Could not start a session: you have no default credential; set one with /credential default id:cred-a (or cred-b or cred-c).",
+		canonicalDivergedText("main"):                                               "Could not start a session: the remote's main history was rewritten, so the host's copy no longer matches. The owner needs to reset it.",
+		DivergedNotice("broodforge", "main", "C:/r/projects/broodforge", "origin"):  "broodforge: host copy of main diverged from the remote. Fix: git -C C:/r/projects/broodforge reset --keep origin/main",
+		DivergedNotice("broodforge", "main", "C:/r/my projects/broodforge", "fork"): `broodforge: host copy of main diverged from the remote. Fix: git -C "C:/r/my projects/broodforge" reset --keep fork/main`,
 	} {
 		if got != want {
 			t.Errorf("got  %q\nwant %q", got, want)
 		}
+	}
+}
+
+// TestTildePath: a path under the home directory is written from `~`, in either slash form and
+// either case of the drive; any other path is unchanged.
+func TestTildePath(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home directory")
+	}
+	slash := filepath.ToSlash(home)
+	for in, want := range map[string]string{
+		filepath.Join(home, "src", "repo"): "~/src/repo",
+		slash + "/x":                       "~/x",
+		strings.ToUpper(slash) + "/y":      "~/y",
+		slash + "x/z":                      slash + "x/z", // a sibling sharing the prefix
+		home:                               home,
+		"/elsewhere/projects/p":            "/elsewhere/projects/p",
+	} {
+		if got := tildePath(in); got != want {
+			t.Errorf("tildePath(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := DivergedNotice("p", "main", slash+"/r/projects/p", "origin"); !strings.Contains(got, "git -C ~/r/projects/p reset") {
+		t.Errorf("the notice names the home directory: %s", got)
+	}
+}
+
+// failingList is a credential store whose List fails.
+type failingList struct{ *storeCredentials }
+
+func (failingList) List(string) ([]CredentialInfo, error) {
+	return nil, errors.New("the store is locked")
+}
+
+// TestNoDefaultListFails: a member whose credential list cannot be read is never told to add
+// one; the refusal names the /credential default form, and the failure is logged.
+func TestNoDefaultListFails(t *testing.T) {
+	h := newTextHarness(t)
+	var log strings.Builder
+	h.a.cfg.Credentials, h.a.cfg.Log = failingList{h.creds}, &log
+	_, err := h.command("1001", "/session start")
+	if got := msgOf(err); strings.Contains(got, "add one with /credential add") ||
+		got != "Could not start a session: you have no default credential; set one with /credential default id:<id>." {
+		t.Errorf("refusal %q", got)
+	}
+	if !strings.Contains(log.String(), "warning: discord: the credentials of 1001 for the no-default refusal: the store is locked") {
+		t.Errorf("log %q", log.String())
 	}
 }
 
@@ -94,7 +145,7 @@ type textHarness struct {
 	root     string
 }
 
-func newTextHarness(t *testing.T, owner string) *textHarness {
+func newTextHarness(t *testing.T) *textHarness {
 	t.Helper()
 	root := filepath.ToSlash(t.TempDir())
 	st, err := store.Create(root)
@@ -120,7 +171,7 @@ func newTextHarness(t *testing.T, owner string) *textHarness {
 	}
 	groups := func() map[string][]string { return cfg.Instance.RoleGroups }
 	h.a = New(Config{Config: func() *config.Config { return cfg }, Channel: channel, Groups: groups, Clock: h.clock,
-		DryRun: true, Credentials: h.creds, OwnerID: owner})
+		DryRun: true, Credentials: h.creds, HostCommand: testHost})
 	h.svc = session.New(session.Config{Root: root, Instance: "test", DryRun: true, Groups: groups, Channel: channel, Started: h.a.SessionStarted,
 		Fixtures: filepath.Dir(fixture),
 		Engine:   func(_, _, received string) (engine.Engine, error) { return engine.NewFake(fixture, received) },
@@ -146,9 +197,12 @@ func newTextHarness(t *testing.T, owner string) *textHarness {
 	return h
 }
 
+// testHost is the harness's host command; command injects as a dry run with --owner 1001 does.
+const testHost = `"C:/Program Files/bf/broodforge.exe" --root C:/r`
+
 func (h *textHarness) command(user, text string) (string, error) {
 	h.t.Helper()
-	r, err := h.a.Command(context.Background(), Inbound{Channel: testLobby, User: user, Roles: []string{"10"}, Text: text})
+	r, err := h.a.Command(context.Background(), Inbound{Channel: testLobby, User: user, Roles: []string{"10"}, Text: text, Owner: "1001"})
 	if err != nil {
 		return "", err
 	}
@@ -171,17 +225,13 @@ func (h *textHarness) defaultOf(user string) string {
 // reply says so; a second leaves the default alone. The owner gets the host command with the
 // binary's own path, a member the owner's part; an API key's reply takes the same sentence.
 func TestCredentialAddFirstDefault(t *testing.T) {
-	h := newTextHarness(t, "1001")
-	exe, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
+	h := newTextHarness(t)
 	got, err := h.command("1001", "/credential add kind:subscription label:mine")
-	if want := "cred-1 is added. Sign it in on the host: " + exe + " credential login cred-1\nIt is your default."; err != nil || got != want {
+	if want := "cred-1 is added. Sign it in on the host: " + testHost + " credential login cred-1\nIt is your default."; err != nil || got != want {
 		t.Errorf("owner's first: %q %v\nwant %q", got, err, want)
 	}
 	got, err = h.command("1001", "/credential add kind:subscription label:second")
-	if want := "cred-2 is added. Sign it in on the host: " + exe + " credential login cred-2"; err != nil || got != want {
+	if want := "cred-2 is added. Sign it in on the host: " + testHost + " credential login cred-2"; err != nil || got != want {
 		t.Errorf("owner's second: %q %v\nwant %q", got, err, want)
 	}
 	if d := h.defaultOf("1001"); d != "cred-1" {
@@ -208,7 +258,7 @@ func TestCredentialAddFirstDefault(t *testing.T) {
 // TestStartRefusalsCredential: a default that needs a login gets 04's needs-a-login line; a
 // member with a credential and no default is told the /credential default command with its id.
 func TestStartRefusalsCredential(t *testing.T) {
-	h := newTextHarness(t, "")
+	h := newTextHarness(t)
 	if _, err := h.command("1001", "/credential add kind:subscription label:mine"); err != nil {
 		t.Fatal(err)
 	}
@@ -224,12 +274,20 @@ func TestStartRefusalsCredential(t *testing.T) {
 	if want := "Could not start a session: you have no default credential; set one with /credential default id:cred-2."; msgOf(err) != want {
 		t.Errorf("no default: %v\nwant %q", err, want)
 	}
+	// Several: each named.
+	if _, err := h.creds.Add("1002", kindAPIKey, "k2", nil); err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.command("1002", "/session start")
+	if want := "Could not start a session: you have no default credential; set one with /credential default id:cred-2 (or cred-3)."; msgOf(err) != want {
+		t.Errorf("no default, several: %v\nwant %q", err, want)
+	}
 }
 
 // TestCanonicalDivergedNotice: the start refusal gets the plain line, and the notice channel
 // the line with the command that resets the host's copy.
 func TestCanonicalDivergedNotice(t *testing.T) {
-	h := newTextHarness(t, "")
+	h := newTextHarness(t)
 	if _, err := h.creds.Add("1001", kindAPIKey, "k", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +299,7 @@ func TestCanonicalDivergedNotice(t *testing.T) {
 	if want := canonicalDivergedText("main"); msgOf(err) != want {
 		t.Errorf("refusal: %v\nwant %q", err, want)
 	}
-	want := "p: host copy of main diverged from the remote. Fix: git -C " + h.root + "/projects/p branch -f main origin/main"
+	want := "p: host copy of main diverged from the remote. Fix: git -C " + quoteSpace(tildePath(h.root+"/projects/p")) + " reset --keep origin/main"
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		posts := h.a.Outbox.Channel("300")
@@ -269,10 +327,10 @@ func msgOf(err error) string {
 }
 
 // TestLiveOwner: on a live instance the owner is the bot application's owner, as the gateway
-// read it at its start; the dry run's Config.OwnerID does not count there.
+// read it at its start; a dry run's --owner stand-in does not count there.
 func TestLiveOwner(t *testing.T) {
 	h := newLiveHarness(t)
-	if !h.a.isOwner("1001") || h.a.isOwner("1002") || h.a.isOwner("") {
+	if !h.a.isOwner(Inbound{User: "1001"}) || h.a.isOwner(Inbound{User: "1002", Owner: "1002"}) || h.a.isOwner(Inbound{}) {
 		t.Errorf("owner %q", h.g.ownerID())
 	}
 }

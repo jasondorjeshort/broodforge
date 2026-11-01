@@ -332,6 +332,7 @@ type injectRequest struct {
 	Text     string   `json:"text"`
 	CustomID string   `json:"customId"`
 	Values   []string `json:"values,omitempty"`
+	Owner    string   `json:"owner,omitempty"` // --owner: the owner's id a dry run cannot read from Discord
 }
 
 // runDiscordInject parses `discord inject message --channel <id> --user <id> --roles <ids>
@@ -350,6 +351,7 @@ func runDiscordInject(ctx context.Context, env *Env) error {
 	roles := fs.String("roles", "", "")
 	customID := fs.String("custom-id", "", "")
 	value := fs.String("value", "", "")
+	owner := fs.String("owner", "", "")
 	var texts []string
 	rest := args[1:]
 	for {
@@ -372,7 +374,7 @@ func runDiscordInject(ctx context.Context, env *Env) error {
 	case kind != "click" && *value != "":
 		return &usageError{"discord inject " + kind + ": --value goes with click"}
 	}
-	r := injectRequest{Kind: kind, Channel: *channel, User: *user, Roles: *roles, Text: strings.Join(texts, ""), CustomID: *customID}
+	r := injectRequest{Kind: kind, Channel: *channel, User: *user, Roles: *roles, Text: strings.Join(texts, ""), CustomID: *customID, Owner: *owner}
 	if *value != "" {
 		r.Values = []string{*value}
 	}
@@ -431,7 +433,7 @@ func DiscordHandlers(a *discord.Adapter, svc *session.Service) func(*control.Reg
 				return nil, control.NewError(control.CodeBadArgs, err.Error())
 			}
 			in := discord.Inbound{Channel: r.Channel, User: r.User, Roles: splitList(r.Roles), Text: r.Text, CustomID: r.CustomID,
-				Values: r.Values}
+				Values: r.Values, Owner: r.Owner}
 			var rep discord.Reply
 			var err error
 			switch r.Kind {

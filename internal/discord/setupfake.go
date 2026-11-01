@@ -49,6 +49,8 @@ type FakeApp struct {
 	ID    string `json:"id"`
 	BotID string `json:"botId"`
 	Flags uint64 `json:"flags,omitempty"`
+	// OwnerID is the application's owner; "" names none.
+	OwnerID string `json:"ownerId,omitempty"`
 	// RefusePatch refuses PATCH /applications/@me, as Discord does for some applications.
 	RefusePatch bool `json:"refusePatch,omitempty"`
 }
@@ -82,6 +84,8 @@ type FakeChannel struct {
 	Name     string `json:"name"`
 	Category bool   `json:"category,omitempty"`
 	Parent   string `json:"parent,omitempty"`
+	// Viewers are the member ids a private channel (@everyone denied the view) shows to.
+	Viewers []string `json:"viewers,omitempty"`
 }
 
 // FakeRole is a role.
@@ -246,6 +250,9 @@ func (r *fakeREST) GetBotApplicationInfo(...rest.RequestOpt) (*dg.Application, e
 	err := r.do("GetBotApplicationInfo", func(s *FakeScript) error {
 		app = &dg.Application{ID: sfID(s.Application.ID), Bot: &dg.User{ID: sfID(s.Application.BotID)},
 			Flags: dg.ApplicationFlags(s.Application.Flags)}
+		if s.Application.OwnerID != "" {
+			app.Owner = &dg.User{ID: sfID(s.Application.OwnerID)}
+		}
 		return nil
 	})
 	return app, err
@@ -445,6 +452,21 @@ func (r *fakeREST) CreateGuildChannel(id snowflake.ID, c dg.GuildChannelCreate, 
 			fc.Name = txt.Name
 			if txt.ParentID != 0 {
 				fc.Parent = txt.ParentID.String()
+			}
+			private := false
+			var viewers []string
+			for _, o := range txt.PermissionOverwrites {
+				switch ow := o.(type) {
+				case dg.RolePermissionOverwrite:
+					private = private || (ow.RoleID == id && ow.Deny.Has(dg.PermissionViewChannel))
+				case dg.MemberPermissionOverwrite:
+					if ow.Allow.Has(dg.PermissionViewChannel) {
+						viewers = append(viewers, ow.UserID.String())
+					}
+				}
+			}
+			if private {
+				fc.Viewers = viewers
 			}
 		} else {
 			return fakeErr(http.StatusBadRequest, 50035, "Invalid Form Body")

@@ -216,13 +216,10 @@ func TestSteps(t *testing.T) {
 	if b, err := os.ReadFile(filepath.Join(f.root, "config", "instance.json")); err != nil || !bytes.Contains(b, []byte(`"//"`)) {
 		t.Errorf("instance.json has no comments: %v", err)
 	}
-	// No service installed (the fixture's Env sets none): the closing line names the binary.
-	self, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := "ok  next  Setup done. Nothing is running yet: start the bot with " + self +
-		" serve, then in Discord run /register and /credential add.\n"; !strings.HasSuffix(out, want) {
+	// No service installed (the fixture's Env sets none): the closing line names the binary and
+	// the root.
+	if want := "ok  next  Setup done. Nothing is running yet: start the bot with " + setup.HostCommand(f.root) +
+		" serve, then in Discord run /register and /credential add.\n"; !strings.HasSuffix(out, want) || !strings.Contains(want, " --root "+f.root+" serve") {
 		t.Errorf("closing line:\n%s\nwant %q", out, want)
 	}
 }

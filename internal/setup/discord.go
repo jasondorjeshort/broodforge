@@ -686,10 +686,18 @@ func stepChannels(ctx context.Context, s *State) (Line, error) {
 				continue
 			}
 			var c discord.SetupChannel
-			if sl.category {
+			switch {
+			case sl.category:
 				c, err = api.CreateCategory(ctx, guild, sl.name)
-			} else {
-				c, err = api.CreateTextChannel(ctx, guild, sl.name, cat.have)
+			case sl == notice:
+				// The owner's notice channel (04): private, shown to the bot and the
+				// application's owner alone, since its lines carry host paths.
+				var app discord.SetupApp
+				if app, err = api.Application(ctx); err == nil {
+					c, err = api.CreateTextChannel(ctx, guild, sl.name, cat.have, &discord.Viewers{Bot: app.BotID, Owner: app.OwnerID})
+				}
+			default:
+				c, err = api.CreateTextChannel(ctx, guild, sl.name, cat.have, nil)
 			}
 			if err != nil {
 				if se, ok := discord.Refused(err); ok {

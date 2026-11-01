@@ -4,7 +4,6 @@ package discord
 
 import (
 	"errors"
-	"os"
 	"strings"
 	"unicode/utf8"
 
@@ -60,7 +59,7 @@ func (a *Adapter) credential(in Inbound, sl Slash) (Reply, error) {
 			if err != nil {
 				return Reply{}, a.credentialRefusal(in, err)
 			}
-			return a.added(in, info.ID, subscriptionReadyText(info.ID, a.isOwner(in.User), selfPath()))
+			return a.added(in, info.ID, subscriptionReadyText(info.ID, a.isOwner(in), a.hostCommand()))
 		case kindAPIKey:
 			return Reply{Reply: ReplyModal, Text: APIKeyModalPrefix + label}, nil
 		}
@@ -165,26 +164,23 @@ func (a *Adapter) apiKeySubmitted(in Inbound, value string) (Reply, error) {
 // added answers a /credential add that stored id: a member with no default gets it as their
 // default, their first credential (the owner's answer 2026-10-31; a later one leaves the
 // default alone), and the reply says so. The add stands either way: a default that cannot be
-// read or set leaves the reply without the sentence, and /credential default sets it.
+// read or set leaves the reply without the sentence (logged), and /credential default sets it.
+// Not fixed, noted: two adds racing for a member with no default both read none, both set it,
+// and both say so; the later SetDefault wins, so one reply's sentence is wrong.
 func (a *Adapter) added(in Inbound, id, reply string) (Reply, error) {
 	reg, ok, err := a.svc.Registered(in.User)
-	if err != nil || !ok || (reg.DefaultCredential != nil && *reg.DefaultCredential != "") {
+	if err != nil {
+		a.warn("the registration of "+in.User+" after /credential add "+id, err)
+		return ephemeral(reply), nil
+	}
+	if !ok || (reg.DefaultCredential != nil && *reg.DefaultCredential != "") {
 		return ephemeral(reply), nil
 	}
 	if _, err := a.svc.SetDefault(in.User, id, in.User); err != nil {
+		a.warn("setting "+id+" as the default of "+in.User, err)
 		return ephemeral(reply), nil
 	}
 	return ephemeral(withDefaultText(reply)), nil
-}
-
-// selfPath is the running binary's own path, the command the owner types on the host (never a
-// bare broodforge, which is on no PATH); "broodforge" only when the system cannot say.
-func selfPath() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return "broodforge"
-	}
-	return exe
 }
 
 func lastFour(s string) string {

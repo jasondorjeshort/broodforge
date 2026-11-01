@@ -34,29 +34,47 @@ const (
 )
 
 // gitCredentialPrompt is the git credential's question, naming the repository the token pushes
-// to (the owner's answer 2026-10-31); with no URL known, the project id stands in.
+// to (the owner's answer 2026-10-31); with no URL known yet, it says so.
 func gitCredentialPrompt(url string) string {
-	return "Token for pushes to " + url + " (not shown; Enter to add later with setup git-credential):"
+	to := "Token for pushes to " + url
+	if url == "" {
+		to = "Token for pushes (no repository URL yet)"
+	}
+	return to + " (not shown; Enter to add later with setup git-credential):"
 }
 
 // nextText is the live form's closing line (the owner's answer 2026-10-31): with a service
 // installed the bot is running; without one, or when setup cannot tell, nothing is, and the
-// line names the running binary's own path to start it.
-func nextText(service bool, exe string) string {
+// line names the host command (HostCommand) that starts it.
+func nextText(service bool, host string) string {
 	if service {
 		return textNext
 	}
-	return "Setup done. Nothing is running yet: start the bot with " + exe + " serve, then in Discord run /register and /credential add."
+	return "Setup done. Nothing is running yet: start the bot with " + host + " serve, then in Discord run /register and /credential add."
 }
 
-// selfPath is the running binary's own path, the command the owner types (never a bare
-// broodforge, which is on no PATH); "broodforge" only when the system cannot say.
-func selfPath() string {
+// HostCommand is the prefix of every host command a text prints, setup's and the bot's alike:
+// the running binary's own path (never a bare broodforge, which is on no PATH; "broodforge"
+// only when the system cannot say), then `--root <root>`, both double-quoted when they hold a
+// space. The root is always given: no command but setup has a default root (without --root or
+// BROODFORGE_ROOT every other command refuses `no instance root`).
+func HostCommand(root string) string {
 	exe, err := os.Executable()
 	if err != nil {
-		return "broodforge"
+		exe = "broodforge"
 	}
-	return exe
+	cmd := quoteSpace(exe)
+	if root != "" {
+		cmd += " --root " + quoteSpace(filepath.ToSlash(root))
+	}
+	return cmd
+}
+
+func quoteSpace(s string) string {
+	if strings.Contains(s, " ") {
+		return `"` + s + `"`
+	}
+	return s
 }
 
 // Steps is the run in the companion's order; the Discord steps are in discord.go.
@@ -696,15 +714,12 @@ func stepGitCredential(_ context.Context, s *State) (Line, error) {
 }
 
 // pushURL is the repository the git credential pushes to, as the prompt names it: the URL given
-// or asked in this run, else the one the project file keeps, else the project id.
+// or asked in this run, else the one the project file keeps, else "" (none known yet).
 func (s *State) pushURL(pdoc *config.Doc) string {
 	if s.repoURL != "" {
 		return s.repoURL
 	}
-	if u := pdoc.String("repo", config.SetupURLKey); u != "" {
-		return u
-	}
-	return s.project
+	return pdoc.String("repo", config.SetupURLKey)
 }
 
 func deref(l *Line) Line {
@@ -1016,5 +1031,5 @@ func stepNext(_ context.Context, s *State) (Line, error) {
 		return ok("next", textNextDryRun), nil
 	}
 	service := s.env.ServiceInstalled != nil && s.env.ServiceInstalled()
-	return ok("next", nextText(service, selfPath())), nil
+	return ok("next", nextText(service, HostCommand(s.root))), nil
 }

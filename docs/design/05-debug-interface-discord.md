@@ -67,8 +67,8 @@ label:<text>|list|remove id:<id>|default id:<id>|login id:<id>`, the caller's ow
 (`not-yours`), `login` answering the host route while the relay is not built; `/usage` is
 `not-built`). `/credential add kind:api-key` prints `modal  bfm:api-key:<label>`, the form's
 custom id, since the key comes back only through the live modal. A member's first `/credential add` sets their default
-(`register show` shows it); a dry run knows no owner (the live gateway reads the application's), so `kind:subscription`
-answers in the member's form; the owner's form is `TestCredentialAddFirstDefault`'s and `TestLiveOwner`'s. It prints `ephemeral  <text>` or `none  <what happened>`; a refusal is `error:
+(`register show` shows it). Any inject takes `--owner <user id>`, the owner a dry run cannot read from Discord (live reads
+the application's owner and ignores it): `--owner` equal to `--user` gets `kind:subscription`'s owner form, with `serve`'s host command. It prints `ephemeral  <text>` or `none  <what happened>`; a refusal is `error:
 <code>: <04's text>`, and the adapter's own (`bad-args`, `not-a-venue`, `not-built`,
 `live-instance`, a bad custom id, shown only by its length and prefix) are audited
 `action-refused` like the service's. `--roles` stands in for the guild lookup and is always

@@ -125,8 +125,9 @@ contains the other) is `error: canonical-diverged: <canonical> <branch> is at <s
 <sha>; neither contains the other`, exit 1, audited `action-refused` with reason `canonical`, the
 row ended `refused: canonical-diverged`, nothing cloned. The owner reconciles a diverged canonical
 by pushing its local commits, or by `git -C <canonical> branch -f <branch> <remote>/<branch>`
-(`reset --keep <remote>/<branch>` while it is checked out); a refused start from Discord posts the `branch -f` form
-to the notice channel (`04-ux.md`, Failure flows; `session outbox --channel <notice id>` in a dry run). A fetch that fails or runs past its
+(`reset --keep <remote>/<branch>` while it is checked out, as setup leaves it); a refused start from Discord posts the
+`reset --keep` form to the notice channel (`04-ux.md`, Failure flows; `session outbox --channel <notice id>` in a dry
+run; `TestDivergedNoticeFixRuns` runs the printed command on a checked-out canonical). A fetch that fails or runs past its
 deadline (offline, a credential refused, a `repo.gitCredentialId` the store lacks, which skips the
 fetch with the reason `credential-missing`, a fast-forward refused by a dirty checkout) starts the
 session from the local branch: the details carry `canonical` `stale: <git's line or the reason>`

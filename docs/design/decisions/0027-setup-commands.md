@@ -31,7 +31,7 @@ stdin with --yes`, not `pass --<flag>`, and `setup git-credential` with empty st
 `needs-input-git-credential: pass the token on stdin` (`internal/setup/steps.go`).
 
 Names `setup` looks up or creates and never stores (03's config holds ids): the role (`--role`), the
-category `Sessions`, the lobby `#<project id>`, the notices channel `#<project id>-notices`. Config values
+category `Sessions`, the lobby `#<project id>`, the notices channel `#<project id>-notices` (created private: the bot and the application's owner only). Config values
 written with a default and no prompt: timeouts 0, mode `prompt`; `discord.mode` is written `dry-run` and
 becomes `live` in the role step of the first run in which every Discord id is present and the role is held.
 
@@ -201,9 +201,9 @@ on yes "fix  role  remove Manage Roles from the bot's role in Server Settings, R
 waiting". Channels: "This server already has channels. Create Sessions, #<project id> and
 #<project id>-notices in it? [y/N]". Repository: "Repository URL of the project (its canonical):".
 Git credential (owner's answer 2026-10-31): "Token for pushes to <repository URL> (not shown; Enter to add later with
-setup git-credential):". Closing with a service installed: "ok  next  the bot is running. In Discord: /register, then
+setup git-credential):", "Token for pushes (no repository URL yet) (...)" before one is known. Closing with a service: "ok  next  the bot is running. In Discord: /register, then
 /credential add kind:subscription; then here: broodforge setup login <credential id>"; with none, or when setup cannot tell
-(owner's answer 2026-10-31; `<path>` the binary's own): "ok  next  Setup done. Nothing is running yet: start the bot with <path> serve, then in Discord run /register and /credential add.". Refusal `running`: "error:
+(owner's answer 2026-10-31; `<path>` the host command, `setup.HostCommand`: the binary's own path and `--root <root>`): "ok  next  Setup done. Nothing is running yet: start the bot with <path> serve, then in Discord run /register and /credential add.". Refusal `running`: "error:
 running: a bot answers at <address>; stop it with broodforge stop in this shell (every open session
 is interrupted) or use setup --check" ("in this shell" added); the other refusal texts as the table.
 Closing under `--discord dry-run` (2026-10-30, interim wording, the owner's review pending): "ok  next

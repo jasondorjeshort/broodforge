@@ -5,6 +5,8 @@ package discord
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"sync"
@@ -58,10 +60,27 @@ type Config struct {
 	// gateway learns its Discord id; nil records nothing.
 	Panels    []Panel
 	SavePanel func(Panel) error
-	// OwnerID is the owner's Discord user id where no live gateway reads it from the bot's
-	// application (a dry run, a test); "" is no owner known, so /credential add answers every
-	// caller in the member's form.
-	OwnerID string
+	// HostCommand is the prefix of every host command a text prints: the running binary's own
+	// path and its --root (setup.HostCommand); `serve` sets it. "" prints "broodforge".
+	HostCommand string
+	// Log receives one `warning: discord: ...` line per failure the adapter answers around (a
+	// credential list or a default it could not read or set); nil discards them.
+	Log io.Writer
+}
+
+// hostCommand is Config.HostCommand, "broodforge" when unset (a test that does not print it).
+func (a *Adapter) hostCommand() string {
+	if a.cfg.HostCommand == "" {
+		return "broodforge"
+	}
+	return a.cfg.HostCommand
+}
+
+// warn writes one warning line to Config.Log, the gateway's format.
+func (a *Adapter) warn(what string, err error) {
+	if a.cfg.Log != nil && err != nil {
+		fmt.Fprintf(a.cfg.Log, "warning: discord: %s: %s\n", what, oneLine(err.Error()))
+	}
 }
 
 // Credentials is what /credential needs of the credential store, which the adapter does not
@@ -307,6 +326,10 @@ type Inbound struct {
 	Text     string
 	CustomID string
 	Values   []string
+	// Owner is `discord inject --owner <user id>`: the owner's id a dry run cannot read from
+	// Discord, so /credential add can answer the owner's form; a live instance reads the
+	// application's owner instead and ignores it.
+	Owner string
 }
 
 // Reply is what the bot answers: `ephemeral` with the text only the writer sees, or `none`
@@ -723,7 +746,7 @@ func (a *Adapter) start(ctx context.Context, in Inbound, channel, model string) 
 			remote = "origin"
 		}
 		// The venue gets the plain line, the owner's notice channel the command that fixes it.
-		a.notice(canonicalDivergedNotice(ch.Project, branch, ch.Repo.Canonical, remote))
+		a.notice(DivergedNotice(ch.Project, branch, ch.Repo.Canonical, remote))
 		return Reply{}, refusal(se.Code, canonicalDivergedText(branch))
 	}
 	return Reply{}, refusal(se.Code, couldNotStartText(se.Message))
@@ -743,15 +766,17 @@ func (a *Adapter) notice(text string) {
 	a.co.Offer(Post{Op: OpCreate, Channel: c.Instance.Discord.NoticeChannelID, MessageID: a.newID(), Body: Mask(text)})
 }
 
-// usableIDs is the ids of user's credentials that are not removed, for the no-default refusal;
-// nil without the credential store or when it cannot be read.
-func (a *Adapter) usableIDs(user string) []string {
+// usableIDs is the ids of user's credentials that are not removed, for the no-default refusal,
+// and whether the list was read: false without the credential store or when it fails (logged),
+// so the refusal never tells a member who has credentials to add one.
+func (a *Adapter) usableIDs(user string) ([]string, bool) {
 	if a.cfg.Credentials == nil {
-		return nil
+		return nil, false
 	}
 	infos, err := a.cfg.Credentials.List(user)
 	if err != nil {
-		return nil
+		a.warn("the credentials of "+user+" for the no-default refusal", err)
+		return nil, false
 	}
 	var ids []string
 	for _, c := range infos {
@@ -759,17 +784,18 @@ func (a *Adapter) usableIDs(user string) []string {
 			ids = append(ids, c.ID)
 		}
 	}
-	return ids
+	return ids, true
 }
 
-// isOwner reports whether user is the owner: on a live instance the owner of the bot's
-// application (the gateway reads it at its start), else Config.OwnerID.
-func (a *Adapter) isOwner(user string) bool {
-	owner := a.cfg.OwnerID
+// isOwner reports whether the caller is the owner: on a live instance the owner of the bot's
+// application (the gateway reads it at its start), in a dry run the id `discord inject
+// --owner` names.
+func (a *Adapter) isOwner(in Inbound) bool {
+	owner := in.Owner
 	if g := a.live.Load(); g != nil {
 		owner = g.ownerID()
 	}
-	return owner != "" && owner == user
+	return owner != "" && owner == in.User
 }
 
 // PostPanel posts or refreshes a project channel's panel (04; `panel post <channel id>`): the

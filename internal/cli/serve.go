@@ -28,6 +28,7 @@ import (
 	"github.com/jasondorjeshort/broodforge/internal/engine"
 	"github.com/jasondorjeshort/broodforge/internal/git"
 	"github.com/jasondorjeshort/broodforge/internal/session"
+	"github.com/jasondorjeshort/broodforge/internal/setup"
 	"github.com/jasondorjeshort/broodforge/internal/spawn"
 	"github.com/jasondorjeshort/broodforge/internal/store"
 )
@@ -334,7 +335,8 @@ func startBot(env *Env) (*bot, error) {
 	}
 	b.adapter = discord.New(discord.Config{Config: b.config, Channel: b.channel, DryRun: b.discord == config.DiscordDryRun,
 		Groups:      func() map[string][]string { return b.config().Instance.RoleGroups },
-		Credentials: discordCredentials{b.creds}, Panels: panels, SavePanel: savePanel(b.st)})
+		Credentials: discordCredentials{b.creds}, Panels: panels, SavePanel: savePanel(b.st),
+		HostCommand: setup.HostCommand(root), Log: env.Stderr})
 	if b.discord == config.DiscordLive {
 		// Step 9's first half: the token and the ids, before anything is served; Open connects.
 		if b.gateway, err = b.newGateway(env, keyPath); err != nil {

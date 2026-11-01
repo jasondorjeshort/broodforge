@@ -90,8 +90,22 @@ func TestSetupAPI(t *testing.T) {
 	if c, _ := r.find("CreateGuildChannel", nil); !strings.Contains(c.body, `"name":"Sessions"`) || !strings.Contains(c.body, `"type":4`) {
 		t.Errorf("category body %q", c.body)
 	}
-	if _, err := a.CreateTextChannel(ctx, testGuild, "demo", cat.ID); err != nil {
+	if _, err := a.CreateTextChannel(ctx, testGuild, "demo", cat.ID, nil); err != nil {
 		t.Fatal(err)
+	}
+	// The notice channel: hidden from @everyone (the guild's id), shown to the bot and the owner.
+	if _, err := a.CreateTextChannel(ctx, testGuild, "demo-notices", cat.ID, &Viewers{Bot: testBot, Owner: "1001"}); err != nil {
+		t.Fatal(err)
+	}
+	if c, ok := r.find("CreateGuildChannel", func(c restCall) bool { return strings.Contains(c.body, `"name":"demo-notices"`) }); !ok ||
+		!strings.Contains(c.body, `{"type":0,"id":"`+testGuild+`","allow":"0","deny":"1024"}`) ||
+		!strings.Contains(c.body, `{"type":1,"id":"`+testBot+`","allow":"3072","deny":"0"}`) ||
+		!strings.Contains(c.body, `{"type":1,"id":"1001","allow":"66560","deny":"0"}`) {
+		t.Errorf("the notice channel's overwrites: %q", c.body)
+	}
+	if c, _ := r.find("CreateGuildChannel", func(c restCall) bool { return strings.Contains(c.body, `"name":"demo"`) }); strings.Contains(c.body, "permission_overwrites") &&
+		strings.Contains(c.body, `"deny":"1024"`) {
+		t.Errorf("the lobby was made private: %q", c.body)
 	}
 	if _, ok := r.find("CreateGuildChannel", func(c restCall) bool {
 		return strings.Contains(c.body, `"name":"demo"`) && strings.Contains(c.body, `"parent_id":"`+cat.ID+`"`)

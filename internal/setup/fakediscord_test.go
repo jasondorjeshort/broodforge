@@ -42,7 +42,7 @@ func scriptedGuild(id, name string, manageRoles bool) discord.FakeGuild {
 // link, with Manage Roles, which the owner removes on the poll after the removal fix.
 func fresh() discord.FakeScript {
 	g := scriptedGuild(guildID, "Test", true)
-	return discord.FakeScript{Token: tokA, Application: discord.FakeApp{ID: app, BotID: bot}, Invite: &g, JoinAfter: 1}
+	return discord.FakeScript{Token: tokA, Application: discord.FakeApp{ID: app, BotID: bot, OwnerID: owner}, Invite: &g, JoinAfter: 1}
 }
 
 func withFake(f *fixture, s discord.FakeScript) *fixture {
@@ -123,6 +123,10 @@ func TestDiscordSteps(t *testing.T) {
 	}
 	if s.Guilds[0].Channels[1].Parent != "9001" || s.Guilds[0].Channels[2].Parent != "9001" {
 		t.Errorf("the channels are not under the category: %+v", s.Guilds[0].Channels)
+	}
+	// The notice channel is private to the bot and the application's owner; the lobby is not.
+	if c := s.Guilds[0].Channels[2]; c.Name != "demo-notices" || strings.Join(c.Viewers, ",") != bot+","+owner || s.Guilds[0].Channels[1].Viewers != nil {
+		t.Errorf("the notice channel's viewers: %+v", s.Guilds[0].Channels)
 	}
 
 	// The rerun: every Discord step skip, nothing written to Discord or config/.

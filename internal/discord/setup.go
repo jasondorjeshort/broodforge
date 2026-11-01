@@ -50,6 +50,8 @@ const PermManageRoles = uint64(dg.PermissionManageRoles)
 type SetupApp struct {
 	ID, BotID string
 	Flags     uint64
+	// OwnerID is the application's owner, or its team's owner; "" when Discord names none.
+	OwnerID string
 }
 
 // SetupGuild is a guild the bot is in, with its owner.
@@ -94,7 +96,9 @@ type SetupAPI interface {
 	Guild(ctx context.Context, guild string) (SetupGuild, error)
 	Channels(ctx context.Context, guild string) ([]SetupChannel, error)
 	CreateCategory(ctx context.Context, guild, name string) (SetupChannel, error)
-	CreateTextChannel(ctx context.Context, guild, name, parent string) (SetupChannel, error)
+	// CreateTextChannel makes a text channel under parent ("" none); private non-nil hides it
+	// from @everyone and shows it to its viewers alone (the notice channel, 04).
+	CreateTextChannel(ctx context.Context, guild, name, parent string, private *Viewers) (SetupChannel, error)
 	Roles(ctx context.Context, guild string) ([]SetupRole, error)
 	CreateRole(ctx context.Context, guild, name string) (SetupRole, error)
 	// MemberRoles is a member's role ids (GET /guilds/{id}/members/{user}).
@@ -194,6 +198,12 @@ func (a *setupAPI) Application(ctx context.Context) (SetupApp, error) {
 	if app.Bot != nil {
 		out.BotID = app.Bot.ID.String()
 	}
+	switch {
+	case app.Owner != nil:
+		out.OwnerID = app.Owner.ID.String()
+	case app.Team != nil && app.Team.OwnerID != 0:
+		out.OwnerID = app.Team.OwnerID.String()
+	}
 	return out, nil
 }
 
@@ -264,7 +274,7 @@ func (a *setupAPI) CreateCategory(ctx context.Context, guild, name string) (Setu
 	return setupChannel(c), nil
 }
 
-func (a *setupAPI) CreateTextChannel(ctx context.Context, guild, name, parent string) (SetupChannel, error) {
+func (a *setupAPI) CreateTextChannel(ctx context.Context, guild, name, parent string, private *Viewers) (SetupChannel, error) {
 	gid, err := parseID("guild", guild)
 	if err != nil {
 		return SetupChannel{}, err
@@ -275,11 +285,42 @@ func (a *setupAPI) CreateTextChannel(ctx context.Context, guild, name, parent st
 			return SetupChannel{}, err
 		}
 	}
+	if private != nil {
+		if create.PermissionOverwrites, err = privateOverwrites(gid, *private); err != nil {
+			return SetupChannel{}, err
+		}
+	}
 	c, err := a.r.CreateGuildChannel(gid, create, rest.WithCtx(ctx), rest.WithReason("broodforge setup"))
 	if err != nil {
 		return SetupChannel{}, setupErr(err)
 	}
 	return setupChannel(c), nil
+}
+
+// Viewers are who a private channel shows to: the bot, which posts there, and the owner, who
+// reads it ("" is none).
+type Viewers struct {
+	Bot, Owner string
+}
+
+// privateOverwrites hide a channel from everyone (the @everyone role's id is the guild's) and
+// show it to the bot, with what the notice channel needs, and to the owner.
+func privateOverwrites(guild snowflake.ID, v Viewers) ([]dg.PermissionOverwrite, error) {
+	out := []dg.PermissionOverwrite{dg.RolePermissionOverwrite{RoleID: guild, Deny: dg.PermissionViewChannel}}
+	for _, m := range []struct {
+		who, id string
+		allow   dg.Permissions
+	}{{"bot", v.Bot, noticePerms}, {"owner", v.Owner, dg.PermissionViewChannel | dg.PermissionReadMessageHistory}} {
+		if m.id == "" {
+			continue
+		}
+		uid, err := parseID(m.who, m.id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, dg.MemberPermissionOverwrite{UserID: uid, Allow: m.allow})
+	}
+	return out, nil
 }
 
 func setupRole(r dg.Role) SetupRole {
