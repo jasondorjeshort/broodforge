@@ -24,7 +24,8 @@ bound into the sandbox, and ADR 0020 made the decision a function of the environ
 the engine's JSON on stdin (`tool_name`, `tool_input`, `tool_use_id`, `cwd`, and
 `transcript_path`, which the engine documents for every hook event and the spike hook did not log:
 its absence is a hook error, below, so the first real turn proves it), prints the engine's hook
-output with `permissionDecision` `allow`, `deny` or `defer` and a reason, and exits 0.
+output with `permissionDecision` `allow`, `deny` or `defer` and a reason, and exits 0; on a `pass`
+(Auto mode) it prints nothing and exits 0.
 
 Failure, and the engine contract this depends on (C39, held). The engine blocks a call only when
 the hook exits 2, and hands the model the hook's stderr wrapped as `PreToolUse:<tool> hook error:
@@ -45,9 +46,14 @@ type, through `policy`'s alias table), under a `trailers.lock` file and by temp 
 within a bounded retry; no pin, a `BROODFORGE_TREE` that is not absolute, or a write that fails
 is logged and the decision stands, since the line is a help and the check owes from the bot's
 record, not the file. The timeout is the one failure it
-cannot catch and it is a real hole: a safe-listed `Bash` runs in read-only reach, and in prompt
+cannot catch, and until P39 it is a real hole: a safe-listed `Bash` runs in read-only reach, and in prompt
 mode with nobody asked. The stream marks every such call (next paragraph), so it is audited, not
-silent; ADR 0020's C39 amendment weighs this and keeps the design.
+silent; ADR 0020's C39 amendment weighs this and keeps the design. P39 (ADR 0020 as amended
+2026-11-01) closes it: the `PreToolUse` entry is registered with `"onFailure": "block"`, which the
+engine (2.1.295 and later; `../hatchery/decisions/0002-hook-specs.md`; V5 of the 0025 critic saw
+it block a hook that could not start) turns a timeout, a crash or a missing interpreter into a block,
+the model reading `PreToolUse:<tool> hook error: [<command>]: failed; blocking because onFailure is
+"block"`. The fall-through below is then an older engine's only.
 
 What the bot sees. The hook writes nothing to the store; the stream is the record (ADR 0020).
 `session` writes a `permission decision` row per `tool-use` block seen. The decider is the result
@@ -65,7 +71,17 @@ contains-match is never used: the rest of the text is the model's. A result whos
 `config`, or an error result with decider `unknown` and neither prefix, is the hook bypassed:
 audited `hook bypassed` with the tool, the outcome (ran, or refused by the engine), the cause
 (timed out, or the hook failed) and the text, shown as 04's hook-bypassed flow, the turn
-continuing. `result.permission_denials` lists hook and engine denies alike.
+continuing. A stripped text beginning `failed; blocking because onFailure` is the engine blocking
+a hook that timed out or could not start (`onFailure: "block"`, above): `action refused` with actor
+`hook`, cause `timed out` or `did not start`, shown as 04's tool-denied notice. One exception, in
+auto mode only: a result whose decider is not `hook`, on a call whose cell for the session's reach
+is `ask` (the shared `policy` function over the tool, the reach and the call's target resolved
+against the tree, as `session` computes a trace line's target), is the engine's own decision on a
+call the hook passed: decider `engine`, decision `allow` when the call ran and `deny` when the
+engine refused it, the stream's raw `source` value kept as the reason, shown as 04's trace line,
+never `hook bypassed`. A non-`hook` decider on any other cell, a `Write` in read-only reach
+included, is `hook bypassed` in every mode (`TestClassifyAutoReadOnlyTimeoutIsBypassed`, P39).
+`result.permission_denials` lists hook and engine denies alike.
 `sessions/<id>/home/hook.log` (one line per decision, debugging only, never audit) shows which
 calls the hook answered; an allowed `Agent` call whose pin was not written adds a second line with
 `pin` (`none`: nothing pins; `failed`: the write did not happen) and `why`.
@@ -78,7 +94,7 @@ Set by `spawn` on the engine process and inherited by the hook; the kept list in
 | Name | Value |
 |---|---|
 | `BROODFORGE_SESSION` | the session id |
-| `BROODFORGE_MODE` | `policy` or `prompt` |
+| `BROODFORGE_MODE` | `policy`, `prompt` or `auto` (Auto mode below) |
 | `BROODFORGE_REACH` | `read-only` or `code` |
 | `BROODFORGE_TREE` | absolute path of `sessions/<id>/tree`; tool-input paths are resolved against it |
 | `BROODFORGE_CANONICAL` | absolute path of the project's canonical checkout, read-only inside the session |
@@ -111,7 +127,7 @@ compare is a hook error: a device or network volume (`\\?\`, `\\.\`, UNC), a dri
 any `:` after the volume (an NTFS stream). "Under the tree" and "under the canonical" are prefix
 tests on the canonical form or, for another spelling of an existing directory (an 8.3 name), the
 same file (`os.SameFile`) on an ancestor; a base name is the one its directory lists. Credential paths are
-denied to every class in both reaches and both modes, with the reason `Denied by Broodforge: <path>
+denied to every class in both reaches and every mode, with the reason `Denied by Broodforge: <path>
 is a credential file`: any file named `.credentials.json` (any case, trailing dots and spaces
 dropped), a hard link to any `.credentials.json` or `.claude.json` the hook can name (the config
 directory's, and every `<root>/harness/<id>/` one when ADR 0022's layout yields the root from the
@@ -126,19 +142,21 @@ the same files (ADR 0022, both stated).
 
 ## Policy table
 
-Cells: `allow` is both modes; `ask` is policy mode `allow`, prompt mode `allow` for a tool named
-in `BROODFORGE_SESSION_ALLOW` and `defer` for the rest; `web` is prompt mode `defer`, policy mode
-`deny`, because no reach allows the network in the first version (ADR 0022 defers egress control;
-the engine's own default mode asks for `WebFetch` too). `deny` uses ADR 0020's text.
+Cells: `allow` is every mode; `ask` is policy mode `allow`, prompt mode `allow` for a tool named
+in `BROODFORGE_SESSION_ALLOW` and `defer` for the rest, auto mode `allow` for a session-allowed
+tool and `pass` for the rest (Auto mode below: no decision, the engine's classifier decides);
+`web` is prompt mode `defer`, policy and auto mode `deny`, because no reach allows the network in
+the first version (ADR 0022 defers egress control; the engine's own default mode asks for
+`WebFetch` too). `deny` uses ADR 0020's text.
 
 | Tool class | read-only reach | code reach |
 |---|---|---|
 | `Read`, `Glob`, `Grep`, `LS`, `NotebookRead` | `allow` under the tree or the canonical, else `deny` | `allow` under the tree or the canonical; elsewhere `allow` too, since Bash reads it anyway, except the credential paths above |
 | `TodoWrite`, `Agent` (`Task` on an older engine pin) | `allow` (a subagent's own calls fire the hook) | `allow` |
-| `Agent` whose `tool_input.subagent_type` is `reviewer` (the `reviewer` cell, ADR 0028) | `defer` in both modes; the bot answers it itself (below) | `defer` in both modes; the bot answers it itself |
+| `Agent` whose `tool_input.subagent_type` is `reviewer` (the `reviewer` cell, ADR 0028) | `defer` in every mode; the bot answers it itself (below) | `defer` in every mode; the bot answers it itself |
 | `WebFetch`, `WebSearch` | `web` | `web` |
 | `Edit`, `MultiEdit`, `Write`, `NotebookEdit` | `deny` | `ask` when the resolved path is under the tree, else `deny` |
-| `Bash` whose command's first words are `git push` or `broodforge session land` (the `land` cell, ADR 0028) | `deny` | `defer` in both modes, before the child chain; the bot answers it itself (below) |
+| `Bash` whose command's first words are `git push` or `broodforge session land` (the `land` cell, ADR 0028) | `deny` | `defer` in every mode, before the child chain; the bot answers it itself (below) |
 | `Bash` | `deny` | `ask` (the host is the boundary, ADR 0022; the PC's gap stands) |
 | anything else, `mcp__*` included | `deny` | `deny` |
 
@@ -152,7 +170,7 @@ single-quoted for `sh`, the other input fields kept, so the model reads the land
 succeeded Bash call (the engine's documented resume pattern, ADR 0028; an engine pin that ignores
 `updatedInput` on a resume is caught by the resume fixture, and the fallback is a `deny` whose reason
 starts `Landed`). (3) The cell is `allow`: allow. (4) The cell is `ask` or `web`: by mode as above;
-`reviewer` and `land` are `defer` in both modes. The two bot-answered cells (ADR 0028): the hook
+`reviewer` and `land` are `defer` in every mode. The two bot-answered cells (ADR 0028): the hook
 defers as for a person's answer, but `session` answers them itself on `deferred_tool_use`, no venue
 prompt and no `waiting-for-answer`: for `reviewer` it bundles the tree under the session's lock,
 records the sha and the tree's cleanliness on the call and resumes `allow`; for `land` it parses the
@@ -169,6 +187,52 @@ cwd, tool name, input and id) carries no message id to decide by, and a deny of 
 would be re-issued the same way at the same cost; `session` records the dropped calls
 (`03-architecture.md`, prompt mode). `session reach-report` prints the table's column for the
 session's reach beside the bind list the spawn uses.
+
+## Auto mode
+
+ADR 0020 as amended 2026-11-01: `auto` is policy mode with the engine's own classifier reviewing
+the `ask` cell. The spawn runs an `auto` session's processes with `--permission-mode auto` and
+`BROODFORGE_MODE=auto`; everything else on the command line and in the environment is the same.
+The hook runs first on every call and the Decision order above is unchanged: a reach or
+credential `deny` is final (C39 held under `auto`, 2026-10-31), a pending answer is returned,
+an `allow` cell, a session-allowed tool and the two bot-answered cells are answered as in policy
+mode, `web` is `deny` as in policy mode. The one new answer is `pass`, for the `ask` cell alone:
+exit 0 with nothing on stdout, logged in `hook.log` as `pass`, so the engine's classifier decides
+the call. That a silent exit 0 is "no decision" is a claim, not a documented fact (the hooks page
+and `../hatchery/decisions/0002-hook-specs.md` cover exit 0 with JSON only): C40a of ADR 0020, settled
+by one run under `-p --permission-mode default` with a hook that exits 0 silently on a `Write`: a
+permission denial means no decision, a landed write means `allow`. If it means `allow`, `auto`
+would be `policy` under another name, and P39 stops at the finding; the design then needs another
+no-decision form before it goes on. The child chain runs on a pass as on an allow, and a child
+deny is a deny. Invariant: `auto` never answers `allow` where policy mode would not, so it never
+widens reach, and Broodforge's safety does not depend on the classifier: the classifier can only
+make a call policy mode would have run cheaper, or refuse it. The adapter reads `system/init`'s
+`permissionMode` into `Init`; `session` compares it with the mode the process asked for and on a
+mismatch (a credential or plan that does not honour `auto` would otherwise fall silently to the
+default's denies) writes an `engine-mode-mismatch` audit row and an `internal-error` event, summary
+`engine mode: wanted auto, got <value>`, the turn continuing.
+
+What the classifier's own ask looks like in the bot's `-p` form is unobserved (the 2026-10-31
+spike never made it act; claim C40 of ADR 0020). It can take two shapes, and `session` handles
+both; the first real `auto` turn (P39) records which one the pinned engine takes. Shape A, a
+`control_request` line the engine emits and then waits on: the adapter reads it as an
+`EngineEvent` of kind `prompt` (the tool, input, `tool_use_id` and the engine's reason);
+`session` interrupts the process through the backend, records the call `deferred` with decider
+`engine`, publishes `waiting-for-answer` and the venue gets 04's permission prompt with the
+reason appended; the click resumes with `BROODFORGE_ANSWER=<id>:allow|deny`, which step (2)
+returns before any pass. This holds only if the re-issued call keeps its `tool_use_id` (C27 shows
+a deferred call does; after an interrupt it is unobserved and part of C40); if it does not, the
+request is handled as shape B for that turn, the finding says so, and holding the process open
+through the wait is the architect's next question. Shape B, a refusal result with no prompt (the
+`system/permission_denied` line and the error result C39 saw under `default`): nobody is asked;
+the call gets the `engine` decision row above and 04's trace line, and the model continues. Under
+B a person never sees a classifier ask in `auto`; the driver switches mode for the next turn. That
+departs from the idea's requirement that whatever the classifier would have prompted for still
+reaches a human through the prompt path, and stands only pending the owner's acceptance; the
+alternative is a relay of the refusal as a venue prompt whose Allow runs the next turn with that
+call session-allowed (`BROODFORGE_SESSION_ALLOW`), a wider grant than one call.
+`--permission-prompts` stays off the command line; `none` is added to `auto` processes only if
+C40 shows the engine waiting on a prompt nobody can answer, and shape B's handling then applies.
 
 ## The child chain
 

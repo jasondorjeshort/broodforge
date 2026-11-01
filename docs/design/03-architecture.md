@@ -85,6 +85,9 @@ the hook again and gets it. Other clicks are refused; no click in the prompt tim
 Parallel calls (ADR 0020, C28, observed for a deferred pair): the engine defers each, ends the turn
 naming only the last, and drops the rest; the model re-issues them after the resume, one prompt and
 one process each. The `tool-use` ids of that message with no result and not in `deferred` get rows `dropped`; 04 says so.
+Auto mode: the hook passes the `ask` cell to the engine's classifier and `spawn` adds `--permission-mode auto` from
+`TurnRequest.PermissionMode`, set from the session's mode at each process start; the classifier's ask and refusal, and
+the `engine` decider, are `03-hook-contract.md`'s (Auto mode; What the bot sees).
 Custom ids (buttons and the header's select menus), parsed by one function in `discord`:
 `bf:<session id>:<tool_use_id>:<allow|deny|allow-session>` for a permission answer, `bf:<session id>:stop`, `bf:<session id>:end`,
 `bf:<channel id>:start` on the panel, and `bf:<session id>:model|effort|mode` on the header's menus (the pick is the interaction's value, never in the id).
@@ -102,6 +105,7 @@ type TurnRequest struct {
 	Input       string              // the From-prefixed blocks
 	Answer      *struct{ ToolUseID, Decision string } // Decision "allow" | "deny"
 	Model, Effort string            // per process (ADR 0020)
+	PermissionMode string           // "default" | "auto": --permission-mode, from the session's mode (ADR 0020 as amended 2026-11-01)
 	SystemPromptFile, AgentsFile string // --append-system-prompt-file (always), --agents: the copy's (ADR 0025)
 	Spawn       SpawnBackend
 }
@@ -190,7 +194,8 @@ Rules: a role list holds group names from `roleGroups` or raw role ids; `"driver
 (R-25). A channel inherits `defaults` for a key it omits. `idleTimeoutMinutes` and `promptTimeoutMinutes` 0 (or absent
 from `defaults`) is never, the default: a session does not end for inactivity, a prompt waits for its answer (each is a
 timer of a year, the cap on any timeout); a negative value is an error; a value above 525600 (a year) is capped there
-with a warning from `config check`, `config reload` and `serve`. `harness` is `claude-code` or `fake`; `handoff` is
+with a warning from `config check`, `config reload` and `serve`. `mode` is `prompt`, `policy` or `auto` (ADR 0020 as
+amended 2026-11-01; `03-hook-contract.md`, Auto mode), in `defaults` and per channel alike; `harness` is `claude-code` or `fake`; `handoff` is
 `pull-request` (default), `push` or `main` (ADR 0028: a fast-forward of the reviewed sha onto `repo.defaultBranch`);
 `handoffFallback` is `push` (default) or `pull-request`, what a `main` end falls back to when the land refuses, an
 error with any other `handoff`; `roles.land` is the channel's list of who may land on the default branch, absent

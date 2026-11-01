@@ -32,7 +32,7 @@ Isolation. A scratch root has no registrations; the ids above are not Discord's.
 ## Session lifecycle without Discord
 
 Drive. `broodforge session start --channel <id> --as <user id> [--roles <ids>] [--credential
-<id>] [--mode prompt|policy] [--reach read-only|code] [--fixture <dir>] [--idle-timeout-seconds
+<id>] [--mode prompt|policy|auto] [--reach read-only|code] [--fixture <dir>] [--idle-timeout-seconds
 <seconds>] [--prompt-timeout-seconds <seconds>]` prints the session id (`s0001`); `--reach`, `--fixture`
 and the timeouts are dry-run only (`live-instance`). Every timeout is at most a year: a larger
 `--...-timeout-seconds` is capped, with `idle timeout capped at a year` (or `prompt`) on stderr, and
@@ -57,8 +57,10 @@ waits for the next turn, one `From: <name> (<role>)` block each, 03); `--wait` r
 turn's end or its wait for an answer, exit 0, printing `turn-ended  <n>
 completed|error|interrupted|deferred` or `waiting-for-answer  <n>  <tool use id> [<tool>]
 <target>` instead; `--tail` streams the turn's events meanwhile and, without `--wait`, prints the
-start line after them. `session mode <id> prompt|policy` (the driver; from the next turn) prints
-`mode-changed  <next turn>  <mode>`. `session start` also takes `[--model <alias|model id>]`, resolved
+start line after them. `session mode <id> prompt|policy|auto` (the driver; from the next turn) prints
+`mode-changed  <next turn>  <mode>`; `--mode` absent at start takes the channel's `mode`, else `defaults.mode`, and
+`session show` and `session list` print the value in their `<mode>` column, so an agent sets the mode with
+either command and reads it back there. `session start` also takes `[--model <alias|model id>]`, resolved
 as `05-debug-interface-discord.md` (Model and effort) says; absent, the channel's own `model` key (`defaults`
 has none; null is unset); the result is copied to the session row at start like `reach` (empty: the engine's
 own), and the spawn reads the row, not the channel. `session model <id> <alias|model id>` and `session
@@ -157,7 +159,7 @@ Types: `session-started` (04's header line, `Session <id> on <project>, branch <
 line, `[<tool>] <target>`), `permission-decision` (`<decision> [<tool>] <target> (<decided
 by>)`), `tool-result` (the trace line, with 04's outcome after ` -> ` when the call was denied,
 blocked, bypassed or failed), `waiting-for-answer` (`<tool use id> [<tool>] <target>`),
-`mode-changed` (04's `From the next turn: asks first.` or `acts freely.`), `model-changed` and
+`mode-changed` (04's `From the next turn: asks first.`, `acts freely.` or the third mode's placeholder post, `04-ux-session-controls.md`), `model-changed` and
 `effort-changed` (04's `From the next turn: Sonnet.`, `From the next turn: effort high.`),
 `timeout-changed` (04's `Ends after <n> without activity.` or `Never ends for inactivity.`), `turn-ended` (the stop
 reason, or `interrupted`), `handoff-refused`, `session-ending` (`<n> commits`, `1 commit` or `commits unknown`:
@@ -167,7 +169,9 @@ write failed mid-turn and the turn went on; the call's `tool`, `target` and `dep
 decider is `policy` (the hook answered from the table; also the `deferred` row, and the `dropped`
 row of every other call of that message, C28), `participant` or `prompt-timeout` (an answer),
 `instance` (dropped as its session ended), `hook` (it failed: exit 2, `hook:`, audited `action-refused` with actor `hook`), `config` (the
-engine's default: audited `hook-bypassed`), or `unknown` (no source in the stream); a tool's own
+engine's default: audited `hook-bypassed`), `engine` (auto mode only: the engine's classifier decided an `ask`-class
+call the hook passed, `allow` when it ran, `deny` when it refused, the raw stream `source` as the reason; also the
+`deferred` row of a classifier ask the bot relays, `03-hook-contract.md`, Auto mode), or `unknown` (no source in the stream); a tool's own
 `<tool_use_error>` gets no row (03-hook-contract.md, What the bot sees). Each engine process's
 usage is one record per model, written with the turn row before `turn-ended` (N-21): the result's
 `modelUsage` minus the engine session's last result, or for a process without a result the
@@ -203,8 +207,9 @@ Observe. `session show`, `session tail --json` (every field: tool, target, decis
 reason, result; `commits` on `session-ending`, absent when unknown; `end.log`, each handed-off commit's
 `hash` and `subject`, and `end.title`, the pull request's, on `session-ended`; a mid-turn store failure as `internal-error`, never
 as a `permission-decision`), `audit --kind permission-decision --session <id>`, the fake's
-`sessions/<id>/fake/received-<n>.json` (the exact `TurnRequest`, plus `args`, the flags it sets
-on the real engine: `--append-system-prompt-file <root>/workflow/<id>/instructions.md` always,
+`sessions/<id>/fake/received-<n>.json` (the exact `TurnRequest`, `permissionMode` included, plus `args`, the flags it sets
+on the real engine: `--permission-mode default`, or `auto` on an auto-mode session, the way to see the mode a process
+got without a real engine; `--append-system-prompt-file <root>/workflow/<id>/instructions.md` always,
 `--agents <root>/workflow/<id>/agents.json` when the copy has agents, never
 `--append-system-prompt`; `hookEnv` holds `BROODFORGE_WORKFLOW` when something was copied),
 `usage --session <id> --by turn --json` (its `raw` holds the model's cumulative `modelUsage` and

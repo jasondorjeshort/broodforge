@@ -17,7 +17,7 @@ is open. It decides nothing the vision left open; it names what is pending and w
   (a thread, a private channel or the channel itself) is its venue: a private channel per session, a thread later (04).
 - Turn means what Claude Code means by it: one input from a person and everything the agent does
   until it waits for input again.
-- Reach is what a channel lets a session touch; permission mode (prompt or policy) is how a session
+- Reach is what a channel lets a session touch; permission mode (prompt, policy or auto) is how a session
   answers the agent's requests inside that reach. They are different things.
 - A trust tier is a way of talking about a Discord role; Broodforge has no tier of its own.
 

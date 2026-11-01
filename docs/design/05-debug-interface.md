@@ -191,12 +191,13 @@ BROODFORGE_SESSION=s0001 BROODFORGE_MODE=prompt
 BROODFORGE_REACH=code BROODFORGE_TREE=/tmp/x BROODFORGE_CANONICAL=/tmp/c
 BROODFORGE_HOOK_LOG=/dev/null broodforge hook pre-tool-use` prints `{"hookSpecificOutput":
 {"hookEventName":"PreToolUse","permissionDecision":"defer","permissionDecisionReason":
-"<reason>"}}`, exit 0. Any error, a missing variable, malformed stdin or an unwritable log
+"<reason>"}}`, exit 0; a `pass` (auto mode) prints nothing, exit 0, and `hook try` shows it as `pass` with the `hook.log`
+line's reason. Any error, a missing variable, malformed stdin or an unwritable log
 included, is exit 2 with `hook: <what>` on stderr, the one exit the engine reads as a block.
 The same code path with flags, nothing logged: `broodforge hook try --tool <name> [--input
-'<json>'] [--tool-use-id <id>] [--cwd <path>] [--mode prompt|policy] [--reach read-only|code]
+'<json>'] [--tool-use-id <id>] [--cwd <path>] [--mode prompt|policy|auto] [--reach read-only|code]
 [--tree <path>] [--canonical <path>] --transcript-path <path> [--answer <id>:allow|deny]
-[--answer-reason <text>] [--session-allow <names>] [--workflow <dir>] [--expect allow|deny|defer|hook]` prints
+[--answer-reason <text>] [--session-allow <names>] [--workflow <dir>] [--expect allow|deny|defer|pass|hook]` prints
 `<decision>  <reason>  <pin>` (defaults: `{}`, `toolu_01`, the tree, `prompt`, `code`, `.`, the tree; `pin` is the
 trailer line an allowed `Agent` call would append, `""` for none, `05-debug-interface-git.md`); a
 hook error is `error: hook: <what>`, exit 1; `--transcript-path` is what the hook derives the

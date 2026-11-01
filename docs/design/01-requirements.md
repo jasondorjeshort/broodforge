@@ -69,10 +69,10 @@ How to read this doc:
 |---|---|---|
 | R-24 | When the agent asks permission for an action, Broodforge posts the request in the session with buttons, and the driver's answer is passed back to the agent. | v1 |
 | R-25 | Whether contributors may also answer permission prompts is set per channel; the default is driver only (choice). | v1 |
-| R-26 | A session can run in policy mode, where Broodforge answers permission prompts itself, and the channel sets whether sessions start in policy mode or prompt mode. | v1 |
-| R-27 | A policy-mode answer never allows more than the channel's reach allows; a request outside the reach is denied, not escalated to a person (choice). | v1 |
+| R-26 | A session can run in policy mode, where Broodforge answers permission prompts itself, or in auto mode, where the engine's own classifier reviews what policy mode would allow (ADR 0020 as amended 2026-11-01), and the channel sets which mode sessions start in. | v1 |
+| R-27 | A policy-mode or auto-mode answer never allows more than the channel's reach allows; a request outside the reach is denied, not escalated to a person or to the classifier (choice). | v1 |
 | R-53 | A permission prompt nobody answers within the channel's prompt timeout, if it has one (none by default since 2026-10-23), is denied, the turn finishes with its output kept, and the session stays open; the idle timeout of R-15 is separate. | v1 |
-| R-28 | The driver can switch a running session between policy mode and prompt mode from Discord. | v1 (Q 5) |
+| R-28 | The driver can switch a running session between the modes of R-26 and prompt mode from Discord. | v1 (Q 5) |
 | R-29 | The driver can choose a session's model at start and change its model or effort from Discord; a change takes effect at the next turn. | v1 (Q 5) |
 
 ### Git, worktrees and attribution

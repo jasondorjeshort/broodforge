@@ -62,7 +62,7 @@ reason `key-pasted`, with no key text). A `message` is always text, even one sta
 in a venue (in a dry run its channel id is the session id, `--channel s0001`) it is submitted,
 in a project channel a permitted registered writer gets 04's lobby hint, anything else is
 `none`. A `command` is parsed (`/register name:<name> email:<email>`, `/session
-start|stop|end|mode asks-first|acts-freely|invite user:<@id>`, `/credential add kind:subscription|api-key
+start|stop|end|mode asks-first|acts-freely|auto|invite user:<@id>`, `/credential add kind:subscription|api-key
 label:<text>|list|remove id:<id>|default id:<id>|login id:<id>`, the caller's own credentials only
 (`not-yours`), `login` answering the host route while the relay is not built; `/usage` is
 `not-built`). `/credential add kind:api-key` prints `modal  bfm:api-key:<label>`, the form's

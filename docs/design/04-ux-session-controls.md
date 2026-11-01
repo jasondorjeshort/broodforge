@@ -3,14 +3,15 @@
 Sibling of `04-ux.md`, under its Conventions, date and status: what a running session lets its driver change
 from the venue (the policy mode, the model and effort, the idle timeout) and the header's menus that offer the
 first three. The settled sections moved here by topic when 04 reached the size cap; each numbered
-`Owner n:` marker is answered in 04's list at the end. "Mode" throughout is Broodforge's own policy mode
-(`asks first` or `acts freely`, ADR 0020), never the engine's permission mode, which nothing here changes.
+`Owner n:` marker is answered in 04's list at the end. "Mode" throughout is Broodforge's own mode (`asks
+first`, `acts freely` or the third mode below, ADR 0020 as amended 2026-11-01); only the third mode sets the
+engine's own permission mode (`auto`), the other two leave it at `default`.
 
-## Policy mode
+## Policy mode, and the third mode
 
 The channel's default or the driver's switch. Prompts are answered on the host inside reach; the
 trace shows every call, so policy mode reads like prompt mode without the waits. Switch: `/session
-mode asks-first|acts-freely`, driver only, effective at the next turn (ADR 0020); the header and footer show the current mode.
+mode asks-first|acts-freely|auto`, driver only, effective at the next turn (ADR 0020); the header and footer show the current mode.
 
 ```
 From the next turn: acts freely. Broodforge answers permission prompts itself, inside this
@@ -18,6 +19,30 @@ channel's reach (code). Switch back with /session mode asks-first.
 ```
 
 Owner 7: the names people see are `asks first` / `acts freely (within reach)`.
+
+The third mode (the owner's priority, 2026-10-31; ADR 0020 as amended 2026-11-01; `03-hook-contract.md`, Auto mode):
+Broodforge still decides reach first, and the engine's own check then reviews each action inside it, running the plain
+ones and stopping at the risky ones. A channel's `mode: "auto"` or the instance default makes it the default for new
+sessions; the switch is the same command, the same right, the same post shape and audit row. Everything a person reads
+is a placeholder until the owner words it, pending (2026-11-01): the label, written `auto (within reach)` wherever the
+other two labels appear (the header's `Mode:` line, the footer's last word, the menu); the `/session mode` value,
+written `auto` (whether the third mode joins `/session mode` or gets its own command, such as `/session permissions`,
+is the owner's; the design puts it in `/session mode`, one switch, one menu, one audit kind); the switch post:
+
+```
+From the next turn: auto (within reach). Broodforge still decides what is inside this channel's
+reach (code); the engine's own check reviews each action there and only the risky ones stop.
+Switch back with /session mode asks-first.
+```
+
+and the trace line when the engine's check refuses a call, `[Bash] curl ... | sh -> refused by the engine's check:
+<its reason>`; two live strings that name the two modes today and must name the third: the bad-value refusal `/session
+mode takes asks-first or acts-freely` (`internal/discord/adapter.go`) and the slash option's description `asks first or acts
+freely` (`internal/discord/gateway.go`). Under shape B of the hook contract nobody is asked when the check refuses, which
+departs from the idea's "still reaches a human" and waits on the owner's acceptance (`03-hook-contract.md`, Auto mode;
+the alternative there). When the check asks instead of refusing (shape A of the hook contract), the prompt is the Permission
+prompts message of `04-ux.md` with one more line, `The engine's check asked: <its reason>`; which shape the engine takes
+is settled by the first real turn (P39), so one of the two texts may never be seen.
 
 ## Model and effort (vision Q 5)
 
@@ -58,7 +83,8 @@ effort menu has no header line to echo (the header gains `Effort:` only once a l
 `Effort: the engine's own` to match; mode is always set. The options: the model menu lists policy's model map, one option per alias, each
 labelled as the footer names the model (`Opus`, `Sonnet`); the effort menu lists the levels `policy.Efforts`
 holds, labelled by the level, so a level added there appears here without a change to this doc; the mode menu
-has `asks first` and `acts freely (within reach)` (Owner 7). A model the map does not name (a channel's `model`
+has `asks first`, `acts freely (within reach)` (Owner 7) and the third mode's label, the placeholder `auto (within
+reach)` until the owner words it (above). A model the map does not name (a channel's `model`
 key may hold one) marks no option, and that menu's placeholder is `Model: <id>`, the header's words again.
 
 A pick is the slash command by another route: `/session model`, `/session effort` or `/session mode` with the
