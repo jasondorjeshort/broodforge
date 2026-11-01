@@ -13,3 +13,10 @@ before the live bot meets it. It costs one real turn per recorded session, so th
 to approve.
 
 Anchor: `internal/engine/parse.go`, the fixtures it parses, and `setup engine`.
+
+Question: Do you want an engine-upgrade canary that spends one real turn per recorded session after each update?
+
+Recommendation: not before the real-turn fixtures of `2026-10-30-real-turns-on-the-dev-root-seed-fixtures.md` exist, since
+the canary replays recorded prompts and none are recorded from real turns yet. It spends your plan, so when they
+do exist you name the per-upgrade turn budget (for instance two turns) and the canary stops there.
+Answer:
