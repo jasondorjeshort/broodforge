@@ -26,6 +26,11 @@ scratchpad is allowed to a coder, and a commit inside it to the runner only).
   run skill): a lane worktree's commits are the runner's, so the landing is a cherry-pick or a
   patch apply by the runner, not a merge by the coder.
 - Review reads the lane's diff before the landing, so a landed lane is already reviewed.
+- 2026-11-01: two coders shared one tree again. One ran `git stash` and `git stash pop` to build the old
+  binary for a comparison, which touched the other lane's uncommitted files for a moment (the pop came back
+  clean). Six shared files could not be staged apart, so the two lanes landed as one commit (5891886). Both
+  are evidence for the trial the Question proposes, and a coder brief in a shared tree should forbid
+  tree-wide git (stash, checkout, reset) in so many words.
 
 Question: should a wave run each lane in its own worktree, and the runner land lanes in order? It changes the base's
 delegation practice (`.claude/skills/brief/SKILL.md`, `.claude/skills/commit/SKILL.md`, and possibly `git-guard.js`, whose

@@ -1,40 +1,40 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-31 by main session (wave round 1 done; push waits on a privacy allow)
+Updated: 2026-11-01 by main session (wave of 2026-11-01 done; the wrap-up push follows)
 
 ## Now
 
-- Account `jdorje`. Pushed at `38ebc03`. Ahead: five earlier commits, triage and answers, the wave's commits. The pusher
-  stops on `4de8974`: the scan reads `<sess>/home/land-result` (0028 critic review) as a home path; owner's `privacy.allow`.
-- Wave round 1 done 2026-10-31: triage, six owner answers, the auto spike (finding: starts under `-p`, hook blocks
-  hold, classifier never fired), the five live-run texts, P38 (schema 5, `model_seen`), two chores; each reviewed once.
-  The pre-commit hook was reverted (`bf96a70`), re-planned as a `--staged` scan. This checkout has no `core.hooksPath`.
-- Live instance `%LOCALAPPDATA%\Broodforge\dev-live` (the owner's; agents never touch it): notice channel public until
-  the owner locks it (`docs/operator/`). `dev`: dry-run, bot stopped, schema 4, `cred-2ha7apqowv`, four real turns granted.
+- Account `jdorje`. Pushed at `764ad5d` (after the owner's allow for the session-home segments `trailers`, `hook.log`).
+  Ahead: nine triage blocks, two coder lanes as one commit (`5891886`), the commit-skill departure, the store-error
+  fix, Ended sessions (`d71b652`), this handoff with four residual ideas; a fresh pusher takes them.
+- Wave of 2026-11-01 done, each change reviewed once: auto mode designed (ADR 0020 amended, P39, claim C40 open);
+  the end WIP commit and `End and discard`; P33 (V1 waits); Ended sessions (the lock is an owner call); triage.
+- Hatchery `../hatchery` holds `bcc78fe` (the delegation-paragraph request as an idea), unpushed. `dev-live` (the
+  owner's): notice channel public until locked; the Ended sessions category waits on the owner's setup step
+  (`docs/operator/`). `dev`: dry-run, schema 5.
 
 ## Next
 
-1. Auto mode (the owner's priority): the owner picks a second spike (make the classifier fire: a throwaway
-   credential-shaped file, a scratch force push, a disposable home) or the `architect` pass now (ADR 0020
-   amendment, 04's mode rows, a third value of `defaults.mode` and `Channel.Mode`); then `coder`.
-2. Owner-answered Plans, `coder`, sequential (shared files): WIP commit at end plus the two-button discard
-   (`end-a-session-without-handing-off`, `ending-a-session-with-uncommitted-changes`); the Ended sessions category.
-3. P33 to P37 (`08-implementation-plan-landing.md`); P34 after Next 2 clears `handoff.go`. P38's real turn on the
-   live instance on the owner's word. Carry-back Sends: the `delegation.md` paragraph; the `--staged` scan (coder first).
-4. `tester`: the two session leftovers; `coder`: the P11 remainder, the serve snapshot, the session-start link
-   button (Plans in `docs/ideas/`). Owner wording pending in 04 (three credential strings). Held: web-reach proposal.
-5. W6: the owner re-runs `spike/setup-host/` (README); then P23, P25. Hatchery: land the five carry-back branches.
+1. P39, `coder` (the owner's priority, `08-implementation-plan-auto-mode.md`): C40a (the silent exit 0) first on
+   the owner's word, then the pass; the classifier spike (row 3) is the owner's to run by hand, no agent brief.
+2. P34, `coder` (`handoff.go` free; the bundle lock shared), then P35 to P37; the `reach-report` reviewer row
+   (idea). V1 and P38's real turns on the live instance on the owner's word.
+3. `coder`: part two of the two-leftovers idea (the transcript renderer); the P11 remainder; the serve snapshot; the
+   session-start link button (Plans in `docs/ideas/`). Carry-back Sends (`carry-back` skill): the commit-skill
+   departure, the heredoc-reason idea; the `--staged` scan, coder first. Triage: the four residual ideas of 2026-11-01.
+4. W6: the owner re-runs `spike/setup-host/` (README); then P23, P25. Hatchery: push `bcc78fe`, land the five branches.
 
 ## Waiting on user
 
-- `privacy.allow` for `<sess>/home/land-result` (blocks the push); `core.hooksPath` in this checkout; the dev-live
-  notice channel lock; auto mode: second spike or architect. `Question:` blocks in `docs/ideas/` (fourteen from today,
-  later-wave features). Wording on sight: discard confirm and summary, WIP end line, three pending 04 strings. Older:
-  0028's venue lines; dry-run and setup texts; four Discord strings; two canonical rows and refuse-or-warn; subagent
-  indent; the `pre-push` line; P12a; "Never ends for inactivity."; the switch post; the hook no-answer phrase; R-17;
-  `C:\elsewhere`; W6's console window.
+- Auto mode: accept shape B (the engine's check refuses, nobody is asked) or the relay alternative
+  (`03-hook-contract.md`, Auto mode); the Owner 7 placeholders. Ended sessions: drop the lock or restore Manage
+  Roles (an ADR 0027 reversal); the dev-live setup step.
+- End wording on sight (`04-ux-session-end.md`; `04-ux.md` failure flows): the lines marked not owner-approved.
+  `Question:` blocks in `docs/ideas/` (seven new 2026-11-01; fourteen older). `core.hooksPath` in this checkout; the
+  notice channel lock. Older wording items: as listed in the 2026-10-31 handoff (`git show 3db52ab:docs/HANDOFF.md`).
 
 ## Open findings
 
-`node .claude/hooks/queue-list.js findings --status open`. Live: `docs/findings/2026-10-26-spike-windows-setup-host-claims.md` (Next 5); the 2026-10-23 and 2026-10-24 session findings (the handoff import gap seen again today); `2026-10-17-net-diff-privacy-scan-let-named-commits-go-public.md` (owner).
+`node .claude/hooks/queue-list.js findings --status open`. Live: the 2026-10-31 auto spike (row 3, the owner's);
+`2026-10-26-spike-windows-setup-host-claims.md` (Next 4); the 2026-10-23 and 2026-10-24 session findings; the 2026-10-17 net-diff privacy scan finding (owner).
