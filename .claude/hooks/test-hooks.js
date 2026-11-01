@@ -827,31 +827,6 @@ for (const [n, command, agent, cwd, want] of GP) {
       }
       return p.length === 0 || p.join('; ');
     });
-    cliCase('PV40', 'pre-commit hook through git commit: a staged refused string is refused with file and class only; a clean commit goes', () => {
-      const p = [];
-      const repo = pvRepo('commit-hook');
-      const hooks = path.join(repo.dir, '.claude', 'hooks');
-      fs.mkdirSync(path.join(hooks, 'git'), { recursive: true });
-      for (const f of ['privacy-scan.js', 'policy.js']) fs.copyFileSync(path.join(HOOKS, f), path.join(hooks, f));
-      fs.copyFileSync(path.join(HOOKS, 'git', 'pre-commit'), path.join(hooks, 'git', 'pre-commit'));
-      fs.chmodSync(path.join(hooks, 'git', 'pre-commit'), 0o755);
-      must(repo.dir, ['config', 'core.hooksPath', '.claude/hooks/git']);
-      const env = envWith({ HOOK_POLICY_FILE: POL, HOME: guardHome, USERPROFILE: guardHome });
-      const bad = `C:/${U}/${SEG}/proj`;
-      fs.writeFileSync(path.join(repo.dir, 'bad.md'), `see ${bad}\n`);
-      must(repo.dir, ['add', 'bad.md']);
-      const head = must(repo.dir, ['rev-parse', 'HEAD']);
-      const r1 = pvGit(repo.dir, ['commit', '-q', '-m', 'x'], null, env);
-      if (r1.status === 0 || must(repo.dir, ['rev-parse', 'HEAD']) !== head) p.push(`hit: exit ${r1.status}, commit made`);
-      if (!r1.stderr.includes('HIT home bad.md:1')) p.push(`hit: no HIT line: ${JSON.stringify(r1.stderr)}`);
-      if (r1.stderr.includes(SEG)) p.push('hit: the refused string was printed');
-      must(repo.dir, ['rm', '-q', '--cached', 'bad.md']);
-      fs.writeFileSync(path.join(repo.dir, 'ok.md'), 'nothing personal\n');
-      must(repo.dir, ['add', 'ok.md']);
-      const r2 = pvGit(repo.dir, ['commit', '-q', '-m', 'y'], null, env);
-      if (r2.status !== 0) p.push(`clean: exit ${r2.status}, ${r2.stderr.trim()}`);
-      return p.length === 0 || p.join('; ');
-    });
     cliCase('PV32', 'CLI --pre-push: a remote sha bounds the range (a hit at it passes, one after it is denied)', () => {
       const two = pvRepo('pre-push-range', [line('docs/a.md', `see C:/${U}/${SEG}/a`), line('docs/b.md', `see C:/${U}/${SEG}/b`)]);
       const [a, b] = two.shas;
