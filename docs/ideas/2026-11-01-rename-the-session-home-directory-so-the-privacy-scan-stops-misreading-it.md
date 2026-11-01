@@ -25,3 +25,15 @@ name and role); `internal/hook/hook.go` (the trailers path beside the tree); `.c
 
 - Whether the engine needs the directory to be literally named `home`, or only `HOME` to point at it.
 - Existing sessions on the live instance hold the old name; a migration or a tolerant lookup.
+
+Question: rename the session home directory (ADR 0022) at the cost of a design-wide edit and a migration, or keep it
+and add an allow entry per file name? The name is fixed in code (`grep -rn '"home"' --include=*.go internal`: the
+session service's `stageHome`, `internal/git/git.go`, `internal/hook/hook.go`, `internal/cli/engine.go`, and the check in
+`internal/hook/facts.go` that matches `sessions/<id>/home` with `.claude` below it) and in the design docs (`grep -rln`
+for the directory name under `docs/design/`); sessions on the live instance hold the old name, so the rename needs a
+tolerant lookup or migration, and an ADR 0022 amendment. Recommendation: rename (`engine-home`), because the allow list
+is the owner's and grows with every new file name in that directory (`privacy.allow` in `.claude/hooks/policy.json`
+already holds `land-result`, `trailers` and `hook.log` for it), and the engine only needs `HOME` to point at it;
+schedule it after P34 to P37 (they touch the same session files) as one `coder` pass with the amendment done first by
+the `architect`. Otherwise keep the name and accept the entries.
+Answer:
