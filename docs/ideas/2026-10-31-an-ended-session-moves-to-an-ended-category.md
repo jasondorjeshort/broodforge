@@ -25,3 +25,12 @@ that one is about not handing off, this one is about where the channel waits aft
 - A moved channel keeps its history and the driver's read access; whether the bot should also
   lock it (no send) so a stray message does not look like it reached a live session.
 - A resumed or reopened session would have to move back.
+
+Question: Build the move alone now (a second category "Ended sessions", the channel locked against sends on the move, removal timer unchanged), leaving lazy removal for a later idea?
+
+Recommendation: yes. Checked 2026-10-31: the move is one channel edit (the bot already holds `ManageChannels` in
+`categoryPerms`, `internal/discord/gateway.go`) made where the gateway calls `scheduleVenueDelete` for an ended session;
+it is not quite one call in total, since the category needs a setup slot beside the Sessions one (`internal/setup/discord.go`,
+the channels step) and a config key beside `venue.category`. The category name and the send lock are what people see,
+so you confirm both. Lazy removal, which touches the `VenueDeleteAfter` timer and the 50-per-category cap, is its own idea.
+Answer:
