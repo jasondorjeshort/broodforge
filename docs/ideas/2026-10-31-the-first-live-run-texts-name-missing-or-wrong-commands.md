@@ -64,4 +64,12 @@ no default can only be confused. The lines are drafted from the anchors (`intern
 - Item 5: `Could not start a session: the host's <branch> and the remote's have diverged, usually after a history rewrite; the owner resets the host's copy.`
 Item 3's wrong refusal (a credential that needs a login should print 04's "your default credential <id> needs a login",
 not this text) is a code bug against 04, built regardless of this answer (`docs/HANDOFF.md`, Next 2: tester).
-Answer:
+Answer: 2026-10-31, the owner accepts all five as revised in the walkthrough, and a member's first
+credential becomes their default (a second one leaves the default unchanged). The accepted lines,
+`<path>` being the running binary's own path (`os.Executable`), never a bare `broodforge`:
+- Item 1, no service installed (a service keeps the old line): `Setup done. Nothing is running yet: start the bot with <path> serve, then in Discord run /register and /credential add.`
+- Item 2, two forms by who asks. Owner: `<id> is added. Sign it in on the host: <path> credential login <id>`. Member: `<id> is added. The owner signs it in on the host and sends you a link; reply with the code.`
+- Item 3: `Could not start a session: you have no default credential; set one with /credential default id:<id>.`
+- Item 4: `Token for pushes to <repository URL> (not shown; Enter to add later with setup git-credential):`
+- Item 5, split by reader. Venue: `Could not start a session: the remote's <branch> history was rewritten, so the host's copy no longer matches. The owner needs to reset it.` Notice channel: `<project>: host copy of <branch> diverged from the remote. Fix: git -C <canonical> branch -f <branch> origin/<branch>`. A `canonical reset <project>` command is a separate idea, not filed.
+This is now a Plan: coder, one pass; `04-ux.md` rows updated to these texts in the same pass.

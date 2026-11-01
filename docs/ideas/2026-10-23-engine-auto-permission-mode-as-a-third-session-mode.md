@@ -47,6 +47,12 @@ Discord through the same prompt path as `prompt` mode.
 - Whether this is a major choice for the proposal loop (an incompatible change to the `mode`
   values in configuration and the debug surface); likely yes, so triage routes it to the architect.
 
+2026-10-31, the owner: "Auto permission mode is a priority", with "the option to set this default
+for a server or channel". The spike below runs now, at the front of the wave. On a pass, the third
+value goes straight to an `architect` pass (ADR 0020 amendment, the `04-ux.md` header word and mode
+rows, the `mode` key's third value at the project level and in the channel override, both already in
+`internal/config/types.go`) and then a coder pass; no separate proposal.
+
 Plan: tester, a spike on the PC, real engine, as a finding (`finding` skill, area `spike /
 permission modes`), no code. It runs as the owner, existing login (no scratch `CLAUDE_CONFIG_DIR`;
 the 2026-10-15 hook-flow spike set none), so claim 1 tests `auto`, not login. `Args` pins `default`,

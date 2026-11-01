@@ -33,4 +33,7 @@ Recommendation: yes. Checked 2026-10-31: the move is one channel edit (the bot a
 it is not quite one call in total, since the category needs a setup slot beside the Sessions one (`internal/setup/discord.go`,
 the channels step) and a config key beside `venue.category`. The category name and the send lock are what people see,
 so you confirm both. Lazy removal, which touches the `VenueDeleteAfter` timer and the 50-per-category cap, is its own idea.
-Answer:
+Answer: 2026-10-31, yes: the category is named "Ended sessions", the channel is locked against
+sends for everyone but the bot on the move, the delete timer is unchanged. Lazy removal is a later
+idea. Now a Plan: coder, one pass (the setup slot and config key, the move and lock at the end
+path, `04-ux.md` Ending a session, the dry-run outbox showing the edit).

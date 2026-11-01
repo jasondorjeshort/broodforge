@@ -49,4 +49,5 @@ of it).
 
 Question: credit a reviewer-only model on the commits made after its launch, as P38 builds it, or
 exempt it from those too?
-Answer:
+Answer: 2026-10-31, credit (the first reading, as P38 builds it). Nothing more to build; this
+file is deleted when P38 lands.

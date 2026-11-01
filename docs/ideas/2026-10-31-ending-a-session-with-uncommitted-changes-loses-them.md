@@ -27,4 +27,11 @@ the third moves the loss to the host.
 Question: which of the three the driver sees, and the line's wording. The refusal (`Could not end:
 the tree has uncommitted changes to <n> files; ask the session to commit, or ...`) is the
 coordinator's suggestion.
-Answer:
+Answer: 2026-10-31, the second shape: the end commits the dirty tree as one WIP commit with the
+session's trailers and hands it off like any other commit, no refusal. The owner's reason: a refusal
+makes the human the safety mechanism and a discard follows; "lose nothing" must hold without one.
+Under ADR 0028 the WIP commit cannot land on `main` without a review fact, so it falls back to the
+session branch as every handoff does, and the push scan runs on it. The end summary line:
+`1 commit · pushed to <branch> (WIP: uncommitted changes committed at end)`. A deliberate drop is
+the discard of the related idea. Now a Plan: coder, one pass (`internal/git/handoff.go`, the
+`04-ux.md` Ending row, the golden that covers the end).
