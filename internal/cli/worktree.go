@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -429,8 +430,8 @@ const titleRunes = 60
 // load reads what a handoff needs: the session and its project's repo, the driver's
 // registration, the other participants in join order (a contributor joins on their first
 // accepted message, R-13, so joined_at is when they first wrote), and every model with
-// non-zero usage, by policy's display name, from the start of its first turn (the usage row's
-// time only where no turn row exists).
+// non-zero usage, by policy's display name, from its first model_seen row, else the start of its
+// first turn (the usage row's time only where no turn row exists).
 func (s *WorktreeService) load(id string) (loadedSession, error) {
 	var ls loadedSession
 	var projectID, driverID, firstInput string
@@ -467,8 +468,26 @@ WHERE p.session_id = ? AND p.user_id != ? ORDER BY p.joined_at, p.rowid`,
 	if err != nil {
 		return ls, err
 	}
-	// A model is a co-author from the start of its first turn: its usage row is written at
-	// the turn's end, after the commits the turn made (03-architecture.md, Attribution).
+	// A model with usage is owed from the moment the bot first recorded it (model_seen, by
+	// display name, the earliest of its ids), else from the start of its first turn, since its
+	// usage row is written at the turn's end, after the commits the turn made, else from that
+	// row (03-architecture.md, Attribution; ADR 0025 rule 10 as amended 2026-10-31).
+	firstSeen := map[string]time.Time{}
+	err = s.Store.Query(`SELECT model, first_seen_at FROM model_seen WHERE session_id = ?`, []store.Value{store.Text(id)},
+		func(r *store.Row) error {
+			t, err := time.Parse(store.TimeLayout, r.Text(1))
+			if err != nil {
+				return err
+			}
+			name := policy.ModelDisplayName(r.Text(0))
+			if have, ok := firstSeen[name]; !ok || t.Before(have) {
+				firstSeen[name] = t
+			}
+			return nil
+		})
+	if err != nil {
+		return ls, err
+	}
 	err = s.Store.Query(`SELECT u.model, min(coalesce(t.started_at, u.recorded_at)) FROM usage_record u
 LEFT JOIN turn t ON t.session_id = u.session_id AND t.seq = u.turn_seq
 WHERE u.session_id = ? AND u.input_tokens + u.output_tokens + u.cache_read_tokens + u.cache_write_tokens > 0
@@ -477,13 +496,17 @@ GROUP BY u.model ORDER BY 2, 1`, []store.Value{store.Text(id)}, func(r *store.Ro
 		if err != nil {
 			return err
 		}
-		ls.attr.Models = append(ls.attr.Models, git.Contributor{
-			Identity: git.Identity{Name: policy.ModelDisplayName(r.Text(0)), Email: git.ModelEmail}, Since: t})
+		name := policy.ModelDisplayName(r.Text(0))
+		if seen, ok := firstSeen[name]; ok {
+			t = seen
+		}
+		ls.attr.Models = append(ls.attr.Models, git.Contributor{Identity: git.Identity{Name: name, Email: git.ModelEmail}, Since: t})
 		return nil
 	})
 	if err != nil {
 		return ls, err
 	}
+	sort.SliceStable(ls.attr.Models, func(i, j int) bool { return ls.attr.Models[i].Since.Before(ls.attr.Models[j].Since) })
 	ls.privacy = instancePrivacy(s.config().Instance.Privacy)
 	repo := ls.project.Repo
 	ls.git = git.Session{Root: s.Root, ID: id, Instance: s.config().Instance.InstanceName, Canonical: repo.Canonical,

@@ -5,9 +5,12 @@ package hook
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -332,7 +335,188 @@ type childLogLine struct {
 	ChildLine
 }
 
-func appendLog[T logLine | childLogLine](path string, l T) error {
+// pinLogLine is the hook.log line of an allowed subagent call whose pin was not written: pin
+// `none` (nothing pins) or `failed` (the trailers file could not be written), and why.
+type pinLogLine struct {
+	Time      string `json:"time"`
+	Session   string `json:"session"`
+	Tool      string `json:"tool"`
+	ToolUseID string `json:"toolUseId"`
+	Pin       string `json:"pin"`
+	Why       string `json:"why"`
+}
+
+// The pin's hook.log values.
+const (
+	pinNone   = "none"
+	pinFailed = "failed"
+)
+
+// The co-author trailer's key and every model's address, git.TrailerKey and git.ModelEmail:
+// hook imports policy alone (03-architecture.md, Components), so it keeps its own copy, and its
+// test holds the two equal.
+const (
+	trailerKey = "Co-Authored-By"
+	modelEmail = "noreply@anthropic.com"
+)
+
+// agentsFile is the copy's rendered agents (workflow.AgentsFile).
+const agentsFile = "agents.json"
+
+// subagentTool is the engine's subagent tool: Agent, Task on an older pin.
+func subagentTool(tool string) bool { return tool == "Agent" || tool == "Task" }
+
+// PinLine is the trailer line of a model id: `Co-Authored-By: <display name> <noreply@anthropic.com>`.
+func PinLine(model string) string {
+	return trailerKey + ": " + policy.ModelDisplayName(model) + " <" + modelEmail + ">"
+}
+
+// pinOf is the model a subagent call pins (policy.Pin) from the copy's agents.json; workflow ""
+// is no copy. An agents.json that exists but cannot be read pins nothing, with the reason.
+func pinOf(in Input, workflow string) policy.Pinned {
+	var agents []byte
+	if workflow != "" {
+		b, err := os.ReadFile(filepath.Join(filepath.FromSlash(workflow), agentsFile))
+		switch {
+		case err == nil:
+			agents = b
+		case !errors.Is(err, fs.ErrNotExist):
+			return policy.Pinned{Why: "cannot read " + EnvWorkflow + "/" + agentsFile + ": " + errText(err)}
+		}
+	}
+	return policy.Pin(in.ToolInput, agents)
+}
+
+// trailersPath is the session's trailers file, in the home directory beside the tree
+// (sessions/<id>/home/trailers, where git.CommitMsg reads it).
+func trailersPath(tree string) string {
+	return filepath.Join(filepath.Dir(filepath.Clean(filepath.FromSlash(tree))), "home", "trailers")
+}
+
+// hasLine reports whether the trailers file's text holds line, surrounding space ignored.
+func hasLine(text []byte, line string) bool {
+	for _, l := range strings.Split(string(text), "\n") {
+		if strings.TrimSpace(l) == line {
+			return true
+		}
+	}
+	return false
+}
+
+// The append's bounded budget: pinTries attempts pinWait apart, for the lock and for the
+// read and rename under it (a rename onto a file another process holds open fails on Windows
+// with "Access is denied" until it lets go). A lock older than staleLock is a hook that died
+// holding it, and is taken over.
+const (
+	pinTries  = 50
+	pinWait   = 20 * time.Millisecond
+	staleLock = 10 * time.Second
+)
+
+// appendTrailer adds line to the trailers file at path when it is missing, by a temp file
+// beside it and a rename, as git.WriteTrailers writes it (two writers, each atomic: ADR 0025
+// rule 10 as amended 2026-10-31). Hook processes appending at once (parallel Agent calls) are
+// serialised by an O_EXCL lock file beside it, `trailers.lock`, so neither rename drops the
+// other's line; the bot's rewrite takes no lock and restores from the record. A missing file
+// is written with the line alone. Giving up within the budget is the error.
+func appendTrailer(path, line string) error {
+	lock := path + ".lock"
+	var err error
+	for i := 0; ; i++ {
+		var f *os.File
+		if f, err = os.OpenFile(lock, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600); err == nil {
+			_ = f.Close()
+			break
+		}
+		if st, serr := os.Stat(lock); serr == nil && time.Since(st.ModTime()) > staleLock {
+			_ = os.Remove(lock)
+			continue
+		}
+		if i+1 >= pinTries {
+			return fmt.Errorf("%s is held: %s", filepath.Base(lock), errText(err))
+		}
+		time.Sleep(pinWait)
+	}
+	defer os.Remove(lock)
+	for i := 0; ; i++ {
+		if err = appendOnce(path, line); err == nil || i+1 >= pinTries {
+			return err
+		}
+		time.Sleep(pinWait)
+	}
+}
+
+// appendOnce is one read, temp-file write and rename of appendTrailer, under its lock.
+func appendOnce(path, line string) error {
+	old, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	if hasLine(old, line) {
+		return nil
+	}
+	text := string(old)
+	if text != "" && !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), ".trailers-*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	_, werr := f.WriteString(text + line + "\n")
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr == nil {
+		werr = os.Rename(tmp, path)
+	}
+	if werr != nil {
+		_ = os.Remove(tmp)
+	}
+	return werr
+}
+
+// tryPin is the line pre-tool-use would append for an allowed subagent call: the pin's line
+// when the trailers file beside tree lacks it, else "". It writes nothing.
+func tryPin(in Input, r policy.Result, tree, workflow string) string {
+	if r.Decision != policy.Allow || !subagentTool(in.ToolName) {
+		return ""
+	}
+	p := pinOf(in, workflow)
+	if p.Model == "" {
+		return ""
+	}
+	line := PinLine(p.Model)
+	if old, err := os.ReadFile(trailersPath(tree)); err == nil && hasLine(old, line) {
+		return ""
+	}
+	return line
+}
+
+// writePin is pre-tool-use's step after the decision and the chain: on an allowed subagent
+// call, the call's pinned model's line appended to the trailers file. No pin, or a failed
+// write, is the returned hook.log line and the decision stands: the line is a help, so this is
+// the one error the hook logs instead of failing closed on (03-hook-contract.md).
+func writePin(in Input, r policy.Result, tree, workflow string) *pinLogLine {
+	if r.Decision != policy.Allow || !subagentTool(in.ToolName) {
+		return nil
+	}
+	p := pinOf(in, workflow)
+	if p.Model == "" {
+		return &pinLogLine{Pin: pinNone, Why: p.Why}
+	}
+	// A relative tree would put the file under the hook's working directory.
+	if !filepath.IsAbs(filepath.FromSlash(tree)) {
+		return &pinLogLine{Pin: pinFailed, Why: "tree not absolute"}
+	}
+	if err := appendTrailer(trailersPath(tree), PinLine(p.Model)); err != nil {
+		return &pinLogLine{Pin: pinFailed, Why: "the trailers file: " + errText(err)}
+	}
+	return nil
+}
+
+func appendLog[T logLine | childLogLine | pinLogLine](path string, l T) error {
 	b, err := json.Marshal(l)
 	if err != nil {
 		return err
@@ -424,6 +608,11 @@ func preToolUse(stdin io.Reader, stdout io.Writer, lookup func(string) (string, 
 	if err := appendLog(log, logLine{Time: stamp(), Session: session, Tool: in.ToolName,
 		ToolUseID: in.ToolUseID, Cell: r.Cell.String(), Decision: r.Decision.String(), Trace: trace}); err != nil {
 		return err
+	}
+	// The pin goes in before the answer, so the subagent's first commit finds its line.
+	if pl := writePin(in, r, s.Tree, workflow); pl != nil {
+		pl.Time, pl.Session, pl.Tool, pl.ToolUseID = stamp(), session, in.ToolName, in.ToolUseID
+		_ = appendLog(log, *pl) // a help never blocks, its log line included
 	}
 	if _, err := stdout.Write(out); err != nil {
 		return &Error{"cannot write stdout"}

@@ -1,0 +1,11 @@
+{
+  "builder": {
+    "description": "Builds; no model of its own",
+    "prompt": "Build."
+  },
+  "runner": {
+    "description": "Runs commands and commits",
+    "prompt": "Run.",
+    "model": "haiku"
+  }
+}

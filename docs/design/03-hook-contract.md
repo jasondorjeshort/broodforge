@@ -14,7 +14,8 @@ the amendments of 2026-10-16 in ADRs 0020 and 0022 are the decisions this text a
 
 The engine runs `<install>/bin/broodforge hook pre-tool-use` for every tool call, a subagent's
 included (the engine's documented behaviour; no spike fixture holds a subagent launch call, which the pinned engine names `Agent`; `Task` is kept for an older pin), registered with an empty matcher and a `timeout` of thirty seconds (ten before C39;
-the hook does no I/O beyond stdin, the environment and one log line, so the bound is never
+the hook does no I/O beyond stdin, the environment, its log lines and, on an allowed `Agent` call,
+the copy's `agents.json` and one line appended to the session's `trailers` file, so the bound is never
 reached by a healthy hook and the engine's fallback below is reached less often) in the bot-owned
 settings file that ADR 0022 (Decision) places on the engine's settings path, read-only to the
 session, for both credential kinds; the hook runs as `broodforge-engine` inside the sandbox on the
@@ -36,7 +37,14 @@ prompt (a `system/permission_denied` line, then an error result `Claude requeste
 write to <path>, but you haven't granted it yet.`) and allows and runs a `Bash` command on the
 engine's own safe list (`echo ok` ran). So the hook wraps everything, malformed stdin, a missing
 variable and a missing `transcript_path` included, in one handler that prints `hook: <what>` on
-stderr and exits 2: it fails closed on every error it can see. The timeout is the one failure it
+stderr and exits 2: it fails closed on every error it can see, with one exception. The pin write
+(ADR 0025 rule 10 as amended 2026-10-31): after the decision and the chain, on an `Agent` (or
+`Task`) call it answers `allow`, the hook appends the call's pinned model's trailer line to
+`sessions/<id>/home/trailers` (`tool_input.model`, else the copy's `agents.json` `model` for the
+type, through `policy`'s alias table), under a `trailers.lock` file and by temp file and rename,
+within a bounded retry; no pin, a `BROODFORGE_TREE` that is not absolute, or a write that fails
+is logged and the decision stands, since the line is a help and the check owes from the bot's
+record, not the file. The timeout is the one failure it
 cannot catch and it is a real hole: a safe-listed `Bash` runs in read-only reach, and in prompt
 mode with nobody asked. The stream marks every such call (next paragraph), so it is audited, not
 silent; ADR 0020's C39 amendment weighs this and keeps the design.
@@ -59,7 +67,8 @@ audited `hook bypassed` with the tool, the outcome (ran, or refused by the engin
 (timed out, or the hook failed) and the text, shown as 04's hook-bypassed flow, the turn
 continuing. `result.permission_denials` lists hook and engine denies alike.
 `sessions/<id>/home/hook.log` (one line per decision, debugging only, never audit) shows which
-calls the hook answered.
+calls the hook answered; an allowed `Agent` call whose pin was not written adds a second line with
+`pin` (`none`: nothing pins; `failed`: the write did not happen) and `why`.
 
 ## Environment
 
@@ -76,7 +85,7 @@ Set by `spawn` on the engine process and inherited by the hook; the kept list in
 | `BROODFORGE_ANSWER` | `<tool_use_id>:allow` or `<tool_use_id>:deny` on a resume after a click or a prompt timeout; else absent |
 | `BROODFORGE_ANSWER_REASON` | after a prompt timeout: the deny reason text, written by `session` (04's `the prompt timed out after 5 minutes`) and returned by the hook verbatim; on a resume of a `land` cell call: the land's outcome line (with `allow`) or its refusal text (with `deny`), ADR 0028; else absent |
 | `BROODFORGE_SESSION_ALLOW` | comma-separated tool names a person allowed for the session; absent unless 04 adopts that button |
-| `BROODFORGE_HOOK_LOG` | `sessions/<id>/home/hook.log`, one line per decision, for debugging only, never audit |
+| `BROODFORGE_HOOK_LOG` | `sessions/<id>/home/hook.log`, one line per decision (and a `pin` line for an allowed `Agent` call whose pin was not written), for debugging only, never audit |
 | `BROODFORGE_WORKFLOW` | absolute path of the session's copy, `workflow/<id>` (ADR 0025 rule 5); absent when nothing was copied or `inject` is `none`: the hook then runs no child (The child chain) |
 
 Under `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` the engine strips `CLAUDE_CONFIG_DIR` from the hook as

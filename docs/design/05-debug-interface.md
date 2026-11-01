@@ -197,7 +197,8 @@ The same code path with flags, nothing logged: `broodforge hook try --tool <name
 '<json>'] [--tool-use-id <id>] [--cwd <path>] [--mode prompt|policy] [--reach read-only|code]
 [--tree <path>] [--canonical <path>] --transcript-path <path> [--answer <id>:allow|deny]
 [--answer-reason <text>] [--session-allow <names>] [--workflow <dir>] [--expect allow|deny|defer|hook]` prints
-`<decision>  <reason>` (defaults: `{}`, `toolu_01`, the tree, `prompt`, `code`, `.`, the tree); a
+`<decision>  <reason>  <pin>` (defaults: `{}`, `toolu_01`, the tree, `prompt`, `code`, `.`, the tree; `pin` is the
+trailer line an allowed `Agent` call would append, `""` for none, `05-debug-interface-git.md`); a
 hook error is `error: hook: <what>`, exit 1; `--transcript-path` is what the hook derives the
 config directory from (`03-hook-contract.md`, Paths), so a case can read inside it. `--workflow` runs that copy's
 `PreToolUse` children as the hook does (`03-hook-contract.md`, The child chain), after a decision that is not `deny`;

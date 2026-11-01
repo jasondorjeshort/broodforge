@@ -47,8 +47,11 @@ var hookPostToolUse = Command{
 // [--tool-use-id <id>] [--mode prompt|policy] [--reach read-only|code] [--tree <path>]
 // [--canonical <path>] --transcript-path <path> [--answer <id>:allow|deny] [--answer-reason
 // <text>] [--session-allow <names>] [--workflow <dir>] [--expect allow|deny|defer|hook]`,
-// printing `<decision>  <reason>`; --workflow runs the copy's PreToolUse children as the hook
-// does under BROODFORGE_WORKFLOW. A hook error is `error: hook: <what>`, exit 1. Nothing is logged.
+// printing `<decision>  <reason>  <pin>`; --workflow runs the copy's PreToolUse children as the
+// hook does under BROODFORGE_WORKFLOW and is the agents.json an Agent call's pin is read from;
+// pin is the trailer line pre-tool-use would append to the trailers file beside --tree, empty
+// for none (05-debug-interface-git.md). A hook error is `error: hook: <what>`, exit 1. Nothing
+// is logged and nothing is written.
 var hookTry = Command{
 	Name:   "hook try",
 	Class:  ClassStandalone,
@@ -103,18 +106,19 @@ func runHookPostToolUse(_ context.Context, env *Env) error {
 	return nil
 }
 
-var tryColumns = []string{"decision", "reason"}
+var tryColumns = []string{"decision", "reason", "pin"}
 
 type tryResult struct {
 	Decision string `json:"decision"`
 	Reason   string `json:"reason"`
+	Pin      string `json:"pin"`
 }
 
 func runHookTry(_ context.Context, env *Env) error {
 	if env.String("tool") == "" {
 		return &usageError{"hook try: --tool <name> is required"}
 	}
-	d, reason, err := hook.Try{Tool: env.String("tool"), Input: json.RawMessage(env.String("input")),
+	d, reason, pin, err := hook.Try{Tool: env.String("tool"), Input: json.RawMessage(env.String("input")),
 		ToolUseID: env.String("tool-use-id"), Cwd: env.String("cwd"), Mode: env.String("mode"),
 		Reach: env.String("reach"), Tree: env.String("tree"), Canonical: env.String("canonical"),
 		Transcript: env.String("transcript-path"), Answer: env.String("answer"),
@@ -123,7 +127,7 @@ func runHookTry(_ context.Context, env *Env) error {
 	if err != nil {
 		return hookError(err)
 	}
-	out, err := encodeAny(tryResult{d, reason})
+	out, err := encodeAny(tryResult{d, reason, pin})
 	if err != nil {
 		return err
 	}

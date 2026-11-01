@@ -54,8 +54,11 @@ type Try struct {
 	Environ []string
 }
 
-// Run decides one try through Decide, with the defaults filled in, then the chain.
-func (t Try) Run() (decision, reason string, err error) {
+// Run decides one try through Decide, with the defaults filled in, then the chain. pin is the
+// trailer line pre-tool-use would append for the call (an allowed Agent or Task whose model
+// tool_input or Workflow's agents.json pins, missing from the trailers file beside Tree), else
+// ""; Run writes nothing and logs nothing.
+func (t Try) Run() (decision, reason, pin string, err error) {
 	s := Settings{Tree: t.Tree, Canonical: t.Canonical}
 	if s.Tree == "" {
 		s.Tree = DefaultTree
@@ -71,13 +74,13 @@ func (t Try) Run() (decision, reason string, err error) {
 		reach = DefaultReach
 	}
 	if s.Mode, err = ParseMode(mode); err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	if s.Reach, err = ParseReach(reach); err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	if s.Answer, err = ParseAnswer(t.Answer, t.AnswerReason); err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	s.SessionAllow = policy.SplitList(t.SessionAllow)
 	id := t.ToolUseID
@@ -85,19 +88,19 @@ func (t Try) Run() (decision, reason string, err error) {
 		id = DefaultToolUseID
 	}
 	if t.Tool == "" {
-		return "", "", &Error{"no tool_name"}
+		return "", "", "", &Error{"no tool_name"}
 	}
 	in := Input{ToolName: t.Tool, ToolInput: t.Input, ToolUseID: id, Cwd: t.Cwd, TranscriptPath: t.Transcript}
 	r, err := Decide(in, s)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	if runsChain(r, s, t.Workflow) {
 		if r, err = t.chain(in, s, r); err != nil {
-			return "", "", err
+			return "", "", "", err
 		}
 	}
-	return r.Decision.String(), r.Reason, nil
+	return r.Decision.String(), r.Reason, tryPin(in, r, s.Tree, t.Workflow), nil
 }
 
 // chain runs the copy's PreToolUse children as the hook does, on the stdin the engine would
@@ -235,7 +238,7 @@ func Cases(r io.Reader, dir string) ([]CaseResult, error) {
 				continue
 			}
 		}
-		got, _, err := Try{Tool: c.Tool, Input: c.Input, ToolUseID: c.ToolUseID, Cwd: c.Cwd, Mode: c.Mode, Reach: c.Reach,
+		got, _, _, err := Try{Tool: c.Tool, Input: c.Input, ToolUseID: c.ToolUseID, Cwd: c.Cwd, Mode: c.Mode, Reach: c.Reach,
 			Tree: c.Tree, Canonical: c.Canonical, Transcript: c.Transcript, Answer: c.Answer,
 			AnswerReason: c.AnswerReason, SessionAllow: c.SessionAllow, Workflow: c.Workflow}.Run()
 		var he *Error

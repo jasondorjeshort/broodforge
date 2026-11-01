@@ -51,7 +51,7 @@ func (w world) try(tool, mode, reach string, input map[string]string) (string, e
 	if err != nil {
 		return "", err
 	}
-	d, _, err := Try{Tool: tool, Input: b, Mode: mode, Reach: reach, Tree: w.tree, Canonical: w.canon, Transcript: w.transcript}.Run()
+	d, _, _, err := Try{Tool: tool, Input: b, Mode: mode, Reach: reach, Tree: w.tree, Canonical: w.canon, Transcript: w.transcript}.Run()
 	return d, err
 }
 
@@ -143,7 +143,7 @@ func TestHardLinkToAnotherHarness(t *testing.T) {
 	}
 	for name, want := range map[string]string{"innocent.txt": "deny", "notes.md": "deny", "plain.txt": "allow"} {
 		for _, reach := range []string{"read-only", "code"} {
-			d, _, err := Try{Tool: "Read", Input: json.RawMessage(`{"file_path":"` + name + `"}`), Mode: "policy", Reach: reach,
+			d, _, _, err := Try{Tool: "Read", Input: json.RawMessage(`{"file_path":"` + name + `"}`), Mode: "policy", Reach: reach,
 				Tree: tree, Transcript: filepath.Join(cfg, "projects", "x", "s.jsonl")}.Run()
 			if err != nil || d != want {
 				t.Errorf("%s %s: %s %v, want %s", name, reach, d, err, want)
@@ -199,7 +199,7 @@ func TestLinkedTree(t *testing.T) {
 	alias := filepath.Join(filepath.Dir(w.tree), "alias")
 	link(t, w.tree, alias)
 	// The tree named through a link and a path named directly agree once both are canonical.
-	d, _, err := Try{Tool: "Write", Input: json.RawMessage(`{"file_path":"` + filepath.ToSlash(filepath.Join(w.tree, "a.go")) + `"}`),
+	d, _, _, err := Try{Tool: "Write", Input: json.RawMessage(`{"file_path":"` + filepath.ToSlash(filepath.Join(w.tree, "a.go")) + `"}`),
 		Mode: "policy", Reach: "code", Tree: alias, Transcript: w.transcript}.Run()
 	if err != nil || d != "allow" {
 		t.Errorf("linked tree: %s %v", d, err)

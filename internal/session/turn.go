@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -134,7 +136,9 @@ func (s *Service) Submit(ctx context.Context, req SendRequest) (Submitted, error
 }
 
 // trailers are the co-author lines a commit made now carries (03 Git, Attribution): the
-// other participants in join order, then every model with usage, by display name.
+// other participants in join order, then every model the bot has seen (model_seen) or that has
+// usage, by display name, in first-seen order (a model's earlier of its first sighting and its
+// first usage row; ADR 0025 rule 10 as amended 2026-10-31).
 func (s *Service) trailers(l *live) ([]string, error) {
 	var lines []string
 	err := s.cfg.Store.Query(`SELECT r.git_name, r.git_email FROM participant p JOIN registration r ON r.user_id = p.user_id
@@ -146,13 +150,133 @@ WHERE p.session_id = ? AND p.user_id != ? ORDER BY p.joined_at, p.rowid`,
 	if err != nil {
 		return nil, err
 	}
-	err = s.cfg.Store.Query(`SELECT model FROM usage_record WHERE session_id = ?
-    AND input_tokens + output_tokens + cache_read_tokens + cache_write_tokens > 0
-GROUP BY model ORDER BY min(recorded_at), model`, []store.Value{store.Text(l.id)}, func(r *store.Row) error {
-		lines = append(lines, git.Identity{Name: policy.ModelDisplayName(r.Text(0)), Email: git.ModelEmail}.Trailer())
+	seen := map[string]bool{}
+	err = s.cfg.Store.Query(`SELECT model, min(at) FROM (
+    SELECT model, first_seen_at AS at FROM model_seen WHERE session_id = ?
+    UNION ALL
+    SELECT model, recorded_at FROM usage_record WHERE session_id = ?
+        AND input_tokens + output_tokens + cache_read_tokens + cache_write_tokens > 0)
+GROUP BY model ORDER BY 2, 1`, []store.Value{store.Text(l.id), store.Text(l.id)}, func(r *store.Row) error {
+		line := git.Identity{Name: policy.ModelDisplayName(r.Text(0)), Email: git.ModelEmail}.Trailer()
+		if !seen[line] { // two ids of one display name are one line
+			seen[line] = true
+			lines = append(lines, line)
+		}
 		return nil
 	})
 	return lines, err
+}
+
+// model_seen's via values (migration 0005): the turn's own model at its start, the model an
+// Agent call pins at its launch, any other at its first assistant line.
+const (
+	seenTurn   = "turn"
+	seenPin    = "pin"
+	seenStream = "stream"
+)
+
+// seenTx records the first sighting of model in the session at at, the bot's clock, in tx; a row
+// already there is kept (insert-if-absent). toolUseID and agent name a pin's call.
+func (s *Service) seenTx(tx *store.Tx, l *live, model, via, toolUseID, agent, at string) error {
+	_, err := tx.Exec(`INSERT INTO model_seen (session_id, model, first_seen_at, via, tool_use_id, agent)
+VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (session_id, model) DO NOTHING`,
+		store.Text(l.id), store.Text(model), store.Text(at), store.Text(via), store.OptText(toolUseID), store.OptText(agent))
+	return err
+}
+
+// sawModel is a model seen mid-turn (a pin, or an assistant line): its model_seen row when the
+// session has none, then the trailers file rewritten from the record (03 Git, Attribution). A
+// model this process already recorded costs nothing. l.mu is not held; a failure is shown as a
+// store failure is, never the turn's end.
+func (s *Service) sawModel(l *live, n int, model, via, toolUseID, agent string, c call) {
+	l.mu.Lock()
+	known := l.seen[model]
+	l.mu.Unlock()
+	if known {
+		return
+	}
+	if err := s.cfg.Store.Write(func(tx *store.Tx) error { return s.seenTx(tx, l, model, via, toolUseID, agent, s.stamp()) }); err != nil {
+		l.log.add(storeFailed(s.stamp(), n, toolUseID, c, err))
+		return
+	}
+	l.mu.Lock()
+	l.markSeen(model)
+	l.mu.Unlock()
+	s.rewriteTrailers(l, n, toolUseID, c)
+}
+
+// unpin undoes the pin of a subagent call whose result is a denial or a refusal: a launch that
+// never ran credits nothing. Its model_seen row (via pin, this tool_use_id) is deleted and the
+// trailers file rewritten, so a model with usage or a later sighting keeps what remains: the
+// usage table, or the next assistant line naming it, which records it again. A sighting between
+// the pin and the denial is not kept (one row per model); the check then owes the model from its
+// first turn's start, a refusal at the end, never a wrong credit.
+func (s *Service) unpin(l *live, n int, toolUseID string, c call) {
+	var model string
+	err := s.cfg.Store.Write(func(tx *store.Tx) error {
+		err := tx.Query("SELECT model FROM model_seen WHERE session_id = ? AND tool_use_id = ? AND via = ?",
+			[]store.Value{store.Text(l.id), store.Text(toolUseID), store.Text(seenPin)}, func(r *store.Row) error {
+				model = r.Text(0)
+				return nil
+			})
+		if err != nil || model == "" {
+			return err
+		}
+		_, err = tx.Exec("DELETE FROM model_seen WHERE session_id = ? AND tool_use_id = ? AND via = ?",
+			store.Text(l.id), store.Text(toolUseID), store.Text(seenPin))
+		return err
+	})
+	if err != nil {
+		l.log.add(storeFailed(s.stamp(), n, toolUseID, c, err))
+		return
+	}
+	if model == "" {
+		return
+	}
+	l.mu.Lock()
+	delete(l.seen, model)
+	l.mu.Unlock()
+	s.rewriteTrailers(l, n, toolUseID, c)
+}
+
+// markSeen notes that model has its model_seen row; l.mu is held.
+func (l *live) markSeen(model string) {
+	if l.seen == nil {
+		l.seen = map[string]bool{}
+	}
+	l.seen[model] = true
+}
+
+// rewriteTrailers writes the trailers file from trailers(); a failure is an internal-error
+// event, the turn going on (the file is a help; the check owes from the record).
+func (s *Service) rewriteTrailers(l *live, n int, toolUseID string, c call) {
+	lines, err := s.trailers(l)
+	if err == nil {
+		err = git.WriteTrailers(l.git.Dir(), lines)
+	}
+	if err != nil {
+		ev := storeFailed(s.stamp(), n, toolUseID, c, err)
+		ev.Summary = "trailers: " + err.Error()
+		l.log.add(ev)
+	}
+}
+
+// streamModel is whether an assistant line's model is one to record: the engine's own marker
+// for a line no model wrote (`<synthetic>`) is not a model.
+func streamModel(m string) bool {
+	return m != "" && !strings.HasPrefix(m, "<")
+}
+
+// pinOf is the model a subagent call pins, resolved as the hook resolves it (policy.Pin) from
+// the copy's agents.json the session holds; no copy, or a file that cannot be read, is none.
+func (l *live) pinOf(input json.RawMessage) policy.Pinned {
+	var agents []byte
+	if l.wf.agents != "" {
+		if b, err := os.ReadFile(filepath.FromSlash(l.wf.agents)); err == nil {
+			agents = b
+		}
+	}
+	return policy.Pin(input, agents)
 }
 
 // startTurnLocked starts the next turn from the messages given; l.mu is held. The turn row is
@@ -175,9 +299,19 @@ func (s *Service) startTurnLocked(l *live, msgs []queued) (int, error) {
 		if _, err := tx.Exec("UPDATE session SET state = ? WHERE id = ?", store.Text(StateRunningTurn), store.Text(l.id)); err != nil {
 			return err
 		}
-		return s.turnModelLocked(tx, l)
+		if err := s.turnModelLocked(tx, l); err != nil {
+			return err
+		}
+		// The turn's own model is seen at its start; startProcessLocked then rewrites the file.
+		if l.turnModel != "" && !l.seen[l.turnModel] {
+			return s.seenTx(tx, l, l.turnModel, seenTurn, "", "", now)
+		}
+		return nil
 	}); err != nil {
 		return 0, s.turnNotStarted(l, n, msgs[0].user, err)
+	}
+	if l.turnModel != "" {
+		l.markSeen(l.turnModel)
 	}
 	l.turn, l.state, l.turnMode, l.requester, l.proc = n, StateRunningTurn, l.mode, msgs[0].user, 0
 	l.turnIn, l.turnOut, l.turnOutUnknown, l.turnModels = 0, 0, false, map[string]int64{}
@@ -299,6 +433,9 @@ type call struct {
 	// commit is refs/sessions/<id>'s sha as the bot bundled it when a reviewer call launched,
 	// commitError why that bundle failed; both go into the subagent-result row.
 	commit, commitError string
+	// model is a subagent call's pinned model by display name, `none` when nothing pins
+	// (policy.Pin); the subagent-result row's model.
+	model string
 }
 
 // indent is s at the call's depth (session tail, 04's trace lines).
@@ -348,6 +485,9 @@ func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan s
 			}
 			parent := ev.Assistant.ParentToolUseID
 			depth := l.depthUnder(parent)
+			if m := ev.Assistant.Model; streamModel(m) {
+				s.sawModel(l, n, m, seenStream, "", "", call{})
+			}
 			for _, b := range ev.Assistant.Blocks {
 				switch b.Kind {
 				case engine.BlockText:
@@ -361,9 +501,17 @@ func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan s
 					if c.agent == reviewerAgent {
 						c.commit, c.commitError = s.refresh(l)
 					}
+					var pin policy.Pinned
+					if subagentTools[b.Name] {
+						pin = l.pinOf(b.Input)
+						c.model = pin.Name()
+					}
 					l.mu.Lock()
 					l.calls[b.ID] = c
 					l.mu.Unlock()
+					if pin.Model != "" {
+						s.sawModel(l, n, pin.Model, seenPin, b.ID, c.agent, c)
+					}
 					l.log.add(Event{Time: s.stamp(), Type: EventToolCall, Turn: n, ToolUseID: b.ID, Tool: c.tool, Target: c.target,
 						Summary: c.indent(TraceLine(c.tool, c.target)), Parent: parent, Depth: depth})
 				}
@@ -549,6 +697,13 @@ func (s *Service) toolResult(l *live, n int, tr engine.ToolResultEvent) {
 	l.mu.Unlock()
 	now := s.stamp()
 	s.subagentResult(l, n, tr, c)
+	var cl Classified
+	if !answered {
+		cl = Classify(tr, c.tool)
+	}
+	if subagentTools[c.tool] && (answered && ans.decision == DecisionDeny || !answered && cl.Decision == DecisionDeny) {
+		s.unpin(l, n, tr.ToolUseID, c)
+	}
 	if answered {
 		line := TraceLine(c.tool, c.target)
 		if ans.trace != "" {
@@ -558,7 +713,6 @@ func (s *Service) toolResult(l *live, n int, tr engine.ToolResultEvent) {
 			IsError: tr.IsError, Summary: c.indent(line), Parent: c.parent, Depth: c.depth})
 		return
 	}
-	cl := Classify(tr, c.tool)
 	line := ResultLine(c.tool, c.target, l.reach, tr.IsError, tr.Text, cl)
 	if cl.Kind != ClassNoDecision {
 		actor := ActorPolicy
@@ -787,7 +941,7 @@ func (s *Service) subagentResult(l *live, n int, tr engine.ToolResultEvent, c ca
 	err := s.cfg.Store.Write(func(tx *store.Tx) error {
 		_, err := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindSubagentResult, Actor: ActorInstance, Session: l.id,
 			Details: details("turn", strconv.Itoa(n), "toolUseId", tr.ToolUseID, "tool", c.tool, "agent", c.agent, "result", result,
-				"commit", c.commit, "commitError", c.commitError)})
+				"commit", c.commit, "commitError", c.commitError, "model", c.model)})
 		return err
 	})
 	if err != nil {

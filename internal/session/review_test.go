@@ -94,7 +94,7 @@ func TestReviewFact(t *testing.T) {
 		t.Fatalf("after the review: %+v %v", d.Review, err)
 	}
 	if n := count(t, h.st, `SELECT count(*) FROM audit_event WHERE kind = 'subagent-result' AND session_id = 's0001'
-    AND details = '{"agent":"reviewer","commit":"`+old+`","result":"ok","tool":"Agent","toolUseId":"toolu_sub_agent","turn":"1"}'`); n != 1 {
+    AND details = '{"agent":"reviewer","commit":"`+old+`","model":"none","result":"ok","tool":"Agent","toolUseId":"toolu_sub_agent","turn":"1"}'`); n != 1 {
 		t.Errorf("%d subagent-result rows for the reviewer naming %s, want 1", n, old)
 	}
 
@@ -202,7 +202,7 @@ func TestReviewFactRefreshFailed(t *testing.T) {
 	}
 	waitTurn(t, h.svc, "s0001", 1)
 	if n := count(t, h.st, `SELECT count(*) FROM audit_event WHERE kind = 'subagent-result' AND session_id = 's0001'
-    AND details = '{"agent":"reviewer","commitError":"refused-bundle: no tree","result":"ok","tool":"Agent","toolUseId":"toolu_sub_agent","turn":"1"}'`); n != 1 {
+    AND details = '{"agent":"reviewer","commitError":"refused-bundle: no tree","model":"none","result":"ok","tool":"Agent","toolUseId":"toolu_sub_agent","turn":"1"}'`); n != 1 {
 		t.Errorf("%d subagent-result rows carrying the bundle's error, want 1", n)
 	}
 	if d, err := h.svc.Inspect(ctx, "s0001", false); err != nil || d.Review == nil || d.Review.Commit != old || d.Review.ToolUseID != nil {

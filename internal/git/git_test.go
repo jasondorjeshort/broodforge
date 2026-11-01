@@ -243,6 +243,67 @@ func TestCheckRequiresOnlyWhatCameBefore(t *testing.T) {
 	}
 }
 
+// TestCheckOwedFromFirstSeen (P38): two commits a minute apart, a model whose Since lies between
+// them is owed on the second only; the trailers file, rewritten between the commits by
+// WriteTrailers and read by CommitMsg, gives each commit its own set, and both pass.
+func TestCheckOwedFromFirstSeen(t *testing.T) {
+	f := newFixture(t)
+	t.Chdir(f.tree) // CommitMsg finds the session from the clone it runs in, as the hook does
+	first, second := t0.Add(30*time.Minute), t0.Add(31*time.Minute)
+	commit := func(file string, at time.Time, lines ...git.Identity) string {
+		t.Helper()
+		var trailers []string
+		for _, i := range lines {
+			trailers = append(trailers, i.Trailer())
+		}
+		if err := git.WriteTrailers(f.sess.Dir(), trailers); err != nil {
+			t.Fatal(err)
+		}
+		msgFile := filepath.Join(t.TempDir(), "COMMIT_EDITMSG")
+		if err := os.WriteFile(msgFile, []byte(file+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := git.CommitMsg(context.Background(), msgFile); err != nil {
+			t.Fatal(err)
+		}
+		m, err := os.ReadFile(msgFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		gittest.Commit(t, gittest.Driver, []string{"GIT_COMMITTER_DATE=" + at.Format(time.RFC3339)}, f.tree, file, file+"\n", string(m))
+		return string(m)
+	}
+	if m := commit("a.txt", first, opus); m != msg("a.txt", opus) {
+		t.Errorf("first message %q", m)
+	}
+	if m := commit("b.txt", second, opus, haiku); m != msg("b.txt", opus, haiku) {
+		t.Errorf("second message %q", m)
+	}
+	a := git.Attribution{Driver: driver,
+		Models: []git.Contributor{{Identity: opus, Since: t0}, {Identity: haiku, Since: first.Add(30 * time.Second)}}}
+	if got := a.Required(first); !reflect.DeepEqual(got, []string{opus.Trailer()}) {
+		t.Errorf("Required at the first commit %q", got)
+	}
+	if got := a.Required(second); !reflect.DeepEqual(got, []string{opus.Trailer(), haiku.Trailer()}) {
+		t.Errorf("Required at the second commit %q", got)
+	}
+	c, err := git.Collect(context.Background(), f.backend, f.sess, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Checks) != 2 || !c.Checks[0].OK() || !c.Checks[1].OK() {
+		t.Errorf("checks %+v", c.Checks)
+	}
+	// The same history, Haiku owed from before the first commit: the first one fails.
+	a.Models[1].Since = t0
+	if c, err = git.Collect(context.Background(), f.backend, f.sess, a); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Checks) != 2 || c.Checks[0].Status() != "missing:"+haiku.Trailer() || !c.Checks[1].OK() {
+		t.Errorf("checks with Haiku owed from t0 %+v", c.Checks)
+	}
+}
+
 func TestHandoffNoCommits(t *testing.T) {
 	f := newFixture(t)
 	out, err := f.handoff(git.ModePush).Run(context.Background(), true)

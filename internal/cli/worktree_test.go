@@ -329,6 +329,21 @@ func TestWorktreeModelCountsFromItsFirstTurn(t *testing.T) {
 		"error: handoff-refused-attribution: 1 of 1 commits fail the attribution check\n")
 }
 
+// A model is owed from the bot's first record of it (model_seen, P38) when it has one: a row
+// later than the turn's start lets a commit made before it pass without the model's line; a
+// row of another id with the same display name counts, the earliest of them.
+func TestWorktreeOwedFromFirstSeen(t *testing.T) {
+	p := newWorktreeProof(t)
+	s := p.startAt(t, "s0005", "2099-01-01T00:00:00Z", false)
+	head := gittest.Commit(t, gittest.Driver, nil, filepath.Join(s.Dir(), "tree"), "a.txt", "a\n", "before the model was seen")
+	seed(t, p.st, `INSERT INTO model_seen (session_id, model, first_seen_at, via) VALUES ('s0005', 'claude-opus-5-5', '2098-01-01T00:00:00Z', 'stream')`)
+	want(t, clitest.Run(t, nil, "--root", p.root, "worktree", "check", "s0005"), 0, "ok  pre-push\n"+head+"  ok\nok  1\n", "")
+	seed(t, p.st, `INSERT INTO model_seen (session_id, model, first_seen_at, via) VALUES ('s0005', 'claude-opus-5-5-20261001', '2026-01-01T00:00:00Z', 'turn')`)
+	want(t, clitest.Run(t, nil, "--root", p.root, "worktree", "check", "s0005"), 1,
+		"ok  pre-push\n"+head+"  missing:Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n",
+		"error: handoff-refused-attribution: 1 of 1 commits fail the attribution check\n")
+}
+
 // The commit-msg hook with no binary beside it: one stderr line, exit 0, so the commit goes on.
 func TestCommitMsgHookWithoutTheBinary(t *testing.T) {
 	sh, err := exec.LookPath("sh")

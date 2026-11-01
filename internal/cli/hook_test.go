@@ -52,17 +52,39 @@ func TestProofHookPreToolUse(t *testing.T) {
 func TestProofHookTry(t *testing.T) {
 	want(t, clitest.Run(t, nil, "hook", "try", "--tool", "Read", "--input", `{"file_path":"/tmp/cfg/.credentials.json"}`,
 		"--transcript-path", "/tmp/cfg/projects/x/s.jsonl", "--expect", "deny"), 0,
-		"deny  Denied by Broodforge: /tmp/cfg/.credentials.json is a credential file\n", "")
+		"deny  Denied by Broodforge: /tmp/cfg/.credentials.json is a credential file  \"\"\n", "")
 	want(t, clitest.Run(t, nil, "--json", "hook", "try", "--tool", "Bash", "--input", `{"command":"ls"}`, "--mode", "policy",
 		"--transcript-path", "/tmp/cfg/projects/x/s.jsonl"), 0,
-		`{"decision":"allow","reason":"Broodforge: allowed by this channel's reach"}`+"\n", "")
+		`{"decision":"allow","reason":"Broodforge: allowed by this channel's reach","pin":""}`+"\n", "")
 	want(t, clitest.Run(t, nil, "hook", "try", "--tool", "Bash", "--answer", "toolu_01:allow",
 		"--transcript-path", "/tmp/cfg/projects/x/s.jsonl", "--expect", "allow"), 0,
-		"allow  Broodforge: allowed by a person in this session\n", "")
+		"allow  Broodforge: allowed by a person in this session  \"\"\n", "")
 	want(t, clitest.Run(t, nil, "hook", "try", "--tool", "Read", "--input", `{"file_path":"a"}`), 1, "",
 		"error: hook: no transcript_path\n")
 	want(t, clitest.Run(t, nil, "hook", "try", "--tool", "Read", "--input", `{"file_path":"a"}`, "--expect", "hook"), 0, "", "")
 	want(t, clitest.Run(t, nil, "hook", "try"), 2, "", "error: usage: hook try: --tool <name> is required\n")
+}
+
+// TestProofHookTryPin: hook try's pin column is the line pre-tool-use would append for an
+// Agent call, from --workflow's agents.json; a line the trailers file beside --tree already
+// holds, or a call nothing pins, is empty. try writes nothing.
+func TestProofHookTryPin(t *testing.T) {
+	pin := "../../tests/hook/pin"
+	try := func(input string, extra ...string) clitest.Result {
+		args := append([]string{"hook", "try", "--tool", "Agent", "--input", input, "--mode", "policy", "--reach", "read-only",
+			"--tree", pin + "/tree", "--transcript-path", "/tmp/cfg/projects/x/s.jsonl"}, extra...)
+		return clitest.Run(t, nil, args...)
+	}
+	allow := "allow  Broodforge: allowed by this channel's reach  "
+	want(t, try(`{"subagent_type":"runner"}`, "--workflow", pin+"/workflow"), 0,
+		allow+"Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>\n", "")
+	want(t, try(`{"subagent_type":"runner","model":"sonnet"}`, "--workflow", pin+"/workflow"), 0, allow+"\"\"\n", "")
+	want(t, try(`{"subagent_type":"general-purpose"}`, "--workflow", pin+"/workflow"), 0, allow+"\"\"\n", "")
+	want(t, try(`{"subagent_type":"runner","model":"opus"}`), 0, allow+"Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n", "")
+	b, err := os.ReadFile(pin + "/home/trailers")
+	if err != nil || string(b) != "Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\n" {
+		t.Errorf("hook try wrote the fixture's trailers file: %q %v", b, err)
+	}
 }
 
 // gitBashEnv names a Git Bash for the chain's children where the environment does not and the
@@ -105,10 +127,10 @@ func TestProofHookChain(t *testing.T) {
 	want(t, clitest.Run(t, gitBashEnv(), "hook", "try", "--tool", "Bash", "--input", `{"command":"deny-exit2"}`, "--mode", "policy",
 		"--tree", chain, "--transcript-path", "/tmp/cfg/projects/x/s.jsonl", "--workflow", chain, "--expect", "deny"), 0,
 		"deny  Denied by Broodforge: refused by the project's hook deny-exit2.sh: the chain fixture refuses deny-exit2. "+
-			"The project's rules on its default branch decide this.\n", "")
+			"The project's rules on its default branch decide this.  \"\"\n", "")
 	want(t, clitest.Run(t, gitBashEnv(), "hook", "try", "--tool", "Bash", "--input", `{"command":"rewrite-me"}`, "--mode", "policy",
 		"--tree", chain, "--transcript-path", "/tmp/cfg/projects/x/s.jsonl", "--workflow", chain), 0,
-		"allow  Broodforge: allowed by this channel's reach\n", "")
+		"allow  Broodforge: allowed by this channel's reach  \"\"\n", "")
 	env := append([]string{"BROODFORGE_REACH=code", "BROODFORGE_TREE=" + chain, "BROODFORGE_WORKFLOW=" + chain}, gitBashEnv()...)
 	want(t, runStdin(t, env, `{"tool_name":"Edit","tool_input":{},"tool_use_id":"toolu_02"}`, "hook", "post-tool-use"), 0,
 		`{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"chain fixture: context from context.sh\n`+

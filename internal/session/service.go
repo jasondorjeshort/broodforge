@@ -337,6 +337,9 @@ type live struct {
 	// calls are the tool calls seen, by tool_use_id, for the session: a resumed process's result
 	// answers a call the process before made.
 	calls map[string]call
+	// seen are the models this process knows have a model_seen row (migration 0005), so an
+	// assistant line naming one costs no write.
+	seen map[string]bool
 
 	model         string // the session row's, mirrored for the summary (P12a); a turn reads the row
 	turnMode      string // the mode the running turn started with (a switch waits for the next)
