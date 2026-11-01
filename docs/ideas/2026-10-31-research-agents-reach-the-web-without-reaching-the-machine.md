@@ -25,3 +25,13 @@ governs files and commands, not the network.
 - A new reach value, a flag on `code`, or a grant tied to the agent type the hook sees?
 - Whether `curl` and the like through Bash stay denied (the sandbox question, not the tool one).
 - Whether this is a proposal (it widens a promised boundary, ADR 0022) or a pass.
+
+Plan: architect, a proposal in `docs/design/proposals/` (the `proposal` skill, then the critic, then an ADR), not a
+code pass: it widens ADR 0022's promised boundary, a major choice (`major-decisions.md`). The owner has said they
+want it ("we do want access to the internet allowed for research agents", above). Read `internal/policy/policy.go`
+(the reach denial, `Decide` and `CellFor`) and `docs/design/03-hook-contract.md` to name the rows it touches (the `ClassWeb` row, denied in both reaches because ADR 0022 defers egress control). The
+proposal weighs the three shapes in Open (a new reach value, a flag on `code`, a grant tied to the agent type the
+hook sees) and settles whether `curl` and the like through Bash stay denied (recommend yes: the network is the
+web tools' only door). It states what stays confined (files and shell in the tree), the ADR 0012 promised-surface
+check, and the debug-interface way to drive it (`05-debug-interface.md`). Verify: the proposal file exists, and
+the critic brief is written, naming the strongest case against each shape. Out of scope: any code, an engine-level sandbox.
