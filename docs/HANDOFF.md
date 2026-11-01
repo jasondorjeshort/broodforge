@@ -1,39 +1,39 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-10-31 by main session (wave launched after triage and the six answers)
+Updated: 2026-10-31 by main session (wave round 1 done; push waits on a privacy allow)
 
 ## Now
 
-- Account `jdorje`. Pushed at `38ebc03`. Ahead: five earlier commits, the triage commits (`b027eaa`..`85355dd`), the
-  answers commit. A pusher stopped on `behind 2` earlier today (a parallel session): the rebase rewrote hashes under the live bot.
-- Triage 2026-10-31: 22 ideas read, 8 Plans, 14 Questions, no deletions; scan 0 fired, 0 due, tests green with `-race`.
-  Six answers recorded the same day (texts, trailer, WIP end, discard, ended category, auto); five are Plans now.
-- Wave in flight (lanes, each its own agent, disjoint files): L1 `tester` auto spike (finding); L2 `coder` the five
-  texts and the credential default; L3 `coder` P38; L4 `tester` three chores (run skill, `delegation.md` sentence,
-  `pre-commit` scan). Then: `reviewer` over the triage and answer commits, `pusher`.
-- Live instance `%LOCALAPPDATA%\Broodforge\dev-live` (the owner's; agents never touch it). `dev`: dry-run, bot stopped,
-  schema 4 (P38 makes it 5), `cred-2ha7apqowv`, four real turns granted, none spent.
+- Account `jdorje`. Pushed at `38ebc03`. Ahead: five earlier commits, triage and answers, the wave's commits. The pusher
+  stops on `4de8974`: the scan reads `<sess>/home/land-result` (0028 critic review) as a home path; owner's `privacy.allow`.
+- Wave round 1 done 2026-10-31: triage, six owner answers, the auto spike (finding: starts under `-p`, hook blocks
+  hold, classifier never fired), the five live-run texts, P38 (schema 5, `model_seen`), two chores; each reviewed once.
+  The pre-commit hook was reverted (`bf96a70`), re-planned as a `--staged` scan. This checkout has no `core.hooksPath`.
+- Live instance `%LOCALAPPDATA%\Broodforge\dev-live` (the owner's; agents never touch it): notice channel public until
+  the owner locks it (`docs/operator/`). `dev`: dry-run, bot stopped, schema 4, `cred-2ha7apqowv`, four real turns granted.
 
 ## Next
 
-1. Auto mode (the owner's priority): on the spike's pass, `architect` amends ADR 0020 and 04's mode rows (third
-   value of `mode`, project and channel), then `coder`. On a fail, the idea waits for a later engine.
+1. Auto mode (the owner's priority): the owner picks a second spike (make the classifier fire: a throwaway
+   credential-shaped file, a scratch force push, a disposable home) or the `architect` pass now (ADR 0020
+   amendment, 04's mode rows, a third value of `defaults.mode` and `Channel.Mode`); then `coder`.
 2. Owner-answered Plans, `coder`, sequential (shared files): WIP commit at end plus the two-button discard
    (`end-a-session-without-handing-off`, `ending-a-session-with-uncommitted-changes`); the Ended sessions category.
-3. P33 to P37 (`08-implementation-plan-landing.md`) after P38; P34 waits for Next 2 to clear `handoff.go`. Real turns
-   only on the owner's word. Then the carry-back Send for the two chores of L4 (ADR 0024 rows name the ideas).
-4. `tester`: the two session leftovers (after P38 leaves `turn.go`); the P11 remainder, serve snapshot and the
-   session-start link button (`coder`, Plans in `docs/ideas/`). Held: the web-reach proposal (Fable budget).
+3. P33 to P37 (`08-implementation-plan-landing.md`); P34 after Next 2 clears `handoff.go`. P38's real turn on the
+   live instance on the owner's word. Carry-back Sends: the `delegation.md` paragraph; the `--staged` scan (coder first).
+4. `tester`: the two session leftovers; `coder`: the P11 remainder, the serve snapshot, the session-start link
+   button (Plans in `docs/ideas/`). Owner wording pending in 04 (three credential strings). Held: web-reach proposal.
 5. W6: the owner re-runs `spike/setup-host/` (README); then P23, P25. Hatchery: land the five carry-back branches.
 
 ## Waiting on user
 
-- `Question:` blocks in `docs/ideas/` (fourteen new today, all later-wave features; none blocks the wave). Wording
-  the owner sees on sight: discard confirm and summary lines, the WIP end summary line (in the answers). The
-  `Waits:` ideas stay. Older: 0028's venue lines; dry-run and setup texts; four Discord strings; two canonical rows
-  and refuse-or-warn; subagent indent; the `pre-push` line; P12a; "Never ends for inactivity."; the switch post;
-  the hook no-answer phrase; R-17; `C:\elsewhere`; W6's console window.
+- `privacy.allow` for `<sess>/home/land-result` (blocks the push); `core.hooksPath` in this checkout; the dev-live
+  notice channel lock; auto mode: second spike or architect. `Question:` blocks in `docs/ideas/` (fourteen from today,
+  later-wave features). Wording on sight: discard confirm and summary, WIP end line, three pending 04 strings. Older:
+  0028's venue lines; dry-run and setup texts; four Discord strings; two canonical rows and refuse-or-warn; subagent
+  indent; the `pre-push` line; P12a; "Never ends for inactivity."; the switch post; the hook no-answer phrase; R-17;
+  `C:\elsewhere`; W6's console window.
 
 ## Open findings
 
