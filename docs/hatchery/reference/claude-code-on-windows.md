@@ -1,6 +1,6 @@
 ---
-verified: 2026-10-17
-source: observed (machine user name in paths, ADR 0018 evidence 2026-10-17; PowerShell pipe and MSYS git show rewrite 2026-10-17; npm behaviour tested 2026-10-14; twelve waves of parallel agents on a downstream project; Windows 10 and 11, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1); hook and status line code read 2026-10-14, usage-gate grants 2026-10-15, per-session usage file 2026-10-16; robocopy and Remove-Item behaviour with junctions observed 2026-10-14
+verified: 2026-11-01
+source: observed (heredoc forms 2026-11-01; machine user name in paths, ADR 0018 evidence 2026-10-17; PowerShell pipe and MSYS git show rewrite 2026-10-17; npm behaviour tested 2026-10-14; twelve waves of parallel agents on a downstream project; Windows 10 and 11, Claude Code 2.1.x, Git Bash and Windows PowerShell 5.1); hook and status line code read 2026-10-14, usage-gate grants 2026-10-15, per-session usage file 2026-10-16; robocopy and Remove-Item behaviour with junctions observed 2026-10-14
 ---
 
 # Claude Code on Windows: what holds
@@ -45,10 +45,13 @@ source: observed (machine user name in paths, ADR 0018 evidence 2026-10-17; Powe
 
 ## Shells
 
-- Bash heredocs: any heredoc body with an apostrophe outside double quotes is rejected before bash
-  runs it (`unexpected EOF while looking for matching` quote), a quoted delimiter does not help,
-  and `\\` is collapsed to `\`, so `\\n` and `\\?\` break. Write such text with the Write or Edit tool. Root cause not
-  confirmed (tool-side pre-processing suspected).
+- Bash heredocs (observed 2026-11-01, GNU bash 5.3.15, cygwin): a body holding an apostrophe and a
+  backtick comes back intact from a quoted `<<'EOF'`, an unquoted `<<EOF` (backticks escaped) and
+  `$(cat <<'EOF' ...)`, read back with `cat -A`. A chained command line still fails at parse time on
+  one quoting error.
+- Backslashes: `\\` arrives as `\` anywhere in the Bash tool's command text (single quotes and quoted
+  heredocs included; `\x` is untouched), so `\\n` and `\\?\` break. This is the tool's, not bash's.
+  Write such text with the Write or Edit tool, or build it with `[char]92` in PowerShell.
 - Windows PowerShell 5.1: quote arguments containing dots or dashes whole when calling
   `powershell -File`; it drops empty-string arguments; `&&` and `||` do not exist; `2>&1` on a
   native command wraps stderr in error records.

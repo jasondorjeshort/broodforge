@@ -29,14 +29,18 @@ but not Bash (a session-meter HOLD is then waited out, not stopped at: `usage-ga
    Co-Authored-By: Claude <Model> <noreply@anthropic.com>
    Claude-Session: <the claude.ai link, only when the harness asks for it>
    Run git status --short before and after and include both. Do not push.
+   Make each commit its own Bash call (the adds, then the commit), nothing chained, never parallel.
    ```
 
    The model is the one that did the work (Opus 5.5 for coder output, Sonnet 5.5 for tester,
    Fable 5.1 for architect or critic, Haiku 5.5 for mechanical runner work). Mixed authorship: one
-   line per model. The runner has no Write tool and heredocs break on apostrophes, so a message
+   line per model. The brief tells the runner to make each commit its own Bash call, the adds then
+   the commit, nothing chained and never in a parallel block: one quoting error in a chain stops
+   every commit after it. The runner has no Write tool, so a message
    with an apostrophe, a backtick or more than one paragraph goes to a file: the coordinator writes
    it to its scratchpad with the Write tool and the brief says `git commit -F <that path>` instead
-   of `Message:`. A serious reviewer finding the coordinator accepted without a fix is one body
+   of `Message:` (heredocs passed such text intact when observed, `docs/hatchery/reference/claude-code-on-windows.md`,
+   Shells, but a file cannot fail at parse time). A serious reviewer finding the coordinator accepted without a fix is one body
    line, `Accepted finding: <one line>`. The message ends with its trailer block, one paragraph
    of trailer lines and nothing else: the `Co-Authored-By` lines, then a `Claude-Session:` line
    when the session's harness asks for one, its value one `claude.ai` link and nothing more on the
@@ -53,7 +57,7 @@ but not Bash (a session-meter HOLD is then waited out, not stopped at: `usage-ga
 `git add docs/HANDOFF.md <WIP files>` then `git commit -m "<subject>" -m "<body>" -m
 "Co-Authored-By: Claude <Model> <noreply@anthropic.com>"` (the trailer paragraph also holds the
 `Claude-Session:` line when the harness asks for it). Subject starts with `WIP:` when the
-work is unfinished. No heredocs for the message (apostrophes break them here).
+work is unfinished. No heredocs for the message (one quoting error fails at parse time; step 3).
 
 ## Pushing
 
