@@ -29,7 +29,7 @@ governs files and commands, not the network.
 Plan: architect, a proposal in `docs/design/proposals/` (the `proposal` skill, then the critic, then an ADR), not a
 code pass: it widens ADR 0022's promised boundary, a major choice (`major-decisions.md`). The owner has said they
 want it ("we do want access to the internet allowed for research agents", above). Read `internal/policy/policy.go`
-(the reach denial, `Decide` and `CellFor`) and `docs/design/03-hook-contract.md` to name the rows it touches (the `ClassWeb` row, denied in both reaches because ADR 0022 defers egress control). The
+(the reach denial, `Decide` and `CellFor`) and `docs/design/03-hook-contract.md` to name the rows it touches (the `ClassWeb` row, cell `web`: deferred to a person in prompt mode, denied in policy mode, because ADR 0022 (`0022-session-isolation-and-credential-storage.md`) defers egress control). The
 proposal weighs the three shapes in Open (a new reach value, a flag on `code`, a grant tied to the agent type the
 hook sees) and settles whether `curl` and the like through Bash stay denied (recommend yes: the network is the
 web tools' only door). It states what stays confined (files and shell in the tree), the ADR 0012 promised-surface

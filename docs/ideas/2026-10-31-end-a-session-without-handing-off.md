@@ -41,7 +41,7 @@ commits stay recoverable on `refs/aborted/<id>`; the dirty tree is WIP-committed
 idea's answer), so nothing is unrecoverable. `session restore <id>` is a later pass ("recovering
 sessions may also be a thing one day"), so the first pass writes the ref and the audit line and the
 summary names the ref, not the command. Lines, the owner's to edit on sight: confirm `Discard session
-<id>? Its <n> commits stay recoverable.`; summary `<n> commits Â· discarded; recoverable on request`.
+<id>? Its <n> commits stay recoverable.`; summary `<n> commits · discarded; recoverable on request`.
 Settled by the coordinator: the transcript still goes to the lobby; the ref is kept until a later
 `session prune`; an interrupted session can be discarded the same way. Now a Plan: coder, one pass
 (`internal/git/handoff.go`, `internal/discord/customid.go` and the header, `04-ux.md` Ending a session,

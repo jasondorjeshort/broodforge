@@ -50,7 +50,7 @@ Discord through the same prompt path as `prompt` mode.
 2026-10-31, the owner: "Auto permission mode is a priority", with "the option to set this default
 for a server or channel". The spike below runs now, at the front of the wave. On a pass, the third
 value goes straight to an `architect` pass (ADR 0020 amendment, the `04-ux.md` header word and mode
-rows, the `mode` key's third value at the project level and in the channel override, both already in
-`internal/config/types.go`) and then a coder pass; no separate proposal.
+rows, a third value of `defaults.mode` and of `Channel.Mode`, both already in `internal/config/types.go`;
+additive, so not an incompatible change under ADR 0012, which is why no separate proposal) and then a coder pass; no separate proposal.
 
 2026-10-31, spike run: `docs/findings/2026-10-31-spike-auto-permission-mode-starts-under-p-hook-still-blocks-classifier-never-fired.md` (starts under `-p`; the hook still blocks; the classifier's own defer or refuse not yet seen).

@@ -34,4 +34,4 @@ Under ADR 0028 the WIP commit cannot land on `main` without a review fact, so it
 session branch as every handoff does, and the push scan runs on it. The end summary line:
 `1 commit · pushed to <branch> (WIP: uncommitted changes committed at end)`. A deliberate drop is
 the discard of the related idea. Now a Plan: coder, one pass (`internal/git/handoff.go`, the
-`04-ux.md` Ending row, the golden that covers the end).
+`04-ux.md`, Ending a session, the golden that covers the end).

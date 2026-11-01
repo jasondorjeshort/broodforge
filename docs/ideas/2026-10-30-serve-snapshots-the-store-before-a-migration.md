@@ -16,9 +16,11 @@ in `internal/backup/backup.go`.
 Plan: coder. In `serve` start-up, before step (4) `store.Create(root)` in `internal/cli/serve.go`: when
 `data/store.sqlite` exists, open it with `store.OpenFile`, read `store.SchemaID` and compare with
 `store.Known()` (`internal/store/migrate.go`; `migrate` itself runs inside `Create`, so the snapshot must
-come first, from outside the store package). When the file is behind, call `backup.Snapshot(root, auditExport)`
-(`internal/backup/backup.go`; `auditExport` is in `internal/cli/usage.go`) and log one line to stderr naming
-the from and to schema and the snapshot path. A snapshot failure stops `serve` with a start-up step error
+come first, from outside the store package). When the file is behind, take the snapshot through a variant of `backup.Snapshot`
+that opens with `store.OpenFile` instead of `store.OpenReadOnly` (review 2026-10-31: `OpenReadOnly` refuses a
+store whose schema is not the binary's, so `Snapshot` as it stands fails on exactly the store this protects;
+`internal/backup/backup.go` `snapshot`), and that skips the audit export when the export cannot read the
+older schema, saying so in the log line. Log one line to stderr naming the from and to schema and the path. A snapshot failure stops `serve` with a start-up step error
 rather than migrating unprotected. A new or current store takes no snapshot. Verify: a test that builds a
 schema-3 store fixture, starts the serve path against it, and finds the snapshot under `backup/` and the
 log line; a second start takes none. Out of scope: other commands that open the store, a restore command.
