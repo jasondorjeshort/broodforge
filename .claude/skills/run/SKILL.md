@@ -106,6 +106,12 @@ repository's); the final message and the working message's `delete` arrive once 
 through, so poll the outbox rather than count its lines. Drive the feature under test the same
 way: every command of `docs/design/05-debug-interface.md` and its companions works here.
 
+The P31 check (`docs/design/08-implementation-plan-canonical.md`) amends the session's commit with
+`git -C <tree> commit --amend --no-edit` and then runs `worktree check`. The amend is the runner's
+(the git-guard allows `git commit` only from the `runner`, and it matches the command, not the
+tree), so the drive splits: the tester runs the session and the `worktree check`, the runner makes
+the amend between them. The brief names each half.
+
 ## 4. The real engine, on the owner's word only
 
 A real turn runs only when the brief quotes the owner's go-ahead for that real turn in so many
