@@ -28,7 +28,8 @@ none, a missing hook ends it with `error: pre-push-missing: ...`, exit 1 (`hando
 is not refused for it: the tree's configuration is the session's).
 `worktree bundle <id>` prints `<bundle path>  <commits>`, or `none  0`. `worktree handoff <id>
 [--dry-run] [--expect <value>]` runs the five steps and prints `<outcome>  <remote>  <refspec>
-<commits>  <url>  <request>`, outcome `pushed`, `pull-request`, `none` (no commits: the tree is
+<commits>  <url>  <request>`, outcome `landed` (a `main` project: the land below, the role unchecked
+as a host's), `pushed`, `pull-request`, `none` (no commits: the tree is
 removed) or `dry-run`, which stops after the check; for `pull-request` the request column is
 `{"url":<endpoint>,"credential":<id>,"body":{"title","head","base","body"}}`, the credential by
 id only. Refusals, exit 1, tree kept: `handoff-refused-bundle` (the bundle step itself),
@@ -170,7 +171,9 @@ and `merge-base --is-ancestor <remote>/<default> refs/sessions/<id>`, the push o
 handoff`'s line, `<outcome>  <remote>  <refspec>  <commits>  <url>  <request>`, outcome `landed`
 (a `main` push done), `pushed` or `pull-request` (a `push` or `pull-request` project: the session
 branch, the request opened on the first land and followed by later ones), `none` (no commits since
-the last land) or `dry-run` (everything but the push). The session stays open and its tree is
+the last land) or `dry-run` (everything but the push), then `stale: <git's line>` when the fetch
+before it failed and `canonical lags: <why>` when the canonical's default branch could not follow
+(its tracking ref did, and the next land's base is the landed sha). The session stays open and its tree is
 untouched; the next land hands off the commits after the landed sha. `--as` and `--roles` make the
 gate reproducible (`--roles` absent, the role is unchecked; the fact is always checked), but the
 audit row's actor is `host` and the `--as` value is recorded as `claimed`, never as the actor; the
@@ -182,8 +185,13 @@ newest reviewer row has one: commit, launch the reviewer as a call on its own, l
 land again; the bot never rebases), `land-canonical-diverged` (the reconcile lift of The fetch at
 session start), `land-rejected` (git's one telling line: a race is landed again; branch protection
 or a checkout remote is the owner's, below), and the handoff's own `handoff-refused-*` and
-`handoff-failed-*` codes. At a `main` session end `land-not-fast-forward` and `land-rejected` fall
-back to `handoffFallback` and `session end` prints the fallback's line with the refusal before it.
+`handoff-failed-*` codes. At a `main` session end the land is judged by the ender's `--roles` (none,
+as on the idle end or `session end <id>` alone, is `land-not-allowed`); every land refusal but
+`land-canonical-diverged` falls back to `handoffFallback`, and `session end` prints the fallback's
+line with the first refusal met before it, `fallback: <code>: Not landed on <default>: <text>. Handed
+off as <branch> instead.` (`--json`: a `fallback` object); `land-canonical-diverged` keeps the
+session open, as a `handoff-refused-*` does (ADR 0028 Amendments 2026-11-02). A channel with no
+`roles.land`, read as configured at each land, is `land-not-allowed` whoever asks.
 The push word: inside the session a `Bash` call `git push` (or `git push <remote> [HEAD|<branch>][:<default>|:<branch>]`,
 `broodforge session land`, each with `--dry-run` for the dry run; `-u`, `-q`, `-v` ignored) is
 deferred by the hook's `land` cell and answered by the bot with the same land; the model reads
@@ -200,7 +208,7 @@ Observe. `audit --kind land --json` (`attempted`, `done`, `failed`; `actor`, `cl
 `commitError` on the reviewer's row; `empty` on a row whose result has no text); `session show` (`review:`); `git -C <root>/remote/scratch.git log --oneline -1 main`;
 `hook try --tool Bash --input '{"command":"git push --force"}' --expect defer`, then with `--answer
 <id>:allow --answer-reason 'Landed 1 commit on main at <sha>'` printing the `updatedInput`.
-Reproduce. `scratch run -- bash tests/repro/land.sh` [no-check: written by P34] (a `main` project with
+Reproduce. `scratch run -- bash tests/repro/land.sh` (a `main` project with
 `roles.land`: unreviewed, not allowed, landed, moved base, the end's fallback, the `config check`
 warning) and `tests/repro/land-push-word.sh` [no-check: written by P35] (the `land-done` and
 `land-refused` fixtures through the hook's resume). A rejected push: a non-bare scratch remote with

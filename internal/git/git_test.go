@@ -698,3 +698,342 @@ func TestFetchFastForwardPastItsDeadlineIsStale(t *testing.T) {
 		t.Errorf("main moved to %s", got)
 	}
 }
+
+// lander is the fixture's handoff on a main project whose gate passes and records each tip it
+// was asked about.
+func (f *fixture) lander(tips *[]string) *git.Handoff {
+	h := f.handoff(git.ModeMain)
+	h.Gate = func(_ context.Context, tip string) error { *tips = append(*tips, tip); return nil }
+	return h
+}
+
+func (f *fixture) rev(t *testing.T, dir, ref string) string {
+	t.Helper()
+	return strings.TrimSpace(gittest.Git(t, dir, "rev-parse", ref))
+}
+
+// pushElsewhere is n commits pushed to the remote's main from a throwaway clone.
+func (f *fixture) pushElsewhere(t *testing.T, n int) {
+	t.Helper()
+	clone := filepath.ToSlash(filepath.Join(f.root, "elsewhere"))
+	gittest.Git(t, f.root, "clone", "--quiet", f.remote, clone)
+	for i := 0; i < n; i++ {
+		gittest.Commit(t, gittest.Driver, nil, clone, "else.txt", strings.Repeat("x", i+1)+"\n", "elsewhere")
+	}
+	gittest.Git(t, clone, "push", "--quiet", "origin", "main")
+}
+
+// TestLandFastForwards: a reviewed tip lands on the remote's main as a fast-forward, the gate
+// asked about that exact tip; the canonical's main and tracking ref follow, the tree and
+// refs/sessions/<id> stay, the audit has land attempted and done with the claimed id; a second
+// land with nothing new is none and pushes nothing.
+func TestLandFastForwards(t *testing.T) {
+	f := newFixture(t)
+	head := gittest.Commit(t, gittest.Driver, nil, f.tree, "a.txt", "a\n", msg("one", opus))
+	var tips []string
+	h := f.lander(&tips)
+	res, err := h.Land(context.Background(), git.LandOptions{Gate: h.Gate, Claimed: "1001"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Outcome.Outcome != git.OutcomeLanded || res.Mode != git.ModeMain || res.Commits != 1 || res.Sha != head ||
+		res.Refspec != "refs/sessions/s0001:refs/heads/main" || res.CanonicalLags != "" || res.Stale != "" || res.Removed {
+		t.Errorf("result %+v", res)
+	}
+	if !reflect.DeepEqual(tips, []string{head}) {
+		t.Errorf("the gate saw %q, want the tip %s", tips, head)
+	}
+	for _, ref := range []string{"main"} {
+		if got := f.rev(t, f.remote, ref); got != head {
+			t.Errorf("remote %s %s, want %s", ref, got, head)
+		}
+	}
+	for _, ref := range []string{"main", "refs/remotes/origin/main", git.SessionRef("s0001")} {
+		if got := f.rev(t, f.sess.Canonical, ref); got != head {
+			t.Errorf("canonical %s %s, want %s", ref, got, head)
+		}
+	}
+	if !exists(filepath.Join(f.sess.Canonical, "a.txt")) || !exists(f.tree) {
+		t.Error("the canonical's checkout did not follow, or the tree went")
+	}
+	if got, want := f.kinds(), []string{"land:attempted", "land:done"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("audit %q, want %q", got, want)
+	}
+	var d map[string]string
+	if err := json.Unmarshal(f.events[1].Details, &d); err != nil || d["claimed"] != "1001" || d["outcome"] != "landed" ||
+		d["sha"] != head || d["commits"] != "1" || f.events[1].Actor != "host" {
+		t.Errorf("land done %s by %s", f.events[1].Details, f.events[1].Actor)
+	}
+	res, err = h.Land(context.Background(), git.LandOptions{Gate: h.Gate})
+	if err != nil || res.Outcome.Outcome != git.OutcomeNone || res.Commits != 0 || len(f.events) != 2 {
+		t.Errorf("second land: %+v %v, audit %q", res, err, f.kinds())
+	}
+}
+
+// TestLandMovedMainIsNotFastForward: the remote's main moved by two commits after the session
+// branched; the land refuses with the count, after the gate, and pushes nothing.
+func TestLandMovedMainIsNotFastForward(t *testing.T) {
+	f := newFixture(t)
+	gittest.Commit(t, gittest.Driver, nil, f.tree, "a.txt", "a\n", msg("one", opus))
+	f.pushElsewhere(t, 2)
+	moved := f.rev(t, f.remote, "main")
+	var tips []string
+	h := f.lander(&tips)
+	_, err := h.Land(context.Background(), git.LandOptions{Gate: h.Gate})
+	var ge *git.Error
+	if !errors.As(err, &ge) || ge.Code != git.CodeLandNotFastForward {
+		t.Fatalf("land: %v", err)
+	}
+	want := "Not landed: main moved by 2 commits since this session branched. Fetch origin, rebase this tree onto origin/main " +
+		"(the driver or the runner), review again, then push again."
+	if ge.Message != want || len(tips) != 1 {
+		t.Errorf("message %q, gate %q", ge.Message, tips)
+	}
+	if got := f.rev(t, f.remote, "main"); got != moved || len(f.events) != 0 {
+		t.Errorf("remote main %s, want %s; audit %q", got, moved, f.kinds())
+	}
+	// The land's fetch fast-forwarded the canonical as session start does.
+	if got := f.rev(t, f.sess.Canonical, "main"); got != moved {
+		t.Errorf("canonical main %s, want the fetched %s", got, moved)
+	}
+}
+
+// TestLandRejectedByACheckoutRemote: a non-bare remote with main checked out refuses the push;
+// the land is land-rejected with git's denyCurrentBranch line and the checkout warning, which
+// config check's inspection gives too, and stops giving under updateInstead.
+func TestLandRejectedByACheckoutRemote(t *testing.T) {
+	f := newFixture(t)
+	checkout := filepath.ToSlash(filepath.Join(f.root, "checkout"))
+	gittest.Git(t, f.root, "clone", "--quiet", f.remote, checkout)
+	gittest.Git(t, f.sess.Canonical, "remote", "set-url", "origin", checkout)
+	gittest.Commit(t, gittest.Driver, nil, f.tree, "a.txt", "a\n", msg("one", opus))
+	if !git.CheckoutRemote(context.Background(), f.sess.Canonical, "origin", "main") {
+		t.Error("CheckoutRemote: false for a checkout with main checked out")
+	}
+	var tips []string
+	h := f.lander(&tips)
+	_, err := h.Land(context.Background(), git.LandOptions{Gate: h.Gate})
+	var ge *git.Error
+	if !errors.As(err, &ge) || ge.Code != git.CodeLandRejected {
+		t.Fatalf("land: %v", err)
+	}
+	if !strings.HasPrefix(ge.Message, "Not landed: push rejected by the remote: remote: error: refusing to update checked out branch: refs/heads/main. ") ||
+		!strings.HasSuffix(ge.Message, " "+git.CheckoutRemoteWarning("origin", "main")) {
+		t.Errorf("message %q", ge.Message)
+	}
+	if got, want := f.kinds(), []string{"land:attempted", "land:failed"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("audit %q, want %q", got, want)
+	}
+	gittest.Git(t, checkout, "config", "receive.denyCurrentBranch", "updateInstead")
+	if git.CheckoutRemote(context.Background(), f.sess.Canonical, "origin", "main") {
+		t.Error("CheckoutRemote: true under updateInstead")
+	}
+	gittest.Git(t, f.sess.Canonical, "remote", "set-url", "origin", f.remote)
+	if git.CheckoutRemote(context.Background(), f.sess.Canonical, "origin", "main") {
+		t.Error("CheckoutRemote: true for a bare remote")
+	}
+}
+
+// TestLandDirtyCanonicalLags: after a done push the canonical's checkout has a local change
+// the fast-forward would overwrite: the tracking ref moves, CanonicalLags says why, main stays;
+// the next land's base is the landed sha, so it hands off only the commit after it.
+func TestLandDirtyCanonicalLags(t *testing.T) {
+	f := newFixture(t)
+	old := f.rev(t, f.sess.Canonical, "main")
+	first := gittest.Commit(t, gittest.Driver, nil, f.tree, "README", "changed\n", msg("one", opus))
+	if err := os.WriteFile(filepath.Join(f.sess.Canonical, "README"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var tips []string
+	h := f.lander(&tips)
+	res, err := h.Land(context.Background(), git.LandOptions{Gate: h.Gate})
+	if err != nil || res.Outcome.Outcome != git.OutcomeLanded {
+		t.Fatalf("land: %+v %v", res, err)
+	}
+	if !strings.HasPrefix(res.CanonicalLags, "the host's copy of main was not moved to "+first+": ") {
+		t.Errorf("CanonicalLags %q", res.CanonicalLags)
+	}
+	if f.rev(t, f.sess.Canonical, "main") != old || f.rev(t, f.sess.Canonical, "refs/remotes/origin/main") != first ||
+		f.rev(t, f.remote, "main") != first {
+		t.Error("main moved, or the tracking ref or the remote did not")
+	}
+	second := gittest.Commit(t, gittest.Driver, nil, f.tree, "b.txt", "b\n", msg("two", opus))
+	if base, err := git.Base(context.Background(), f.sess); err != nil || base != first {
+		t.Errorf("Base %s %v, want the landed %s", base, err, first)
+	}
+	res, err = h.Land(context.Background(), git.LandOptions{Gate: h.Gate})
+	if err != nil || res.Outcome.Outcome != git.OutcomeLanded || res.Commits != 1 || res.Sha != second {
+		t.Fatalf("second land: %+v %v", res, err)
+	}
+	// The second land's own fetch tried the fast-forward again and noted that it failed.
+	if res.Stale == "" || f.rev(t, f.remote, "main") != second {
+		t.Errorf("stale %q, remote main %s", res.Stale, f.rev(t, f.remote, "main"))
+	}
+}
+
+// TestLandDryRunPushesNothing: the dry run runs the gate and the fast-forward check, prints the
+// line, and pushes and audits nothing.
+func TestLandDryRunPushesNothing(t *testing.T) {
+	f := newFixture(t)
+	before := f.rev(t, f.remote, "main")
+	head := gittest.Commit(t, gittest.Driver, nil, f.tree, "a.txt", "a\n", msg("one", opus))
+	var tips []string
+	h := f.lander(&tips)
+	res, err := h.Land(context.Background(), git.LandOptions{DryRun: true, Gate: h.Gate})
+	if err != nil || res.Outcome.Outcome != git.OutcomeDryRun || res.Commits != 1 || res.Sha != head ||
+		res.Refspec != "refs/sessions/s0001:refs/heads/main" || len(tips) != 1 {
+		t.Fatalf("dry run: %+v %v, gate %q", res, err, tips)
+	}
+	if f.rev(t, f.remote, "main") != before || len(f.events) != 0 {
+		t.Errorf("the dry run pushed or audited: %q", f.kinds())
+	}
+}
+
+// TestLandGateRefusals: the gate's refusal is the land's, nothing pushed; no gate on a main
+// project is land-not-allowed; a push project's land has no gate and pushes the session branch.
+func TestLandGateRefusals(t *testing.T) {
+	f := newFixture(t)
+	head := gittest.Commit(t, gittest.Driver, nil, f.tree, "a.txt", "a\n", msg("one", opus))
+	h := f.handoff(git.ModeMain)
+	_, err := h.Land(context.Background(), git.LandOptions{
+		Gate: func(_ context.Context, tip string) error {
+			return git.LandUnreviewed(tip, "dirty tree at the reviewer's launch")
+		}})
+	var ge *git.Error
+	want := "Not landed: review: none since " + head + "; the last reviewer launch failed: dirty tree at the reviewer's launch. " +
+		"Commit, launch the reviewer as a call on its own, then push again."
+	if !errors.As(err, &ge) || ge.Code != git.CodeLandUnreviewed || ge.Message != want {
+		t.Errorf("unreviewed: %v", err)
+	}
+	if _, err := h.Land(context.Background(), git.LandOptions{}); !errors.As(err, &ge) || ge.Code != git.CodeLandNotAllowed ||
+		ge.Message != "Not landed: landing on main needs a land role in this channel." {
+		t.Errorf("no gate: %v", err)
+	}
+	if len(f.events) != 0 {
+		t.Errorf("audit %q", f.kinds())
+	}
+	res, err := f.handoff(git.ModePush).Land(context.Background(), git.LandOptions{})
+	if err != nil || res.Outcome.Outcome != git.OutcomePushed || f.rev(t, f.remote, "broodforge/test/s0001") != head || !exists(f.tree) {
+		t.Errorf("push project: %+v %v", res, err)
+	}
+}
+
+// TestLandAtTheEnd: Run on a main project lands then removes the tree; with the remote's main
+// moved it falls back to handoffFallback, the outcome carrying the land's refusal.
+func TestLandAtTheEnd(t *testing.T) {
+	f := newFixture(t)
+	head := gittest.Commit(t, gittest.Driver, nil, f.tree, "a.txt", "a\n", msg("one", opus))
+	var tips []string
+	out, err := f.lander(&tips).Run(context.Background(), false)
+	if err != nil || out.Outcome != git.OutcomeLanded || !out.Removed || out.Fallback != nil || exists(f.tree) ||
+		f.rev(t, f.remote, "main") != head {
+		t.Fatalf("landed end: %+v %v", out, err)
+	}
+
+	f = newFixture(t)
+	gittest.Commit(t, gittest.Driver, nil, f.tree, "a.txt", "a\n", msg("one", opus))
+	f.pushElsewhere(t, 1)
+	h := f.lander(&tips)
+	h.Fallback = git.ModePush
+	out, err = h.Run(context.Background(), false)
+	if err != nil || out.Outcome != git.OutcomePushed || out.Mode != git.ModePush || !out.Removed ||
+		out.Refspec != "refs/sessions/s0001:refs/heads/broodforge/test/s0001" {
+		t.Fatalf("fallback end: %+v %v", out, err)
+	}
+	if out.Fallback == nil || out.Fallback.Code != git.CodeLandNotFastForward || !strings.Contains(out.Fallback.Message, "moved by 1 commits") {
+		t.Errorf("fallback %+v", out.Fallback)
+	}
+	if got, want := f.kinds(), []string{"push:attempted", "push:done"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("audit %q, want %q", got, want)
+	}
+	wantLine := "Not landed on main: main moved by 1 commits since this session branched. Fetch origin, rebase this tree onto " +
+		"origin/main (the driver or the runner), review again, then push again. Handed off as broodforge/test/s0001 instead."
+	if out.Fallback != nil && out.Fallback.Line != wantLine {
+		t.Errorf("fallback line %q", out.Fallback.Line)
+	}
+}
+
+// TestLandAtTheEndFallsBackOnTheGate: at a main end a gate refusal falls back too (ADR 0028
+// Amendments 2026-11-02), the refusal the first met; a diverged canonical does not fall back:
+// nothing is pushed and the tree stays.
+func TestLandAtTheEndFallsBackOnTheGate(t *testing.T) {
+	f := newFixture(t)
+	gittest.Commit(t, gittest.Driver, nil, f.tree, "a.txt", "a\n", msg("one", opus))
+	h := f.handoff(git.ModeMain)
+	h.Gate = func(_ context.Context, tip string) error { return git.LandNotAllowed("main") }
+	out, err := h.Run(context.Background(), false)
+	if err != nil || out.Outcome != git.OutcomePushed || out.Fallback == nil || out.Fallback.Code != git.CodeLandNotAllowed ||
+		out.Fallback.Line != "Not landed on main: landing on main needs a land role in this channel. Handed off as broodforge/test/s0001 instead." {
+		t.Fatalf("not-allowed end: %+v %v", out, err)
+	}
+
+	f = newFixture(t)
+	gittest.Commit(t, gittest.Driver, nil, f.tree, "a.txt", "a\n", msg("one", opus))
+	f.pushElsewhere(t, 1)
+	gittest.Commit(t, gittest.Driver, nil, f.sess.Canonical, "local.txt", "l\n", "local, not pushed")
+	var tips []string
+	_, err = f.lander(&tips).Run(context.Background(), false)
+	var ge *git.Error
+	if !errors.As(err, &ge) || ge.Code != git.CodeLandCanonicalDiverged || !exists(f.tree) || len(f.events) != 0 {
+		t.Errorf("diverged end: %v, tree %v, audit %q", err, exists(f.tree), f.kinds())
+	}
+}
+
+// TestLandRowsNameTheEnder: the end's land rows carry LandActor and Claimed, not the handoff's
+// own actor.
+func TestLandRowsNameTheEnder(t *testing.T) {
+	f := newFixture(t)
+	gittest.Commit(t, gittest.Driver, nil, f.tree, "a.txt", "a\n", msg("one", opus))
+	var tips []string
+	h := f.lander(&tips)
+	h.Actor, h.LandActor, h.Claimed = "instance", "host", "1001"
+	if out, err := h.Run(context.Background(), false); err != nil || out.Outcome != git.OutcomeLanded {
+		t.Fatalf("end: %+v %v", out, err)
+	}
+	if len(f.events) != 2 {
+		t.Errorf("audit %q", f.kinds())
+	}
+	for _, e := range f.events {
+		var d map[string]string
+		_ = json.Unmarshal(e.Details, &d)
+		if e.Kind != audit.KindLand || e.Actor != "host" || d["claimed"] != "1001" {
+			t.Errorf("%s:%s by %s %s", e.Kind, e.Phase, e.Actor, e.Details)
+		}
+	}
+}
+
+// TestCheckoutRemoteReadsBooleanTrue: git reads every boolean true as refuse.
+func TestCheckoutRemoteReadsBooleanTrue(t *testing.T) {
+	f := newFixture(t)
+	checkout := filepath.ToSlash(filepath.Join(f.root, "checkout"))
+	gittest.Git(t, f.root, "clone", "--quiet", f.remote, checkout)
+	gittest.Git(t, f.sess.Canonical, "remote", "set-url", "origin", checkout)
+	for _, v := range []string{"refuse", "true", "yes", "on", "1", "TRUE", "Yes", "On"} {
+		gittest.Git(t, checkout, "config", "receive.denyCurrentBranch", v)
+		if !git.CheckoutRemote(context.Background(), f.sess.Canonical, "origin", "main") {
+			t.Errorf("receive.denyCurrentBranch %s: false", v)
+		}
+	}
+	for _, v := range []string{"false", "ignore", "warn", "updateInstead", "0"} {
+		gittest.Git(t, checkout, "config", "receive.denyCurrentBranch", v)
+		if git.CheckoutRemote(context.Background(), f.sess.Canonical, "origin", "main") {
+			t.Errorf("receive.denyCurrentBranch %s: true", v)
+		}
+	}
+}
+
+// TestLandLeavesANewerTrackingRef: step 5's tracking-ref write never moves the ref backwards (a
+// concurrent fetch got further) and moves it forwards from an ancestor.
+func TestLandLeavesANewerTrackingRef(t *testing.T) {
+	f := newFixture(t)
+	older := f.rev(t, f.sess.Canonical, "main")
+	newer := gittest.Commit(t, gittest.Driver, nil, f.sess.Canonical, "n.txt", "n\n", "newer")
+	gittest.Git(t, f.sess.Canonical, "update-ref", "refs/remotes/origin/main", newer)
+	if err := git.FollowTracking(context.Background(), f.sess, older); err != nil || f.rev(t, f.sess.Canonical, "refs/remotes/origin/main") != newer {
+		t.Errorf("an older sha moved the ref: %v", err)
+	}
+	gittest.Git(t, f.sess.Canonical, "update-ref", "refs/remotes/origin/main", older)
+	if err := git.FollowTracking(context.Background(), f.sess, newer); err != nil || f.rev(t, f.sess.Canonical, "refs/remotes/origin/main") != newer {
+		t.Errorf("a newer sha did not move the ref: %v", err)
+	}
+}

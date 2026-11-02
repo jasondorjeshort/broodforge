@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -18,7 +20,9 @@ import (
 const (
 	ModePush        = "push"
 	ModePullRequest = "pull-request"
+	ModeMain        = "main" // a land on the default branch, falling back to Handoff.Fallback (ADR 0028)
 
+	OutcomeLanded      = "landed"       // main: the session's commits are on the default branch
 	OutcomeNone        = "none"         // no commits: the tree was removed
 	OutcomePushed      = "pushed"       // push: the branch is on the remote
 	OutcomePullRequest = "pull-request" // pull-request: pushed and the request opened
@@ -155,24 +159,58 @@ func Refresh(ctx context.Context, b spawn.Backend, s Session) (sha string, err e
 // Collect runs steps 1 to 3 (ADR 0022 companion, Handoff at session end): Refresh, then Check
 // of the session's commits over the base.
 func Collect(ctx context.Context, b spawn.Backend, s Session, a Attribution) (Collected, error) {
-	sha, err := Refresh(ctx, b, s)
+	unlock, err := LockBundle(ctx, s.ID)
 	if err != nil {
 		return Collected{}, err
+	}
+	defer unlock()
+	c, _, err := collectLocked(ctx, b, s, a)
+	return c, err
+}
+
+// collectLocked is Collect with the session's bundle lock held by the caller (the land holds it
+// throughout, ADR 0028 Decision 1); it also returns the sha refs/sessions/<id> holds after the
+// fetch, the session's tip.
+func collectLocked(ctx context.Context, b spawn.Backend, s Session, a Attribution) (Collected, string, error) {
+	bundle, base, err := BundleStep(ctx, b, s)
+	if err != nil {
+		return Collected{}, "", err
+	}
+	sha, err := fetchBundle(ctx, s, bundle, base)
+	if err != nil {
+		return Collected{}, "", err
 	}
 	// The check's base is taken after the fetch: a session that merged the default branch's
 	// newer commits forks from it later, and those commits are not the session's.
 	var c Collected
 	if c.Base, err = Base(ctx, s); err != nil {
-		return c, err
+		return c, sha, err
 	}
 	if sha == c.Base {
-		return c, nil // no commits since the base
+		return c, sha, nil // no commits since the base
 	}
 	if c.Checks, err = Check(ctx, s, c.Base, a); err != nil {
-		return c, err
+		return c, sha, err
 	}
 	c.Commits = len(c.Checks)
-	return c, nil
+	return c, sha, nil
+}
+
+// vet is what a handoff and a land refuse on after Collect: a commit failing the attribution
+// check, then, with every commit passing it, a hit of the push scan.
+func (h *Handoff) vet(ctx context.Context, c Collected) error {
+	if failing := c.Failing(); len(failing) > 0 {
+		return &Error{Code: CodeRefusedAttribution, Commits: failing,
+			Message: strconv.Itoa(len(failing)) + " of " + strconv.Itoa(len(c.Checks)) + " commits fail the attribution check"}
+	}
+	if c.Commits == 0 {
+		return nil
+	}
+	hits, err := ScanPrivacy(ctx, h.Session, c.Base, h.Privacy.WithSession(h.Attribution))
+	if err == nil && len(hits) > 0 {
+		err = PrivacyRefusal(hits, c.Commits)
+	}
+	return err
 }
 
 // Outcome is what a handoff did, or with --dry-run would do.
@@ -194,6 +232,17 @@ type Outcome struct {
 	// Log is the commits handed off, oldest first, for the end-of-session summary (04, Ending a
 	// session); `worktree handoff` does not print it.
 	Log []CommitLine `json:"-"`
+	// Fallback is a main project's land refusal when Run handed off as Handoff.Fallback instead
+	// (land-not-fast-forward, land-rejected; ADR 0028 Decision 1): the result carries both.
+	Fallback *LandRefusal `json:"fallback,omitempty"`
+}
+
+// LandRefusal is a land's refusal as an outcome carries it: its code and text.
+type LandRefusal struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	// Line is the companion's fallback line (FallbackLine).
+	Line string `json:"line"`
 }
 
 // CommitLine is one commit as the summary lists it: its hash and its subject.
@@ -204,9 +253,21 @@ type CommitLine struct {
 
 // Handoff is one session's handoff: the five steps of the ADR 0022 companion.
 type Handoff struct {
-	Backend     spawn.Backend
-	Session     Session
-	Mode        string // ModePush or ModePullRequest
+	Backend spawn.Backend
+	Session Session
+	Mode    string // ModePush, ModePullRequest or ModeMain
+	// Fallback is a main project's handoffFallback, ModePush ("" reads as it) or
+	// ModePullRequest: what Run hands off as when the end's land refuses anything but
+	// land-canonical-diverged (ADR 0028 Decision 1, Amendments 2026-11-02).
+	Fallback string
+	// Gate is Run's gate for a main land (LandOptions.Gate); nil refuses land-not-allowed.
+	Gate LandGate
+	// LandActor is the actor of the end's `land` audit rows (the ender: a Discord user id, host,
+	// or instance for the idle end), "" for Actor; Claimed is a host end's --as (LandOptions).
+	LandActor, Claimed string
+	// Opened is the web URL of the pull request a land already opened for this session, "" for
+	// none: a later land, or the end, pushes the branch and opens no second request.
+	Opened      string
 	Attribution Attribution
 	// Privacy is the push scan's lists (ADR 0025 rule 7); the scan adds the Attribution's
 	// identities (WithSession).
@@ -229,10 +290,12 @@ type Handoff struct {
 
 // Run hands the session off. Refusals keep the tree; a done push or request removes it through
 // worktree-remove and deletes refs/sessions/<id> (R-35). dryRun stops after the check: the
-// attribution check, then, with every commit passing it, the push scan.
+// attribution check, then, with every commit passing it, the push scan. On a main project it is
+// the land (Land, with Gate) followed by the removal; a land refused land-not-fast-forward or
+// land-rejected hands off as Fallback instead, the outcome carrying the refusal (ADR 0028).
 func (h *Handoff) Run(ctx context.Context, dryRun bool) (Outcome, error) {
-	if h.Mode != ModePush && h.Mode != ModePullRequest {
-		return Outcome{}, &Error{Code: CodeBadSession, Message: "handoff is " + strconv.Quote(h.Mode) + ", want push or pull-request"}
+	if h.Mode != ModePush && h.Mode != ModePullRequest && h.Mode != ModeMain {
+		return Outcome{}, &Error{Code: CodeBadSession, Message: "handoff is " + strconv.Quote(h.Mode) + ", want push, pull-request or main"}
 	}
 	var wip string
 	if h.CommitDirty && !dryRun {
@@ -242,9 +305,64 @@ func (h *Handoff) Run(ctx context.Context, dryRun bool) (Outcome, error) {
 			return Outcome{}, err
 		}
 	}
-	out, err := h.run(ctx, dryRun)
+	var out Outcome
+	var err error
+	if h.Mode == ModeMain {
+		out, err = h.runMain(ctx, dryRun)
+	} else {
+		out, err = h.run(ctx, dryRun)
+	}
 	out.WIP = wip
 	return out, err
+}
+
+// runMain is Run on a main project: the land, then step 5's removal; on a land refusal the
+// fallback (FallsBack), the outcome carrying the first refusal met in the land's order (role,
+// fact, fast-forward, push). land-canonical-diverged and the handoff's own refusals are final.
+func (h *Handoff) runMain(ctx context.Context, dryRun bool) (Outcome, error) {
+	res, err := h.Land(ctx, LandOptions{DryRun: dryRun, Gate: h.Gate, Claimed: h.Claimed})
+	if err == nil {
+		out := res.Outcome
+		if !dryRun {
+			h.remove(ctx, &out)
+		}
+		return out, nil
+	}
+	var ge *Error
+	if !errors.As(err, &ge) || !FallsBack(ge.Code) {
+		return Outcome{}, err
+	}
+	fb := *h
+	fb.Mode = h.Fallback
+	if fb.Mode == "" {
+		fb.Mode = ModePush
+	}
+	if fb.Mode != ModePush && fb.Mode != ModePullRequest {
+		return Outcome{}, &Error{Code: CodeBadSession, Message: "handoffFallback is " + strconv.Quote(fb.Mode) + ", want push or pull-request"}
+	}
+	out, ferr := fb.run(ctx, dryRun)
+	out.Fallback = &LandRefusal{Code: ge.Code, Message: ge.Message,
+		Line: FallbackLine(h.Session.DefaultBranch, ge.Message, h.Session.Branch())}
+	return out, ferr
+}
+
+// FallsBack reports whether a main end's land refused with code hands off as handoffFallback
+// instead (ADR 0028 Amendments 2026-11-02): every land refusal but land-canonical-diverged,
+// which names a fault of the host's canonical a fallback push would publish.
+func FallsBack(code string) bool {
+	switch code {
+	case CodeLandNotAllowed, CodeLandUnreviewed, CodeLandNotFastForward, CodeLandRejected:
+		return true
+	}
+	return false
+}
+
+// FallbackLine is the companion's line for an end that fell back (wording: owner): `Not landed
+// on <default>: <refusal text>. Handed off as <branch> instead.`, the refusal's own `Not landed: `
+// and closing period dropped so the line reads once.
+func FallbackLine(defaultBranch, refusal, branch string) string {
+	text := strings.TrimSuffix(strings.TrimPrefix(refusal, "Not landed: "), ".")
+	return "Not landed on " + defaultBranch + ": " + text + ". Handed off as " + branch + " instead."
 }
 
 // run is Run after the WIP commit: the five steps of the ADR 0022 companion.
@@ -252,15 +370,7 @@ func (h *Handoff) run(ctx context.Context, dryRun bool) (Outcome, error) {
 	s := h.Session
 	c, err := Collect(ctx, h.Backend, s, h.Attribution)
 	if err == nil {
-		if failing := c.Failing(); len(failing) > 0 {
-			err = &Error{Code: CodeRefusedAttribution, Commits: failing,
-				Message: strconv.Itoa(len(failing)) + " of " + strconv.Itoa(len(c.Checks)) + " commits fail the attribution check"}
-		} else if c.Commits > 0 {
-			var hits []PrivacyHit
-			if hits, err = ScanPrivacy(ctx, s, c.Base, h.Privacy.WithSession(h.Attribution)); err == nil && len(hits) > 0 {
-				err = PrivacyRefusal(hits, c.Commits)
-			}
-		}
+		err = h.vet(ctx, c)
 	}
 	if err != nil {
 		h.refused(err)
@@ -280,7 +390,7 @@ func (h *Handoff) run(ctx context.Context, dryRun bool) (Outcome, error) {
 		h.remove(ctx, &out)
 		return out, nil
 	}
-	if h.Mode == ModePullRequest {
+	if h.Mode == ModePullRequest && h.Opened == "" {
 		pr, err := h.request(ctx)
 		if err != nil {
 			return out, err
@@ -291,21 +401,23 @@ func (h *Handoff) run(ctx context.Context, dryRun bool) (Outcome, error) {
 		out.Outcome = OutcomeDryRun
 		return out, nil
 	}
-	var token []byte
-	if h.CredentialID != "" && h.Secret != nil {
-		if token, err = h.Secret(h.CredentialID); err != nil {
-			return out, &Error{Code: CodeFailedPush, Message: "git credential " + h.CredentialID + ": " + err.Error()}
-		}
+	token, err := h.token()
+	if err != nil {
+		return out, err
 	}
 	if err := h.push(ctx, out, token); err != nil {
 		return out, err
 	}
 	out.Outcome = OutcomePushed
-	if out.Request != nil {
+	switch {
+	case out.Request != nil:
 		url, err := h.open(ctx, *out.Request, token)
 		if err != nil {
 			return out, err
 		}
+		out.Outcome, out.URL = OutcomePullRequest, &url
+	case h.Mode == ModePullRequest:
+		url := h.Opened // a land opened the request: the push moved its branch
 		out.Outcome, out.URL = OutcomePullRequest, &url
 	}
 	h.remove(ctx, &out)
@@ -500,18 +612,30 @@ func (h *Handoff) refused(err error) {
 }
 
 func (h *Handoff) record(kind audit.Kind, phase audit.Phase, details map[string]string) {
+	h.recordAs(h.Actor, kind, phase, details)
+}
+
+// recordAs is record for another actor than h.Actor ("" reads as it): the end's land rows name
+// the ender (LandActor).
+func (h *Handoff) recordAs(actor string, kind audit.Kind, phase audit.Phase, details map[string]string) {
+	if actor == "" {
+		actor = h.Actor
+	}
 	if b, err := json.Marshal(details); err == nil {
-		h.emit(kind, phase, b)
+		h.emitAs(actor, kind, phase, b)
 	}
 }
 
 // emit writes the event; an audit failure does not change the handoff's outcome, which has
 // already happened outside the store (ADR 0021: attempted before, done or failed after).
 func (h *Handoff) emit(kind audit.Kind, phase audit.Phase, b json.RawMessage) {
+	h.emitAs(h.Actor, kind, phase, b)
+}
+
+func (h *Handoff) emitAs(actor string, kind audit.Kind, phase audit.Phase, b json.RawMessage) {
 	if h.Record == nil {
 		return
 	}
-	actor := h.Actor
 	if actor == "" {
 		actor = "instance"
 	}
@@ -524,4 +648,363 @@ func messageOf(err error) string {
 		return ge.Message
 	}
 	return err.Error()
+}
+
+// token is the project's git credential for a fetch or a push, nil when it has none; one that
+// cannot be read is handoff-failed-push.
+func (h *Handoff) token() ([]byte, error) {
+	if h.CredentialID == "" || h.Secret == nil {
+		return nil, nil
+	}
+	t, err := h.Secret(h.CredentialID)
+	if err != nil {
+		return nil, &Error{Code: CodeFailedPush, Message: "git credential " + h.CredentialID + ": " + err.Error()}
+	}
+	return t, nil
+}
+
+// LandGate is a main land's gate (ADR 0028 Decision 1, step 3): the driver's land role, then
+// the review fact naming tip, the sha refs/sessions/<id> holds after the land's own refresh. The
+// session service supplies it, so git reads no store; a refusal is its error (LandNotAllowed,
+// LandUnreviewed).
+type LandGate func(ctx context.Context, tip string) error
+
+// LandOptions are one land's: DryRun runs everything but the push; Gate is a main land's gate
+// (nil refuses land-not-allowed); Claimed is a host land's --as value, recorded on the audit
+// row as claimed, never as the actor (ADR 0028 Decision 5).
+type LandOptions struct {
+	DryRun  bool
+	Gate    LandGate
+	Claimed string
+}
+
+// EndLand is what a main end's land takes from the session service (ADR 0028 Amendments
+// 2026-11-02): the gate over the ender's roles, and the ender, the `land` rows' actor (a Discord
+// user id, host, or instance for the idle end) with a host end's --as as Claimed.
+type EndLand struct {
+	Gate           LandGate
+	Actor, Claimed string
+}
+
+// LandResult is what a land did, as `session land` prints it: the handoff's line (Outcome, its
+// outcome landed, pushed, pull-request, none or dry-run), the tip handed off, and two notes.
+// Stale is git's line when the fetch of step 1 failed (the land went on from the canonical's
+// copy); CanonicalLags is why step 5 left the canonical's default branch behind the landed sha
+// (its tracking ref was moved, and Base reads it).
+type LandResult struct {
+	Outcome
+	Sha           string `json:"sha,omitempty"`
+	Stale         string `json:"stale,omitempty"`
+	CanonicalLags string `json:"canonicalLags,omitempty"`
+}
+
+// Land is the one land of ADR 0028 Decision 1, run from the canonical, never opening the tree,
+// under the session's bundle lock throughout (one land at a time per session; the reviewer pin,
+// `worktree check` and a second land wait for it): (1) the fetch and fast-forward of the
+// default branch as at session start (Fetch), a failure noted in Stale, a diverged canonical
+// land-canonical-diverged; (2) the bundle and fetch into refs/sessions/<id>, the attribution
+// check and the push scan, as the handoff's; (3) on a main project the gate, then `merge-base
+// --is-ancestor <remote>/<db> <tip>`, false being land-not-fast-forward with the count; (4) the
+// push from the canonical with the askpass helper, never --force, audited `land`, a rejection on
+// a main project land-rejected with git's line (and the checkout warning when the remote is
+// one); (5) on a main project the canonical's branch and tracking ref fast-forwarded to the
+// landed sha (followCanonical). A push project pushes the session branch; a pull-request project
+// the same, and opens the request unless one is open (Opened). No commits since the base is
+// none. The tree and refs/sessions/<id> stay: the next land hands off what came after.
+func (h *Handoff) Land(ctx context.Context, opts LandOptions) (LandResult, error) {
+	s := h.Session
+	if h.Mode != ModePush && h.Mode != ModePullRequest && h.Mode != ModeMain {
+		return LandResult{}, &Error{Code: CodeBadSession, Message: "handoff is " + strconv.Quote(h.Mode) + ", want push, pull-request or main"}
+	}
+	if err := s.check(); err != nil {
+		return LandResult{}, err
+	}
+	unlock, err := LockBundle(ctx, s.ID)
+	if err != nil {
+		return LandResult{}, err
+	}
+	defer unlock()
+
+	var res LandResult
+	token, terr := h.token()
+	if terr != nil {
+		res.Stale = messageOf(terr)
+	} else {
+		f, err := Fetch(ctx, s, h.Backend.Askpass(), token)
+		var ge *Error
+		if errors.As(err, &ge) && ge.Code == CodeCanonicalDiverged {
+			return LandResult{}, &Error{Code: CodeLandCanonicalDiverged, Message: "Not landed: the host's copy of " +
+				s.DefaultBranch + " and " + s.Remote + " have diverged; the owner reconciles it."}
+		}
+		if err != nil {
+			return LandResult{}, err
+		}
+		if f.Stale {
+			res.Stale = f.Error
+		}
+	}
+
+	c, tip, err := collectLocked(ctx, h.Backend, s, h.Attribution)
+	if err == nil {
+		err = h.vet(ctx, c)
+	}
+	if err != nil {
+		h.refused(err)
+		return LandResult{}, err
+	}
+	res.Mode, res.Remote, res.Commits, res.Sha = h.Mode, s.Remote, c.Commits, tip
+	for _, ch := range c.Checks {
+		res.Log = append(res.Log, CommitLine{Hash: ch.Hash, Subject: ch.Subject})
+	}
+	if c.Commits == 0 {
+		res.Outcome.Outcome = OutcomeNone
+		if opts.DryRun {
+			res.Outcome.Outcome = OutcomeDryRun
+		}
+		return res, nil
+	}
+
+	done := OutcomePushed
+	switch h.Mode {
+	case ModeMain:
+		res.Refspec, done = SessionRef(s.ID)+":refs/heads/"+s.DefaultBranch, OutcomeLanded
+		if opts.Gate == nil {
+			return LandResult{}, LandNotAllowed(s.DefaultBranch)
+		}
+		if err := opts.Gate(ctx, tip); err != nil {
+			return LandResult{}, err
+		}
+		if err := fastForwardOnto(ctx, s, tip); err != nil {
+			return LandResult{}, err
+		}
+	case ModePullRequest:
+		res.Refspec = SessionRef(s.ID) + ":refs/heads/" + s.Branch()
+		if h.Opened == "" {
+			pr, err := h.request(ctx)
+			if err != nil {
+				return LandResult{}, err
+			}
+			res.Request = &pr
+		}
+	default:
+		res.Refspec = SessionRef(s.ID) + ":refs/heads/" + s.Branch()
+	}
+	if opts.DryRun {
+		res.Outcome.Outcome = OutcomeDryRun
+		return res, nil
+	}
+	if terr != nil {
+		return LandResult{}, terr
+	}
+	if err := h.landPush(ctx, res, token, opts.Claimed, done); err != nil {
+		return LandResult{}, err
+	}
+	res.Outcome.Outcome = done
+	switch {
+	case h.Mode == ModeMain:
+		res.CanonicalLags = followCanonical(ctx, s, tip)
+	case res.Request != nil:
+		url, err := h.open(ctx, *res.Request, token)
+		if err != nil {
+			return res, err
+		}
+		res.Outcome.Outcome, res.URL = OutcomePullRequest, &url
+	case h.Mode == ModePullRequest:
+		url := h.Opened // the request a land opened: the push moved its branch
+		res.Outcome.Outcome, res.URL = OutcomePullRequest, &url
+	}
+	return res, nil
+}
+
+// fastForwardOnto is step 3's check after the gate: <remote>/<db> must be an ancestor of tip,
+// else land-not-fast-forward with the number of its commits tip lacks; the bot never rebases. A
+// remote that has no such branch yet is no refusal: the push creates it.
+func fastForwardOnto(ctx context.Context, s Session, tip string) error {
+	tracking := trackingRef(s)
+	if _, err := run(ctx, CodeFetch, s.Canonical, nil, "rev-parse", "--verify", "--quiet", tracking+"^{commit}"); err != nil {
+		return nil
+	}
+	ok, err := isAncestor(ctx, s.Canonical, tracking, tip)
+	if err != nil || ok {
+		return err
+	}
+	out, err := run(ctx, CodeFetch, s.Canonical, nil, "rev-list", "--count", tip+".."+tracking)
+	if err != nil {
+		return err
+	}
+	return &Error{Code: CodeLandNotFastForward, Message: "Not landed: " + s.DefaultBranch + " moved by " + strings.TrimSpace(out) +
+		" commits since this session branched. Fetch " + s.Remote + ", rebase this tree onto " + s.Remote + "/" + s.DefaultBranch +
+		" (the driver or the runner), review again, then push again."}
+}
+
+// landPush is step 4: `git push <remote> <refspec>` from the canonical with the account's
+// credential helpers cleared, never --force, audited `land` attempted, then done with the
+// outcome or failed with git's line. A rejected main push is land-rejected; a push project's is
+// the handoff's handoff-failed-push.
+func (h *Handoff) landPush(ctx context.Context, res LandResult, token []byte, claimed, outcome string) error {
+	details := map[string]string{"remote": res.Remote, "refspec": res.Refspec, "commits": strconv.Itoa(res.Commits), "sha": res.Sha}
+	if claimed != "" {
+		details["claimed"] = claimed
+	}
+	h.recordAs(h.LandActor, audit.KindLand, audit.PhaseAttempted, details)
+	_, err := run(ctx, CodeFailedPush, h.Session.Canonical, PushEnv(h.Backend.Askpass(), token),
+		"-c", "credential.helper=", "push", "--quiet", res.Remote, res.Refspec)
+	if err != nil {
+		details["error"] = messageOf(err)
+		h.recordAs(h.LandActor, audit.KindLand, audit.PhaseFailed, details)
+		if h.Mode != ModeMain {
+			return err
+		}
+		s := h.Session
+		msg := "Not landed: push rejected by the remote: " + strings.TrimPrefix(messageOf(err), "git push: ") + ". If " +
+			s.DefaultBranch + " moved, push again; if the remote refuses the branch, the owner changes the remote or the project's handoff."
+		// A land on a checkout remote repeats config check's inspection (the companion).
+		if CheckoutRemote(ctx, s.Canonical, s.Remote, s.DefaultBranch) {
+			msg += " " + CheckoutRemoteWarning(s.Remote, s.DefaultBranch)
+		}
+		return &Error{Code: CodeLandRejected, Message: msg}
+	}
+	details["outcome"] = outcome
+	h.recordAs(h.LandActor, audit.KindLand, audit.PhaseDone, details)
+	return nil
+}
+
+// followCanonical is step 5 after a done main push, under a deadline of its own: the canonical's
+// tracking ref moved to sha unless it already holds it (followTracking), then its default branch
+// fast-forwarded to it (FastForward) when the branch is an ancestor. "" when the branch followed;
+// else why it lags, the tracking ref moved all the same, so Base reads the landed sha. The tree
+// is untouched; nothing is re-collected.
+func followCanonical(ctx context.Context, s Session, sha string) string {
+	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), fastForwardTimeout)
+	defer cancel()
+	lags := func(why string) string {
+		return "the host's copy of " + s.DefaultBranch + " was not moved to " + sha + ": " + why
+	}
+	if err := followTracking(fctx, s, sha); err != nil {
+		return lags(messageOf(err))
+	}
+	out, err := run(fctx, CodeFetch, s.Canonical, nil, "rev-parse", "--verify", "--quiet", "refs/heads/"+s.DefaultBranch+"^{commit}")
+	if err != nil {
+		return lags(messageOf(err))
+	}
+	local := strings.TrimSpace(out)
+	if local == sha {
+		return ""
+	}
+	ok, err := isAncestor(fctx, s.Canonical, local, sha)
+	switch {
+	case err != nil:
+		return lags(messageOf(err))
+	case !ok:
+		return lags("it holds commits the landed one does not")
+	}
+	if err := FastForward(fctx, s, sha, local); err != nil {
+		return lags(messageOf(err))
+	}
+	return ""
+}
+
+// followTracking moves refs/remotes/<remote>/<db> to sha, a fetch's write after a done push: left
+// alone when it already holds sha or a descendant of it (git's push or another session's fetch
+// on the same project got there first), else `update-ref <ref> <sha> <old>`, so a concurrent
+// write is refused, never moved backwards.
+func followTracking(ctx context.Context, s Session, sha string) error {
+	old := ""
+	if out, err := run(ctx, CodeFetch, s.Canonical, nil, "rev-parse", "--verify", "--quiet", trackingRef(s)+"^{commit}"); err == nil {
+		old = strings.TrimSpace(out)
+	}
+	if old == sha {
+		return nil
+	}
+	if old != "" {
+		if held, err := isAncestor(ctx, s.Canonical, sha, old); err != nil || held {
+			return err
+		}
+	}
+	// An empty old value: the ref must not exist yet.
+	_, err := run(ctx, CodeFetch, s.Canonical, nil, "update-ref", trackingRef(s), sha, old)
+	return err
+}
+
+// LandNotAllowed is the land-not-allowed refusal (the companion's text; wording: owner).
+func LandNotAllowed(defaultBranch string) *Error {
+	return &Error{Code: CodeLandNotAllowed, Message: "Not landed: landing on " + defaultBranch + " needs a land role in this channel."}
+}
+
+// LandUnreviewed is the land-unreviewed refusal for the tip sha, naming the newest reviewer
+// row's commitError when there is one (the companion's text; wording: owner).
+func LandUnreviewed(sha, commitError string) *Error {
+	why := "review: none since " + sha
+	if commitError != "" {
+		why += "; the last reviewer launch failed: " + commitError
+	}
+	return &Error{Code: CodeLandUnreviewed, Message: "Not landed: " + why +
+		". Commit, launch the reviewer as a call on its own, then push again."}
+}
+
+// CheckoutRemote is the inspection behind the companion's second config check warning: the
+// remote named in the canonical is a path to a non-bare repository (`rev-parse
+// --is-bare-repository` false) whose `symbolic-ref HEAD` is the default branch and whose
+// receive.denyCurrentBranch is unset, true or refuse, so git refuses every push to that branch.
+// A URL remote, or a path it cannot read, is false.
+func CheckoutRemote(ctx context.Context, canonical, remote, defaultBranch string) bool {
+	url, err := run(ctx, CodeClone, canonical, nil, "remote", "get-url", remote)
+	if err != nil {
+		return false
+	}
+	dir, ok := remotePath(canonical, strings.TrimSpace(url))
+	if !ok {
+		return false
+	}
+	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+		return false
+	}
+	bare, err := run(ctx, CodeClone, dir, nil, "rev-parse", "--is-bare-repository")
+	if err != nil || strings.TrimSpace(bare) != "false" {
+		return false
+	}
+	head, err := run(ctx, CodeClone, dir, nil, "symbolic-ref", "-q", "HEAD")
+	if err != nil || strings.TrimSpace(head) != "refs/heads/"+defaultBranch {
+		return false
+	}
+	deny, err := run(ctx, CodeClone, dir, nil, "config", "--get", "receive.denyCurrentBranch")
+	if err != nil {
+		return true // unset: git's default, refuse
+	}
+	// git reads a boolean true (true, yes, on, 1, any case) as refuse.
+	switch strings.ToLower(strings.TrimSpace(deny)) {
+	case "refuse", "true", "yes", "on", "1":
+		return true
+	}
+	return false
+}
+
+// CheckoutRemoteWarning is the companion's checkout-remote warning without its `warning:
+// <project>: ` prefix (wording: owner).
+func CheckoutRemoteWarning(remote, defaultBranch string) string {
+	return remote + " is a checkout with " + defaultBranch + " checked out; git refuses every push to it " +
+		"(receive.denyCurrentBranch). Lifts: a bare repository beside the checkout that the owner pulls from; " +
+		"receive.denyCurrentBranch updateInstead on the checkout (still refused while its tree or index differs " +
+		"from HEAD); GitHub as the remote."
+}
+
+// remotePath is a remote URL read as a local path, a relative one against the canonical: a
+// file:// URL or a plain path; any other scheme, or git's scp form host:path, is not one.
+func remotePath(canonical, url string) (string, bool) {
+	if p, ok := strings.CutPrefix(url, "file://"); ok {
+		if len(p) > 2 && p[0] == '/' && p[2] == ':' {
+			p = p[1:] // file:///C:/x
+		}
+		return p, true
+	}
+	if strings.Contains(url, "://") {
+		return "", false
+	}
+	if i := strings.Index(url, ":"); i > 1 && !strings.ContainsAny(url[:i], `/\`) {
+		return "", false
+	}
+	if !filepath.IsAbs(url) && !strings.HasPrefix(url, "/") {
+		url = filepath.Join(canonical, url)
+	}
+	return url, true
 }

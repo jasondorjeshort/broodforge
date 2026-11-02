@@ -368,6 +368,16 @@ type EndRequest struct {
 	// Discard ends without a handoff (`--discard`, the header's End and discard after its
 	// confirm; 04-ux-session-end.md): Config.Discard in place of Config.Handoff.
 	Discard bool
+	// Host is `session end` on the host: a main end's `land` rows name host as the actor and As
+	// as claimed (ADR 0028 Decision 5); the venue's end leaves it false, As being the member.
+	Host bool
+}
+
+// ender is who ended a session as a main end's land sees it (ADR 0028 Amendments 2026-11-02):
+// the roles judged against roles.land ("" none, so land-not-allowed and the fallback), and the
+// `land` rows' actor and claimed --as.
+type ender struct {
+	roles, actor, claimed string
 }
 
 // End is SessionService.end (03, End of session): a running turn is interrupted, a pending
@@ -385,7 +395,11 @@ func (s *Service) End(ctx context.Context, req EndRequest) (git.Outcome, error) 
 		return git.Outcome{}, err
 	}
 	summary := "Session " + l.id + " ended by " + who + "." // 04, Ending a session
-	return s.endWith(ctx, l, actorOf(req.As), who, "end", summary, noGen, req.Discard)
+	by := ender{roles: req.Roles, actor: actorOf(req.As)}
+	if req.Host {
+		by.actor, by.claimed = ActorHost, req.As
+	}
+	return s.endWith(ctx, l, actorOf(req.As), who, "end", summary, noGen, req.Discard, by)
 }
 
 // DiscardCount is the header's End and discard before its confirm (04-ux-session-end.md): the
@@ -439,12 +453,22 @@ func (s *Service) pending(ctx context.Context, l *live) *int {
 const noGen = -1
 
 func (s *Service) end(ctx context.Context, l *live, actor, who, reason, summary string, idleGen int) (git.Outcome, error) {
-	return s.endWith(ctx, l, actor, who, reason, summary, idleGen, false)
+	// The idle end has no roles behind it: a main land is land-not-allowed and falls back.
+	return s.endWith(ctx, l, actor, who, reason, summary, idleGen, false, ender{actor: actor})
+}
+
+// endRefusal reports whether a git refusal at the end keeps the session open: the handoff's
+// refusals, and on a main project land-canonical-diverged, the one land refusal that does not
+// fall back (ADR 0028 Amendments 2026-11-02; the others never reach here).
+func endRefusal(code string) bool {
+	return strings.HasPrefix(code, CodeHandoffState) || code == git.CodeLandCanonicalDiverged
 }
 
 // endWith is end, with discard running Config.Discard in place of the handoff: no Ending line,
-// the same refusals keeping the session open, the outcome discarded (04-ux-session-end.md).
-func (s *Service) endWith(ctx context.Context, l *live, actor, who, reason, summary string, idleGen int, discard bool) (git.Outcome, error) {
+// the same refusals keeping the session open, the outcome discarded (04-ux-session-end.md). by
+// is the ender: on a main project the land's gate judges by.roles against the channel's
+// current roles.land, none being land-not-allowed (ADR 0028 Amendments 2026-11-02).
+func (s *Service) endWith(ctx context.Context, l *live, actor, who, reason, summary string, idleGen int, discard bool, by ender) (git.Outcome, error) {
 	l.mu.Lock()
 	switch l.state {
 	case StateEnded, StateEnding:
@@ -489,12 +513,13 @@ func (s *Service) endWith(ctx context.Context, l *live, actor, who, reason, summ
 			return esc, nil
 		}
 	}
-	handoff := s.cfg.Handoff
-	if discard {
-		handoff = nil
-		if s.cfg.Discard != nil {
-			handoff = func(ctx context.Context, id string) (git.Outcome, error) { return s.cfg.Discard(ctx, id, actor) }
-		}
+	var handoff func(ctx context.Context, id string) (git.Outcome, error)
+	switch {
+	case discard && s.cfg.Discard != nil:
+		handoff = func(ctx context.Context, id string) (git.Outcome, error) { return s.cfg.Discard(ctx, id, actor) }
+	case !discard && s.cfg.Handoff != nil:
+		land := git.EndLand{Gate: s.landGate(l, by.roles, true), Actor: by.actor, Claimed: by.claimed}
+		handoff = func(ctx context.Context, id string) (git.Outcome, error) { return s.cfg.Handoff(ctx, id, land) }
 	}
 	if handoff != nil {
 		if !discard {
@@ -503,7 +528,7 @@ func (s *Service) endWith(ctx context.Context, l *live, actor, who, reason, summ
 		out, err := handoff(ctx, l.id)
 		if err != nil {
 			var ge *git.Error
-			if errors.As(err, &ge) && strings.HasPrefix(ge.Code, CodeHandoffState) && before == StateInterrupted {
+			if errors.As(err, &ge) && endRefusal(ge.Code) && before == StateInterrupted {
 				// Refused on a held session: back to interrupted, no timer, no new turn; no agent
 				// can amend the commits, so 04's sentence names the owner's retry.
 				l.mu.Lock()
@@ -514,7 +539,7 @@ func (s *Service) endWith(ctx context.Context, l *live, actor, who, reason, summ
 				l.mu.Unlock()
 				return out, err
 			}
-			if errors.As(err, &ge) && strings.HasPrefix(ge.Code, CodeHandoffState) {
+			if errors.As(err, &ge) && endRefusal(ge.Code) {
 				// Refused: the session stays open; the driver may amend and end again. An idle
 				// end tries once: the timer waits for the next activity, not the next period.
 				l.mu.Lock()
@@ -588,7 +613,7 @@ func heldRetry(id, code string, discard bool) string {
 // heldEscape is end's two escapes on a held session, in 05's order, so every held session can be
 // ended (ADR 0026): refs/sessions/<id> gone from the canonical (a worktree handoff finished
 // earlier) ends with the outcome that handoff recorded in end_outcome, a URL as pull-request with
-// the URL, a branch as pushed, null as none; else the tree gone ends tree-missing, the ref
+// the URL, `landed` as landed, a branch as pushed, null as none; else the tree gone ends tree-missing, the ref
 // present or the canonical unreadable (a handoff would refuse the bundle on every attempt).
 // Neither runs a handoff; the commit count is unknown, the remote and the mode the project's.
 // false when neither applies: then the handoff runs and reports what it finds.
@@ -610,6 +635,9 @@ func (s *Service) heldEscape(ctx context.Context, l *live) (git.Outcome, bool) {
 		out := git.Outcome{Outcome: git.OutcomeNone, Mode: mode, Remote: l.git.Remote, Commits: CommitsUnknown}
 		switch {
 		case stored == nil:
+		case *stored == git.OutcomeLanded:
+			// A main project's handoff landed the commits on the default branch (ADR 0028).
+			out.Outcome, out.Mode = git.OutcomeLanded, git.ModeMain
 		case strings.Contains(*stored, "://"):
 			// The handoff records a URL in pull-request mode and the branch in push mode.
 			out.Outcome, out.Mode, out.URL = git.OutcomePullRequest, git.ModePullRequest, stored
@@ -828,6 +856,9 @@ func (s *Service) endInfo(l *live, reason, outcome string, out git.Outcome, by s
 	info := &EndInfo{By: by, Reason: reason, StartedAt: l.startedAt, Turns: l.turn, In: l.sessIn, Out: l.sessOut,
 		Model: topModel(l.sessionModels, l.model), Branch: l.git.Branch(), Outcome: outcome, Commits: out.Commits,
 		WIP: out.WIP, Ref: out.Ref, Author: l.driver.Name, CoAuthors: []string{}}
+	if out.Fallback != nil {
+		info.NotLanded = out.Fallback.Line // a main end that fell back: the companion's line (ADR 0028)
+	}
 	// The opened request's web URL (04's `pull request #42 <url>`); before it opens, as on a
 	// failed request, the API URL it was posted to.
 	switch {

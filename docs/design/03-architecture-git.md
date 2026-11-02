@@ -53,8 +53,9 @@ bundle, verify, fetch, check, and hand off per the project's `handoff` (default 
 `push` pushes `refs/sessions/<id>` to `refs/heads/<session branch>` on the remote; `pull-request`
 pushes the same and opens the request through the forge's HTTP API with the project's git
 credential in that one call (`forge: "github"` only in the first version; title and body are a 04
-flow); `main` runs the land below and, when the land refuses `land-not-fast-forward` or
-`land-rejected`, falls back to `handoffFallback` (ADR 0028). Before the bundle, a dirty tree is committed through the spawn backend as one `WIP` commit with the session's attribution, and the end-and-discard keeps the commits on `refs/aborted/<id>` in place of a handoff (`04-ux-session-end.md`). No commits: the tree is removed and the session says so. The tree is removed only after
+flow); `main` runs the land below, judged by the ender's roles (none for the idle end or a host
+`session end` without `--roles`), and on any land refusal but `land-canonical-diverged` falls back
+to `handoffFallback`, the line naming the first refusal met (ADR 0028, Amendments 2026-11-02). Before the bundle, a dirty tree is committed through the spawn backend as one `WIP` commit with the session's attribution, and the end-and-discard keeps the commits on `refs/aborted/<id>` in place of a handoff (`04-ux-session-end.md`). No commits: the tree is removed and the session says so. The tree is removed only after
 `done` on the push or the request (R-35); a refused or failed handoff keeps it and `status` lists it with its unpushed count.
 
 ## Landing (ADR 0028)

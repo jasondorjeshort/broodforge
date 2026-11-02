@@ -105,9 +105,10 @@ const worktreeActive = "active"
 // defaultFixture is the fake's fixture when a start names none (05, A turn against the fake).
 const defaultFixture = "basic"
 
-// Roles are a channel's role lists (03 Configuration).
+// Roles are a channel's role lists (03 Configuration); Land is who may land on the default
+// branch, empty meaning nobody (ADR 0028 Decision 2).
 type Roles struct {
-	Start, Contribute, Answer []string
+	Start, Contribute, Answer, Land []string
 }
 
 // Repo is the project's canonical checkout and its handoff mode (push or pull-request; "" reads
@@ -164,8 +165,13 @@ type Config struct {
 	// RemoveTree undoes CreateTree for a start that fails after the clone: git.Discard.
 	RemoveTree func(ctx context.Context, s git.Session) error
 	// Handoff is the end of session's bundle, check and push or pull request (03; the bot's
-	// worktree handoff). nil hands nothing off: the outcome is none.
-	Handoff func(ctx context.Context, id string) (git.Outcome, error)
+	// worktree handoff), on a main project the land with gate and the fallback (ADR 0028). nil
+	// hands nothing off: the outcome is none.
+	Handoff func(ctx context.Context, id string, land git.EndLand) (git.Outcome, error)
+	// Land is a land mid-session (ADR 0028 Decision 1; the bot's git.Handoff.Land for the
+	// session's project) for actor, the audit row's: `session land`, later the venue and the
+	// push word. nil refuses every land.
+	Land func(ctx context.Context, id, actor string, opts git.LandOptions) (git.LandResult, error)
 	// Discard is the end without a handoff (`session end --discard`, 04-ux-session-end.md):
 	// the dirty tree WIP-committed, the commits kept on refs/aborted/<id>, nothing pushed, for
 	// actor (the bot's git.Handoff.Discard). nil discards nothing: the outcome is discarded.
@@ -958,6 +964,109 @@ func treeGone(tree, state string) bool {
 	}
 	_, err := os.Stat(filepath.FromSlash(tree))
 	return errors.Is(err, fs.ErrNotExist)
+}
+
+// LandRequest is `session land <id> [--dry-run] [--as <user id>] [--roles <ids>]` (ADR 0028
+// Decision 1; 05-debug-interface-git.md, Landing): --roles absent leaves the role unchecked, the
+// review fact is always checked. Host is a land from the host: the audit actor is host and As,
+// when given, is recorded as claimed, never as the actor (Decision 5).
+type LandRequest struct {
+	ActRequest
+	DryRun bool
+	Host   bool
+}
+
+// Land is SessionService's land mid-session (ADR 0028 Decision 1): an open session, then
+// Config.Land with the session's gate (LandGate over --roles and the channel's roles.land). The
+// session stays open and its tree untouched; a running turn does not block it, and one land at
+// a time runs per session (the land holds the session's bundle lock, a second request waits). A
+// refusal is audited action-refused with its code and returned as git's error. A host land's
+// actor is host on every row, its own refusals included; --as is only ever claimed, so it need
+// not be registered (ADR 0028 Decision 5).
+func (s *Service) Land(ctx context.Context, req LandRequest) (git.LandResult, error) {
+	act, actor, claimed := req.ActRequest, actorOf(req.As), ""
+	var l *live
+	if req.Host {
+		act.As, actor, claimed = "", ActorHost, req.As
+		if s.closing.Load() {
+			return git.LandResult{}, &Error{CodeShuttingDown, "the bot is stopping"}
+		}
+		if l = s.lookup(req.Session); l == nil {
+			return git.LandResult{}, s.closedSession(req.Session)
+		}
+	} else {
+		var err error
+		if l, _, err = s.acting(req.ActRequest); err != nil {
+			return git.LandResult{}, err
+		}
+	}
+	if err := s.openCheck(l, act, "land"); err != nil {
+		return git.LandResult{}, err
+	}
+	if s.cfg.Land == nil {
+		return git.LandResult{}, s.refuse(actor, l.id, "land", "no-land", &Error{CodeRefused, "this bot does not land"})
+	}
+	res, err := s.cfg.Land(ctx, l.id, actor, git.LandOptions{DryRun: req.DryRun, Gate: s.landGate(l, req.Roles, req.Roles != ""),
+		Claimed: claimed})
+	if err != nil {
+		var ge *git.Error
+		if errors.As(err, &ge) {
+			kv := []string{"action", "land", "reason", ge.Code, "message", ge.Message}
+			if claimed != "" {
+				kv = append(kv, "claimed", claimed)
+			}
+			if werr := s.cfg.Store.Write(func(tx *store.Tx) error {
+				_, e := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindActionRefused, Actor: actor, Session: l.id, Details: details(kv...)})
+				return e
+			}); werr != nil {
+				return git.LandResult{}, errors.Join(err, werr)
+			}
+		}
+		return git.LandResult{}, err
+	}
+	return res, nil
+}
+
+// landGate is the gate of a land in l for roles as --roles gives them; checkRoles false leaves
+// the role unchecked (a mid-session land without --roles, as every acting command's). The land
+// list is the channel's as configured now (landList), so `config reload` lifts a refusal.
+func (s *Service) landGate(l *live, roles string, checkRoles bool) git.LandGate {
+	return LandGate(s.cfg.Store, l.git, splitRoles(roles), checkRoles, s.landList(l), s.groups())
+}
+
+// landList is the session's channel's roles.land as the configuration holds it now, nil when
+// the channel has left it (nobody may land).
+func (s *Service) landList(l *live) []string {
+	if ch, ok := s.cfg.Channel(l.ch.ID); ok {
+		return ch.Roles.Land
+	}
+	return nil
+}
+
+// LandGate is the gate of a main land for gs (ADR 0028 Decision 1, step 3; the companion's
+// codes): a channel whose land list is empty is land-not-allowed whoever asks; with checkRoles
+// the roles held must be in the list (policy.MayLand); then the review fact (ReviewFact) must
+// name tip exactly, else land-unreviewed carrying the newest reviewer row's commitError. The
+// session service builds it for a land and for a main end; `worktree handoff` on the host with
+// checkRoles false.
+func LandGate(q store.Querier, gs git.Session, held []string, checkRoles bool, land []string, groups map[string][]string) git.LandGate {
+	return func(ctx context.Context, tip string) error {
+		if len(land) == 0 || (checkRoles && !policy.MayLand(held, land, groups)) {
+			return git.LandNotAllowed(gs.DefaultBranch)
+		}
+		r, err := ReviewFact(ctx, q, gs)
+		switch {
+		case err != nil:
+			return err
+		case r == nil:
+			return git.LandUnreviewed(tip, "")
+		case r.Error != nil:
+			return &git.Error{Code: r.Error.Code, Message: r.Error.Message}
+		case r.ToolUseID == nil || r.Commit != tip:
+			return git.LandUnreviewed(tip, r.LastLaunch)
+		}
+		return nil
+	}
 }
 
 // Counts are status's session line (05 Bot lifecycle).

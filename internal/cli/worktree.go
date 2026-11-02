@@ -19,6 +19,7 @@ import (
 	"github.com/jasondorjeshort/broodforge/internal/control"
 	"github.com/jasondorjeshort/broodforge/internal/git"
 	"github.com/jasondorjeshort/broodforge/internal/policy"
+	"github.com/jasondorjeshort/broodforge/internal/session"
 	"github.com/jasondorjeshort/broodforge/internal/spawn"
 	"github.com/jasondorjeshort/broodforge/internal/store"
 	"github.com/jasondorjeshort/broodforge/internal/workflow"
@@ -200,7 +201,7 @@ type bundleResult struct {
 	Commits int    `json:"commits"`
 }
 
-func encodeWorktree[T hookLine | commitLine | privacyLine | attributionResult | bundleResult | git.Outcome | endLine](v T) (json.RawMessage, error) {
+func encodeWorktree[T hookLine | commitLine | privacyLine | attributionResult | bundleResult | git.Outcome | endLine | git.LandResult](v T) (json.RawMessage, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)
@@ -341,7 +342,7 @@ func (s *WorktreeService) bundle(ctx context.Context, _ *control.Call, id string
 }
 
 func (s *WorktreeService) handoff(ctx context.Context, call *control.Call, id string, dryRun bool) (json.RawMessage, error) {
-	out, err := s.runHandoff(ctx, id, dryRun, false, actorHostCLI)
+	out, err := s.runHandoff(ctx, id, dryRun, false, actorHostCLI, git.EndLand{})
 	if err != nil {
 		var ge *git.Error
 		if errors.As(err, &ge) && ge.Code == git.CodeRefusedAttribution {
@@ -371,19 +372,22 @@ const ActorBot = "instance"
 // runHandoff is the companion's five steps for one session: the tree's state and the
 // session's outcome recorded as `worktree handoff` records them. A git refusal is returned as
 // the *git.Error, its failing commits with it. commitDirty is the end's WIP commit of a dirty
-// tree (git.Handoff.CommitDirty), which `worktree handoff` does not make.
-func (s *WorktreeService) runHandoff(ctx context.Context, id string, dryRun, commitDirty bool, actor string) (git.Outcome, error) {
+// tree (git.Handoff.CommitDirty), which `worktree handoff` does not make. land is a main end's
+// gate and ender (the session service's); a nil gate is the host's (hostGate), the land rows
+// then naming actor.
+func (s *WorktreeService) runHandoff(ctx context.Context, id string, dryRun, commitDirty bool, actor string, land git.EndLand) (git.Outcome, error) {
 	sess, err := s.load(id)
 	if err != nil {
 		return git.Outcome{}, err
 	}
-	p, err := s.scanPrivacy(sess, id)
+	h, err := s.handoffFor(sess, id, actor)
 	if err != nil {
 		return git.Outcome{}, err
 	}
-	h := &git.Handoff{Backend: s.Backend, Session: sess.git, Mode: sess.project.HandoffOrDefault(),
-		Attribution: sess.attr, Privacy: p, CredentialID: sess.project.Repo.GitCredentialID, Secret: s.Secret,
-		Forge: s.Forge, API: s.API, Title: sess.title, Record: s.record, Actor: actor, CommitDirty: commitDirty}
+	h.CommitDirty, h.Gate, h.LandActor, h.Claimed = commitDirty, land.Gate, land.Actor, land.Claimed
+	if land.Gate == nil {
+		h.Gate = s.hostGate(sess)
+	}
 	out, err := h.Run(ctx, dryRun)
 	if err != nil {
 		var ge *git.Error
@@ -395,10 +399,14 @@ func (s *WorktreeService) runHandoff(ctx context.Context, id string, dryRun, com
 	if out.Removed {
 		s.setWorktreeState(id, store.WorktreeRemoved)
 	}
-	if out.Outcome == git.OutcomePushed || out.Outcome == git.OutcomePullRequest {
+	if out.Outcome == git.OutcomePushed || out.Outcome == git.OutcomePullRequest || out.Outcome == git.OutcomeLanded {
+		// heldEscape reads it back: a URL, landed, or the branch pushed.
 		outcome := sess.git.Branch()
-		if out.URL != nil {
+		switch {
+		case out.URL != nil:
 			outcome = *out.URL
+		case out.Outcome == git.OutcomeLanded:
+			outcome = git.OutcomeLanded
 		}
 		_ = s.Store.Write(func(tx *store.Tx) error {
 			_, err := tx.Exec("UPDATE session SET end_outcome = ? WHERE id = ?", store.Text(outcome), store.Text(id))
@@ -406,6 +414,61 @@ func (s *WorktreeService) runHandoff(ctx context.Context, id string, dryRun, com
 		})
 	}
 	return out, nil
+}
+
+// handoffFor is the git.Handoff of a loaded session as `worktree handoff`, the end and a land
+// run it: the project's handoff and handoffFallback, the push scan's lists, the credential, and
+// the pull request a land already opened (openedRequest).
+func (s *WorktreeService) handoffFor(sess loadedSession, id, actor string) (*git.Handoff, error) {
+	p, err := s.scanPrivacy(sess, id)
+	if err != nil {
+		return nil, err
+	}
+	opened, err := s.openedRequest(id)
+	if err != nil {
+		return nil, err
+	}
+	return &git.Handoff{Backend: s.Backend, Session: sess.git, Mode: sess.project.HandoffOrDefault(),
+		Fallback: sess.project.HandoffFallbackOrDefault(), Opened: opened,
+		Attribution: sess.attr, Privacy: p, CredentialID: sess.project.Repo.GitCredentialID, Secret: s.Secret,
+		Forge: s.Forge, API: s.API, Title: sess.title, Record: s.record, Actor: actor}, nil
+}
+
+// hostGate is a main land's gate from the host (`worktree handoff`): the role unchecked, the
+// channel's land list still required, and the review fact (session.LandGate).
+func (s *WorktreeService) hostGate(sess loadedSession) git.LandGate {
+	return session.LandGate(s.Store, sess.git, nil, false, sess.land, s.config().Instance.RoleGroups)
+}
+
+// openedRequest is the web URL of the pull request a land opened for session id (the newest
+// done pull-request-opened row), "" when none was: a pull-request project's later land and its
+// end then push the branch alone (ADR 0028 Decision 1).
+func (s *WorktreeService) openedRequest(id string) (string, error) {
+	url := ""
+	err := s.Store.Query(`SELECT details FROM audit_event WHERE session_id = ? AND kind = ? AND phase = ? ORDER BY seq DESC LIMIT 1`,
+		[]store.Value{store.Text(id), store.Text(string(audit.KindPullRequestOpened)), store.Text(string(audit.PhaseDone))},
+		func(r *store.Row) error {
+			var d struct{ URL string }
+			if json.Unmarshal([]byte(r.Text(0)), &d) == nil {
+				url = d.URL
+			}
+			return nil
+		})
+	return url, err
+}
+
+// Land is a land of session id mid-session for actor (the session service's Land; ADR 0028
+// Decision 1): git.Handoff.Land with the service's options. The tree and the session stay.
+func (s *WorktreeService) Land(ctx context.Context, id, actor string, opts git.LandOptions) (git.LandResult, error) {
+	sess, err := s.load(id)
+	if err != nil {
+		return git.LandResult{}, err
+	}
+	h, err := s.handoffFor(sess, id, actor)
+	if err != nil {
+		return git.LandResult{}, err
+	}
+	return h.Land(ctx, opts)
 }
 
 // setWorktreeState records the tree's state on its row, when the session has one.
@@ -430,6 +493,8 @@ type loadedSession struct {
 	privacy git.Privacy
 	project *config.Project
 	title   string
+	// land is the session's channel's roles.land, nil when the channel left the configuration.
+	land []string
 }
 
 // titleRunes bounds the first message in the fallback pull-request title.
@@ -442,14 +507,14 @@ const titleRunes = 60
 // first turn (the usage row's time only where no turn row exists).
 func (s *WorktreeService) load(id string) (loadedSession, error) {
 	var ls loadedSession
-	var projectID, driverID, firstInput string
+	var projectID, driverID, firstInput, channelID string
 	found := false
 	err := s.Store.Query(`SELECT s.project_id, s.driver_id, r.git_name, r.git_email,
-    coalesce((SELECT input FROM turn WHERE session_id = s.id ORDER BY seq LIMIT 1), '')
+    coalesce((SELECT input FROM turn WHERE session_id = s.id ORDER BY seq LIMIT 1), ''), s.channel_id
 FROM session s JOIN registration r ON r.user_id = s.driver_id WHERE s.id = ?`, []store.Value{store.Text(id)},
 		func(r *store.Row) error {
 			found = true
-			projectID, driverID, firstInput = r.Text(0), r.Text(1), r.Text(4)
+			projectID, driverID, firstInput, channelID = r.Text(0), r.Text(1), r.Text(4), r.Text(5)
 			ls.attr.Driver = git.Identity{Name: r.Text(2), Email: r.Text(3)}
 			return nil
 		})
@@ -461,6 +526,9 @@ FROM session s JOIN registration r ON r.user_id = s.driver_id WHERE s.id = ?`, [
 	}
 	if ls.project = s.config().Project(projectID); ls.project == nil {
 		return ls, control.NewError(CodeUnknownProject, id+" names project "+projectID+", which the configuration does not define")
+	}
+	if ch, ok := ls.project.Channels[channelID]; ok {
+		ls.land = ch.Roles.Land
 	}
 	err = s.Store.Query(`SELECT r.git_name, r.git_email, p.joined_at FROM participant p
 JOIN registration r ON r.user_id = p.user_id
@@ -614,8 +682,8 @@ func (s *WorktreeService) Pending(ctx context.Context, id string) (*int, error) 
 // Handoff is the handoff of session id as `worktree handoff` runs it, for the end of session
 // (the session service's Handoff): the tree's uncommitted changes committed first, then the
 // outcome, or the git refusal with its failing commits.
-func (s *WorktreeService) Handoff(ctx context.Context, id string) (git.Outcome, error) {
-	return s.runHandoff(ctx, id, false, true, ActorBot)
+func (s *WorktreeService) Handoff(ctx context.Context, id string, land git.EndLand) (git.Outcome, error) {
+	return s.runHandoff(ctx, id, false, true, ActorBot, land)
 }
 
 // Discard is the end of session id without a handoff (`session end --discard`; the session

@@ -1,7 +1,7 @@
 ---
 date: 2026-10-31
 kind: feature
-related: [2026-10-23-handoff-main-lands-a-session-on-the-default-branch.md, 2026-10-29-broodforge-works-on-itself-overnight.md]  # the first lands the change; this one runs it; the second would need this to be unattended end to end
+related: [2026-10-23-session-land-pushes-to-main-mid-session.md, 2026-10-29-broodforge-works-on-itself-overnight.md]  # the first lands the change; this one runs it; the second would need this to be unattended end to end
 ---
 
 # Broodforge deploys Broodforge

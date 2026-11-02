@@ -1,7 +1,7 @@
 ---
 date: 2026-10-29
 kind: feature
-related: [2026-10-23-handoff-main-lands-a-session-on-the-default-branch.md, 2026-10-30-owner-less-weeks.md, 2026-10-30-credential-pool-scheduling-by-headroom.md, 2026-10-30-the-base-tends-itself.md, 2026-10-31-broodforge-deploys-broodforge.md]  # that one is the accept button; this one runs unattended; the pool and base-tending ideas build on this; the last runs a landed change as the live service, which unattended end to end would need
+related: [2026-10-23-session-land-pushes-to-main-mid-session.md, 2026-10-30-owner-less-weeks.md, 2026-10-30-credential-pool-scheduling-by-headroom.md, 2026-10-30-the-base-tends-itself.md, 2026-10-31-broodforge-deploys-broodforge.md]  # that one is the accept button; this one runs unattended; the pool and base-tending ideas build on this; the last runs a landed change as the live service, which unattended end to end would need
 ---
 
 # Broodforge works on itself overnight
@@ -15,8 +15,8 @@ README reserves for them anyway.
 
 Anchor: the `triage` skill in `.claude/skills/triage/`; session start from a schedule rather than a
 person has no entry point yet (`internal/session/service.go` starts sessions from a venue
-command); the accept button is the `main` handoff of
-`2026-10-23-handoff-main-lands-a-session-on-the-default-branch.md`.
+command); the accept button is the `main` handoff (ADR 0028, built by P34;
+`../design/decisions/0028-landing-a-session-on-the-default-branch.md`).
 
 ## Open
 

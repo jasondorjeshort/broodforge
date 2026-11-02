@@ -86,13 +86,17 @@ type Defaults struct {
 
 // Project is config/projects/<id>.json.
 type Project struct {
-	ID       string             `json:"id"`
-	Name     string             `json:"name"`
-	Repo     Repo               `json:"repo"`
-	Handoff  string             `json:"handoff"` // pull-request (the default) or push
-	Venue    Venue              `json:"venue"`
-	Channels map[string]Channel `json:"channels"`
-	Workflow *Workflow          `json:"workflow,omitempty"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Repo    Repo   `json:"repo"`
+	Handoff string `json:"handoff"` // pull-request (the default), push or main
+	// HandoffFallback is what a main project's end falls back to when the land refuses
+	// land-not-fast-forward or land-rejected (ADR 0028): push (the default) or pull-request; an
+	// error with any other handoff.
+	HandoffFallback string             `json:"handoffFallback,omitempty"`
+	Venue           Venue              `json:"venue"`
+	Channels        map[string]Channel `json:"channels"`
+	Workflow        *Workflow          `json:"workflow,omitempty"`
 }
 
 // HandoffOrDefault is the project's handoff, pull-request when the file omits it.
@@ -101,6 +105,14 @@ func (p *Project) HandoffOrDefault() string {
 		return HandoffPullRequest
 	}
 	return p.Handoff
+}
+
+// HandoffFallbackOrDefault is the project's handoffFallback, push when the file omits it.
+func (p *Project) HandoffFallbackOrDefault() string {
+	if p.HandoffFallback == "" {
+		return HandoffPush
+	}
+	return p.HandoffFallback
 }
 
 // Workflow is what a session takes from the repository's own workflow (ADR 0025 rule 6): Inject,
@@ -154,11 +166,13 @@ type Channel struct {
 }
 
 // Roles are the role lists of a channel: group names from roleGroups or raw role ids, and
-// "driver" under Answer meaning the driver only (R-25).
+// "driver" under Answer meaning the driver only (R-25). Land is who may land on the default
+// branch (ADR 0028 Decision 2), absent meaning nobody.
 type Roles struct {
 	Start      []string `json:"start"`
 	Contribute []string `json:"contribute"`
 	Answer     []string `json:"answer"`
+	Land       []string `json:"land,omitempty"`
 }
 
 // The enumerated values of 03.
@@ -182,6 +196,7 @@ const (
 
 	HandoffPullRequest = "pull-request"
 	HandoffPush        = "push"
+	HandoffMain        = "main"
 
 	ForgeGitHub = "github"
 

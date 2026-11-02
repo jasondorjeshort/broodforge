@@ -52,6 +52,9 @@ const (
 	// KindSessionDiscarded is an end without a handoff: the commit count and the ref the
 	// commits are kept on (04-ux-session-end.md, Discarding).
 	KindSessionDiscarded Kind = "session-discarded"
+	// KindLand is a land's push (ADR 0028 Decision 1, step 4): attempted, done or failed, with
+	// the actor, the claimed --as of a host land, the outcome, the commits and the sha.
+	KindLand Kind = "land"
 )
 
 // Phase marks an action outside the store: attempted before, done or failed after (ADR

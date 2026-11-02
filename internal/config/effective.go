@@ -23,10 +23,11 @@ func (c *Config) Effective(project *Project, id string) EffectiveChannel {
 	ch := project.Channels[id]
 	d := c.Instance.Defaults
 	e := EffectiveChannel{
-		ID:                   id,
-		Project:              project.ID,
-		Reach:                ch.Reach,
-		Roles:                Roles{Start: nonNil(ch.Roles.Start), Contribute: nonNil(ch.Roles.Contribute), Answer: nonNil(ch.Roles.Answer)},
+		ID:      id,
+		Project: project.ID,
+		Reach:   ch.Reach,
+		Roles: Roles{Start: nonNil(ch.Roles.Start), Contribute: nonNil(ch.Roles.Contribute), Answer: nonNil(ch.Roles.Answer),
+			Land: ch.Roles.Land},
 		Mode:                 d.Mode,
 		Harness:              d.Harness,
 		IdleTimeoutMinutes:   d.IdleTimeoutMinutes,

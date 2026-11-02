@@ -22,8 +22,8 @@ type Pin struct {
 }
 
 // bundleLocks holds one lock per session, taken by every writer of <sess>/out.bundle: Refresh
-// (`worktree check`, the handoff), `worktree bundle`, the reviewer pin, and in P34 the land
-// (ADR 0028 Decision 1).
+// (`worktree check`, the handoff), `worktree bundle`, the reviewer pin, and the land, which
+// holds it from its fetch to its push (ADR 0028 Decision 1).
 var bundleLocks sync.Map // session id -> chan struct{} of capacity 1
 
 // LockBundle takes the session's bundle lock, waiting no longer than ctx; the returned func

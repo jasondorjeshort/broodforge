@@ -128,6 +128,26 @@ func TestPermitted(t *testing.T) {
 	}
 }
 
+// TestMayLand: the land list by group or raw id; "driver" there means nobody, and so does an
+// empty list (ADR 0028 Decision 2).
+func TestMayLand(t *testing.T) {
+	groups := map[string][]string{"trusted": {"10"}}
+	for _, c := range []struct {
+		held, land []string
+		want       bool
+	}{
+		{[]string{"10"}, []string{"trusted"}, true},
+		{[]string{"11"}, []string{"trusted"}, false},
+		{[]string{"11"}, []string{"11"}, true},
+		{[]string{"10"}, []string{"driver"}, false},
+		{[]string{"10"}, nil, false},
+	} {
+		if got := MayLand(c.held, c.land, groups); got != c.want {
+			t.Errorf("MayLand(%v, %v) = %v", c.held, c.land, got)
+		}
+	}
+}
+
 func TestModelDisplayName(t *testing.T) {
 	for id, want := range map[string]string{
 		"claude-haiku-5-5":          "Claude Haiku 5.5",

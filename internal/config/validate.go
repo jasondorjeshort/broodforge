@@ -165,7 +165,16 @@ func validateProject(p *Project, fileName string, groups map[string][]string, ch
 		out = append(out, oneOf("repo.forge", p.Repo.Forge, ForgeGitHub)...)
 	}
 	out = append(out, credential("repo.gitCredentialId", p.Repo.GitCredentialID, exists)...)
-	out = append(out, oneOf("handoff", p.HandoffOrDefault(), HandoffPullRequest, HandoffPush)...)
+	out = append(out, oneOf("handoff", p.HandoffOrDefault(), HandoffPullRequest, HandoffPush, HandoffMain)...)
+	// handoffFallback (ADR 0028 Decision 2): meaningful only with handoff main.
+	if p.HandoffFallback != "" {
+		if p.HandoffOrDefault() != HandoffMain {
+			out = append(out, "handoffFallback: "+quote(p.HandoffFallback)+" is only for handoff "+quote(HandoffMain)+
+				", and handoff is "+quote(p.HandoffOrDefault()))
+		} else {
+			out = append(out, oneOf("handoffFallback", p.HandoffFallback, HandoffPush, HandoffPullRequest)...)
+		}
+	}
 	// The workflow key (ADR 0025 rule 6): only the two events are ever run from a repository.
 	w := p.WorkflowOrDefault()
 	out = append(out, oneOf("workflow.inject", w.Inject, InjectRepository, InjectNone)...)
@@ -211,6 +220,7 @@ func validateChannel(key, id string, ch Channel, groups map[string][]string, che
 		{"start", ch.Roles.Start, false},
 		{"contribute", ch.Roles.Contribute, false},
 		{"answer", ch.Roles.Answer, true},
+		{"land", ch.Roles.Land, false},
 	}
 	for _, l := range lists {
 		for _, r := range l.roles {

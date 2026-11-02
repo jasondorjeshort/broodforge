@@ -50,7 +50,7 @@ after step 2, before any write, so a second bot never touches the first's sessio
 ## Configuration
 
 Drive. `broodforge config check (file)` validates `config/` without the bot: `ok  <projects>
-<channels>`, exit 0, then warnings prefixed `warning:` (a timeout above a year is one, capped at 525600); on any
+<channels>`, exit 0, then warnings prefixed `warning:` (a timeout above a year is one, capped at 525600; ADR 0028's two land warnings, `05-debug-interface-git.md`, Landing); on any
 problem one `error: bad-config: <file>: <what>` line each, exit 1 (a channel id in two project files is one, R-07; an unknown or
 repeated key names its dotted path, `duplicate key channels.100`); paths print with `/` on both
 hosts; no `config/instance.json` is `no-config`. `broodforge config show [--effective] [--channel

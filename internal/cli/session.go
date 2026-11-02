@@ -431,7 +431,7 @@ func SessionHandlers(svc *session.Service) func(*control.Registry) {
 				return nil, control.NewError(control.CodeBadArgs, err.Error())
 			}
 			out, err := svc.End(ctx, session.EndRequest{ActRequest: session.ActRequest{Session: a.ID, As: a.As, Roles: a.Roles},
-				NoClosingTurn: a.NoClosingTurn, Discard: a.Discard})
+				NoClosingTurn: a.NoClosingTurn, Discard: a.Discard, Host: true})
 			if err != nil {
 				var ge *git.Error
 				if errors.As(err, &ge) && ge.Code == git.CodeRefusedAttribution {
@@ -442,6 +442,27 @@ func SessionHandlers(svc *session.Service) func(*control.Registry) {
 				return nil, sessionError(err)
 			}
 			return encodeWorktree(endLineOf(out))
+		})
+		reg.Handle("session.land", func(ctx context.Context, call *control.Call) (json.RawMessage, error) {
+			var a struct {
+				ID, As, Roles string
+				DryRun        bool
+			}
+			if err := json.Unmarshal(call.Args, &a); err != nil {
+				return nil, control.NewError(control.CodeBadArgs, err.Error())
+			}
+			res, err := svc.Land(ctx, session.LandRequest{ActRequest: session.ActRequest{Session: a.ID, As: a.As, Roles: a.Roles},
+				DryRun: a.DryRun, Host: true})
+			if err != nil {
+				var ge *git.Error
+				if errors.As(err, &ge) && ge.Code == git.CodeRefusedAttribution {
+					if eerr := emitCommits(call, ge.Commits); eerr != nil {
+						return nil, eerr
+					}
+				}
+				return nil, sessionError(err)
+			}
+			return encodeWorktree(res)
 		})
 		reg.Handle("session.show", func(ctx context.Context, call *control.Call) (json.RawMessage, error) {
 			var a struct {
@@ -655,16 +676,76 @@ type endLine struct {
 	RemoveError string           `json:"removeError,omitempty"`
 	WIP         string           `json:"wip,omitempty"` // the end's WIP commit of a dirty tree
 	Ref         string           `json:"ref,omitempty"` // a discard's refs/aborted/<id>
+	// Fallback is a main project's land refusal when the end handed off as handoffFallback
+	// (ADR 0028); the text line is printed after it (renderSessionEnd).
+	Fallback *git.LandRefusal `json:"fallback,omitempty"`
 }
 
 func endLineOf(o git.Outcome) endLine {
 	l := endLine{Outcome: o.Outcome, Mode: o.Mode, Remote: o.Remote, Refspec: o.Refspec, URL: o.URL, Request: o.Request,
-		Removed: o.Removed, RemoveError: o.RemoveError, WIP: o.WIP, Ref: o.Ref}
+		Removed: o.Removed, RemoveError: o.RemoveError, WIP: o.WIP, Ref: o.Ref, Fallback: o.Fallback}
 	if o.Commits != session.CommitsUnknown {
 		n := o.Commits
 		l.Commits = &n
 	}
 	return l
+}
+
+// renderSessionEnd prints session end's line; at a main end that fell back the refusal comes
+// first, `fallback: <code>: <line>`, the line the companion's (`Not landed on <default>: ...
+// Handed off as <branch> instead.`), and the outcome token stays the fallback's outcome.
+func renderSessionEnd(env *Env, raw json.RawMessage) error {
+	var l endLine
+	if err := json.Unmarshal(raw, &l); err != nil {
+		return err
+	}
+	if l.Fallback != nil && !env.JSON {
+		env.Out.SetToken(l.Outcome)
+		if _, err := fmt.Fprintln(env.Out.w, "fallback: "+l.Fallback.Code+": "+control.OneLine(l.Fallback.Line)); err != nil {
+			return err
+		}
+	}
+	return env.Out.Result(raw, sessionEnd.Columns)
+}
+
+// sessionLand is `broodforge session land <id> [--dry-run] [--expect <value>] [--as <user id>]
+// [--roles <ids>]` (ADR 0028 Decision 1; 05-debug-interface-git.md, Landing): a land from the
+// host, mid-session. It prints `worktree handoff`'s line, `<outcome>  <remote>  <refspec>
+// <commits>  <url>  <request>`, outcome landed, pushed, pull-request, none or dry-run, then
+// `stale: <line>` when the fetch before it failed and `canonical lags: <why>` when the
+// canonical's default branch could not follow; a refused attribution lists its commits first.
+// Every refusal is its error line, exit 1. The session stays open and its tree untouched; the
+// audit actor is host, --as recorded as claimed; --roles absent leaves the role unchecked.
+var sessionLand = Command{
+	Name:   "session land",
+	Class:  ClassWrite,
+	Expect: true,
+	Flags: append([]Flag{
+		{Name: "dry-run", Kind: FlagBool, Usage: "everything but the push"},
+		{Name: "id", Kind: FlagString, Value: "<session id>"},
+	}, actingFlags...),
+	EventColumns: commitColumns,
+	Columns:      []string{"outcome", "remote", "refspec", "commits", "url", "request"},
+}
+
+// renderSessionLand prints the land's line, then its notes.
+func renderSessionLand(env *Env, raw json.RawMessage) error {
+	if err := env.Out.Result(raw, sessionLand.Columns); err != nil || env.JSON {
+		return err
+	}
+	var r git.LandResult
+	if err := json.Unmarshal(raw, &r); err != nil {
+		return err
+	}
+	for _, note := range [][2]string{{"stale", r.Stale}, {"canonical lags", r.CanonicalLags}} {
+		if note[1] == "" {
+			continue
+		}
+		if _, err := fmt.Fprintln(env.Out.w, note[0]+": "+control.OneLine(note[1])); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // sessionReachReport is `broodforge session reach-report <id>`: the policy table's column for
@@ -680,7 +761,7 @@ var sessionReachReport = Command{
 
 func init() {
 	commands = append(commands, &sessionAnswer, &sessionInterrupt, &sessionMode, &sessionModel, &sessionEffort, &sessionTimeout, &sessionInvite,
-		&sessionEnd, &sessionReachReport)
+		&sessionEnd, &sessionLand, &sessionReachReport)
 	positionals[&sessionAnswer] = []string{"id", "decision"}
 	positionals[&sessionInterrupt] = []string{"id"}
 	positionals[&sessionMode] = []string{"id", "mode"}
@@ -690,7 +771,10 @@ func init() {
 	positionals[&sessionInvite] = []string{"id"}
 	required[&sessionInvite] = []string{"user"}
 	positionals[&sessionEnd] = []string{"id"}
+	positionals[&sessionLand] = []string{"id"}
 	positionals[&sessionReachReport] = []string{"id"}
+	renderers[&sessionEnd] = renderSessionEnd
+	renderers[&sessionLand] = renderSessionLand
 }
 
 func runReachReport(_ context.Context, env *Env) error {

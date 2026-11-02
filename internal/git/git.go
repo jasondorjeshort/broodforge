@@ -49,6 +49,13 @@ const (
 	CodeClone               = "clone"              // setup could not clone a project's canonical (CloneCanonical)
 	CodeFetch               = "canonical-fetch"    // the fetch at session start failed (its result is stale, not this error)
 	CodeCanonicalDiverged   = "canonical-diverged" // the canonical's default branch and the remote's: neither contains the other
+
+	// The land's refusals (ADR 0028; the companion's Refusals and lifts).
+	CodeLandNotAllowed        = "land-not-allowed"
+	CodeLandUnreviewed        = "land-unreviewed"
+	CodeLandNotFastForward    = "land-not-fast-forward"
+	CodeLandCanonicalDiverged = "land-canonical-diverged"
+	CodeLandRejected          = "land-rejected"
 )
 
 // waitDelay bounds the wait for a killed git's output pipes: a child git started (a remote

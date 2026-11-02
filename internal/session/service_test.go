@@ -95,7 +95,7 @@ func newHarness(t *testing.T, fixtureDir string, dryRun bool) *harness {
 		CreateTree: func(_ context.Context, s git.Session) (string, error) {
 			return "base", os.MkdirAll(filepath.FromSlash(s.Dir()+"/tree"), 0o750)
 		},
-		Handoff: func(_ context.Context, id string) (git.Outcome, error) {
+		Handoff: func(_ context.Context, id string, _ git.EndLand) (git.Outcome, error) {
 			h.mu.Lock()
 			f := h.handoff
 			h.mu.Unlock()

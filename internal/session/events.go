@@ -156,8 +156,11 @@ type EndInfo struct {
 	Title     string       `json:"title,omitempty"`
 	// WIP is the commit the end made of the tree's uncommitted changes; Ref is the ref a discard
 	// kept the commits on (04-ux-session-end.md). Both "" for none.
-	WIP       string   `json:"wip,omitempty"`
-	Ref       string   `json:"ref,omitempty"`
+	WIP string `json:"wip,omitempty"`
+	Ref string `json:"ref,omitempty"`
+	// NotLanded is a main project's land refusal when the end handed off as handoffFallback
+	// instead (ADR 0028 Decision 1); the venue's fallback line is P36's. "" for none.
+	NotLanded string   `json:"notLanded,omitempty"`
 	Author    string   `json:"author"`
 	CoAuthors []string `json:"coAuthors"`
 }

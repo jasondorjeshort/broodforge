@@ -1,7 +1,7 @@
 ---
 date: 2026-10-31
 kind: feature
-related: [2026-10-23-handoff-main-lands-a-session-on-the-default-branch.md, 2026-10-24-a-turn-ending-on-a-tool-call-could-prompt-the-engine-for-a-closing-message.md]  # the first is the landing this announces; the second produces the text it would post
+related: [2026-10-23-session-land-pushes-to-main-mid-session.md, 2026-10-24-a-turn-ending-on-a-tool-call-could-prompt-the-engine-for-a-closing-message.md]  # the first is the landing this announces; the second produces the text it would post
 ---
 
 # A changelog channel for landings

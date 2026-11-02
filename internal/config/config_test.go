@@ -169,7 +169,19 @@ func TestProblems(t *testing.T) {
 		{"file name", minimalInstance, proj(`"id":"p"`, `"id":"q"`), "p", []string{`id "q": the file must be named q.json`}},
 		{"project id rule", minimalInstance, proj(`"id":"p"`, `"id":"P"`), "p", []string{`id "P": want ^[a-z][a-z0-9-]{0,31}$`}},
 		{"project required", minimalInstance, proj(`"name":"P","repo":{"canonical":"c"}`, `"handoff":"merge"`), "p",
-			[]string{"name: missing", "repo.canonical: missing", `handoff: "merge", want pull-request or push`}},
+			[]string{"name: missing", "repo.canonical: missing", `handoff: "merge", want pull-request or push or main`}},
+		{"handoff main with a fallback and a land list", minimalInstance, proj(`"repo":{"canonical":"c"}`,
+			`"repo":{"canonical":"c"},"handoff":"main","handoffFallback":"pull-request"`), "", nil},
+		{"handoff main, fallback absent", minimalInstance, proj(`"repo":{"canonical":"c"}`, `"repo":{"canonical":"c"},"handoff":"main"`), "", nil},
+		{"handoffFallback values", minimalInstance, proj(`"repo":{"canonical":"c"}`,
+			`"repo":{"canonical":"c"},"handoff":"main","handoffFallback":"main"`), "p",
+			[]string{`handoffFallback: "main", want push or pull-request`}},
+		{"handoffFallback without main", minimalInstance, proj(`"repo":{"canonical":"c"}`,
+			`"repo":{"canonical":"c"},"handoff":"push","handoffFallback":"push"`), "p",
+			[]string{`handoffFallback: "push" is only for handoff "main", and handoff is "push"`}},
+		{"land roles", minimalInstance, proj(`"roles":{"start":["trusted"]}`, `"roles":{"start":["trusted"],"land":["trusted","20","driver","nobody"]}`), "p",
+			[]string{`channels.100.roles.land: "driver" is allowed under answer only`,
+				`channels.100.roles.land: "nobody" is neither a role id nor a group in roleGroups`}},
 		{"channel", minimalInstance, proj(`"100":{"reach":"code","roles":{"start":["trusted"]}}`,
 			`"x1":{"reach":"all","mode":"auto","idleTimeoutMinutes":-1,"roles":{"start":["driver","nobody","20"]}}`), "p",
 			[]string{"channels.x1: a channel id is decimal digits", `channels.x1.reach: "all", want read-only or code`,
@@ -244,6 +256,37 @@ func TestTimeoutAboveAYearIsCappedWithAWarning(t *testing.T) {
 	e := c.Effective(c.Project("p"), "100")
 	if e.IdleTimeoutMinutes != 525600 || e.PromptTimeoutMinutes != 525600 {
 		t.Errorf("effective %d %d, want both 525600", e.IdleTimeoutMinutes, e.PromptTimeoutMinutes)
+	}
+}
+
+// TestHandoffMainWithoutLandRolesWarns: a main project's channel without roles.land is the
+// companion's warning, naming the fallback; a channel with the list, or a push project, is not.
+func TestHandoffMainWithoutLandRolesWarns(t *testing.T) {
+	proj := strings.Replace(minimalProject, `"repo":{"canonical":"c"}`, `"repo":{"canonical":"c"},"handoff":"main"`, 1)
+	proj = strings.Replace(proj, `"channels":{`, `"channels":{"200":{"reach":"code","roles":{"start":["trusted"],"land":["trusted"]}},`, 1)
+	c, err := config.Load(root(t, minimalInstance, map[string]string{"p.json": proj}), nil)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	var got []string
+	for _, w := range c.Warnings {
+		got = append(got, w.String())
+	}
+	want := []string{"p 100: handoff main with no roles.land; every session end there will fall back to push."}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("warnings %q, want %q", got, want)
+	}
+	if e := c.Effective(c.Project("p"), "200"); !reflect.DeepEqual(e.Roles.Land, []string{"trusted"}) {
+		t.Errorf("effective land %q", e.Roles.Land)
+	}
+	proj = strings.Replace(proj, `"handoff":"main"`, `"handoff":"main","handoffFallback":"pull-request"`, 1)
+	c, err = config.Load(root(t, minimalInstance, map[string]string{"p.json": proj}), nil)
+	if err != nil || len(c.Warnings) != 1 || !strings.HasSuffix(c.Warnings[0].Message, "fall back to pull-request.") {
+		t.Errorf("pull-request fallback: %v %v", err, c)
+	}
+	c, err = config.Load(root(t, minimalInstance, map[string]string{"p.json": minimalProject}), nil)
+	if err != nil || len(c.Warnings) != 0 {
+		t.Errorf("a pull-request project: %v, warnings %v", err, c.Warnings)
 	}
 }
 

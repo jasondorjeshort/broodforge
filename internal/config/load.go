@@ -181,7 +181,27 @@ func LoadDir(dir string, exists CredentialExists) (*Config, error) {
 	}
 	c.Files = append(c.Files, projectFiles...)
 	c.capTimeouts(ipath, projectFiles)
+	c.landWarnings()
 	return c, nil
+}
+
+// landWarnings is the first `config check` warning of the ADR 0028 companion: a main project's
+// channel without a land list, `<project> <channel>: handoff main with no roles.land; every
+// session end there will fall back to <handoffFallback>.` (wording: owner). The second, a path
+// remote that is a checkout, reads git and is the CLI's (git.CheckoutRemote).
+func (c *Config) landWarnings() {
+	for i := range c.Projects {
+		p := &c.Projects[i]
+		if p.HandoffOrDefault() != HandoffMain {
+			continue
+		}
+		for _, id := range channelIDs(p) {
+			if len(p.Channels[id].Roles.Land) == 0 {
+				c.Warnings = append(c.Warnings, Problem{File: p.ID + " " + id,
+					Message: "handoff main with no roles.land; every session end there will fall back to " + p.HandoffFallbackOrDefault() + "."})
+			}
+		}
+	}
 }
 
 // capTimeouts caps every timeout above MaxTimeoutMinutes at it and warns, one warning per

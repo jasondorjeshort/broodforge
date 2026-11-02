@@ -13,6 +13,7 @@ import (
 
 	"github.com/jasondorjeshort/broodforge/internal/config"
 	"github.com/jasondorjeshort/broodforge/internal/control"
+	"github.com/jasondorjeshort/broodforge/internal/git"
 )
 
 // Error codes of the config commands, beside no-config and bad-config.
@@ -126,6 +127,7 @@ func runConfigCheck(ctx context.Context, env *Env) error {
 	for i, w := range c.Warnings {
 		warnings[i] = w.String()
 	}
+	warnings = append(warnings, checkoutRemotes(ctx, c)...)
 	result, err := marshal(checkResult{"ok", len(c.Projects), len(c.Channels()), warnings})
 	if err != nil {
 		return err
@@ -145,6 +147,24 @@ func runConfigCheck(ctx context.Context, env *Env) error {
 		}
 	}
 	return nil
+}
+
+// checkoutRemotes is the ADR 0028 companion's second config check warning, one per main project
+// whose remote is a path to a checkout with the default branch checked out, which refuses every
+// push to it (git.CheckoutRemote): `<project>: <remote> is a checkout with <db> checked out; ...`.
+// A push or pull-request project never pushes the default branch and is not inspected.
+func checkoutRemotes(ctx context.Context, c *config.Config) []string {
+	var out []string
+	for _, p := range c.Projects {
+		if p.HandoffOrDefault() != config.HandoffMain {
+			continue
+		}
+		remote, db := orDefault(p.Repo.Remote, "origin"), orDefault(p.Repo.DefaultBranch, "main")
+		if git.CheckoutRemote(ctx, p.Repo.Canonical, remote, db) {
+			out = append(out, config.Problem{File: p.ID, Message: git.CheckoutRemoteWarning(remote, db)}.String())
+		}
+	}
+	return out
 }
 
 func runConfigShow(_ context.Context, env *Env) error {

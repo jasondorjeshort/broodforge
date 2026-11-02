@@ -346,7 +346,7 @@ func startBot(env *Env) (*bot, error) {
 	b.svc = session.New(session.Config{
 		Root: root, Instance: c.Instance.InstanceName, DryRun: b.discord == config.DiscordDryRun, Started: b.adapter.SessionStarted,
 		Groups:  func() map[string][]string { return b.config().Instance.RoleGroups },
-		Channel: b.channel, Fixtures: fixturesDir(c), Handoff: b.wt.Handoff, Discard: b.wt.Discard, Pending: b.wt.Pending,
+		Channel: b.channel, Fixtures: fixturesDir(c), Handoff: b.wt.Handoff, Land: b.wt.Land, Discard: b.wt.Discard, Pending: b.wt.Pending,
 		Engine: b.engine, CreateTree: func(ctx context.Context, s git.Session) (string, error) {
 			return git.Create(ctx, b.backend, s)
 		},
@@ -475,7 +475,7 @@ func (b *bot) channel(id string) (session.Channel, bool) {
 		return *s
 	}
 	return session.Channel{ID: id, Project: p.ID, ProjectName: p.Name, Reach: e.Reach, Mode: e.Mode, Harness: e.Harness,
-		Roles:       session.Roles{Start: e.Roles.Start, Contribute: e.Roles.Contribute, Answer: e.Roles.Answer},
+		Roles:       session.Roles{Start: e.Roles.Start, Contribute: e.Roles.Contribute, Answer: e.Roles.Answer, Land: e.Roles.Land},
 		IdleTimeout: time.Duration(e.IdleTimeoutMinutes) * time.Minute, PromptTimeout: time.Duration(e.PromptTimeoutMinutes) * time.Minute,
 		Model: deref(e.Model), Effort: deref(e.Effort),
 		Repo: session.Repo{Canonical: p.Repo.Canonical, Remote: p.Repo.Remote, DefaultBranch: p.Repo.DefaultBranch,

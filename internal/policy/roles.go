@@ -10,6 +10,13 @@ import (
 // RoleDriver in an `answer` list means the session's driver only (03-architecture.md, R-25).
 const RoleDriver = "driver"
 
+// MayLand is the land's role check (ADR 0028 Decisions 2 and 5): the roles held against the
+// channel's `land` list, group names or raw role ids, "driver" meaning nothing there; an empty
+// list is nobody.
+func MayLand(held, land []string, groups map[string][]string) bool {
+	return Permitted(held, land, groups, false)
+}
+
 // Permitted is the role check (03-architecture.md, Registration and participants): a pure
 // function of the roles a person holds at that moment, the channel's list for the action
 // (`start`, `contribute` or `answer`), the instance's roleGroups and whether the person is the

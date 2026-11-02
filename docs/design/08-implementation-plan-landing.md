@@ -134,7 +134,8 @@ gate a closure the service supplies (role, fact) so `git` reads no store; `land-
 `land-not-fast-forward` with the count, `land-rejected` with git's telling line; step 5 through
 `Fetch`'s fast-forward path, the refused case updating the tracking ref and `Base` read against
 `<remote>/<default>` where ahead, `LandResult.CanonicalLags`; `Run` on a `main` project calls `Land`
-and on `land-not-fast-forward` or `land-rejected` falls back to `handoffFallback`, the result
+and on any land refusal but `land-canonical-diverged` falls back to `handoffFallback` (ADR 0028
+Amendments 2026-11-02: the gate judges the ender's roles, none being `land-not-allowed`), the result
 carrying both outcomes; a first land on a path remote repeats the `config check` inspection into the
 outcome line); `internal/git/create.go` (`FastForward(ref, sha)` shared by `Fetch` and step 5);
 `internal/policy/` (the role check over a channel's `land` list); `internal/session/service.go`

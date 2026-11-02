@@ -114,13 +114,8 @@ func Fetch(ctx context.Context, s Session, askpass string, token []byte) (FetchR
 		return stale(messageOf(err))
 	}
 	if behind {
-		head, herr := HeadBranch(lctx, s.Canonical)
 		mctx, mcancel := context.WithTimeout(context.WithoutCancel(ctx), fastForwardTimeout)
-		if herr == nil && head == s.DefaultBranch {
-			_, err = run(mctx, CodeFetch, s.Canonical, nil, "merge", "--ff-only", "--quiet", tracking)
-		} else {
-			_, err = run(mctx, CodeFetch, s.Canonical, nil, "update-ref", branch, remote, local)
-		}
+		err = FastForward(mctx, s, remote, local)
 		ffTimedOut := errors.Is(mctx.Err(), context.DeadlineExceeded)
 		mcancel()
 		switch {
@@ -148,6 +143,20 @@ func Fetch(ctx context.Context, s Session, askpass string, token []byte) (FetchR
 		return stale("git rev-list --count: " + strings.TrimSpace(out))
 	}
 	return FetchResult{Commit: local, Fetched: fetched, Ahead: n}, nil
+}
+
+// FastForward moves the canonical's default branch from its commit from to to, a descendant
+// the caller has checked: `merge --ff-only` while HEAD is the branch, so the checkout follows,
+// else `update-ref refs/heads/<db> <to> <from>`; never a reset. The fetch at session start (Fetch)
+// and the land's step 5 share it (ADR 0028 Decision 1); the caller sets its deadline in ctx.
+func FastForward(ctx context.Context, s Session, to, from string) error {
+	head, herr := HeadBranch(ctx, s.Canonical)
+	if herr == nil && head == s.DefaultBranch {
+		_, err := run(ctx, CodeFetch, s.Canonical, nil, "merge", "--ff-only", "--quiet", to)
+		return err
+	}
+	_, err := run(ctx, CodeFetch, s.Canonical, nil, "update-ref", "refs/heads/"+s.DefaultBranch, to, from)
+	return err
 }
 
 // LocalCommit is the canonical's default branch's commit, best effort: "" when it cannot be
@@ -221,14 +230,33 @@ func HeadBranch(ctx context.Context, dir string) (string, error) {
 // Base is the session's base commit as the canonical knows it: the merge base of
 // refs/sessions/<id> and the default branch. Before the first fetch the ref is the base itself;
 // after one it is the fetched tip, whose fork point from the default branch is the base again,
-// also when the driver has had commits amended since. No store column holds the base.
+// also when the driver has had commits amended since. No store column holds the base. Where the
+// remote-tracking ref refs/remotes/<remote>/<db> forks from the session later than the branch
+// does (a land pushed the session's commits and the canonical's fast-forward was refused, ADR
+// 0028 Decision 1 step 5), the base is taken against it, so the next land hands off only what
+// came after the landed sha.
 func Base(ctx context.Context, s Session) (string, error) {
 	out, err := run(ctx, CodeRefusedBundle, s.Canonical, nil, "merge-base", SessionRef(s.ID), "refs/heads/"+s.DefaultBranch)
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(out), nil
+	base := strings.TrimSpace(out)
+	// No tracking ref, or no fork point with it, leaves the branch's base.
+	t, err := run(ctx, CodeRefusedBundle, s.Canonical, nil, "merge-base", SessionRef(s.ID), trackingRef(s))
+	if err != nil {
+		return base, nil
+	}
+	if tb := strings.TrimSpace(t); tb != base {
+		if later, err := isAncestor(ctx, s.Canonical, base, tb); err == nil && later {
+			return tb, nil
+		}
+	}
+	return base, nil
 }
+
+// trackingRef is the canonical's remote-tracking ref of the default branch,
+// refs/remotes/<remote>/<db>, the one the fetch at session start writes.
+func trackingRef(s Session) string { return "refs/remotes/" + s.Remote + "/" + s.DefaultBranch }
 
 // SessionTip is refs/sessions/<id> in the canonical: the session's last commit as of the last
 // bundle (`worktree check`, the handoff and a reviewer's launch fetch it, Refresh; before the

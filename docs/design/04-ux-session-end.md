@@ -61,8 +61,10 @@ ignore) is committed as one commit on the session branch, `WIP: uncommitted chan
 end`, its author and committer the driver and its trailers the ones the check requires of a commit
 made then (`03-architecture-git.md`, Attribution), so it passes the check like the session's own
 commits. The commit is made through the spawn backend, as the bundle is; the bot's git never opens
-the tree (ADR 0022). It is handed off like any other commit by the project's `handoff` (`push` or
-`pull-request`; ADR 0028's `main` landing is not built yet, P34), and the push scan runs on it. The
+the tree (ADR 0022). It is handed off like any other commit by the project's `handoff` (`push`,
+`pull-request` or `main`; on `main` it is a commit no reviewer read, so the land refuses it
+`land-unreviewed` and the end falls back to `handoffFallback`, ADR 0028 Amendments 2026-11-02), and
+the push scan runs on it. The
 Ending line counts it. The summary's branch line becomes the owner's line (2026-10-31):
 
 ```

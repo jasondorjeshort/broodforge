@@ -1,7 +1,6 @@
 ---
 date: 2026-10-23
 kind: feature
-related: [2026-10-23-handoff-main-lands-a-session-on-the-default-branch.md]  # that one is the end's handoff; this lands without ending
 ---
 
 # `/session land` puts a session's commits on main without ending it
