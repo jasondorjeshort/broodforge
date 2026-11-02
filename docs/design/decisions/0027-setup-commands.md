@@ -212,11 +212,11 @@ adds Discord".
 
 ## On the PC: which shell
 
-The root's ACL and the pipe's default security descriptor (`CreateNamedPipe` with no attributes:
-full control to SYSTEM, Administrators and the creator, read only for Everyone; the client opens
-read-write) keep the owner's unelevated shell out: a read of the root is denied and the pipe is
-`connect-failed`. The descriptor stays as it is: Administrators are already admitted and the pipe
-authenticates nothing (ADR 0022), so the owner's door is an elevated PowerShell. Reads and `stop`
+The root's ACL and the pipe's descriptor (a protected DACL with full control for SYSTEM,
+Administrators and the user of the token that serves, no other entry, not even read; the client
+opens read-write) keep the owner's unelevated shell out: a read of the root is denied and the pipe is
+`connect-failed`. Administrators are admitted and the pipe authenticates nothing (ADR 0022), so the
+owner's door is an elevated PowerShell. Reads and `stop`
 (`status`, `stop`, `setup --check`, `audit`, every read command) run in it. Writes to the root
 (`setup`, `setup <step>`) run as `broodforge`: from an elevated PowerShell `setup` finds its caller
 is not `broodforge` and relaunches itself as `broodforge` by `setup host`'s route (rotate the
@@ -270,3 +270,6 @@ application per instance). State and secrets stay 0021's backup and restore.
   lobby, notices)" above: found by name or created last, its id written to `venue.endedCategory`, with the same rerun
   rule; when it alone is missing (a project set up before it) it is created without the channels question, whose text
   is unchanged, unless `--channels no` is given.
+- 2026-11-02: On the PC: which shell. The pipe's "default security descriptor" is replaced by an explicit
+  one (ADR 0022, Amendments from the control pipe fix): the default grants the creating token's default
+  owner, not its user, and refused the owner's own shell on a live instance served by an S4U task.

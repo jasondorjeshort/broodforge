@@ -175,3 +175,7 @@ Windows (ADR 0022's trigger).
   account is a second root and instance); the Windows gap of ADR 0022 applies to it, and the owner
   accepted it for development on that instance on 2026-10-30, a real turn still running on the
   owner's word only. Counts in Consequences are unchanged (the dev instance is not an owner instance).
+- 2026-11-02: Decision 5's "the pipe keeps its default security descriptor (Administrators admitted,
+  Everyone read only; no DACL change ...)" reads "the pipe gets a protected DACL with full control for
+  SYSTEM, Administrators and the account that serves, and no other entry" (ADR 0022, Amendments from
+  the control pipe fix). The owner's door to the `broodforge` instance is unchanged: Administrators.

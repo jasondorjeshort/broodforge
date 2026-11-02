@@ -1,5 +1,5 @@
 ---
-verified: 2026-10-26
+verified: 2026-11-02
 source: observed (go.mod, go mod graph, and the LICENSE file of each module in the module cache)
 ---
 
@@ -46,7 +46,7 @@ zombiezen facts (finding `docs/findings/2026-10-16-sqlite-facts-seen-while-build
 - Keep every `windows.Overlapped` and its I/O buffer on the heap until the operation completes:
   a goroutine stack moves, and the kernel completes into the old copy (`ERROR_IO_INCOMPLETE`).
 - Pass `WaitForMultipleObjects` a handle array held on the heap (a struct field, as
-  `pipe_windows.go` line 56 does), never a slice literal: the literal stays on the stack, and
+  `op.hs` in `pipe_windows.go` is), never a slice literal: the literal stays on the stack, and
   x/sys v0.49.0 calls another Go function between taking its address and the syscall, so a stack
   move hands the kernel freed memory (`ERROR_INVALID_HANDLE`; `TestStressUnderGC` catches it).
 

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -45,6 +46,35 @@ const (
 	// How long a client retries a pipe whose every instance is busy.
 	pipeBusyWait = 2 * time.Second
 )
+
+// pipeSDDL is the control pipe's descriptor: a protected DACL with full control for SYSTEM,
+// Administrators (the owner's elevated shell reaches a service instance under another account,
+// ADR 0022 as amended) and user, the account the serving process runs as, from any of its
+// logon sessions. Nobody else gets an entry, not even read.
+//
+// The default a pipe gets from CreateNamedPipe with no attributes is not enough: it grants the
+// creating token's default owner, not its user, and the token Task Scheduler gives an S4U task
+// with LeastPrivilege has Administrators as its default owner, so that pipe refused the same
+// user's unelevated shell (where Administrators is deny-only) as access denied.
+func pipeSDDL(user string) string {
+	return "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;" + user + ")"
+}
+
+// pipeSecurity builds pipeSDDL for the user of this process's token.
+func pipeSecurity() (*windows.SecurityAttributes, error) {
+	u, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		return nil, err
+	}
+	sd, err := windows.SecurityDescriptorFromString(pipeSDDL(u.User.Sid.String()))
+	if err != nil {
+		return nil, err
+	}
+	return &windows.SecurityAttributes{
+		Length:             uint32(unsafe.Sizeof(windows.SecurityAttributes{})),
+		SecurityDescriptor: sd,
+	}, nil
+}
 
 // op is one overlapped operation slot: an OVERLAPPED with its manual-reset event, on the heap.
 type op struct {
@@ -97,7 +127,8 @@ func (o *op) wait(h, closeEv windows.Handle) (n int, cancelled bool, err error) 
 type pipeListener struct {
 	addr   string
 	name16 *uint16
-	cancel windows.Handle // manual-reset event, set by Close
+	sa     *windows.SecurityAttributes // pipeSecurity, for every instance
+	cancel windows.Handle              // manual-reset event, set by Close
 
 	acceptMu sync.Mutex // one Accept at a time; Close takes it before freeing cancel and conn
 	conn     *op        // the connect operation, used under acceptMu
@@ -112,7 +143,11 @@ func listen(addr string) (listener, error) {
 	if err != nil {
 		return nil, NewError(CodeStartControl, err.Error())
 	}
-	l := &pipeListener{addr: addr, name16: name16, next: windows.InvalidHandle}
+	sa, err := pipeSecurity()
+	if err != nil {
+		return nil, NewError(CodeStartControl, addr+": pipe security: "+err.Error())
+	}
+	l := &pipeListener{addr: addr, name16: name16, sa: sa, next: windows.InvalidHandle}
 	// FILE_FLAG_FIRST_PIPE_INSTANCE: the first instance fails if the name already exists, so a
 	// second bot on the same instanceName cannot join the first one's pipe.
 	h, err := l.create(true)
@@ -143,7 +178,7 @@ func (l *pipeListener) create(first bool) (windows.Handle, error) {
 		flags |= windows.FILE_FLAG_FIRST_PIPE_INSTANCE
 	}
 	return windows.CreateNamedPipe(l.name16, flags, pipeMode, windows.PIPE_UNLIMITED_INSTANCES,
-		pipeBuffer, pipeBuffer, 0, nil)
+		pipeBuffer, pipeBuffer, 0, l.sa)
 }
 
 func (l *pipeListener) Accept() (io.ReadWriteCloser, error) {
