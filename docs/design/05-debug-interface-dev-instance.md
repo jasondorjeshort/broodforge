@@ -44,7 +44,10 @@ The live form on the PC under the owner's account is a second root, `%LOCALAPPDA
 instance `dev-live` (pipe `\\.\pipe\broodforge-dev-live`), made by the same line with `--discord
 live` and its own `--instance`, `--root` and application: P22's owner step runs there, and the
 companion's placeholder rule (a `--discord live` run replaces a dry-run root's placeholders) serves a
-dry-run root the owner chooses to promote, never `dev`.
+dry-run root the owner chooses to promote, never `dev`. `dev-live` may run as the always-up Task
+Scheduler task `Broodforge-dev-live`, started at boot under the owner's account by
+`scripts/dev-task.ps1` and installed by the owner from an elevated shell; agents redeploy it with
+the same script (the run skill, 2c). The script refuses `dev`, which keeps no task.
 
 Drive. Build (`CGO_ENABLED=0 go build -o bin/ ./cmd/broodforge`), `export
 BROODFORGE_ROOT="$LOCALAPPDATA/Broodforge/dev"` (and `unset BROODFORGE_KEY_FILE`: the override is

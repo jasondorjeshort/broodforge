@@ -81,6 +81,30 @@ when the bot does not answer that within its timeout,
 `MSYS_NO_PATHCONV=1 taskkill /PID "$(tr -d '\r\n' <"$BROODFORGE_ROOT/serve.pid")" /F` (`Set-Content`
 writes the PID with a CRLF, and Git Bash rewrites a bare `/PID` into a path); then delete `serve.pid`.
 
+## 2c. The always-up task
+
+The owner's always-up bot is a Task Scheduler task per live instance, `Broodforge-<instance>`,
+made by `scripts/dev-task.ps1`: it starts at machine boot as the owner (S4U, no stored password,
+nobody logged on), restarts the bot a minute after a failed exit, and ends on a clean `stop`. The
+default instance is `dev-live` (`serve --discord live`); the dry-run `dev` instance has no task
+and the script refuses it (`dry-run-not-supported`), so steps 0 to 5 hold for `dev` unchanged.
+`install` and `remove` need an elevated shell and are the owner's (they print the one line to
+paste; the owner's install step is in `docs/operator/`). An agent, in Git Bash from the main
+checkout, on the instance the brief names:
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-task.ps1 status -Instance <instance>
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-task.ps1 redeploy -Instance <instance>
+```
+
+`status` exits 0 only when the task is installed and the bot answers. `redeploy` builds `bin/`,
+stops the bot with `stop`, runs `setup engine --yes` only when `setup --check engine` disagrees
+(never the full setup line, which would touch the Discord application), starts the task and waits
+for `status --expect ok`; it is how a new build reaches the always-up bot, and how a bot started
+by hand is handed to the task. With the task installed, its bot always answers: do not end a run
+with `stop` (the task stays down until `redeploy` or the next boot). Logs: the loop's
+`<root>/task.log`, a `serve-<stamp>.log` and `.err` per start, `serve.pid` the current bot.
+
 ## 3. The round trip on the fake channel
 
 ```
