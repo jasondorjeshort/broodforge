@@ -141,3 +141,21 @@ venue and refusal text (companion, marked "wording: owner").
   model reading the outcome line as a succeeded Bash call, with no change to `internal/hook`.
 - Fitness, run by the test command: the land resume fixtures (a done and a refused land) and every
   row of the companion's push-form table pass against the pinned engine's recorded stream.
+
+## Amendments
+
+- 2026-11-02, the P34 build (`../08-implementation-plan-landing.md`) found Decision 1 and the companion
+  disagreeing. Sources: the owner's principle of 2026-10-23 (a refused land falls back to the session
+  branch and says so; nothing is lost); the WIP commit of 2026-11-01 (`../04-ux-session-end.md`), which
+  makes every dirty-tree end on a `main` project `land-unreviewed`; the 0022 companion's amendment of
+  2026-10-31 (a refused gate at the end falls back). Decision 1's "`land-not-fast-forward` and
+  `land-rejected` at the end fall back to `handoffFallback` and the venue says why" is replaced: at the
+  end every land refusal falls back to `handoffFallback` except `land-canonical-diverged`, final as a
+  `handoff-refused-*` is (tree and session kept; the owner reconciles and ends again), because it names
+  a fault in the host's canonical that a fallback push would publish under the session's name. The
+  fallback line (companion, Venue lines) carries the first refusal met in Decision 1's order: role,
+  fact, fast-forward, push. At the end Decision 5's "the driver's roles" is the ender's roles: the
+  member who pressed `[End session]` or ran `/session end`. An end with no roles behind it, the idle
+  timeout and `session end <id>` on the host (no `--as`, no `--roles`), is `land-not-allowed` and so
+  falls back; a host land is `session land <id> --as --roles` before the end. Mid-session nothing
+  changes: every refusal keeps the session open. The companion is corrected in place (living tables).

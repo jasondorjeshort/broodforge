@@ -27,12 +27,12 @@ Each refusal is an exit-1 line from `session land` (`error: <code>: <text>`), a 
 
 | Code | When | Text (wording: owner) | Lift |
 |---|---|---|---|
-| `land-not-allowed` | the driver has no role in the channel's `roles.land`, or the channel has none | `Not landed: landing on <default> needs a land role in this channel.` | The owner adds a land role to this channel (`roles.land`, `config reload`); nobody in the session or venue. |
+| `land-not-allowed` | the driver has no role in the channel's `roles.land`, or the channel has none | `Not landed: landing on <default> needs a land role in this channel.` | The owner adds a land role to this channel (`roles.land`, `config reload`); nobody in the session or venue. At the end the fallback (ADR Amendments 2026-11-02), judged by the ender's roles; the idle end and the host's `session end` have none. |
 | `land-not-allowed` (subagent) | the request came from a subagent the copy's `git.push.subagents` does not name, or before the V12 probe passes | `Not landed: in this session the push word is the driver process's; a subagent leaves the work committed and reports.` | The project's authors on the default branch (the list); the next session has it. |
-| `land-unreviewed` | the review fact does not name the tip | `Not landed: review: none since <sha>[; the last reviewer launch failed: <commitError>]. Commit, launch the reviewer as a call on its own, then push again.` | The session: commit, launch the reviewer on the tip, land again. |
+| `land-unreviewed` | the review fact does not name the tip | `Not landed: review: none since <sha>[; the last reviewer launch failed: <commitError>]. Commit, launch the reviewer as a call on its own, then push again.` | The session: commit, launch the reviewer on the tip, land again. At the end the fallback (every dirty-tree end is this code: the WIP commit, `../04-ux-session-end.md`). |
 | `land-not-fast-forward` | `<remote>/<default>` is not an ancestor of the tip | `Not landed: <default> moved by <n> commits since this session branched. Fetch <remote>, rebase this tree onto <remote>/<default> (the driver or the runner), review again, then push again.` | The session, as the text says; at the end the fallback. |
-| `land-canonical-diverged` | the canonical's default branch and the remote's have diverged | `Not landed: the host's copy of <default> and <remote> have diverged; the owner reconciles it.` | The owner: push the canonical's commits, or `branch -f` / `reset --keep` onto `<remote>/<default>` (`../05-debug-interface-git.md`, The fetch at session start). |
-| `land-rejected` | the remote refused the push | `Not landed: push rejected by the remote: <git's one line>. If <default> moved, push again; if the remote refuses the branch, the owner changes the remote or the project's handoff.` | A race: land again. Protection or `denyCurrentBranch`: the owner (the remote's configuration, `handoff` `pull-request`, or the warning's lifts below). |
+| `land-canonical-diverged` | the canonical's default branch and the remote's have diverged | `Not landed: the host's copy of <default> and <remote> have diverged; the owner reconciles it.` | The owner: push the canonical's commits, or `branch -f` / `reset --keep` onto `<remote>/<default>` (`../05-debug-interface-git.md`, The fetch at session start). At the end no fallback: the session stays open, as on a `handoff-refused-*`. |
+| `land-rejected` | the remote refused the push | `Not landed: push rejected by the remote: <git's one line>. If <default> moved, push again; if the remote refuses the branch, the owner changes the remote or the project's handoff.` | A race: land again. Protection or `denyCurrentBranch`: the owner (the remote's configuration, `handoff` `pull-request`, or the warning's lifts below). At the end the fallback. |
 | `land-bad-push` | the command is not a landing form | `Not landed: Broodforge lands this session's branch onto <default> as a fast-forward, nothing else. Use git push, or git push --dry-run.` | Inside the session: issue a landing form. |
 | the handoff's own codes | `handoff-refused-*`, `handoff-failed-*` | the existing texts (ADR 0025 companion; `../05-debug-interface-git.md`) | as today |
 | a project hook's deny of a land request | the copy's `PreToolUse` child denied the `Bash` call before the land ran (only when the request did not begin with a landing form; a landing form returns before the chain) | the companion's child-deny text | The project's authors on the default branch; the next session. |
@@ -41,7 +41,8 @@ Each refusal is an exit-1 line from `session land` (`error: <code>: <text>`), a 
 ## `config check` warnings (Decision 2)
 
 - A `main` project whose channel has no `land` list: `warning: <project> <channel>: handoff main with
-  no roles.land; every session there will fall back to <handoffFallback>.` Lift: `roles.land`.
+  no roles.land; every session end there will fall back to <handoffFallback>.` Lift: `roles.land`. A
+  mid-session land there is refused `land-not-allowed`, no fallback (Decision 1). Wording: owner.
 - A path remote that is a non-bare repository (`rev-parse --is-bare-repository` false) whose
   `symbolic-ref HEAD` is the default branch and whose `receive.denyCurrentBranch` is unset or `refuse`:
   `warning: <project>: <remote> is a checkout with <default> checked out; git refuses every push to it
