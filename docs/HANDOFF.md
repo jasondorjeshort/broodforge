@@ -1,13 +1,13 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-11-01 by main session (wave of 2026-11-01 done; the wrap-up push follows)
+Updated: 2026-11-02 by main session (P34 built and reviewed; the push follows)
 
 ## Now
 
-- Account `jdorje`. Pushed at `764ad5d` (after the owner's allow for the session-home segments `trailers`, `hook.log`).
-  Ahead: nine triage blocks, two coder lanes as one commit (`5891886`), the commit-skill departure, the store-error
-  fix, Ended sessions (`d71b652`), this handoff with four residual ideas; a fresh pusher takes them.
+- Account `jdorje`. Pushed at `8d21968` (the control pipe DACL). Ahead: ADR 0028 amended 2026-11-02 (the end's
+  fallback on every refusal but `land-canonical-diverged`; the ender's roles), P34 (`Land`, `handoff: main`,
+  `session land`, the warnings; reviewed, seven findings fixed), the redeploy idea; a fresh pusher takes them.
 - Wave of 2026-11-01 done, each change reviewed once: auto mode designed (ADR 0020 amended, P39, claim C40 open);
   the end WIP commit and `End and discard`; P33 (V1 waits); Ended sessions (the lock is an owner call); triage.
 - Hatchery `../hatchery` holds `bcc78fe` (the delegation-paragraph request as an idea), unpushed. `dev-live` (the
@@ -18,8 +18,8 @@ Updated: 2026-11-01 by main session (wave of 2026-11-01 done; the wrap-up push f
 
 1. P39, `coder` (the owner's priority, `08-implementation-plan-auto-mode.md`): C40a (the silent exit 0) first on
    the owner's word, then the pass; the classifier spike (row 3) is the owner's to run by hand, no agent brief.
-2. P34, `coder` (`handoff.go` free; the bundle lock shared), then P35 to P37; the `reach-report` reviewer row
-   (idea). V1 and P38's real turns on the live instance on the owner's word.
+2. P35, `coder`, then P36, P37; the `reach-report` reviewer row (idea); P34's open point, `worktree handoff` on a
+   `main` project landing with the role unchecked (architect). V1 and P38's real turns on the owner's word.
 3. `coder`: part two of the two-leftovers idea (the transcript renderer); the P11 remainder; the serve snapshot; the
    session-start link button (Plans in `docs/ideas/`). Carry-back Sends (`carry-back` skill): the commit-skill
    departure, the heredoc-reason idea; the `--staged` scan, coder first. Triage: the four residual ideas of 2026-11-01.
