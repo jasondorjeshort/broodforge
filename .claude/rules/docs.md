@@ -12,18 +12,29 @@ These load automatically when a file matching one of the `paths:` above (`docs/*
 `.claude/agreement/**`, `.claude/project/**`) is read or edited. The map of what goes where is
 `docs/README.md`; the reasoning is ADR 0002.
 
-## Size caps (enforced by the pusher, check 7; the post-edit hook warns)
+## Size thresholds and caps (pusher check 7; the post-edit hook warns)
 
-- Any `docs/**/*.md`: at most 300 lines. Split by topic, never by date, and never by "part 2".
-  Exempt: `docs/design/proposals/`, because a proposal carries its options, the critic's objections,
-  and the responses in one closed record that nothing loads on demand. A project's legacy docs may
-  be exempted by path in `.claude/hooks/policy.json` `edit.capExempt`, which the post-edit hook and
-  the pusher both read; the patterns' `*` crosses `/`, so name files when a folder's subfolders
-  must stay capped. Aim under 300 anyway.
-- `docs/HANDOFF.md`, and each `docs/handoff/*.md` where that directory exists: at most 40 lines, at most 120 together. Detail
-  goes to an idea or a finding; the handoff links.
-- `CLAUDE.md`: at most 40 lines, loading at most 190 (`node .claude/hooks/policy.js --claude-check`);
-  `edit.capExempt` naming `CLAUDE.md` lifts both. A new paragraph of facts goes to `docs/reference/` with a pointer.
+- Any `docs/**/*.md`: 300 lines is the threshold where the writer asks what the doc is made of (ADR
+  0023). Cut an inventory the rule could generate, and the record of a settled deliberation. Move
+  rationale, history and dated rulings to `docs/reference/` or the ADR that chose the practice,
+  leaving the procedure in place with one pointer; move a phase only some runs use to a file the doc
+  names, one level deep. Never split one procedure's steps across files, and split a reference doc
+  only when it covers two subsystems. Staying long is right when the doc is one procedure read start
+  to finish, or when its length is the exact commands and checks a pass needs. A file over 300 then
+  carries `[length: <reason>]` in its first 10 lines, naming which case applies; the post-edit hook
+  warns about a file over 300 without it, the pusher refuses the push, and the reviewer checks that
+  the reason holds. Exempt, needing no marker: `docs/design/proposals/` (a proposal carries its
+  options, the critic's objections and the responses in one closed record), and a project's legacy
+  docs named in `.claude/hooks/policy.json` `edit.capExempt`, which the post-edit hook and the pusher
+  both read; the patterns' `*` crosses `/`, so name files when a folder's subfolders must stay
+  checked. Split by topic, never by date, and never by "part 2".
+- `docs/HANDOFF.md`, and each `docs/handoff/*.md` where that directory exists: at most 40 lines, at
+  most 120 together, hard. Detail goes to an idea or a finding; the handoff links.
+- `CLAUDE.md`: at most 40 lines, loading at most 190 (`node .claude/hooks/policy.js --claude-check`),
+  hard; `edit.capExempt` naming `CLAUDE.md` lifts both. A new paragraph of facts goes to
+  `docs/reference/` with a pointer.
+- `.claude/skills/*/SKILL.md`: 500 lines is a threshold (Anthropic's guidance for skills); the
+  post-edit hook warns, nothing fails. Split content into files the skill names, one level deep.
 
 ## Indexes
 

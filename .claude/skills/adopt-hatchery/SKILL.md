@@ -93,7 +93,8 @@ Everything below runs in a private clone of the project, on its default branch, 
    `LICENSE` present and different: keep it, copy nothing, the same exclude, replacement file and
    row, and supersede 0001 the same way.
 9. Caps. `git ls-files 'docs/*.md' | xargs wc -l | awk '$1>300 && $2!="total"'`: list every pre-existing file over
-   300 lines. Per file the user chooses split or exempt; an exemption is the path (or a glob) added
+   300 lines. Per file the user chooses split, exempt or mark (a doc that is one procedure read start to
+   finish, or the exact commands and checks a pass needs, keeps a `[length: <reason>]` marker); an exemption is the path (or a glob) added
    to `edit.capExempt` in `.claude/hooks/policy.json`, which the post-edit hook and pusher check 7
    both read, recorded in step 10's Decision (no departure row: `policy.json` is the project's). Never
    edit check 7 for it.

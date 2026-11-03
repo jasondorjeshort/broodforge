@@ -3,7 +3,7 @@
 Durable facts the project depends on: how a tool behaves, what an API accepts, what an environment
 provides. One topic per file, named by topic (`git-credentials.md`, `android-sdk.md`), never by date.
 Each file starts with frontmatter `verified: YYYY-MM-DD` and `source: <url or "observed">`, then
-facts, commands that work, and gotchas. Cap 300 lines; split by topic when near it.
+facts, commands that work, and gotchas. 300 lines is where the writer asks what the doc is made of; over it, `[length: <reason>]` (`.claude/rules/docs.md`, Hatchery ADR 0023 in `docs/hatchery/decisions/`).
 
 A fact gets here by being promoted from a finding (`finding` skill) or written directly when it is
 already certain. When a fact turns out to be wrong, fix it and bump `verified:`; do not append history.

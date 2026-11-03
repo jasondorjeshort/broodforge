@@ -17,7 +17,8 @@ Rules:
 - Serious by rule: a new dependency the brief did not name; a change to an interface the brief
   said must not change; an incompatible change to a surface in the project's surfaces ADR with no
   ADR for it; a changed input check, a new silent fallback or a swallowed error the brief did not
-  name.
+  name; a `[length: <reason>]` marker the change adds or keeps whose reason does not hold against
+  ADR 0023, item 1 (an inventory or a settled deliberation the doc could cut, a movable phase).
 - Blocking by rule: any class of ADR 0018 in the diff or in a commit's author, committer or
   message (an email, a home path with a user segment in any spelling, a host name, the machine's
   user name, an identity outside `privacy.identities`, a session link anywhere but a message's

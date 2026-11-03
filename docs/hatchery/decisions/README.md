@@ -21,7 +21,8 @@ Decisions so far:
 - [0002 Repository layout](0002-repository-layout.md): where knowledge, state, procedures,
   rules, and hooks live; skills, permissions, and continuity by `@docs/HANDOFF.md` import, superseded
   in part by 0014 (handoff), 0016 (the Hatchery records subtree; `CLAUDE.md` as a 40-line
-  importing file) and 0017 (the three queue directories have no index). Companion [hook specifications](0002-hook-specs.md) for the
+  importing file), 0017 (the three queue directories have no index) and 0023 (the 300-line cap is a
+  threshold). Companion [hook specifications](0002-hook-specs.md) for the
   hooks, and [section 3, the usage gate and status line](0002-hook-specs-usage.md).
 - [0004 Adopting the Hatchery practice](0004-adopt-hatchery.md): an existing project takes
   the practice as files from `hatchery/main`, records the base commit in its own ADR, and updates by
@@ -144,3 +145,10 @@ Decisions so far:
 - [0022 A session-meter HOLD is waited out](0022-session-meter-hold-is-waited-out.md): a HOLD on the
   session meter alone is waited out with one scheduled wake-up after the reset, after the handoff,
   commit and a report to the owner. Supersedes in part 0006 and 0011.
+- [0023 The 300-line doc cap becomes a threshold](0023-length-threshold-not-cap.md): 300 lines on a
+  `docs/**/*.md` is where the writer asks what the doc is made of (cut inventories and settled
+  deliberations; move rationale to reference or the ADR; never split one procedure's steps); a file
+  over 300 carries `[length: <reason>]` in its first 10 lines, the post-edit hook warns without it,
+  pusher check 7 FAILs only without it, the reviewer judges the reason; `SKILL.md` over 500 warns,
+  nothing fails; `edit.capExempt` and the proposals exemption stay; the handoff and `CLAUDE.md` caps
+  stay hard. Supersedes in part 0002.

@@ -25,7 +25,7 @@ and why the practice was adopted rather than the project decanted anew. A decant
   - <section>: <decision>, or none.
 - License: <adopted GPL-3.0-or-later and kept ADR 0001 | kept existing <license>, supersedes 0001 |
   none, supersedes 0001>. SPDX headers: <new files only; retrofit as an ideas file | all files>.
-- Docs over the 300-line cap: <file: split | exempted in `edit.capExempt` of `.claude/hooks/policy.json`>.
+- Docs over the 300-line cap: <file: split | marked [length: <reason>] | exempted in `edit.capExempt` of `.claude/hooks/policy.json`>.
 
 ## Departures
 
