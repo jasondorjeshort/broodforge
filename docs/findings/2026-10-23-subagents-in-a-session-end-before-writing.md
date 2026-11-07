@@ -160,7 +160,7 @@ field naming the agent, so a subagent's call is placed by its time after the `Ag
 ### Third look: the engine ends the subagent, not the bot (2026-11-07, engine 2.1.319)
 
 - Three real turns on the PC from one scratch tree (`hello.txt`; `.claude/agents/probe.md`, Haiku, tools Read and Bash). The
-  tree is not a repository, since the git-guard gives `git commit` to the runner alone, so the probe ran `echo hi`. One prompt
+  probe ran `echo hi`. One prompt
   for all three: launch `probe` (else `general-purpose`) in the foreground with model `haiku`, have it run `echo hi`, use no
   other tool, and quote the Agent result. The coordinator ran on `--model opus`. The raw streams, hook stdin and transcripts
   stay in `~/AppData/Local/Temp/bf-subdefer/`.
@@ -184,8 +184,7 @@ field naming the agent, so a subagent's call is placed by its time after the `Ag
   `"permissionMode":"default"`), and its meta file says `"requestShape":"foreground"`, `"requestNonInteractive":true`, `"finished":true`.
 - Hook stdin (control): the coordinator's `Agent` call carries `session_id`, `transcript_path`, `cwd`, `prompt_id`,
   `permission_mode`, `effort`, `hook_event_name`, `tool_name`, `tool_input` and `tool_use_id`. The subagent's `Bash` call
-  carries the same fields plus `agent_id` (the Agent result's `agentId`) and `agent_type` (`probe`). Its `session_id`,
-  `transcript_path` and `prompt_id` are the parent's. The bot's hook reads neither `agent_id` nor `agent_type`.
+  carries the same fields plus `agent_id` and `agent_type`; the session, transcript and prompt ids are the parent's. The bot's hook reads neither `agent_id` nor `agent_type`.
 - So the bot drops nothing. Under `-p` the engine ends a subagent at a hook `defer` and does not pass the defer up, so
   `deferLocked` has nothing to read. Only a top-level call's defer ends the process with `tool_deferred`. An `ask` is a
   refusal that the subagent survives. The 2026-10-31 spike's `"handback":"withheld"` is absent on both paths here. That
@@ -193,9 +192,8 @@ field naming the agent, so a subagent's call is placed by its time after the `Ag
 - A second result: in all three streams the `rate_limit_event`'s `unifiedWindows` holds `seven_day` alone, with no
   `five_hour`, on both accounts. Every rate-limit line of the 2.1.296 fixtures has `five_hour`. `ParseLine` reads the
   missing window as zeros, so the meter of ADR 0021 would record a five-hour window of `0` that resets at `0`. The
-  replay test's invariant (`internal/engine/parse_test.go`, `KindRateLimit`: both `resetsAt` non-zero) fails on line 4:
-  `rate-limit without status or windows: &{Status:allowed RateLimitType:seven_day FiveHour:{Utilization:0 ResetsAt:0}
-  SevenDay:{Utilization:0.33 ResetsAt:1794542400} OverageStatus:rejected IsUsingOverage:false}`.
+  replay test's invariant (`internal/engine/parse_test.go`, `KindRateLimit`: both `resetsAt` non-zero) refused
+  line 4, a rate-limit event with `seven_day` alone.
 
 ## Next
 
@@ -214,8 +212,8 @@ field naming the agent, so a subagent's call is placed by its time after the `Ag
   under the spawn's `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, so `auto` is no workaround: the 2026-10-31
   auto spike finding, row 3), and until it is answered a session that
   delegates runs in policy mode.
-- Decide how a missing `five_hour` window is read (the meter, and the replay test's invariant), then import the
-  2026-11-07 recording as `fixtures/engine/subagent-deferred/` (`importfixture` from the scratch `rec/`).
+- Answered 2026-11-07: ADR 0021 Amendments 2026-11-07 (an absent window is NULL, printed `-`); the recording is
+  `fixtures/engine/subagent-deferred/`.
 - Decide whether `SendMessage` and `Skill` belong in `code` reach (the policy table,
   `03-hook-contract.md`); option D for skills needs the `Skill` row as well as its droplet row.
 - Decide whether the copy takes the files `CLAUDE.md` imports outside `.claude/`, or the handoff
