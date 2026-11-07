@@ -21,6 +21,22 @@ func drain(h TurnHandle) []EngineEvent {
 	return evs
 }
 
+// drainDenying is drain answering every prompt event deny, as engine run's default
+// --requests does, so a fake waiting on a request goes on.
+func drainDenying(t *testing.T, h TurnHandle) []EngineEvent {
+	t.Helper()
+	var evs []EngineEvent
+	for ev := range h.Events {
+		evs = append(evs, ev)
+		if ev.Kind == KindPrompt {
+			if err := h.Answer(ev.Prompt.RequestID, false, "denied by the test", false); err != nil {
+				t.Errorf("answer %s: %v", ev.Prompt.RequestID, err)
+			}
+		}
+	}
+	return evs
+}
+
 // TestFakeReplaysEveryTurn: every turn of every fixture plays through the fake and ends with
 // one exit carrying fixture.json's code; turns play in order.
 func TestFakeReplaysEveryTurn(t *testing.T) {
@@ -34,7 +50,7 @@ func TestFakeReplaysEveryTurn(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			evs := drain(h)
+			evs := drainDenying(t, h)
 			want := parseTurn(t, dir, turn.N)
 			if len(evs) != len(want)+1 {
 				t.Fatalf("%s turn %d: %d events, want %d and an exit", dir, turn.N, len(evs), len(want))
@@ -223,6 +239,196 @@ func TestFakeReceivedDir(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 	if _, err := NewFake(fixturesRoot+"/basic", missing); !errors.Is(err, ErrReceivedDir) {
 		t.Errorf("missing received dir: %v, want ErrReceivedDir", err)
+	}
+}
+
+// nextUntil reads events up to and including the first of kind, failing after a timeout.
+func nextUntil(t *testing.T, h TurnHandle, kind EventKind) []EngineEvent {
+	t.Helper()
+	var evs []EngineEvent
+	timeout := time.After(30 * time.Second)
+	for {
+		select {
+		case ev, ok := <-h.Events:
+			if !ok {
+				t.Fatalf("the turn ended before a %s event", kind)
+			}
+			evs = append(evs, ev)
+			if ev.Kind == kind {
+				return evs
+			}
+		case <-timeout:
+			t.Fatalf("no %s event within 30s", kind)
+		}
+	}
+}
+
+// receivedAnswers is received-<n>.json's answers.
+func receivedAnswers(t *testing.T, path string) []json.RawMessage {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec struct {
+		Answers *[]json.RawMessage `json:"answers"`
+	}
+	if err := json.Unmarshal(b, &rec); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Answers == nil {
+		t.Fatalf("%s has no answers key", path)
+	}
+	return *rec.Answers
+}
+
+// TestFakeWaitsForAnswer (P40c): at prompt-ask-allow's request, which the recording answered
+// before its result, the fake waits; an answer given after a delay lets it stream on to the
+// exit, and received-1.json holds the line the real adapter would have written. An interrupt
+// during the wait ends the replay.
+func TestFakeWaitsForAnswer(t *testing.T) {
+	dir := fixturesRoot + "/prompt-ask-allow"
+	recv := t.TempDir()
+	f, err := NewFake(dir, recv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := f.StartTurn(TurnRequest{Input: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := nextUntil(t, h, KindPrompt)
+	p := got[len(got)-1].Prompt
+	select {
+	case ev := <-h.Events:
+		t.Fatalf("the fake streamed %s before an answer", ev.Kind)
+	case <-time.After(300 * time.Millisecond):
+	}
+	if err := h.Answer("no-such-request", true, "", false); err == nil {
+		t.Error("an answer to an unknown request was taken")
+	}
+	if err := h.Answer(p.RequestID, true, "", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Answer(p.RequestID, true, "", false); err == nil {
+		t.Error("a second answer to the same request was taken")
+	}
+	got = append(got, drain(h)...)
+	if want := parseTurn(t, dir, 1); len(got) != len(want)+1 {
+		t.Fatalf("%d events, want %d and an exit", len(got), len(want))
+	}
+	if last := got[len(got)-1]; last.Kind != KindExit || last.Exit.Interrupted || last.Exit.Code == nil || *last.Exit.Code != 0 {
+		t.Errorf("last event %+v", last.Exit)
+	}
+	answers := receivedAnswers(t, filepath.Join(recv, "received-1.json"))
+	want := `{"type":"control_response","response":{"subtype":"success","request_id":"` + p.RequestID +
+		`","response":{"behavior":"allow","updatedInput":{"command":"echo hi","description":"Print hi via echo"}}}}`
+	if len(answers) != 1 || compactJSON(answers[0]) != want {
+		t.Errorf("answers %s, want [%s]", answers, want)
+	}
+
+	// Interrupted while waiting: the replay ends, the exit interrupted.
+	f, err = NewFake(dir, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err = f.StartTurn(TurnRequest{Input: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextUntil(t, h, KindPrompt)
+	if err := h.Interrupt(); err != nil {
+		t.Fatal(err)
+	}
+	rest := drain(h)
+	if last := rest[len(rest)-1]; len(rest) != 1 || last.Kind != KindExit || !last.Exit.Interrupted {
+		t.Errorf("after an interrupt in the wait: %d events, last %+v", len(rest), last.Exit)
+	}
+}
+
+// TestFakeAbortStreamsOn (P40c): prompt-ask-abort's request was aborted by the engine at a
+// stdin close (source config, reason_type other), never answered, so the fake streams on.
+func TestFakeAbortStreamsOn(t *testing.T) {
+	f, err := NewFake(fixturesRoot+"/prompt-ask-abort", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := f.StartTurn(TurnRequest{Input: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextUntil(t, h, KindPrompt)
+	select {
+	case <-h.Events:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the fake waited on a request the engine aborted")
+	}
+	_ = h.Interrupt()
+	drain(h)
+}
+
+// TestFakeAnswerUntilFirstResult (P40c): the fake takes an answer to an emitted, unanswered
+// request until it emits the turn's first result, and refuses it after with errNoRequest.
+func TestFakeAnswerUntilFirstResult(t *testing.T) {
+	f, err := NewFake(fixturesRoot+"/prompt-ask-abort", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := f.StartTurn(TurnRequest{Input: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := nextUntil(t, h, KindPrompt)
+	id := p[len(p)-1].Prompt.RequestID
+	if err := h.Answer(id, true, "", false); err != nil {
+		t.Errorf("an answer before the first result: %v", err)
+	}
+	drain(h)
+	if err := h.Answer(id, true, "", false); !errors.Is(err, errNoRequest) {
+		t.Errorf("an answer after the turn: %v, want errNoRequest", err)
+	}
+}
+
+// TestFakeBackgroundStreamsOn (P40c): prompt-ask-background's request was answered only after
+// the turn's first result, so the fake streams on without an answer, the whole recording
+// replayed: both results, then the exit; received-1.json's answers is empty.
+func TestFakeBackgroundStreamsOn(t *testing.T) {
+	dir := fixturesRoot + "/prompt-ask-background"
+	recv := t.TempDir()
+	f, err := NewFake(dir, recv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := f.StartTurn(TurnRequest{Input: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan []EngineEvent)
+	go func() { done <- drain(h) }()
+	var evs []EngineEvent
+	select {
+	case evs = <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the fake waited on a request answered after the result")
+	}
+	if want := parseTurn(t, dir, 1); len(evs) != len(want)+1 {
+		t.Fatalf("%d events, want %d and an exit", len(evs), len(want))
+	}
+	prompts, results := 0, 0
+	for _, ev := range evs {
+		switch ev.Kind {
+		case KindPrompt:
+			prompts++
+		case KindResult:
+			results++
+		case KindInit, KindAssistant, KindToolResult, KindExit, KindRateLimit, KindUnknown:
+		}
+	}
+	if prompts != 1 || results != 2 || evs[len(evs)-1].Kind != KindExit {
+		t.Errorf("%d prompts, %d results, last %s", prompts, results, evs[len(evs)-1].Kind)
+	}
+	if answers := receivedAnswers(t, filepath.Join(recv, "received-1.json")); len(answers) != 0 {
+		t.Errorf("answers %s", answers)
 	}
 }
 

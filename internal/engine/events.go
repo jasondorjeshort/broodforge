@@ -5,6 +5,7 @@ package engine
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -38,7 +39,14 @@ type TurnRequest struct {
 	// PermissionMode is --permission-mode, set per process from the session's mode (ADR 0020 as
 	// amended 2026-11-01): "auto" on an auto-mode session, else "default"; "" is "default".
 	PermissionMode string `json:"permissionMode"`
+	// Mode is the session's mode for this process, "prompt", "policy" or "auto"; "" is not
+	// prompt. A prompt-mode process runs the stdio prompt tool with stdin held open (ADR 0029
+	// rule 2): --permission-prompt-tool stdio, and TurnHandle.Answer writes the answers.
+	Mode string `json:"mode"`
 }
+
+// modePrompt is TurnRequest.Mode for a prompt-mode process.
+const modePrompt = "prompt"
 
 // The engine's permission modes the bot asks for (ADR 0020 as amended 2026-11-01).
 const (
@@ -74,10 +82,59 @@ type TurnAnswer struct {
 
 // TurnHandle is a running turn. Events carries the turn's events, the last of them an exit,
 // and is then closed; a reader drains it to the close, or calls Interrupt, after which it may
-// stop reading without leaving the turn blocked. Interrupt ends the turn early.
+// stop reading without leaving the turn blocked. Interrupt ends the turn early. Answer answers
+// an open prompt event by its RequestID (ADR 0029 rule 3): allow, the call running with its
+// input unchanged, or deny with message, interrupt true killing the asking subagent. It
+// refuses a request that is not open, and every request once the turn's stdin is closed.
 type TurnHandle struct {
 	Events    <-chan EngineEvent
 	Interrupt func() error
+	Answer    func(requestID string, allow bool, message string, interrupt bool) error
+}
+
+// errNoRequest is returned by Answer for a request id that is not open.
+var errNoRequest = errors.New("no open request")
+
+// controlResponse is the one line Answer writes for requestID
+// (03-hook-contract-prompt-tool.md, The answers): an allow carries the request's input
+// unchanged as updatedInput and never updatedPermissions; a deny its message and interrupt.
+func controlResponse(requestID string, input json.RawMessage, allow bool, message string, interrupt bool) []byte {
+	type allowBody struct {
+		Behavior     string          `json:"behavior"`
+		UpdatedInput json.RawMessage `json:"updatedInput"`
+	}
+	type denyBody struct {
+		Behavior  string `json:"behavior"`
+		Message   string `json:"message"`
+		Interrupt bool   `json:"interrupt"`
+	}
+	var body []byte
+	var err error
+	if allow {
+		if len(input) == 0 {
+			input = json.RawMessage("{}")
+		}
+		body, err = encodeJSON(allowBody{"allow", input})
+	} else {
+		body, err = encodeJSON(denyBody{"deny", message, interrupt})
+	}
+	if err != nil {
+		panic(err) // strings, a bool and the request's own JSON
+	}
+	type response struct {
+		Subtype   string          `json:"subtype"`
+		RequestID string          `json:"request_id"`
+		Response  json.RawMessage `json:"response"`
+	}
+	v := struct {
+		Type     string   `json:"type"`
+		Response response `json:"response"`
+	}{"control_response", response{"success", requestID, body}}
+	b, err := encodeJSON(v)
+	if err != nil {
+		panic(err) // strings, a bool and the request's own JSON
+	}
+	return append(b, '\n')
 }
 
 // EventKind names the payload an EngineEvent carries; it is the "type" of its JSON form.

@@ -38,10 +38,11 @@ const (
 
 // engineRun is the adapter alone, no store, no session (05-debug-interface.md, A turn against
 // the engine): `broodforge engine run --fake <fixture dir> [--turn <n>] [--cwd <dir>]
-// [--received-dir <dir>] --prompt <text> [--expect <value>]` replays a fixture; `engine run
-// --real --credential <id> --cwd <dir> --prompt <text> [--resume <engine session id>] [--model
-// <model>] [--workflow <dir>] [--mode prompt|policy|auto]` runs
-// the configured engine through the spawn backend (runEngineReal, below). Either streams the turn's
+// [--received-dir <dir>] --prompt <text> [--requests allow|deny] [--expect <value>]` replays a
+// fixture; `engine run --real --credential <id> --cwd <dir> --prompt <text> [--resume <engine
+// session id>] [--model <model>] [--workflow <dir>] [--mode prompt|policy|auto] [--requests
+// allow|deny]` runs the configured engine through the spawn backend (runEngineReal, below);
+// --requests answers every request (requestsFlag). Either streams the turn's
 // EngineEvents as JSONL on stdout, in text mode too, and exits with the turn's exit code (any
 // non-zero code is 1, `error: engine-exit: ...`). Its outcome token for --expect is `result`
 // when the turn produced a result event and `no-result` otherwise; a non-zero exit is the
@@ -61,9 +62,41 @@ var engineRun = Command{
 		{Name: "cwd", Kind: FlagString, Value: "<dir>", Usage: "the request's working directory"},
 		{Name: "received-dir", Kind: FlagString, Value: "<dir>", Usage: "--fake: where received-<n>.json goes (default: the fixture directory)"},
 		{Name: "prompt", Kind: FlagString, Value: "<text>", Usage: "the turn's input"},
+		requestsFlag,
 	},
 	Expect: true,
 	Local:  runEngine,
+}
+
+// requestsFlag is how a standalone turn answers every request (03-hook-contract-prompt-tool.md,
+// Debug surface): each prompt event the engine raises, or the fake waits on, is answered at
+// once, one stderr line each, so no standalone run waits on a person. --fake always answers;
+// --real and engine record answer under --mode prompt only.
+var requestsFlag = Flag{Name: "requests", Kind: FlagString, Value: "<allow|deny>",
+	Usage: "answer every request this way (--fake, or --mode prompt; default deny)"}
+
+// Answer policies of --requests.
+const (
+	requestsAllow = "allow"
+	requestsDeny  = "deny"
+)
+
+// requestsDenyMessage is the deny --requests deny writes (a placeholder until the owner words it).
+const requestsDenyMessage = "Denied by Broodforge: answered by the recording's policy"
+
+// requestsPolicy is --requests checked: "" is deny; with answers false any value is refused,
+// since that turn raises no request it could answer.
+func requestsPolicy(env *Env, name string, answers bool, why string) (string, error) {
+	v := env.String("requests")
+	switch {
+	case v != "" && !answers:
+		return "", control.NewError(control.CodeBadArgs, name+": --requests "+v+": "+why)
+	case v == "":
+		return requestsDeny, nil
+	case v == requestsAllow || v == requestsDeny:
+		return v, nil
+	}
+	return "", control.NewError(control.CodeBadArgs, name+": --requests "+v+": want allow or deny")
 }
 
 func init() { commands = append(commands, &engineRun) }
@@ -84,6 +117,10 @@ func runEngine(ctx context.Context, env *Env) error {
 	}
 	if env.String("prompt") == "" {
 		return &usageError{"engine run: --prompt <text> is required"}
+	}
+	policy, err := requestsPolicy(env, "engine run", true, "")
+	if err != nil {
+		return err
 	}
 	n := env.Int("turn")
 	if n < 1 {
@@ -107,21 +144,36 @@ func runEngine(ctx context.Context, env *Env) error {
 	if err != nil {
 		return err
 	}
-	_, err = streamTurn(env, h)
+	_, err = streamTurn(env, h, policy)
 	return err
 }
 
 // streamTurn prints every event of the turn as it comes, drains it to its end, sets the
 // outcome token and returns the turn's refusal: engine-exit for an interrupted turn or a
-// non-zero exit.
-func streamTurn(env *Env, h engine.TurnHandle) (string, error) {
-	id, _, err := streamTurnExit(env, h)
+// non-zero exit. requests, when set, answers every prompt event (answerRequest).
+func streamTurn(env *Env, h engine.TurnHandle, requests string) (string, error) {
+	id, _, err := streamTurnExit(env, h, requests)
 	return id, err
+}
+
+// answerRequest answers one prompt event by the --requests policy and says so on stderr:
+// `request  <request id>  <tool>  <agent id or ->  allow|deny`. A request the turn no longer
+// holds open (its stdin closed at the result first) is a warning line.
+func answerRequest(env *Env, h engine.TurnHandle, p *engine.PromptEvent, requests string) {
+	agent := p.AgentID
+	if agent == "" {
+		agent = "-"
+	}
+	if err := h.Answer(p.RequestID, requests == requestsAllow, requestsDenyMessage, false); err != nil {
+		fmt.Fprintf(env.Stderr, "warning: request  %s  %s  %s  not answered: %v\n", p.RequestID, p.Tool, agent, err)
+		return
+	}
+	fmt.Fprintf(env.Stderr, "request  %s  %s  %s  %s\n", p.RequestID, p.Tool, agent, requests)
 }
 
 // streamTurnExit is streamTurn that also returns the engine session id (its first init's)
 // and the exit event.
-func streamTurnExit(env *Env, h engine.TurnHandle) (string, *engine.ExitEvent, error) {
+func streamTurnExit(env *Env, h engine.TurnHandle, requests string) (string, *engine.ExitEvent, error) {
 	token := tokenNoResult
 	var exit *engine.ExitEvent
 	var printErr error
@@ -138,14 +190,16 @@ func streamTurnExit(env *Env, h engine.TurnHandle) (string, *engine.ExitEvent, e
 			}
 		case engine.KindAssistant, engine.KindToolResult, engine.KindRateLimit, engine.KindPrompt, engine.KindUnknown:
 		}
-		if printErr != nil {
-			continue // drain the turn
+		if printErr == nil {
+			line, err := ev.MarshalJSON() // not json.Marshal, which would escape HTML again
+			if err == nil {
+				err = env.Out.Event(line, nil)
+			}
+			printErr = err
 		}
-		line, err := ev.MarshalJSON() // not json.Marshal, which would escape HTML again
-		if err == nil {
-			err = env.Out.Event(line, nil)
+		if ev.Kind == engine.KindPrompt && requests != "" {
+			answerRequest(env, h, ev.Prompt, requests) // even while draining: the fake waits on it
 		}
-		printErr = err
 	}
 	if printErr != nil {
 		return sessionID, exit, printErr
@@ -170,9 +224,9 @@ func exitRefusal(exit *engine.ExitEvent) error {
 }
 
 // engineRecord is `broodforge engine record --credential <id> --cwd <dir> --out <fixture
-// dir> --prompt <text> [--model <model>] [--mode prompt|policy|auto]`: engine run --real that also writes the engine's raw stdout as the
+// dir> --prompt <text> [--model <model>] [--mode prompt|policy|auto] [--requests allow|deny]`: engine run --real that also writes the engine's raw stdout as the
 // directory's next turn-<n>.jsonl, resuming the previous turn's session, and records the turn
-// in fixture.json (05-debug-interface.md). It refuses an --out inside the instance root
+// in fixture.json, under --mode prompt with the requests policy (05-debug-interface.md). It refuses an --out inside the instance root
 // (a session tree, a config directory) or inside --cwd.
 var engineRecord = Command{
 	Name:  "engine record",
@@ -184,6 +238,7 @@ var engineRecord = Command{
 		{Name: "prompt", Kind: FlagString, Value: "<text>", Usage: "the turn's input"},
 		{Name: "model", Kind: FlagString, Value: "<model>", Usage: "the engine's --model (default: the account's)"},
 		modeFlag,
+		requestsFlag,
 	},
 	Expect: true,
 	Local:  runEngineRecord,
@@ -257,6 +312,13 @@ func runEngineReal(_ context.Context, env *Env, name string, out *string) error 
 	default:
 		return &usageError{name + ": --mode " + mode + ": want prompt, policy or auto"}
 	}
+	requests, err := requestsPolicy(env, name, mode == config.ModePrompt, "the mode is "+mode+", and only a prompt-mode process raises requests")
+	if err != nil {
+		return err
+	}
+	if mode != config.ModePrompt {
+		requests = ""
+	}
 	req, secret, err := standaloneRequest(env.Root, c, credID, absCwd, mode)
 	if err != nil {
 		return err
@@ -282,15 +344,19 @@ func runEngineReal(_ context.Context, env *Env, name string, out *string) error 
 			return err
 		}
 		req.EngineSessionID = rec.Resume()
+		rec.Requests = requests
 	}
-	backend, err := spawn.New(spawnConfig(c))
+	sc := spawnConfig(c)
+	backend, err := spawn.New(sc)
 	if err != nil {
 		if rec != nil {
 			rec.Abort()
 		}
 		return spawnError(err)
 	}
-	cc := &engine.ClaudeCode{Backend: backend, Secret: secret, Stderr: env.Stderr}
+	// ExitTimeout: the prompt-mode exit bound after the close at result, the same value as
+	// the backend's interrupt timeout (ADR 0029, Amendments 2026-11-07 decision 1).
+	cc := &engine.ClaudeCode{Backend: backend, Secret: secret, Stderr: env.Stderr, ExitTimeout: sc.InterruptTimeout}
 	if rec != nil {
 		cc.Raw = rec.Write
 	}
@@ -317,7 +383,7 @@ func runEngineReal(_ context.Context, env *Env, name string, out *string) error 
 		case <-ended:
 		}
 	}()
-	sessionID, exit, turnErr := streamTurnExit(env, h)
+	sessionID, exit, turnErr := streamTurnExit(env, h, requests)
 	if rec != nil {
 		if err := rec.Finish(exit, sessionID, c.Instance.Engine.Version); err != nil {
 			return control.NewError(CodeBadOut, err.Error())
@@ -394,6 +460,7 @@ func standaloneRequest(root string, c *config.Config, credID, cwd, mode string) 
 	if mode == config.ModeAuto {
 		req.PermissionMode = engine.PermissionAuto
 	}
+	req.Mode = mode
 	return req, secret, nil
 }
 

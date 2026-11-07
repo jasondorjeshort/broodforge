@@ -27,6 +27,9 @@ const pipeGrace = 5 * time.Second
 type Process struct {
 	Stdout io.Reader
 	Stderr io.Reader
+	// Stdin is the open writer of a Spec with StdinOpen, nil otherwise. A Write waits until
+	// the Spec's bytes are written; the caller closes it, once.
+	Stdin io.WriteCloser
 
 	proc   *os.Process
 	outR   *os.File
@@ -80,9 +83,26 @@ func (p *Process) Close() {
 	})
 }
 
-// start runs path with args and env in cwd, stdin written then closed, stdout and stderr on
-// pipes the caller reads.
-func start(path string, args []string, cwd string, env []string, stdin []byte, timeout time.Duration) (*Process, error) {
+// heldStdin is Process.Stdin: the pipe's writer, a Write locked until start's goroutine has
+// written the Spec's bytes, so a caller's line never lands before or inside them. Close takes
+// no lock, so a close at exit never waits on a write a leftover child left blocked.
+type heldStdin struct {
+	mu sync.Mutex
+	w  *os.File
+}
+
+func (h *heldStdin) Write(b []byte) (int, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.w.Write(b)
+}
+
+func (h *heldStdin) Close() error { return h.w.Close() }
+
+// start runs path with args and env in cwd, stdout and stderr on pipes the caller reads. The
+// stdin bytes are written, then the writer is closed, or with open handed to the Process as
+// Stdin.
+func start(path string, args []string, cwd string, env []string, stdin []byte, open bool, timeout time.Duration) (*Process, error) {
 	if !filepath.IsAbs(path) {
 		return nil, &Error{CodeSpawnFailed, "the engine path " + quote(path) + " is not absolute"}
 	}
@@ -113,10 +133,22 @@ func start(path string, args []string, cwd string, env []string, stdin []byte, t
 	}
 	p := &Process{Stdout: outR, Stderr: errR, proc: cmd.Process, outR: outR, errR: errR, exited: make(chan struct{})}
 	p.host = attach(cmd.Process, timeout)
-	go func() {
-		_, _ = inW.Write(stdin) // an engine that exits without reading closes the pipe first
-		_ = inW.Close()
-	}()
+	if open {
+		held := &heldStdin{w: inW}
+		held.mu.Lock() // released once the bytes are written
+		p.Stdin = held
+		go func() {
+			defer held.mu.Unlock()
+			if len(stdin) > 0 {
+				_, _ = inW.Write(stdin)
+			}
+		}()
+	} else {
+		go func() {
+			_, _ = inW.Write(stdin) // an engine that exits without reading closes the pipe first
+			_ = inW.Close()
+		}()
+	}
 	go p.wait()
 	return p, nil
 }

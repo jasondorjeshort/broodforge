@@ -85,7 +85,7 @@ func (s *SameAccount) Start(spec Spec) (*Process, error) {
 		return nil, &Error{CodeSpawnFailed, "settings: " + err.Error()}
 	}
 	env := Environment(os.Environ(), append(append([]Var{}, spec.Env...), own...))
-	return start(s.c.EnginePath, spec.Args, spec.Cwd, env, spec.Stdin, s.c.InterruptTimeout)
+	return start(s.c.EnginePath, spec.Args, spec.Cwd, env, spec.Stdin, spec.StdinOpen, s.c.InterruptTimeout)
 }
 
 // HarnessCreate makes <root>/harness/<id> (0750) as a directory operation, the parent created

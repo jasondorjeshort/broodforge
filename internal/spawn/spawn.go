@@ -134,7 +134,11 @@ type Spec struct {
 	Home     string   // sessions/<id>/home, created if missing: the hook log's directory
 	Delivery Delivery
 	Env      []Var  // the hook variables and the four git identity variables
-	Stdin    []byte // written to the engine's stdin, which is then closed
+	Stdin    []byte // written to the engine's stdin, which is then closed unless StdinOpen
+	// StdinOpen leaves stdin open after Stdin is written: Process.Stdin is the pipe's writer,
+	// the caller's to close (a prompt-mode process, ADR 0029 rule 2). Unset, Process.Stdin is
+	// nil and stdin is closed once the bytes are written.
+	StdinOpen bool
 }
 
 // HarnessDir is a subscription credential's config directory, <root>/harness/<id>.

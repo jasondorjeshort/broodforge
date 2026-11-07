@@ -7,6 +7,8 @@
 package spawntest
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"io"
 	"os"
@@ -14,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -26,6 +29,14 @@ const (
 	EnvLog     = "BFTEST_STANDIN_LOG"     // where the Record goes, as JSON
 	EnvSleep   = "BFTEST_STANDIN_SLEEP"   // a duration slept after the fixture, before exiting
 	EnvExit    = "BFTEST_STANDIN_EXIT"    // the exit code; default 0
+	// EnvWait set: after each control_request line of the fixture the stand-in waits for a
+	// control_response line on stdin, or stdin's end, before the next line, as the engine waits
+	// for an answer under --permission-prompt-tool stdio.
+	EnvWait = "BFTEST_STANDIN_WAIT"
+	// EnvHold "sleep": after the fixture the stand-in sleeps EnvSleep and exits without waiting
+	// for stdin's end (an engine that exits, or hangs, whatever its stdin does). Unset, it
+	// waits for stdin's end, then sleeps EnvSleep, then exits.
+	EnvHold = "BFTEST_STANDIN_HOLD"
 )
 
 // Record is what one stand-in run saw: never an environment value except the names below.
@@ -35,7 +46,80 @@ type Record struct {
 	EnvNames []string          `json:"envNames"`
 	Values   map[string]string `json:"values"` // CLAUDE_CONFIG_DIR, BROODFORGE_*, GIT_* only
 	Stdin    string            `json:"stdin"`
-	Settings string            `json:"settings"` // <CLAUDE_CONFIG_DIR>/settings.json as found
+	// StdinClosed is set once stdin reached its end before the record was written.
+	StdinClosed bool   `json:"stdinClosed"`
+	Settings    string `json:"settings"` // <CLAUDE_CONFIG_DIR>/settings.json as found
+}
+
+// stdinLog is the stand-in's stdin as read so far; the record is rewritten on every change,
+// so a process killed early still leaves what it read.
+type stdinLog struct {
+	mu     sync.Mutex
+	cond   *sync.Cond
+	text   strings.Builder
+	lines  []string
+	closed bool
+	path   string
+}
+
+func (s *stdinLog) read(r io.Reader) {
+	br := bufio.NewReader(r)
+	for {
+		line, err := br.ReadString('\n')
+		s.mu.Lock()
+		if line != "" {
+			s.text.WriteString(line)
+			s.lines = append(s.lines, line)
+		}
+		if err != nil {
+			s.closed = true
+		}
+		s.writeLocked()
+		s.mu.Unlock()
+		s.cond.Broadcast()
+		if err != nil {
+			return
+		}
+	}
+}
+
+// waitResponse waits for a control_response line at index from or later, or stdin's end, and
+// returns the index after the line it found.
+func (s *stdinLog) waitResponse(from int) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for {
+		for i := from; i < len(s.lines); i++ {
+			if strings.HasPrefix(s.lines[i], `{"type":"control_response"`) {
+				return i + 1
+			}
+		}
+		from = len(s.lines)
+		if s.closed {
+			return from
+		}
+		s.cond.Wait()
+	}
+}
+
+func (s *stdinLog) waitClosed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for !s.closed {
+		s.cond.Wait()
+	}
+}
+
+func (s *stdinLog) write() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.writeLocked()
+}
+
+func (s *stdinLog) writeLocked() {
+	if s.path != "" {
+		writeRecord(s.path, s.text.String(), s.closed)
+	}
 }
 
 // Main runs the stand-in and exits when Env is set; otherwise it returns at once.
@@ -51,25 +135,45 @@ func Main() {
 		os.Stdout.WriteString(v + " (Claude Code)\n")
 		os.Exit(0)
 	}
-	stdin, _ := io.ReadAll(os.Stdin)
-	if path := os.Getenv(EnvLog); path != "" {
-		writeRecord(path, string(stdin))
-	}
+	in := &stdinLog{path: os.Getenv(EnvLog)}
+	in.cond = sync.NewCond(&in.mu)
+	in.write()
+	go in.read(os.Stdin)
 	if path := os.Getenv(EnvFixture); path != "" {
 		if b, err := os.ReadFile(path); err == nil {
-			os.Stdout.Write(b)
+			replay(b, in, os.Getenv(EnvWait) != "")
 		}
+	}
+	if os.Getenv(EnvHold) != "sleep" {
+		in.waitClosed()
 	}
 	if d, err := time.ParseDuration(os.Getenv(EnvSleep)); err == nil {
 		time.Sleep(d)
 	}
+	in.write()
 	code, _ := strconv.Atoi(os.Getenv(EnvExit))
 	os.Exit(code)
 }
 
-func writeRecord(path, stdin string) {
+// replay copies the fixture to stdout, whole, or line by line waiting for an answer after
+// each control_request line.
+func replay(b []byte, in *stdinLog, wait bool) {
+	if !wait {
+		os.Stdout.Write(b)
+		return
+	}
+	next := 0
+	for _, line := range bytes.SplitAfter(b, []byte("\n")) {
+		os.Stdout.Write(line)
+		if bytes.HasPrefix(line, []byte(`{"type":"control_request"`)) {
+			next = in.waitResponse(next)
+		}
+	}
+}
+
+func writeRecord(path, stdin string, closed bool) {
 	cwd, _ := os.Getwd()
-	r := Record{Args: os.Args[1:], Cwd: filepath.ToSlash(cwd), Values: map[string]string{}, Stdin: stdin}
+	r := Record{Args: os.Args[1:], Cwd: filepath.ToSlash(cwd), Values: map[string]string{}, Stdin: stdin, StdinClosed: closed}
 	for _, kv := range os.Environ() {
 		name, value, _ := strings.Cut(kv, "=")
 		if name == "" {

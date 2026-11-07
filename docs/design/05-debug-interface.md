@@ -156,7 +156,7 @@ Drive. Through a session: `session send` on a scratch root, where the channel's 
 directory (default `fixtures/engine/basic/` [no-check: no code yet]). Adapter alone, no store, no session: `broodforge engine run
 --fake <fixture dir> [--turn <n>] [--cwd <dir>] --prompt "<text>"` streams `EngineEvent`s as JSONL to stdout exactly as the
 adapter parsed them (an unknown line as `{"type":"unknown","eventType":..,"subtype":..,"bytes":..,"head":..}`, `head` its first 200 bytes, so
-a page-long `commands_changed` is one short line; P29) and exits 0 when the fixture's `exit` is 0, else 1 with `error: engine-exit`. `engine run --real --credential
+a page-long `commands_changed` is one short line; P29) and exits 0 when the fixture's `exit` is 0, else 1 with `error: engine-exit`; `--requests allow|deny` (default `deny`) answers every prompt event the fake emits (it waits only on those the recording answered inside the turn), and on `--real` and `engine record` each one a `--mode prompt` process raises, one stderr line each (`03-hook-contract-prompt-tool.md`, Debug surface; another mode `bad-args`). `engine run --real --credential
 <id> --cwd <dir> --prompt "<text>" [--resume <engine session id>] [--model <m>] [--workflow <dir>] [--mode prompt|policy|auto]`, with `--root`, does the same through the configured spawn
 backend: credential and git identity from the store, an API key through the key file; the hook sees session `engine-run`, code
 reach, `--mode` else `defaults.mode` (`auto` also runs the engine with `--permission-mode auto`), log `<root>/sessions/engine-run/home/hook.log`, and with `--workflow` `BROODFORGE_WORKFLOW` naming the

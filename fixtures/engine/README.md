@@ -27,6 +27,11 @@ shape is assumed, not observed. `subagent-deferred` shows a subagent's own `user
 lines carrying `parent_tool_use_id`; that a subagent's tool results carry `tool_result_meta` with
 `source: hook` (the bot's hook deciding a subagent's call) stays unproven, since its one call ended
 at the defer with no result, until a recorded subagent call runs to a result.
+At a `control_request` line the recording answered inside the turn (the call's result before the
+turn's first `result`; the engine's own abort at a stdin close, source `config` and reason_type `other`, answers nothing) the fake waits for the handle's `Answer`, and `received-<n>.json` lists every
+answer it got as `answers`; any other request streams on, and a recording is replayed whole, lines
+after its first `result` included. `engine record --mode prompt` writes its `--requests` policy to
+`fixture.json` as `requests`.
 `events-<n>.jsonl` is the parser's golden for `turn-<n>.jsonl`, one `EngineEvent` per line;
 `go test ./internal/engine/` compares them field by field, `-run TestGolden -update` rewrites them.
 

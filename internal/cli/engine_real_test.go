@@ -129,8 +129,9 @@ func TestProofEngineRealMatchesFake(t *testing.T) {
 		t.Fatal(err)
 	}
 	mcp := repoRoot(t) + "/share/empty/mcp.json"
+	// defaults.mode is prompt: the stdio prompt tool (ADR 0029 rule 2).
 	if want := []string{"-p", "--output-format", "stream-json", "--verbose", "--input-format", "stream-json", "--permission-mode", "default",
-		"--setting-sources", "user", "--strict-mcp-config", "--mcp-config", mcp}; !slices.Equal(rec.Args, want) {
+		"--setting-sources", "user", "--strict-mcp-config", "--mcp-config", mcp, "--permission-prompt-tool", "stdio"}; !slices.Equal(rec.Args, want) {
 		t.Errorf("args %q", rec.Args)
 	}
 	home := filepath.ToSlash(filepath.Join(root, "sessions", "engine-run", "home"))
@@ -278,6 +279,39 @@ func TestProofEngineRealDefaultsModeAuto(t *testing.T) {
 	}
 }
 
+// TestProofEngineRealRequestsDefaultsMode (P40c): with defaults.mode prompt, engine run --real
+// --requests allow answers the request; with defaults.mode policy it is bad-args, nothing spawned.
+func TestProofEngineRealRequestsDefaultsMode(t *testing.T) {
+	root, sub, _ := realRoot(t)
+	log := filepath.Join(t.TempDir(), "standin.json")
+	env := append(standinEnv(t, "prompt-ask-allow", 1, log), spawntest.EnvWait+"=1")
+	r := clitest.Run(t, env, "--root", root, "engine", "run", "--real", "--credential", sub,
+		"--cwd", t.TempDir(), "--prompt", "x", "--requests", "allow")
+	if r.Code != 0 || r.Stderr != "request  "+allowRequest+"  allow\n" {
+		t.Errorf("exit %d stderr %q", r.Code, r.Stderr)
+	}
+
+	cfgPath := filepath.Join(root, "config", "instance.json")
+	b, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := strings.Replace(string(b), `"mode": "prompt", "harness"`, `"mode": "policy", "harness"`, 1)
+	if cfg == string(b) {
+		t.Fatal("the instance config has no prompt default to replace")
+	}
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	none := filepath.Join(t.TempDir(), "standin.json")
+	want(t, clitest.Run(t, standinEnv(t, "basic", 1, none), "--root", root, "engine", "run", "--real", "--credential", sub,
+		"--cwd", t.TempDir(), "--prompt", "x", "--requests", "allow"), 1, "",
+		"error: bad-args: engine run: --requests allow: the mode is policy, and only a prompt-mode process raises requests\n")
+	if _, err := os.Stat(none); !os.IsNotExist(err) {
+		t.Errorf("an engine was spawned: %v", err)
+	}
+}
+
 // TestProofEngineRealRefusals: no credential, or one the store does not hold, exits with its
 // error line and no engine is spawned.
 func TestProofEngineRealRefusals(t *testing.T) {
@@ -379,4 +413,98 @@ func TestProofSpawnPreflight(t *testing.T) {
 	}
 	writeInstance(t, root, exe, "2.1.296", "linux-sudo-bwrap")
 	want(t, clitest.Run(t, env, "--root", root, "spawn", "preflight"), 1, "", "error: preflight-backend: held\n")
+}
+
+// allowRequest is prompt-ask-allow's one request: id, tool, agent id.
+const allowRequest = "ac51e519-431c-4ad3-a5ff-6e3a99987959  Bash  a26c6f2b725f33c8e"
+
+// TestProofEngineRunFakeRequests (P40c): engine run --fake answers the request the fake waits
+// on, deny by default, one stderr line each, so the run never hangs; received-1.json holds the
+// line under answers; --requests allow answers allow; another value is bad-args.
+func TestProofEngineRunFakeRequests(t *testing.T) {
+	for _, policy := range []string{"", "deny", "allow"} {
+		recv := t.TempDir()
+		args := []string{"engine", "run", "--fake", fixtures + "prompt-ask-allow", "--turn", "1", "--prompt", "x", "--received-dir", recv, "--expect", "result"}
+		if policy != "" {
+			args = append(args, "--requests", policy)
+		}
+		r := clitest.Run(t, nil, args...)
+		answer := policy
+		if answer == "" {
+			answer = "deny"
+		}
+		if r.Code != 0 || r.Stderr != "request  "+allowRequest+"  "+answer+"\n" {
+			t.Errorf("--requests %q: exit %d stderr %q", policy, r.Code, r.Stderr)
+		}
+		b, err := os.ReadFile(filepath.Join(recv, "received-1.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var rec struct {
+			Answers []struct {
+				Response struct {
+					Response struct {
+						Behavior  string `json:"behavior"`
+						Message   string `json:"message"`
+						Interrupt *bool  `json:"interrupt"`
+					} `json:"response"`
+				} `json:"response"`
+			} `json:"answers"`
+		}
+		if err := json.Unmarshal(b, &rec); err != nil {
+			t.Fatal(err)
+		}
+		if len(rec.Answers) != 1 || rec.Answers[0].Response.Response.Behavior != answer {
+			t.Errorf("--requests %q: received-1.json %s", policy, b)
+		} else if answer == "deny" {
+			if d := rec.Answers[0].Response.Response; d.Message != "Denied by Broodforge: answered by the recording's policy" || d.Interrupt == nil || *d.Interrupt {
+				t.Errorf("deny %+v", d)
+			}
+		}
+	}
+	want(t, clitest.Run(t, nil, "engine", "run", "--fake", fixtures+"prompt-ask-allow", "--prompt", "x", "--received-dir", t.TempDir(),
+		"--requests", "maybe"), 1, "", "error: bad-args: engine run: --requests maybe: want allow or deny\n")
+}
+
+// TestProofEngineRealRequests (P40c): under --mode prompt the real engine runs with stdin held
+// open and --requests answers its request on stdin (the stand-in waits for it, as the engine
+// does); engine record writes the policy to fixture.json; --requests under another mode is
+// bad-args, nothing spawned.
+func TestProofEngineRealRequests(t *testing.T) {
+	root, sub, _ := realRoot(t)
+	log := filepath.Join(t.TempDir(), "standin.json")
+	out := filepath.Join(t.TempDir(), "rec")
+	env := append(standinEnv(t, "prompt-ask-allow", 1, log), spawntest.EnvWait+"=1")
+	r := clitest.Run(t, env, "--root", root, "engine", "record", "--credential", sub, "--cwd", t.TempDir(), "--out", out,
+		"--prompt", "x", "--mode", "prompt", "--requests", "allow")
+	if r.Code != 0 || r.Stderr != "request  "+allowRequest+"  allow\n" {
+		t.Fatalf("exit %d stderr %q", r.Code, r.Stderr)
+	}
+	rec, err := spawntest.ReadRecord(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantLine := `{"type":"control_response","response":{"subtype":"success","request_id":"ac51e519-431c-4ad3-a5ff-6e3a99987959",` +
+		`"response":{"behavior":"allow","updatedInput":{"command":"echo hi","description":"Print hi via echo"}}}}` + "\n"
+	if !strings.HasSuffix(rec.Stdin, "\n"+wantLine) || !rec.StdinClosed || !slices.Contains(rec.Args, "--permission-prompt-tool") {
+		t.Errorf("the stand-in read %q (closed %v), args %q", rec.Stdin, rec.StdinClosed, rec.Args)
+	}
+	b, err := os.ReadFile(filepath.Join(out, "fixture.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fx struct {
+		Requests string `json:"requests"`
+	}
+	if err := json.Unmarshal(b, &fx); err != nil || fx.Requests != "allow" {
+		t.Errorf("fixture.json %s", b)
+	}
+
+	none := filepath.Join(t.TempDir(), "standin.json")
+	want(t, clitest.Run(t, standinEnv(t, "basic", 1, none), "--root", root, "engine", "run", "--real", "--credential", sub,
+		"--cwd", t.TempDir(), "--prompt", "x", "--mode", "policy", "--requests", "deny"), 1, "",
+		"error: bad-args: engine run: --requests deny: the mode is policy, and only a prompt-mode process raises requests\n")
+	if _, err := os.Stat(none); !os.IsNotExist(err) {
+		t.Errorf("an engine was spawned: %v", err)
+	}
 }

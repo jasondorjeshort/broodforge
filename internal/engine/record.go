@@ -24,6 +24,10 @@ var turnFileRE = regexp.MustCompile(`^turn-(\d+)\.jsonl$`)
 // turn-<n>.jsonl, n counting up from the directory's last turn, and its outcome added to
 // fixture.json, which carries no delay. Nothing is redacted.
 type Recording struct {
+	// Requests, when set, is the policy the recorded turn's requests were answered with
+	// (--requests under --mode prompt); Finish writes it to fixture.json as requests.
+	Requests string
+
 	dir     string
 	n       int
 	resume  string
@@ -128,6 +132,9 @@ func (r *Recording) Finish(exit *ExitEvent, engineSessionID, engineVersion strin
 	}
 	fx.EngineVersion = engineVersion
 	fx.Recorded = time.Now().Format(time.DateOnly)
+	if r.Requests != "" {
+		fx.Requests = r.Requests
+	}
 	turns := []FixtureTurn{{N: r.n, Exit: code, EngineSessionID: engineSessionID}}
 	for _, t := range fx.Turns {
 		if t.N != r.n {

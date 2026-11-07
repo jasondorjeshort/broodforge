@@ -176,7 +176,7 @@ interrupt stopping it before the next line (the engine's close-of-stdin behaviou
 does not end its turn at a close, it aborts the open request and goes on to `result`, `c43a`, and the adapter
 never closes with a request open). New: at a `control_request` line the fake waits for a `TurnHandle.Answer`
 call when the recording answered that request inside the turn (the call's result precedes the turn's first
-`result` line), whichever answer the bot gives (the recording's outcome is fixed; the opposite answer is another
+`result` line; the engine's own abort at a stdin close, a result with source `config` and reason_type `other`, answers nothing), whichever answer the bot gives (the recording's outcome is fixed; the opposite answer is another
 fixture), and streams on without waiting otherwise; it records every answer it got in `received-<n>.json` as
 `answers`, in order. A recording that runs past its first `result` (`prompt-ask-background`: the allow after
 `result`, the second `init` and `result`) is replayed whole: the fake does not model the adapter's kill, so a
@@ -198,7 +198,7 @@ session on it sees the second turn's lines, which is the first-result rule's tes
 ## Debug surface
 
 `hook try --agent-id <id> --agent-type <type>` and `hook cases` (`agentId`, `agentType`; `expect` `ask`), 05's
-hook section; `engine run --fake|--real --mode prompt --requests allow|deny` and `engine record --mode prompt
+hook section; `engine run --fake --requests allow|deny` (`--fake` takes no `--mode`), `engine run --real --mode prompt --requests allow|deny` and `engine record --mode prompt
 --requests allow|deny`, one rule for all three: every `control_request` the engine raises, or the fake waits on,
 is answered that way at once (a deny with `interrupt` false and the placeholder `Denied by Broodforge: answered by
 the recording's policy`), one stderr line `request  <request id>  <tool>  <agent id or ->  allow|deny` each, the

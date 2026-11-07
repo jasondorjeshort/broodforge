@@ -25,6 +25,9 @@ type Fixture struct {
 	Recorded      string        `json:"recorded"`
 	DelayMs       int           `json:"delayMs,omitempty"` // between replayed lines; absent is none
 	Turns         []FixtureTurn `json:"turns"`
+	// Requests is the policy engine record --mode prompt answered every request with, "allow"
+	// or "deny"; absent on any other recording.
+	Requests string `json:"requests,omitempty"`
 }
 
 // FixtureTurn is one recorded turn's outcome.
@@ -95,7 +98,9 @@ var ErrNoTurn = errors.New("no such turn")
 
 // Fake is the engine that replays a fixture directory (03, The engine adapter): its n-th
 // StartTurn plays turn-<n>.jsonl through ParseLine, then an exit carrying fixture.json's exit
-// code, and writes the request it received as received-<n>.json.
+// code, and writes the request it received as received-<n>.json. At a control_request line
+// the recording answered inside the turn it waits for the handle's Answer (fakeTurn); the
+// recording is replayed whole, lines after its first result included.
 type Fake struct {
 	dir         string
 	receivedDir string
@@ -153,16 +158,17 @@ func (f *Fake) StartTurn(req TurnRequest) (TurnHandle, error) {
 	if err != nil {
 		return TurnHandle{}, err
 	}
-	// The request as given, and the flags it sets on the real engine's command line.
-	rec, err := json.MarshalIndent(struct {
-		TurnRequest
-		Args []string `json:"args"`
-	}{req, nonNil(RequestArgs(req))}, "", "  ")
-	if err != nil {
-		return TurnHandle{}, err
+	st := &fakeTurn{
+		req:      req,
+		path:     filepath.Join(f.receivedDir, "received-"+strconv.Itoa(n)+".json"),
+		inputs:   map[string]json.RawMessage{},
+		waits:    map[string]bool{},
+		emitted:  map[string]bool{},
+		answered: map[string]bool{},
+		notify:   make(chan struct{}),
 	}
-	received := filepath.Join(f.receivedDir, "received-"+strconv.Itoa(n)+".json")
-	if err := os.WriteFile(received, append(rec, '\n'), 0o644); err != nil {
+	st.scan(data)
+	if err := st.writeReceived(); err != nil {
 		return TurnHandle{}, fmt.Errorf("%w: %w", ErrReceivedDir, err)
 	}
 
@@ -200,9 +206,19 @@ func (f *Fake) StartTurn(req TurnRequest) (TurnHandle, error) {
 					break replay
 				default:
 				}
+				if ev.Kind == KindPrompt {
+					st.emit(ev.Prompt.RequestID)
+				}
+				if ev.Kind == KindResult {
+					st.endAnswers()
+				}
 				select {
 				case events <- ev:
 				case <-stop:
+					interrupted = true
+					break replay
+				}
+				if ev.Kind == KindPrompt && !st.wait(ev.Prompt.RequestID, stop) {
 					interrupted = true
 					break replay
 				}
@@ -218,7 +234,129 @@ func (f *Fake) StartTurn(req TurnRequest) (TurnHandle, error) {
 	return TurnHandle{
 		Events:    events,
 		Interrupt: func() error { once.Do(func() { close(stop) }); return nil },
+		Answer:    st.answer,
 	}, nil
+}
+
+// fakeTurn is one replayed turn's requests and answers (03-hook-contract-prompt-tool.md,
+// Fixtures, the fake): the fake waits at a control_request line for an Answer when the
+// recording answered it inside the turn, its call's result preceding the turn's first result
+// line, and streams on otherwise; every answer it gets joins received-<n>.json's answers.
+type fakeTurn struct {
+	req  TurnRequest
+	path string
+
+	mu       sync.Mutex
+	inputs   map[string]json.RawMessage // request id: the request's input
+	waits    map[string]bool            // request ids the replay waits on
+	emitted  map[string]bool
+	answered map[string]bool
+	answers  []json.RawMessage
+	resulted bool          // the turn's first result was emitted: answers are refused
+	notify   chan struct{} // closed and replaced on every answer
+}
+
+// scan reads the turn's requests and which of them the recording answered inside the turn.
+func (t *fakeTurn) scan(data []byte) {
+	toolUse := map[string]string{} // request id: tool_use_id
+	answeredInTurn := map[string]bool{}
+	sawResult := false
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		for _, ev := range ParseLine(line) {
+			switch ev.Kind {
+			case KindPrompt:
+				t.inputs[ev.Prompt.RequestID] = ev.Prompt.Input
+				toolUse[ev.Prompt.RequestID] = ev.Prompt.ToolUseID
+			case KindToolResult:
+				// The engine's own abort at a stdin close (c43a: source config, reason_type
+				// other) answers nothing.
+				aborted := ev.ToolResult.DecidedBy == "config" && ev.ToolResult.ReasonType == "other"
+				if !sawResult && !aborted {
+					answeredInTurn[ev.ToolResult.ToolUseID] = true
+				}
+			case KindResult:
+				sawResult = true
+			case KindInit, KindAssistant, KindExit, KindRateLimit, KindUnknown:
+			}
+		}
+	}
+	for id, use := range toolUse {
+		t.waits[id] = answeredInTurn[use]
+	}
+}
+
+// endAnswers is the turn's first result: later answers are refused.
+func (t *fakeTurn) endAnswers() {
+	t.mu.Lock()
+	t.resulted = true
+	t.mu.Unlock()
+}
+
+func (t *fakeTurn) emit(id string) {
+	t.mu.Lock()
+	t.emitted[id] = true
+	t.mu.Unlock()
+}
+
+// wait blocks until request id is answered when the replay waits on it; false when stop
+// came first.
+func (t *fakeTurn) wait(id string, stop <-chan struct{}) bool {
+	for {
+		t.mu.Lock()
+		if !t.waits[id] || t.answered[id] {
+			t.mu.Unlock()
+			return true
+		}
+		ch := t.notify
+		t.mu.Unlock()
+		select {
+		case <-ch:
+		case <-stop:
+			return false
+		}
+	}
+}
+
+// answer is the handle's Answer: the line the real adapter would write, recorded in order.
+func (t *fakeTurn) answer(id string, allow bool, message string, interrupt bool) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.emitted[id] || t.answered[id] || t.resulted {
+		return fmt.Errorf("%w: %s", errNoRequest, id)
+	}
+	t.answered[id] = true
+	line := bytes.TrimRight(controlResponse(id, t.inputs[id], allow, message, interrupt), "\n")
+	t.answers = append(t.answers, json.RawMessage(line))
+	close(t.notify)
+	t.notify = make(chan struct{})
+	return t.writeReceivedLocked()
+}
+
+func (t *fakeTurn) writeReceived() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.writeReceivedLocked()
+}
+
+// writeReceivedLocked writes received-<n>.json: the request as given, the flags it sets on the
+// real engine's command line, and the answers so far.
+func (t *fakeTurn) writeReceivedLocked() error {
+	answers := t.answers
+	if answers == nil {
+		answers = []json.RawMessage{}
+	}
+	rec, err := json.MarshalIndent(struct {
+		TurnRequest
+		Args    []string          `json:"args"`
+		Answers []json.RawMessage `json:"answers"`
+	}{t.req, nonNil(RequestArgs(t.req)), answers}, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(t.path, append(rec, '\n'), 0o644)
 }
 
 // fixtureError says what is wrong with fixture.json in one sentence, its path slash-separated:
