@@ -1,7 +1,7 @@
 # 0029. A subagent's prompt in prompt mode: `defer` at the top level, the stdio prompt tool for a subagent's call, the hold bounded
 
 Date: 2026-11-07
-Status: accepted (the mechanism; the texts and the subagent prompt timeout's default are the owner's)
+Status: accepted (the mechanism and the texts; only rule 8 summary and trace line stay the owner's)
 
 Record: proposal `../proposals/0029-subagent-prompt-in-prompt-mode.md` and `../proposals/0029-critic-review.md`
 (its verification table and its one real turn, C41a, are authoritative; every objection resolved, none rejected).
@@ -34,10 +34,10 @@ blocking 1: against one process per turn, ADR 0026's held sessions and 04's year
    `defer` in every mode, the resume as ADR 0028. With `agent_id` set: the `ask` and `web` cells answer `ask` in
    prompt mode (a session-allowed tool still `allow`); the `reviewer` cell and, in code reach, the `land` cell answer
    `deny` in every mode, before the child chain, the `land` text the companion's `land-not-allowed (subagent)` and the
-   `reviewer` text placeholder `Denied by Broodforge: in this session the reviewer is launched by the driver process;
-   report and let it launch one.` (owner wording). Reach and credential denies come first as today. The `ask`
-   reason is written for the model on a fall-through, placeholder `Broodforge: asked a person in this session; if
-   this reads as a refusal, no prompt reached them: say so and stop`. A `hook cases` row per new cell.
+   `reviewer` text `Denied by Broodforge: in this session the reviewer is launched by the driver process;
+   report and let it launch one.` (owner-approved 2026-11-07). Reach and credential denies come first as today. The `ask`
+   reason is written for the model on a fall-through, `Broodforge: asked a person in this session; if
+   this reads as a refusal, no prompt reached them: say so and stop` (owner-approved 2026-11-07). A `hook cases` row per new cell.
 2. A prompt-mode process runs with `--permission-prompt-tool stdio`; policy and auto processes are unchanged, and
    `--permission-prompts` stays off the command line. The engine adapter owns the stdin writer (`spawn.Spec.Stdin`
    becomes a writer): it stays open until the `result` line or exit, is closed on `result`, and is never closed while a
@@ -65,13 +65,13 @@ blocking 1: against one process per turn, ADR 0026's held sessions and 04's year
    not answer is `hook bypassed`,
    cause `engine answered`; the fixture check asserts the value on every recorded result.
 6. The bound. A subagent's prompt waits `subagentPromptTimeoutMinutes` (per channel, inheriting `defaults`; absent
-   from `defaults` is the default, 60, owner item). The key does not take its siblings' zero: `promptTimeoutMinutes` 0
+   from `defaults` is the default, 60, owner-approved 2026-11-07). The key does not take its siblings' zero: `promptTimeoutMinutes` 0
    means never, a year (`../03-architecture.md`), and this wait holds the engine process, about 250 MB idle, so never
    is the hold the critic's objection 1 refused, and a third meaning for 0 in one file would be read as one of the other
    two. So `config check`, `config reload` and `serve` refuse 0 and a negative value as an error naming the key, and
    cap a value above 1440 (a day) there with a warning, as the siblings cap at a year: a hold longer than a day on a
    host that may sleep or reboot (06) is a held session, not a wait. On expiry: deny, `interrupt` false, reason
-   placeholder `Broodforge: no answer in <n> minutes; stop here and report what you have` (owner wording), the message
+   `Broodforge: the Discord prompt went unanswered for <n> minutes; stop here and report what you have.` (owner-approved 2026-11-07), the message
    `No answer; denied`, the turn continuing. The top-level prompt timeout (R-53) and its year-long default are
    untouched: a top-level wait holds no process. Which waits hold a process: a subagent's prompt only; 03 (How the
    engine runs it, amended 2026-11-07) and ADR 0020's amendment of the same date say so.
@@ -138,3 +138,5 @@ passes a subagent's `deferred_tool_use` up.
 (1) Rule 2's "closed on `result`" stands and a process has one turn: at `result` with a request open the adapter answers each open request deny with `interrupt` true, closes stdin and calls the backend's interrupt at once (the kill as today: `TerminateJobObject` on Windows, SIGINT then SIGKILL at `spawn.interruptTimeoutSeconds` on Linux, the backend's own bound; nothing new reads the key); `session` records each `dropped`, decider `instance`, cause `the turn ended`, and ends the turn on that `result` with its usage. Why the kill, not the close alone (revised 2026-11-07 on the reviewer's reading): a close after `result` with a request open was never run; an answer written after `result` starts a second turn in the process within 3 s (`c42-bg`) and the engine's notification for the subagent the deny kills plausibly does the same, its allowed calls changing the tree with no `session` row; a kill with a request open is observed (`c47-kill`: exit 1, no further line, the resume patching the transcript only); the first `result`'s usage is in hand. The denies go first so an engine that reads them before the kill lands has the rejection in its transcript. First-result rule, every mode: the process's result is its first `result` line; a later line, a second `init`, `result`, call or `deferred_tool_use` included, is logged and never classified, prompted or resumed; the fake replays such a recording whole so the rule has a fixture test. With no request open the close stands and the engine exits (C51); an exit not seen within `engine.ClaudeCode.ExitTimeout` of the close (an internal value set from `spawn.interruptTimeoutSeconds` beside `spawn.Config.InterruptTimeout`, no new key) gets the same interrupt. Reading the second turn is the 2026-10-24 finding's option b, an ADR 0020 proposal of its own, its recording now in hand; till then the header's foreground rule stands. (2) Rule 7 without its wait: Stop, `end`, the idle end and shutdown answer each open request deny with `interrupt` true, then call the backend's interrupt at once, as a running turn's Stop does today; the turn ends on the exit event, never before it (no queued turn starts under a live process), outcome `interrupted`, usage as S2 (unknown on Windows; on Linux the engine's interrupt `result` when it comes before the SIGKILL), so `04-ux.md`'s Stop line stands; a `result`, a request or a `deferred_tool_use` between the denies and the exit is logged, not acted on. Stop keeps its actor as today's Stop on a deferred call: decision `deny`, decider `participant` or `host`, reason `interrupted`; the other three record `dropped`, decider `instance`, with 05's cause. Waiting for a `result` was refused: in that window the coordinator takes one more model call (`c49`) and a hook-allowed call of its runs during the Stop. (3) A call the bot holds a request record for takes its decider from the record (`participant`, `prompt-timeout`, `instance`) whatever `source` the stream carries or omits (`user_temporary` on an allow, `user_reject` on a deny, `config`/`other` on the abort, none on an interrupting deny; the fixture check asserts each); with no record, a `user_*` or `config`/`other` source is `hook bypassed`, cause `engine answered` or `engine aborted`.
 
 C46's consequence: rule 5 stands, the session allow recorded by the bot and applied by the hook, and an allow never carries `updatedPermissions` (the sent shape passes the engine's validator; a hook `ask` outranking a session rule is the likely, unconfirmed cause). C50 fires the Deferred `land` item's trigger: its own pass after P40. New surface: `engine run --real` and `engine record` take `--requests allow|deny` under `--mode prompt`; `session show`'s `pending:` line gains `agent <type>`; `hook try --agent-id <id> --agent-type <type>` and `hook cases` `agentId`, `agentType`; `config check` refuses `subagentPromptTimeoutMinutes` 0 and below; the fixtures are rule 9's five and the companion's table, imported with every home path rewritten and the recording account's plugin lines dropped, or re-recorded with `engine record --mode prompt`. `--permission-prompts` stays off every command line, asserted by the adapter's args test (P40c).
+
+2026-11-07 (Owner wording, the owner's four answers, multiple choice): (1) `subagentPromptTimeoutMinutes` default 60 confirmed; (2) the expiry reason is exactly `Broodforge: the Discord prompt went unanswered for <n> minutes; stop here and report what you have.` (replacing the earlier "no answer" placeholder); (3) the `reviewer` deny text of rule 1 stands as written, approved; (4) the fall-through `ask` reason of rule 1 stands as written, approved. Not answered: rule 8's `internal-error` summary and trace line, which stay the owner's placeholders.
