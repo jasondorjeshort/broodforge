@@ -157,20 +157,65 @@ field naming the agent, so a subagent's call is placed by its time after the `Ag
   or a mode switch by the driver).
 - s000e, the session before it, launched no subagent, so it is not evidence.
 
+### Third look: the engine ends the subagent, not the bot (2026-11-07, engine 2.1.319)
+
+- Three real turns on the PC from one scratch tree (`hello.txt`; `.claude/agents/probe.md`, Haiku, tools Read and Bash). The
+  tree is not a repository, since the git-guard gives `git commit` to the runner alone, so the probe ran `echo hi`. One prompt
+  for all three: launch `probe` (else `general-purpose`) in the foreground with model `haiku`, have it run `echo hi`, use no
+  other tool, and quote the Agent result. The coordinator ran on `--model opus`. The raw streams, hook stdin and transcripts
+  stay in `~/AppData/Local/Temp/bf-subdefer/`.
+- The bot's path: `engine record --mode prompt` on the dev root, with the dev instance's subscription credential. There was
+  no `probe` type (`--setting-sources user` drops the tree's agents; the 2026-10-23 settings-sources finding), so the
+  subagent was `general-purpose` on Haiku. The recording imports cleanly (`importfixture`; a golden was written), but it is
+  not in `fixtures/engine/`, because `TestEveryFixtureReplays` refuses it (below). The imported copy stays in the
+  scratch directory as `fixture-imported/`.
+- The control: bare `claude -p --permission-mode default --output-format stream-json --verbose --model opus --settings
+  <file>` under the owner's login, with every `CLAUDE*` name unset, as the spawn strips them. Its stub hook logs stdin and
+  prints the bot hook's exact JSON: `defer` (reason `Broodforge: waiting for a person in this session to answer`) for the
+  `ask`-cell tools, `allow` for the rest. It found `probe`.
+
+| Run | What the engine did with the subagent's deferred `Bash` |
+|---|---|
+| Bot, hook `defer` (`hook.log` `"cell":"ask","decision":"defer"` for its id) | No `tool_result` for it, ever. `system/task_updated` `patch.status` `completed`, then `system/task_notification` `status` `completed`. The `Agent` result is a success (`tool_result_meta` `accept`, source `hook`): text `(Subagent completed but returned no output.)` plus `agentId: <id> (use SendMessage ... to continue this agent)`; `tool_use_result` `status` `completed`, `content` `[]`, `canContinueAgent` true. The coordinator answered; `result` `end_turn`, no `deferred_tool_use`, `permission_denials` `[]`, exit 0. |
+| Control, stub `defer` | The same, line for line. The line-type sequences differ only by the owner's plugin `SessionStart` hook lines and one coordinator text line. |
+| Control, stub `ask` | `system/permission_denied` with `agent_id` and `decision_reason_type` `hook`, then an error `tool_result` to the subagent (`reject`, source `config`). The subagent went on and reported the refusal. `permission_denials` lists the call. No `control_request`. |
+
+- On both paths the subagent's transcript ends on a `hook_deferred_tool` attachment (`toolUseID`, `toolName`, `toolInput`,
+  `"permissionMode":"default"`), and its meta file says `"requestShape":"foreground"`, `"requestNonInteractive":true`, `"finished":true`.
+- Hook stdin (control): the coordinator's `Agent` call carries `session_id`, `transcript_path`, `cwd`, `prompt_id`,
+  `permission_mode`, `effort`, `hook_event_name`, `tool_name`, `tool_input` and `tool_use_id`. The subagent's `Bash` call
+  carries the same fields plus `agent_id` (the Agent result's `agentId`) and `agent_type` (`probe`). Its `session_id`,
+  `transcript_path` and `prompt_id` are the parent's. The bot's hook reads neither `agent_id` nor `agent_type`.
+- So the bot drops nothing. Under `-p` the engine ends a subagent at a hook `defer` and does not pass the defer up, so
+  `deferLocked` has nothing to read. Only a top-level call's defer ends the process with `tool_deferred`. An `ask` is a
+  refusal that the subagent survives. The 2026-10-31 spike's `"handback":"withheld"` is absent on both paths here. That
+  spike ran 2.1.316; whether its environment differed was not tested.
+- A second result: in all three streams the `rate_limit_event`'s `unifiedWindows` holds `seven_day` alone, with no
+  `five_hour`, on both accounts. Every rate-limit line of the 2.1.296 fixtures has `five_hour`. `ParseLine` reads the
+  missing window as zeros, so the meter of ADR 0021 would record a five-hour window of `0` that resets at `0`. The
+  replay test's invariant (`internal/engine/parse_test.go`, `KindRateLimit`: both `resetsAt` non-zero) fails on line 4:
+  `rate-limit without status or windows: &{Status:allowed RateLimitType:seven_day FiveHour:{Utilization:0 ResetsAt:0}
+  SevenDay:{Utilization:0.33 ResetsAt:1794542400} OverageStatus:rejected IsUsingOverage:false}`.
+
 ## Next
 
 - The hook's `defer` for a subagent's call is now seen (Result, "Read from the hook log"); the
   audit shows no deferred row and no prompt, and the subagent ends while the engine turn goes on.
   A second occurrence on 2026-11-02 (s000g, `dev-live`, three `coder` launches; Result, "Second
   occurrence") shows the same end at the first deferred Bash.
-  Still open: why the engine returns no top-level `deferred_tool_use` result for a subagent's
-  deferred call, so the bot never posts a prompt (the engine, or the bot's handling of a call
-  whose tool-use id belongs to a subagent), and a design answer for the
-  architect: prompt mode cannot host subagents until such a call resumes; it bears on `auto` too
+  Answered 2026-11-07 (Result, "Third look"): the engine ends the subagent itself and raises no top-level
+  `deferred_tool_use`; a bare `claude -p` does the same. Still open: a design answer for the
+  architect. Prompt mode cannot host subagents until such a call resumes. What the engine offers is in the Third look:
+  `agent_id` and `agent_type` on the hook's stdin; `canContinueAgent` and `SendMessage`, which is
+  outside `code` reach; the loss is visible in the stream, as a subagent `tool_use` with no result before its
+  `Agent` result, matching a `defer` row in `hook.log`; and `ask`, which is a refusal the subagent survives.
+  `--permission-prompt-tool` is untried. The question bears on `auto` too
   (its classifier prompts would take the same path; today the engine forces `auto` back to `default`
   under the spawn's `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, so `auto` is no workaround: the 2026-10-31
   auto spike finding, row 3), and until it is answered a session that
   delegates runs in policy mode.
+- Decide how a missing `five_hour` window is read (the meter, and the replay test's invariant), then import the
+  2026-11-07 recording as `fixtures/engine/subagent-deferred/` (`importfixture` from the scratch `rec/`).
 - Decide whether `SendMessage` and `Skill` belong in `code` reach (the policy table,
   `03-hook-contract.md`); option D for skills needs the `Skill` row as well as its droplet row.
 - Decide whether the copy takes the files `CLAUDE.md` imports outside `.claude/`, or the handoff
