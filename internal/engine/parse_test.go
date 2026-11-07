@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -160,8 +161,12 @@ func TestEveryFixtureReplays(t *testing.T) {
 							t.Errorf("%s turn %d: tool_deferred result names no call", dir, turn.N)
 						}
 					case KindRateLimit:
-						if ev.RateLimit.Status == "" || ev.RateLimit.SevenDay.ResetsAt == 0 || ev.RateLimit.FiveHour.ResetsAt == 0 {
-							t.Errorf("%s turn %d line %d: rate-limit without status or windows: %+v", dir, turn.N, i+1, ev.RateLimit)
+						// At least one window, either one absent (ADR 0021, Amendments 2026-11-07),
+						// and every window present resets at a real time.
+						r := ev.RateLimit
+						if r.Status == "" || (r.FiveHour == nil && r.SevenDay == nil) ||
+							(r.FiveHour != nil && r.FiveHour.ResetsAt == 0) || (r.SevenDay != nil && r.SevenDay.ResetsAt == 0) {
+							t.Errorf("%s turn %d line %d: rate-limit without status or windows: %+v", dir, turn.N, i+1, r)
 						}
 					case KindPrompt:
 						if ev.Prompt.ToolUseID == "" || ev.Prompt.Tool == "" {
@@ -484,7 +489,8 @@ func TestInterruptedRowDeduplicates(t *testing.T) {
 
 // TestRateLimit: the recorded line of recorded-read turn 1 (allowed_warning, seven-day 0.68)
 // is one rate-limit event; the top-level utilization and resetsAt and seven_day_overage_included
-// are not read; a line with no unifiedWindows, or no rate_limit_info, is one event of zeros (P28).
+// are not read; a line with no unifiedWindows, or no rate_limit_info, is one event with both
+// windows absent (P28; ADR 0021, Amendments 2026-11-07).
 func TestRateLimit(t *testing.T) {
 	var got []RateLimitEvent
 	for _, ev := range parseTurn(t, fixturesRoot+"/recorded-read", 1) {
@@ -493,9 +499,9 @@ func TestRateLimit(t *testing.T) {
 		}
 	}
 	want := RateLimitEvent{Status: "allowed_warning", RateLimitType: "seven_day",
-		FiveHour: Window{Utilization: 0.09, ResetsAt: 1792248000}, SevenDay: Window{Utilization: 0.68, ResetsAt: 1792728000},
+		FiveHour: &Window{Utilization: 0.09, ResetsAt: 1792248000}, SevenDay: &Window{Utilization: 0.68, ResetsAt: 1792728000},
 		OverageStatus: "rejected"}
-	if len(got) != 1 || got[0] != want {
+	if len(got) != 1 || !reflect.DeepEqual(got[0], want) {
 		t.Fatalf("recorded-read turn 1: rate-limit events %+v, want one %+v", got, want)
 	}
 	b, err := EngineEvent{Kind: KindRateLimit, RateLimit: &got[0]}.MarshalJSON()
@@ -515,8 +521,8 @@ func TestRateLimit(t *testing.T) {
 			t.Fatalf("%s: %+v, want one rate-limit event", line, evs)
 		}
 		r := *evs[0].RateLimit
-		if r.FiveHour != (Window{}) || r.SevenDay != (Window{}) {
-			t.Errorf("%s: windows %+v %+v, want zeros", line, r.FiveHour, r.SevenDay)
+		if r.FiveHour != nil || r.SevenDay != nil {
+			t.Errorf("%s: windows %+v %+v, want both absent", line, r.FiveHour, r.SevenDay)
 		}
 	}
 	if r := ParseLine([]byte(`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","rateLimitType":"five_hour","isUsingOverage":true}}`))[0].RateLimit; r.Status != "allowed" || r.RateLimitType != "five_hour" || !r.IsUsingOverage || r.OverageStatus != "" {
@@ -540,7 +546,7 @@ func TestRateLimitMalformedNeverRefuses(t *testing.T) {
 	} {
 		line := `{"type":"rate_limit_event","rate_limit_info":` + info + `}`
 		evs := ParseLine([]byte(line))
-		if len(evs) != 1 || evs[0].Kind != KindRateLimit || evs[0].RateLimit == nil || *evs[0].RateLimit != (RateLimitEvent{}) {
+		if len(evs) != 1 || evs[0].Kind != KindRateLimit || evs[0].RateLimit == nil || !reflect.DeepEqual(*evs[0].RateLimit, RateLimitEvent{}) {
 			t.Errorf("%s: %+v, want one zero rate-limit event", line, evs)
 		}
 	}
@@ -548,9 +554,51 @@ func TestRateLimitMalformedNeverRefuses(t *testing.T) {
 		`"unifiedWindows":{"five_hour":{"utilization":0.3,"resetsAt":"soon"},"seven_day":{"utilization":0.5,"resetsAt":1792728000}}}}`
 	evs := ParseLine([]byte(line))
 	want := RateLimitEvent{RateLimitType: "five_hour", OverageStatus: "rejected",
-		FiveHour: Window{Utilization: 0.3}, SevenDay: Window{Utilization: 0.5, ResetsAt: 1792728000}}
-	if len(evs) != 1 || evs[0].Kind != KindRateLimit || evs[0].RateLimit == nil || *evs[0].RateLimit != want {
+		FiveHour: &Window{Utilization: 0.3}, SevenDay: &Window{Utilization: 0.5, ResetsAt: 1792728000}}
+	if len(evs) != 1 || evs[0].Kind != KindRateLimit || evs[0].RateLimit == nil || !reflect.DeepEqual(*evs[0].RateLimit, want) {
 		t.Errorf("bad fields beside good: %+v, want %+v", evs, want)
+	}
+}
+
+// TestRateLimitWindowShapes: each window is optional and absent is not zero (ADR 0021,
+// Amendments 2026-11-07). Both, seven_day alone (engine 2.1.319 on an account with no five-hour
+// limit, as in fixtures/engine/subagent-deferred), five_hour alone, and neither; a present
+// window at utilization 0 stays present; an absent window marshals as null.
+func TestRateLimitWindowShapes(t *testing.T) {
+	five := &Window{Utilization: 0.16, ResetsAt: 1792141200}
+	seven := &Window{Utilization: 0.33, ResetsAt: 1794542400}
+	for _, c := range []struct {
+		windows     string
+		five, seven *Window
+		json        string
+	}{
+		{`{"five_hour":{"utilization":0.16,"resetsAt":1792141200},"seven_day":{"utilization":0.33,"resetsAt":1794542400,"status":"allowed"}}`, five, seven,
+			`"fiveHour":{"utilization":0.16,"resetsAt":1792141200},"sevenDay":{"utilization":0.33,"resetsAt":1794542400}`},
+		{`{"seven_day":{"utilization":0.33,"resetsAt":1794542400,"status":"allowed"}}`, nil, seven,
+			`"fiveHour":null,"sevenDay":{"utilization":0.33,"resetsAt":1794542400}`},
+		{`{"five_hour":{"utilization":0.16,"resetsAt":1792141200}}`, five, nil,
+			`"fiveHour":{"utilization":0.16,"resetsAt":1792141200},"sevenDay":null`},
+		{`{}`, nil, nil, `"fiveHour":null,"sevenDay":null`},
+		{`{"five_hour":{"utilization":0,"resetsAt":1792141200}}`, &Window{ResetsAt: 1792141200}, nil,
+			`"fiveHour":{"utilization":0,"resetsAt":1792141200},"sevenDay":null`},
+	} {
+		line := `{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","rateLimitType":"seven_day","unifiedWindows":` + c.windows + `}}`
+		evs := ParseLine([]byte(line))
+		if len(evs) != 1 || evs[0].Kind != KindRateLimit || evs[0].RateLimit == nil {
+			t.Fatalf("%s: %+v, want one rate-limit event", c.windows, evs)
+		}
+		r := evs[0].RateLimit
+		if !reflect.DeepEqual(r.FiveHour, c.five) || !reflect.DeepEqual(r.SevenDay, c.seven) {
+			t.Errorf("%s: windows %+v %+v, want %+v %+v", c.windows, r.FiveHour, r.SevenDay, c.five, c.seven)
+		}
+		b, err := evs[0].MarshalJSON()
+		if err != nil {
+			t.Fatal(err)
+		}
+		w := `{"type":"rate-limit","status":"allowed","rateLimitType":"seven_day",` + c.json + `,"overageStatus":"","isUsingOverage":false}`
+		if string(b) != w {
+			t.Errorf("%s:\n got %s\nwant %s", c.windows, b, w)
+		}
 	}
 }
 

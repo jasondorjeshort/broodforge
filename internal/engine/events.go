@@ -199,17 +199,21 @@ type ExitEvent struct {
 }
 
 // RateLimitEvent is a rate_limit_event line's rate_limit_info: the plan meters of the account
-// the engine runs as (ADR 0020, Amendments 2026-10-30). An absent field is its zero value.
+// the engine runs as (ADR 0020, Amendments 2026-10-30). An absent field is its zero value, but
+// a window is nil when unifiedWindows does not carry it (null in JSON): an account need not have
+// a five-hour limit (ADR 0021, Amendments 2026-11-07), and either window may be the absent one.
 type RateLimitEvent struct {
-	Status         string `json:"status"`
-	RateLimitType  string `json:"rateLimitType"`
-	FiveHour       Window `json:"fiveHour"`
-	SevenDay       Window `json:"sevenDay"`
-	OverageStatus  string `json:"overageStatus"`
-	IsUsingOverage bool   `json:"isUsingOverage"`
+	Status         string  `json:"status"`
+	RateLimitType  string  `json:"rateLimitType"`
+	FiveHour       *Window `json:"fiveHour"`
+	SevenDay       *Window `json:"sevenDay"`
+	OverageStatus  string  `json:"overageStatus"`
+	IsUsingOverage bool    `json:"isUsingOverage"`
 }
 
-// Window is one of unifiedWindows' meters: Utilization a fraction, ResetsAt unix seconds.
+// Window is one of unifiedWindows' meters: Utilization a fraction, ResetsAt unix seconds. A
+// window is present when its object carries a utilization or a resetsAt of the right type; the
+// other field is then zero where absent.
 type Window struct {
 	Utilization float64 `json:"utilization"`
 	ResetsAt    int64   `json:"resetsAt"`

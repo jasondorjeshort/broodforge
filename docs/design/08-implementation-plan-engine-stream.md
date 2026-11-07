@@ -55,6 +55,17 @@ in Discord (04, the owner's); write the meter from `engine run --real` (standalo
 touch the `usage-gate` hook (Hatchery's, a carry-back once the meter exists); audit the event.
 Depends on: P3, P5, P10.
 
+Amended 2026-11-07 (ADR 0020 and ADR 0021, Amendments 2026-11-07; the owner: some accounts have no
+five-hour limit): each window is optional, so the two-window shape above is the case of an account
+with both. `RateLimitEvent`'s `FiveHour` and `SevenDay` are `*Window`, nil and JSON `null` when the
+event does not carry them; the replay test asks a recorded `rate-limit` event for a status and at least
+one window, each present window with a `resetsAt`. `0006-meter-windows-optional.sql` makes the four
+window columns of `credential_meter` nullable (schema 6), `store.MeterRow` gains `HasFiveHour` and
+`HasSevenDay`, `credential show --json` and `usage --credential --json` print an absent window as
+`null`, and the `meter` text line prints `-` in its column (`meter  -  0.33  allowed  <seen at>`).
+Debug surface: `engine run --fake fixtures/engine/subagent-deferred --turn 1 --prompt x | grep
+'"type":"rate-limit"'` prints `"fiveHour":null`.
+
 ## P29. The unknown event shrunk to its type, subtype, length and head (small)
 
 Implements: `03-architecture.md` (The engine adapter: `Unknown` as a shape, the stream subset's

@@ -140,16 +140,17 @@ type credentialShowRecord struct {
 }
 
 // meterRecord is a credential's meter as credential show and usage --credential print it: the
-// latest rate-limit event of a turn it paid for (ADR 0021's credential_meter).
+// latest rate-limit event of a turn it paid for (ADR 0021's credential_meter). A window the
+// event did not carry is null (ADR 0021, Amendments 2026-11-07).
 type meterRecord struct {
-	Status         string      `json:"status"`
-	RateLimitType  string      `json:"rateLimitType"`
-	FiveHour       meterWindow `json:"fiveHour"`
-	SevenDay       meterWindow `json:"sevenDay"`
-	OverageStatus  string      `json:"overageStatus"`
-	IsUsingOverage bool        `json:"isUsingOverage"`
-	SeenAt         string      `json:"seenAt"`
-	Session        string      `json:"session"`
+	Status         string       `json:"status"`
+	RateLimitType  string       `json:"rateLimitType"`
+	FiveHour       *meterWindow `json:"fiveHour"`
+	SevenDay       *meterWindow `json:"sevenDay"`
+	OverageStatus  string       `json:"overageStatus"`
+	IsUsingOverage bool         `json:"isUsingOverage"`
+	SeenAt         string       `json:"seenAt"`
+	Session        string       `json:"session"`
 }
 
 type meterWindow struct {
@@ -163,9 +164,17 @@ func toMeter(m *store.MeterRow) *meterRecord {
 		return nil
 	}
 	return &meterRecord{Status: m.Status, RateLimitType: m.RateLimitType,
-		FiveHour:      meterWindow{m.FiveHourUtilization, m.FiveHourResetsAt},
-		SevenDay:      meterWindow{m.SevenDayUtilization, m.SevenDayResetsAt},
+		FiveHour:      toWindow(m.HasFiveHour, m.FiveHourUtilization, m.FiveHourResetsAt),
+		SevenDay:      toWindow(m.HasSevenDay, m.SevenDayUtilization, m.SevenDayResetsAt),
 		OverageStatus: m.OverageStatus, IsUsingOverage: m.IsUsingOverage, SeenAt: m.SeenAt, Session: m.Session}
+}
+
+// toWindow is one meter window's JSON form, nil when the event did not carry it.
+func toWindow(has bool, utilization float64, resetsAt int64) *meterWindow {
+	if !has {
+		return nil
+	}
+	return &meterWindow{utilization, resetsAt}
 }
 
 type initResult struct {

@@ -119,17 +119,25 @@ func runUsage(_ context.Context, env *Env) error {
 }
 
 // meterLine is usage --credential's last line: {"meter": ...} under --json, otherwise the text
-// line as one string column.
+// line as one string column. A window the event did not carry prints `-` in its column.
 func meterLine(m *meterRecord, jsonMode bool) (json.RawMessage, error) {
 	if jsonMode {
 		return encode(usageMeter{m})
 	}
 	text := "meter  -"
 	if m != nil {
-		text = strings.Join([]string{"meter", strconv.FormatFloat(m.FiveHour.Utilization, 'f', -1, 64),
-			strconv.FormatFloat(m.SevenDay.Utilization, 'f', -1, 64), orDash(m.Status), orDash(m.SeenAt)}, "  ")
+		text = strings.Join([]string{"meter", utilizationText(m.FiveHour), utilizationText(m.SevenDay),
+			orDash(m.Status), orDash(m.SeenAt)}, "  ")
 	}
 	return json.Marshal(text)
+}
+
+// utilizationText is a meter window's utilization column, `-` when the window is absent.
+func utilizationText(w *meterWindow) string {
+	if w == nil {
+		return "-"
+	}
+	return strconv.FormatFloat(w.Utilization, 'f', -1, 64)
 }
 
 // usageMeter is usage --credential --json's meter line.

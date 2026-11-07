@@ -140,7 +140,7 @@ instance credential; the status is the
 store's record (03): the bot never reads the config directory to infer it. `credential remove
 <id>` marks it removed; the next `session start` naming it is refused (R-41). `credential show <id> --json` prints the record without
 any store value, plus `meter`: the latest `rate-limit` event of a turn paid by it (`status`, `rateLimitType`, `fiveHour` and `sevenDay` with
-`utilization` and `resetsAt`, `overageStatus`, `isUsingOverage`, `seenAt`, `session`; ADR 0021's `credential_meter`, P28), `null` before one.
+`utilization` and `resetsAt`, either `null` when the event did not carry it, `overageStatus`, `isUsingOverage`, `seenAt`, `session`; ADR 0021's `credential_meter`, P28), `null` before one.
 Observe. `credential list`; `audit --kind credential-added,credential-removed`. Reproduce. `printf scratch | broodforge --root <r> credential
 add --kind api-key --user 1001 --label t`; a delivery bug is read from the fake's `received-<n>.json`, whose `delivery` field carries the kind
 and the id (03), never the value. Isolation. The scratch store key lives under the scratch root; the fake accepts only the fixed string and
@@ -249,7 +249,7 @@ Drive. `broodforge usage [--session <id> | --user <id> | --credential <id> | --c
 <input>  <output>  <cache read>  <cache write>  <interrupted turns>`, then the same columns as
 `total`, printed even with no usage; no filter is the instance total; `--user` is the requester
 total, `--credential` the payer total (02), followed by `meter  <five-hour utilization>  <seven-day utilization>  <status>  <seen at>` or
-`meter  -`, the credential's latest `rate-limit` event (ADR 0021's `credential_meter`; `--json`: `meter` as `credential show`'s); `--by turn` prints `<session>  <turn>  <model>
+`meter  -`, the credential's latest `rate-limit` event, `-` in a window's column when the event did not carry it (ADR 0021's `credential_meter`; `--json`: `meter` as `credential show`'s); `--by turn` prints `<session>  <turn>  <model>
 <input>  <output>  <cache read>  <cache write>  <interrupted>  <time>`. `broodforge audit
 [--since-seq <n>] [--kind <kind>[,<kind>]] [--session <id>] [--limit 20] [--follow]` prints
 `<seq>  <time>  <kind>  <phase or ->  <actor>  <session or ->  <details, first 80 chars>` in seq

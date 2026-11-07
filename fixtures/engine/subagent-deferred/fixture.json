@@ -1,0 +1,12 @@
+{
+  "claim": "recorded",
+  "engineVersion": "2.1.319",
+  "recorded": "2026-11-07",
+  "turns": [
+    {
+      "n": 1,
+      "exit": 0,
+      "engineSessionId": "6ca77987-d022-4c75-ae7a-0875a9c0a376"
+    }
+  ]
+}

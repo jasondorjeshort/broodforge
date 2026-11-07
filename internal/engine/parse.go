@@ -56,14 +56,16 @@ type rawRateLimit struct {
 	OverageStatus  string `json:"overageStatus"`
 	IsUsingOverage bool   `json:"isUsingOverage"`
 	UnifiedWindows struct {
-		FiveHour rawWindow `json:"five_hour"`
-		SevenDay rawWindow `json:"seven_day"`
+		FiveHour json.RawMessage `json:"five_hour"`
+		SevenDay json.RawMessage `json:"seven_day"`
 	} `json:"unifiedWindows"`
 }
 
+// rawWindow keeps a window's fields raw, so window can tell a field absent or mistyped from a
+// zero.
 type rawWindow struct {
-	Utilization float64 `json:"utilization"`
-	ResetsAt    int64   `json:"resetsAt"`
+	Utilization json.RawMessage `json:"utilization"`
+	ResetsAt    json.RawMessage `json:"resetsAt"`
 }
 
 type rawMessage struct {
@@ -287,7 +289,8 @@ func prompt(o *rawLine) *PromptEvent {
 }
 
 // rateLimit is the event of a rate_limit_event line; an absent rate_limit_info or field is
-// the zero value, so a line without unifiedWindows still records when it was seen.
+// the zero value and an absent window nil, so a line without unifiedWindows still records when
+// it was seen.
 func rateLimit(r *rawRateLimit) *RateLimitEvent {
 	if r == nil {
 		return &RateLimitEvent{}
@@ -296,11 +299,38 @@ func rateLimit(r *rawRateLimit) *RateLimitEvent {
 	return &RateLimitEvent{
 		Status:         r.Status,
 		RateLimitType:  r.RateLimitType,
-		FiveHour:       Window{Utilization: w.FiveHour.Utilization, ResetsAt: w.FiveHour.ResetsAt},
-		SevenDay:       Window{Utilization: w.SevenDay.Utilization, ResetsAt: w.SevenDay.ResetsAt},
+		FiveHour:       window(w.FiveHour),
+		SevenDay:       window(w.SevenDay),
 		OverageStatus:  r.OverageStatus,
 		IsUsingOverage: r.IsUsingOverage,
 	}
+}
+
+// window is one unifiedWindows entry, nil unless it is an object carrying a utilization or a
+// resetsAt of the right type (null, a string, or an object of neither is no window).
+func window(raw json.RawMessage) *Window {
+	var rw rawWindow
+	if len(raw) == 0 || raw[0] != '{' || !decode(raw, &rw) {
+		return nil
+	}
+	var w Window
+	hasU := number(rw.Utilization, &w.Utilization)
+	hasR := number(rw.ResetsAt, &w.ResetsAt)
+	if !hasU && !hasR {
+		return nil
+	}
+	return &w
+}
+
+// number reads raw into v when it is a JSON number v's type holds; false, v untouched, for an
+// absent field, null, or another type.
+func number[T float64 | int64](raw json.RawMessage, v *T) bool {
+	var n T
+	if len(raw) == 0 || string(raw) == "null" || json.Unmarshal(raw, &n) != nil {
+		return false
+	}
+	*v = n
+	return true
 }
 
 // blocks reads a content field as blocks; a string or anything else is no blocks.

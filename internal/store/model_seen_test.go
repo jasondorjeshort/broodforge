@@ -54,8 +54,8 @@ VALUES ('s0001', 2, '1001', 'cred-a', '100', 'p', 'claude-code', 'claude-opus-5-
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if id, err := SchemaID(s); err != nil || id != 5 {
-		t.Fatalf("SchemaID %d %v, want 5", id, err)
+	if id, err := SchemaID(s); err != nil || id != Known() {
+		t.Fatalf("SchemaID %d %v, want %d", id, err, Known())
 	}
 	var rows []string
 	err = s.Query(`SELECT session_id || ' ' || model || ' ' || first_seen_at || ' ' || via || ' ' ||

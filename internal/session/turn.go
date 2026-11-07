@@ -1174,12 +1174,15 @@ func (s *Service) resumeReviewerLocked(l *live, n int, id string, c call) {
 // an action: no audit event. A store failure is shown as subagentResult shows one, never the
 // turn's end.
 func (s *Service) saveMeter(l *live, n int, r engine.RateLimitEvent) {
-	err := store.SaveMeter(s.cfg.Store, store.MeterRow{Credential: l.credential, SeenAt: s.stamp(), Session: l.id,
-		Status: r.Status, RateLimitType: r.RateLimitType,
-		FiveHourUtilization: r.FiveHour.Utilization, FiveHourResetsAt: r.FiveHour.ResetsAt,
-		SevenDayUtilization: r.SevenDay.Utilization, SevenDayResetsAt: r.SevenDay.ResetsAt,
-		OverageStatus: r.OverageStatus, IsUsingOverage: r.IsUsingOverage})
-	if err != nil {
+	m := store.MeterRow{Credential: l.credential, SeenAt: s.stamp(), Session: l.id,
+		Status: r.Status, RateLimitType: r.RateLimitType, OverageStatus: r.OverageStatus, IsUsingOverage: r.IsUsingOverage}
+	if w := r.FiveHour; w != nil {
+		m.HasFiveHour, m.FiveHourUtilization, m.FiveHourResetsAt = true, w.Utilization, w.ResetsAt
+	}
+	if w := r.SevenDay; w != nil {
+		m.HasSevenDay, m.SevenDayUtilization, m.SevenDayResetsAt = true, w.Utilization, w.ResetsAt
+	}
+	if err := store.SaveMeter(s.cfg.Store, m); err != nil {
 		l.log.add(storeFailed(s.stamp(), n, "", call{}, err))
 	}
 }

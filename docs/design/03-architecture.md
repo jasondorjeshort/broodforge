@@ -119,7 +119,7 @@ type EngineEvent struct {
 	ToolResult *struct{ ToolUseID string; IsError bool; Text, DecidedBy string } // tool_result_meta source
 	Result     *struct{ StopReason string; IsError bool; NumTurns int; Deferred *DeferredTool; PermissionDenials []json.RawMessage; ModelUsage map[string]ModelUsage; Usage json.RawMessage }
 	Exit       *struct{ Code *int; Signal string; Interrupted bool }
-	RateLimit  *struct{ Status, RateLimitType string; FiveHour, SevenDay Window; OverageStatus string; IsUsingOverage bool } // rate_limit_event's rate_limit_info
+	RateLimit  *struct{ Status, RateLimitType string; FiveHour, SevenDay *Window; OverageStatus string; IsUsingOverage bool } // rate_limit_event's rate_limit_info; a window nil (JSON null) when absent
 	Unknown    *struct{ Type, Subtype string; Bytes int; Head string } // any other line: its type, subtype, length and first 200 bytes; never fatal
 }
 type Usage struct{ Input, CacheRead, CacheWrite int }; type Window struct{ Utilization float64; ResetsAt int64 } // a fraction; unix seconds
@@ -131,8 +131,9 @@ Stream-json subset consumed: `system` subtype `init` (session id, model, tools, 
 `message.model`, `message.usage`, text and `tool_use` content, `parent_tool_use_id`; one line per content block, S1); `user` with
 `tool_result` content and the optional `tool_result_meta`; `result` (`stop_reason`, `is_error`, `num_turns`, `deferred_tool_use`,
 `permission_denials`, `modelUsage`, `usage`); `rate_limit_event` (`rate_limit_info`: `status`, `rateLimitType`, `unifiedWindows.five_hour`
-and `seven_day` with `utilization` and `resetsAt`, `overageStatus`, `isUsingOverage`; an absent field is its zero value; the account's plan
-meters, kept per credential: ADR 0020 and ADR 0021, Amendments 2026-10-30). Everything else is `unknown`, carried as its `type`, `subtype`,
+and `seven_day` with `utilization` and `resetsAt`, `overageStatus`, `isUsingOverage`; an absent field is its zero value, but each window is
+optional and an absent one is nil, not zeros: some accounts have no five-hour limit, and either window may be the missing one; the account's plan
+meters, kept per credential: ADR 0020 and ADR 0021, Amendments 2026-10-30 and 2026-11-07). Everything else is `unknown`, carried as its `type`, `subtype`,
 byte length and first 200 bytes, never the line (the engine's `commands_changed` runs to pages); partial messages are not requested; a
 `capabilities` set missing a name the adapter needs refuses at start (exit 1).
 
