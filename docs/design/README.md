@@ -121,5 +121,14 @@ Decisions so far (this project's own; Hatchery's records are in
   0022 companion's Handoff. Companion
   [refusals and push forms](decisions/0028-land-refusals-and-push-forms.md): the push forms, the
   `land-*` refusals and lifts, the `config check` warnings, the venue lines (wording: owner).
+- [0029 A subagent's prompt in prompt mode](decisions/0029-subagent-prompt-in-prompt-mode.md): the
+  engine ends a subagent at a hook `defer` under `-p`, so the hook reads `agent_id` and keeps `defer` for the
+  coordinator's own calls only; a prompt-mode process runs with `--permission-prompt-tool stdio`, stdin held
+  open, and a subagent's `ask`-cell call is answered in place on the engine's `control_request` (one venue
+  prompt per request, the agent type named, `Allow <tool> this session` one list), bounded by a per-channel
+  `subagentPromptTimeoutMinutes` with a deny-and-report on expiry and a deny-and-interrupt on Stop, end and
+  shutdown; a subagent's `land` and `reviewer` calls are refused with a message in every mode; a hook `ask` that
+  gets no request is detected and audited; the spike (C42, C44, C45 must hold) precedes any code; the stdio tool
+  for every prompt deferred as its own proposal. Amends 0020, 0028 (Decisions 3 to 5, the Deferred item) and 03.
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).

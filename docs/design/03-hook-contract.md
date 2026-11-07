@@ -23,9 +23,16 @@ droplet, as the instance account on the PC. It has no channel to the bot: nothin
 bound into the sandbox, and ADR 0020 made the decision a function of the environment. It reads
 the engine's JSON on stdin (`tool_name`, `tool_input`, `tool_use_id`, `cwd`, and
 `transcript_path`, which the engine documents for every hook event and the spike hook did not log:
-its absence is a hook error, below, so the first real turn proves it), prints the engine's hook
+its absence is a hook error, below, so the first real turn proves it; on a subagent's call only,
+`agent_id` and `agent_type`, seen on 2.1.319, read from ADR 0029's build pass on, `agent_type` for
+`hook.log` alone, their absence the hook's test for the driver process's own call), prints the engine's hook
 output with `permissionDecision` `allow`, `deny` or `defer` and a reason, and exits 0; on a `pass`
 (Auto mode) it prints nothing and exits 0.
+Amended 2026-11-07 (ADR 0029; unbuilt until its spike and build pass): a prompt-mode process runs with
+`--permission-prompt-tool stdio`, its stdin held open until the `result` line or exit, closed on `result`,
+never while a `control_request` is unanswered; a policy or auto process is unchanged. Which waits hold a
+process: a subagent's prompt only, for at most `subagentPromptTimeoutMinutes` (ADR 0029 rule 6); a
+top-level prompt holds none, the `defer` round trip (C27) standing in every mode.
 
 Failure, and the engine contract this depends on (C39, held). The engine blocks a call only when
 the hook exits 2, and hands the model the hook's stderr wrapped as `PreToolUse:<tool> hook error:
@@ -61,7 +68,11 @@ line's `tool_result_meta[].permission_decision.source`: `hook` when the hook ans
 deny or an answered defer), `config` when the engine's default decided (a timeout, or a non-2
 exit the engine ignored), `unknown` when the field is absent, since the engine does not document
 it; the adapter's fixture tests assert the field on every recorded result, so an engine pin that
-drops it fails the fixture check instead of silencing the audit below. A `tool-result` whose text
+drops it fails the fixture check instead of silencing the audit below. Amended 2026-11-07 (ADR 0029,
+unbuilt until its build pass): a call the bot answered on the stdio prompt tool by `request_id` carries
+`user_temporary` (observed, C41a) and is decider `participant` from the bot's own record whatever the
+value; a `user_*` source on a call the bot did not answer is `hook bypassed`, cause `engine answered`;
+the fixture check asserts the value on those results too. A `tool-result` whose text
 begins `<tool_use_error>` is the tool's own error (the engine refuses a standalone `sleep` in
 Bash before any hook runs, S2) and gets no decision row. Any other error result is classified by
 its text after stripping `PreToolUse:<tool> hook error: `, then an optional `[<command>]: `, then
@@ -153,10 +164,10 @@ the first version (ADR 0022 defers egress control; the engine's own default mode
 |---|---|---|
 | `Read`, `Glob`, `Grep`, `LS`, `NotebookRead` | `allow` under the tree or the canonical, else `deny` | `allow` under the tree or the canonical; elsewhere `allow` too, since Bash reads it anyway, except the credential paths above |
 | `TodoWrite`, `Agent` (`Task` on an older engine pin) | `allow` (a subagent's own calls fire the hook) | `allow` |
-| `Agent` whose `tool_input.subagent_type` is `reviewer` (the `reviewer` cell, ADR 0028) | `defer` in every mode; the bot answers it itself (below) | `defer` in every mode; the bot answers it itself |
+| `Agent` whose `tool_input.subagent_type` is `reviewer` (the `reviewer` cell, ADR 0028) | `defer` in every mode; the bot answers it itself (below). Amended 2026-11-07 (ADR 0029, unbuilt until its build pass; `policy` answers `defer` till then): on a subagent's call (stdin `agent_id` set) `deny` in every mode, with ADR 0029's reviewer text | `defer` in every mode; the bot answers it itself; a subagent's call `deny` as in the read-only column (ADR 0029) |
 | `WebFetch`, `WebSearch` | `web` | `web` |
 | `Edit`, `MultiEdit`, `Write`, `NotebookEdit` | `deny` | `ask` when the resolved path is under the tree, else `deny` |
-| `Bash` whose command's first words are `git push` or `broodforge session land` (the `land` cell, ADR 0028) | `deny` | `defer` in every mode, before the child chain; the bot answers it itself (below) |
+| `Bash` whose command's first words are `git push` or `broodforge session land` (the `land` cell, ADR 0028) | `deny` | `defer` in every mode, before the child chain; the bot answers it itself (below). Amended 2026-11-07 (ADR 0029, unbuilt until its build pass; `policy` answers `defer` till then): on a subagent's call (stdin `agent_id` set) `deny` in every mode, before the chain, with the companion's `land-not-allowed (subagent)` text |
 | `Bash` | `deny` | `ask` (the host is the boundary, ADR 0022; the PC's gap stands) |
 | anything else, `mcp__*` included | `deny` | `deny` |
 
@@ -170,7 +181,10 @@ single-quoted for `sh`, the other input fields kept, so the model reads the land
 succeeded Bash call (the engine's documented resume pattern, ADR 0028; an engine pin that ignores
 `updatedInput` on a resume is caught by the resume fixture, and the fallback is a `deny` whose reason
 starts `Landed`). (3) The cell is `allow`: allow. (4) The cell is `ask` or `web`: by mode as above;
-`reviewer` and `land` are `defer` in every mode. The two bot-answered cells (ADR 0028): the hook
+`reviewer` and `land` are `defer` in every mode for the coordinator's own call, and `deny` with a message
+for a subagent's (stdin `agent_id` set; amended 2026-11-07, ADR 0029, unbuilt until its build pass, `policy`
+answering `defer` for both till then; the ADR also owns what a subagent's `ask`-cell call gets in prompt
+mode once its spike has run). The two bot-answered cells (ADR 0028): the hook
 defers as for a person's answer, but `session` answers them itself on `deferred_tool_use`, no venue
 prompt and no `waiting-for-answer`: for `reviewer` it bundles the tree under the session's lock,
 records the sha and the tree's cleanliness on the call and resumes `allow`; for `land` it parses the
@@ -233,6 +247,9 @@ alternative is a relay of the refusal as a venue prompt whose Allow runs the nex
 call session-allowed (`BROODFORGE_SESSION_ALLOW`), a wider grant than one call.
 `--permission-prompts` stays off the command line; `none` is added to `auto` processes only if
 C40 shows the engine waiting on a prompt nobody can answer, and shape B's handling then applies.
+Amended 2026-11-07 (ADR 0029): its default `host` is what routes a hook `ask` to the prompt tool, so on
+a prompt-mode process the stdio tool is that host; the flag is on prompt-mode processes only, and this
+section is otherwise unchanged by it.
 
 ## The child chain
 

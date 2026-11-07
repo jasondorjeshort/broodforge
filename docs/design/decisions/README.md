@@ -22,6 +22,7 @@ Hatchery's own records are in `../../hatchery/decisions/`, never edited here (AD
 | `0027-setup-commands-host.md` | Companion to 0027: `setup host` per host (Linux: the operator files as code; Windows: the `broodforge` account, the ACLs, the task, the generated password), split from `0027-setup-commands.md` |
 | `0028-landing-a-session-on-the-default-branch.md` | One land procedure from four doors (the end, `/session land`, `session land`, the push word through the hook's `defer`); `handoff: main` fast-forward only with a fallback and a per-channel `land` role; the review fact pinned at the reviewer call's `defer`; the departure from one-review; amends 0025 rules 4, 7, 8 and the 0022 companion |
 | `0028-land-refusals-and-push-forms.md` | Companion to 0028: the push forms the land reads, the `land-*` refusals with their lifts, the `config check` warnings, the venue lines (wording: owner) |
+| `0029-subagent-prompt-in-prompt-mode.md` | The hook reads `agent_id`: `defer` and the resume for the coordinator's own calls, `--permission-prompt-tool stdio` with stdin held open and an in-place answer on the engine's `control_request` for a subagent's `ask`-cell call, bounded by `subagentPromptTimeoutMinutes`; a subagent's `land` and `reviewer` calls refused with a message; the no-request detector; the spike first; amends 0020, 0028 (Decisions 3 to 5, the Deferred item) and 03 |
 
 Template:
 

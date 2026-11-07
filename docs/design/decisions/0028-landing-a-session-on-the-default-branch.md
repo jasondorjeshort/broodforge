@@ -159,3 +159,20 @@ venue and refusal text (companion, marked "wording: owner").
   timeout and `session end <id>` on the host (no `--as`, no `--roles`), is `land-not-allowed` and so
   falls back; a host land is `session land <id> --as --roles` before the end. Mid-session nothing
   changes: every refusal keeps the session open. The companion is corrected in place (living tables).
+- 2026-11-07, ADR 0029 (`0029-subagent-prompt-in-prompt-mode.md`; source
+  `../../findings/2026-10-23-subagents-in-a-session-end-before-writing.md`, Third look). Under `-p` the engine ends a
+  subagent at a hook `defer` and passes nothing up, so a subagent's call on either bot-answered cell was lost silently
+  in every mode (the `land-not-allowed (subagent)` text could never be delivered, since the hook read no `agent_id`).
+  Three Decision sentences gain the same exception, a subagent's call being one whose hook stdin carries `agent_id`
+  (ADR 0029 rule 1). Decision 3's "an `Agent` call whose `subagent_type` is `reviewer` is answered `defer` in both
+  modes" holds for the driver process's call; a subagent's is answered `deny` in every mode with ADR 0029's reviewer
+  text, no pin and no resume (the fact counts a reviewer the driver process launched). Decision 4's "gets the `land`
+  cell: `defer` in both modes, returned before the child chain" holds for the driver process's call; a subagent's is
+  `deny` in every mode, before the chain, with the companion's `land-not-allowed (subagent)` text. Decision 5's "a
+  subagent the copy's `.claude/hooks/policy.json` `git.push.subagents` names is accepted only after the V12 probe
+  passes (Deferred)" keeps its header sentence, but the V12 probe as written cannot pass, its premise refuted; the
+  acceptance now waits on ADR 0029's C50, and `git.push.subagents` is still read as data and decides nothing till
+  then. The Deferred item "L-2's subagent list, when the V12 probe ... shows the subagent's `defer` ends the process,
+  re-fires on resume and the subagent survives" now reads: L-2's subagent list revives when C50 holds and the `land`
+  cell for a subagent is carried through the stdio prompt tool, the bot answering the request itself with
+  `updatedInput`, no resume.
