@@ -47,6 +47,10 @@ type Try struct {
 	Answer       string
 	AnswerReason string
 	SessionAllow string
+	// AgentID and AgentType are the hook input's agent_id and agent_type: a subagent's call
+	// when AgentID is set, "" the driver process's own (ADR 0029 rule 1).
+	AgentID   string
+	AgentType string
 	// Workflow is BROODFORGE_WORKFLOW: a copy whose PreToolUse children run after a decision
 	// that is not deny, in code reach; "" runs none.
 	Workflow string
@@ -90,7 +94,8 @@ func (t Try) Run() (decision, reason, pin string, err error) {
 	if t.Tool == "" {
 		return "", "", "", &Error{"no tool_name"}
 	}
-	in := Input{ToolName: t.Tool, ToolInput: t.Input, ToolUseID: id, Cwd: t.Cwd, TranscriptPath: t.Transcript}
+	in := Input{ToolName: t.Tool, ToolInput: t.Input, ToolUseID: id, Cwd: t.Cwd, TranscriptPath: t.Transcript,
+		AgentID: t.AgentID, AgentType: t.AgentType}
 	r, err := Decide(in, s)
 	if err != nil {
 		return "", "", "", err
@@ -123,7 +128,7 @@ func (t Try) chain(in Input, s Settings, r policy.Result) (policy.Result, error)
 		input = json.RawMessage("{}")
 	}
 	stdin, err := json.Marshal(engineInput{HookEventName: EventPreToolUse, ToolName: in.ToolName, ToolInput: input,
-		ToolUseID: in.ToolUseID, Cwd: cwd, TranscriptPath: in.TranscriptPath})
+		ToolUseID: in.ToolUseID, Cwd: cwd, TranscriptPath: in.TranscriptPath, AgentID: in.AgentID, AgentType: in.AgentType})
 	if err != nil {
 		return r, err
 	}
@@ -147,6 +152,8 @@ type engineInput struct {
 	ToolUseID      string          `json:"tool_use_id"`
 	Cwd            string          `json:"cwd"`
 	TranscriptPath string          `json:"transcript_path"`
+	AgentID        string          `json:"agent_id,omitempty"`
+	AgentType      string          `json:"agent_type,omitempty"`
 }
 
 // Case is one line of a case file (05-debug-interface.md, The PreToolUse hook). needs names a
@@ -164,10 +171,14 @@ type Case struct {
 	Answer       string          `json:"answer"`
 	AnswerReason string          `json:"answerReason"`
 	SessionAllow string          `json:"sessionAllow"`
-	Workflow     string          `json:"workflow"`
-	Expect       string          `json:"expect"`
-	Needs        string          `json:"needs"`
-	Note         string          `json:"note"`
+	// AgentID and AgentType are read as the hook reads agent_id and agent_type, so a case can
+	// give a value that is not a string and expect error.
+	AgentID   json.RawMessage `json:"agentId"`
+	AgentType json.RawMessage `json:"agentType"`
+	Workflow  string          `json:"workflow"`
+	Expect    string          `json:"expect"`
+	Needs     string          `json:"needs"`
+	Note      string          `json:"note"`
 }
 
 // CaseResult is one line of hook cases' output: `ok|FAIL|skip  <line>  <tool>  <mode>  <reach>
@@ -221,9 +232,9 @@ func Cases(r io.Reader, dir string) ([]CaseResult, error) {
 			return out, &BadCasesError{fmt.Sprintf("line %d: %v", n, err)}
 		}
 		switch c.Expect {
-		case "allow", "deny", "defer", "pass", ExpectError:
+		case "allow", "deny", "defer", "pass", "ask", ExpectError:
 		default:
-			return out, &BadCasesError{fmt.Sprintf("line %d: expect is %q, want allow, deny, defer, pass or error", n, c.Expect)}
+			return out, &BadCasesError{fmt.Sprintf("line %d: expect is %q, want allow, deny, defer, pass, ask or error", n, c.Expect)}
 		}
 		for _, f := range []*string{&c.Tree, &c.Canonical, &c.Transcript, &c.Needs, &c.Cwd, &c.Workflow} {
 			if *f != "" && !filepath.IsAbs(*f) && !rooted(*f) && filepath.VolumeName(*f) == "" {
@@ -238,9 +249,18 @@ func Cases(r io.Reader, dir string) ([]CaseResult, error) {
 				continue
 			}
 		}
-		got, _, _, err := Try{Tool: c.Tool, Input: c.Input, ToolUseID: c.ToolUseID, Cwd: c.Cwd, Mode: c.Mode, Reach: c.Reach,
-			Tree: c.Tree, Canonical: c.Canonical, Transcript: c.Transcript, Answer: c.Answer,
-			AnswerReason: c.AnswerReason, SessionAllow: c.SessionAllow, Workflow: c.Workflow}.Run()
+		agentID, err := agentField("agent_id", c.AgentID)
+		var agentType string
+		if err == nil {
+			agentType, err = agentField("agent_type", c.AgentType)
+		}
+		var got string
+		if err == nil {
+			got, _, _, err = Try{Tool: c.Tool, Input: c.Input, ToolUseID: c.ToolUseID, Cwd: c.Cwd, Mode: c.Mode, Reach: c.Reach,
+				Tree: c.Tree, Canonical: c.Canonical, Transcript: c.Transcript, Answer: c.Answer,
+				AnswerReason: c.AnswerReason, SessionAllow: c.SessionAllow, AgentID: agentID, AgentType: agentType,
+				Workflow: c.Workflow}.Run()
+		}
 		var he *Error
 		switch {
 		case errors.As(err, &he):

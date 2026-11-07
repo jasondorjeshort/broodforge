@@ -105,12 +105,13 @@ type Cell int
 
 const (
 	CellAllow Cell = iota // both modes
-	CellAsk               // policy: allow; prompt: allow if session-allowed, else defer; auto: allow if session-allowed, else pass
-	CellWeb               // policy and auto: deny; prompt: defer
+	CellAsk               // policy: allow; prompt: allow if session-allowed, else defer (a subagent's: ask); auto: allow if session-allowed, else pass
+	CellWeb               // policy and auto: deny; prompt: defer (a subagent's: allow if session-allowed, else ask)
 	CellDeny              // both modes, and no answer lifts it
 	// CellReviewer is the `reviewer` cell (ADR 0028): an Agent or Task call whose subagent_type
 	// is reviewer, defer in every mode and reach; the bot answers it itself after pinning the
-	// tree. One object of the table, never configuration.
+	// tree. One object of the table, never configuration. A subagent's is deny in every mode
+	// (ADR 0029 rule 1).
 	CellReviewer
 )
 
@@ -151,6 +152,9 @@ const (
 	// decision, exit 0 with nothing on stdout, so the engine's own classifier decides. C40a
 	// (2026-11-07) holds that a silent exit 0 is no decision.
 	Pass
+	// Ask is a subagent's ask- or web-cell call in prompt mode (ADR 0029 rule 1): the engine
+	// routes it to the prompt-mode process's stdio prompt tool, where the bot answers it.
+	Ask
 )
 
 func (d Decision) String() string {
@@ -163,6 +167,8 @@ func (d Decision) String() string {
 		return "defer"
 	case Pass:
 		return "pass"
+	case Ask:
+		return "ask"
 	}
 	return "unknown"
 }
@@ -211,6 +217,9 @@ type Request struct {
 	SessionAllow []string
 	// SubagentType is a subagent call's tool_input.subagent_type, "" for any other call.
 	SubagentType string
+	// Subagent is whether a subagent made the call (the hook input's agent_id set, ADR 0029
+	// rule 1); false is the driver process's own call, decided as before ADR 0029.
+	Subagent bool
 }
 
 // Result is the decision with its reason and the cell it came from.
@@ -247,6 +256,11 @@ func CredentialDenyText(target string, holds bool) string {
 // AnswerDenyText is the deny reason of a person's deny when session gave none.
 const AnswerDenyText = DenyPrefix + " a person in this session denied this call"
 
+// reviewerSubagentDenyText is the deny of a subagent's `reviewer` launch, in every mode (ADR
+// 0029 rule 1; the owner's wording, 2026-11-07).
+const reviewerSubagentDenyText = DenyPrefix + " in this session the reviewer is launched by the driver process; " +
+	"report and let it launch one."
+
 // Allow and defer reasons; the engine shows them to nobody but the model.
 const (
 	reasonAllow         = "Broodforge: allowed by this channel's reach"
@@ -258,6 +272,9 @@ const (
 	// reasonPass is a pass's reason: hook.log's and `hook try`'s only, since a pass prints
 	// nothing to the engine.
 	reasonPass = "Broodforge: inside this channel's reach; the engine's own check decides"
+	// reasonAsk is an ask's reason (ADR 0029 rule 1; the owner's wording, 2026-11-07): the
+	// model reads it only on a fall-through, when no prompt reached a person.
+	reasonAsk = "Broodforge: asked a person in this session; if this reads as a refusal, no prompt reached them: say so and stop"
 )
 
 // CellFor is the table (03-hook-contract.md, Policy table) after the path checks: a credential
@@ -308,6 +325,11 @@ func CellFor(class Class, r Reach, paths []Path) Cell {
 // cannot lift a reach deny; then a pending answer for this tool_use_id; then the cell by mode.
 // The `reviewer` cell replaces the row's cell after the path checks, before the answer, so a
 // resume with the bot's allow returns allow and a first call defers in every mode.
+//
+// A subagent's call (ADR 0029 rule 1): the `reviewer` cell is deny in every mode, after the
+// reach and credential denies and before any answer, since the bot never answers a subagent's
+// launch; in prompt mode the ask and web cells are ask, a session-allowed tool allow. Every
+// other cell, and every call in policy or auto mode, decides as the driver process's own.
 func Decide(req Request) Result {
 	cell := CellFor(ClassOf(req.Tool), req.Reach, req.Paths)
 	if cell != CellDeny && ReviewerCall(req.Tool, req.SubagentType) {
@@ -320,6 +342,9 @@ func Decide(req Request) Result {
 			}
 		}
 		return Result{Deny, DenyText(req.Tool, firstDenied(req), req.Reach), cell}
+	}
+	if cell == CellReviewer && req.Subagent {
+		return Result{Deny, reviewerSubagentDenyText, cell}
 	}
 	if a := req.Answer; a != nil && a.ToolUseID == req.ToolUseID {
 		if a.Decision == Allow && cell == CellReviewer {
@@ -347,10 +372,17 @@ func Decide(req Request) Result {
 		if req.Mode == ModeAuto {
 			return Result{Pass, reasonPass, cell}
 		}
+		if req.Subagent {
+			return Result{Ask, reasonAsk, cell}
+		}
 		return Result{Defer, reasonDefer, cell}
 	case CellWeb:
 		if req.Mode == ModePolicy || req.Mode == ModeAuto {
 			return Result{Deny, DenyText(req.Tool, "", req.Reach), cell}
+		}
+		if req.Subagent {
+			// A session allow does not cover web (the policy table): always ask.
+			return Result{Ask, reasonAsk, cell}
 		}
 		return Result{Defer, reasonDefer, cell}
 	case CellReviewer:

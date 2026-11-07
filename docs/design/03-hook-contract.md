@@ -24,7 +24,7 @@ bound into the sandbox, and ADR 0020 made the decision a function of the environ
 the engine's JSON on stdin (`tool_name`, `tool_input`, `tool_use_id`, `cwd`, and
 `transcript_path`, which the engine documents for every hook event and the spike hook did not log:
 its absence is a hook error, below, so the first real turn proves it; on a subagent's call only,
-`agent_id` and `agent_type`, seen on 2.1.319, read from ADR 0029's build pass on, `agent_type` for
+`agent_id` and `agent_type`, seen on 2.1.319, strings when present, any other type (`null` too) a hook error, `agent_type` for
 `hook.log` alone, their absence the hook's test for the driver process's own call), prints the engine's hook
 output with `permissionDecision` `allow`, `deny` or `defer` and a reason, and exits 0; on a `pass`
 (Auto mode) it prints nothing and exits 0.
@@ -163,7 +163,7 @@ the first version (ADR 0022 defers egress control; the engine's own default mode
 |---|---|---|
 | `Read`, `Glob`, `Grep`, `LS`, `NotebookRead` | `allow` under the tree or the canonical, else `deny` | `allow` under the tree or the canonical; elsewhere `allow` too, since Bash reads it anyway, except the credential paths above |
 | `TodoWrite`, `Agent` (`Task` on an older engine pin) | `allow` (a subagent's own calls fire the hook) | `allow` |
-| `Agent` whose `tool_input.subagent_type` is `reviewer` (the `reviewer` cell, ADR 0028) | `defer` in every mode; the bot answers it itself (below). Amended 2026-11-07 (ADR 0029, unbuilt until its build pass; `policy` answers `defer` till then): on a subagent's call (stdin `agent_id` set) `deny` in every mode, with ADR 0029's reviewer text | `defer` in every mode; the bot answers it itself; a subagent's call `deny` as in the read-only column (ADR 0029) |
+| `Agent` whose `tool_input.subagent_type` is `reviewer` (the `reviewer` cell, ADR 0028) | `defer` in every mode; the bot answers it itself (below). Amended 2026-11-07 (ADR 0029, built in P40a): on a subagent's call (stdin `agent_id` set) `deny` in every mode, with ADR 0029's reviewer text | `defer` in every mode; the bot answers it itself; a subagent's call `deny` as in the read-only column (ADR 0029) |
 | `WebFetch`, `WebSearch` | `web` | `web` |
 | `Edit`, `MultiEdit`, `Write`, `NotebookEdit` | `deny` | `ask` when the resolved path is under the tree, else `deny` |
 | `Bash` whose command's first words are `git push` or `broodforge session land` (the `land` cell, ADR 0028) | `deny` | `defer` in every mode, before the child chain; the bot answers it itself (below). Amended 2026-11-07 (ADR 0029, unbuilt until its build pass; `policy` answers `defer` till then): on a subagent's call (stdin `agent_id` set) `deny` in every mode, before the chain, with the companion's `land-not-allowed (subagent)` text |
@@ -181,8 +181,8 @@ succeeded Bash call (the engine's documented resume pattern, ADR 0028; an engine
 `updatedInput` on a resume is caught by the resume fixture, and the fallback is a `deny` whose reason
 starts `Landed`). (3) The cell is `allow`: allow. (4) The cell is `ask` or `web`: by mode as above;
 `reviewer` and `land` are `defer` in every mode for the coordinator's own call, and `deny` with a message
-for a subagent's (stdin `agent_id` set; amended 2026-11-07, ADR 0029, unbuilt until its build pass, `policy`
-answering `defer` for both till then; a subagent's `ask`-cell call in prompt mode is `ask`, answered on the
+for a subagent's (stdin `agent_id` set; amended 2026-11-07, ADR 0029; `reviewer` built in P40a, the `land` deny P35's, `policy`
+answering `defer` for `land` till then; a subagent's `ask`-cell call in prompt mode is `ask` (unbuilt until P40c and P40d), answered on the
 stdio prompt tool, `03-hook-contract-prompt-tool.md`). The two bot-answered cells (ADR 0028): the hook
 defers as for a person's answer, but `session` answers them itself on `deferred_tool_use`, no venue
 prompt and no `waiting-for-answer`: for `reviewer` it bundles the tree under the session's lock,

@@ -57,6 +57,24 @@ type Input struct {
 	ToolUseID      string
 	Cwd            string // "" means the tree
 	TranscriptPath string
+	// AgentID and AgentType are set on a subagent's call only (03-hook-contract.md, How the
+	// engine runs it; ADR 0029 rule 1); "" is the driver process's own call. AgentType is for
+	// hook.log alone.
+	AgentID   string
+	AgentType string
+}
+
+// agentField reads agent_id or agent_type: absent is "", a string is its value, and any other
+// type, null included, is a hook error, since the field decides who made the call.
+func agentField(name string, v json.RawMessage) (string, error) {
+	if v == nil {
+		return "", nil
+	}
+	var s string
+	if t := bytes.TrimSpace(v); len(t) == 0 || t[0] != '"' || json.Unmarshal(t, &s) != nil {
+		return "", &Error{name + " is not a string"}
+	}
+	return s, nil
 }
 
 // ParseMode, ParseReach and ParseAnswer read the variables' values; try's flags take the same.
@@ -153,6 +171,8 @@ func ParseInput(b []byte) (Input, error) {
 		ToolUseID      *string         `json:"tool_use_id"`
 		Cwd            *string         `json:"cwd"`
 		TranscriptPath *string         `json:"transcript_path"`
+		AgentID        json.RawMessage `json:"agent_id"`
+		AgentType      json.RawMessage `json:"agent_type"`
 	}
 	if !json.Valid(b) || bytes.TrimSpace(b)[0] != '{' {
 		return Input{}, &Error{"stdin is not a JSON object"}
@@ -176,6 +196,13 @@ func ParseInput(b []byte) (Input, error) {
 		return in, &Error{"no transcript_path"}
 	}
 	in.TranscriptPath = *raw.TranscriptPath
+	var err error
+	if in.AgentID, err = agentField("agent_id", raw.AgentID); err != nil {
+		return in, err
+	}
+	if in.AgentType, err = agentField("agent_type", raw.AgentType); err != nil {
+		return in, err
+	}
 	return in, nil
 }
 
@@ -292,7 +319,8 @@ func Decide(in Input, s Settings) (policy.Result, error) {
 		}
 	}
 	return policy.Decide(policy.Request{Tool: in.ToolName, ToolUseID: in.ToolUseID, Mode: s.Mode,
-		Reach: s.Reach, Paths: paths, Answer: s.Answer, SessionAllow: s.SessionAllow, SubagentType: agent}), nil
+		Reach: s.Reach, Paths: paths, Answer: s.Answer, SessionAllow: s.SessionAllow, SubagentType: agent,
+		Subagent: in.AgentID != ""}), nil
 }
 
 // runsChain is whether the repository's PreToolUse children run after the bot's own result:
@@ -315,7 +343,8 @@ type HookSpecificOutput struct {
 
 // Encode is the output line for a result, newline included. A pass is no output at all: exit 0
 // with nothing on stdout is no decision, so the engine's own check decides (03-hook-contract.md,
-// Auto mode; C40a).
+// Auto mode; C40a). An ask is the same object as the others with permissionDecision ask, the
+// shape the engine accepted on 2.1.319 (ADR 0029's spike).
 func Encode(r policy.Result) ([]byte, error) {
 	if r.Decision == policy.Pass {
 		return nil, nil
@@ -333,6 +362,9 @@ type logLine struct {
 	Session   string `json:"session"`
 	Tool      string `json:"tool"`
 	ToolUseID string `json:"toolUseId"`
+	// AgentID and AgentType name a subagent's call, absent on the driver process's own.
+	AgentID   string `json:"agentId,omitempty"`
+	AgentType string `json:"agentType,omitempty"`
 	Cell      string `json:"cell"`
 	Decision  string `json:"decision"`
 	// Trace is a child deny's `denied: refused by the project's hook <name>: <reason>`.
@@ -345,6 +377,8 @@ type childLogLine struct {
 	Session   string `json:"session"`
 	Tool      string `json:"tool"`
 	ToolUseID string `json:"toolUseId"`
+	AgentID   string `json:"agentId,omitempty"`
+	AgentType string `json:"agentType,omitempty"`
 	ChildLine
 }
 
@@ -355,6 +389,8 @@ type pinLogLine struct {
 	Session   string `json:"session"`
 	Tool      string `json:"tool"`
 	ToolUseID string `json:"toolUseId"`
+	AgentID   string `json:"agentId,omitempty"`
+	AgentType string `json:"agentType,omitempty"`
 	Pin       string `json:"pin"`
 	Why       string `json:"why"`
 }
@@ -599,7 +635,8 @@ func preToolUse(stdin io.Reader, stdout io.Writer, lookup func(string) (string, 
 	if runsChain(r, s, workflow) {
 		c := Chain{Workflow: workflow, Tree: s.Tree, Environ: environ, now: now, Log: func(l ChildLine) {
 			if logErr == nil {
-				logErr = appendLog(log, childLogLine{Time: stamp(), Session: session, Tool: in.ToolName, ToolUseID: in.ToolUseID, ChildLine: l})
+				logErr = appendLog(log, childLogLine{Time: stamp(), Session: session, Tool: in.ToolName, ToolUseID: in.ToolUseID,
+					AgentID: in.AgentID, AgentType: in.AgentType, ChildLine: l})
 			}
 		}}
 		deny, why, err := c.Pre(in.ToolName, b)
@@ -619,12 +656,14 @@ func preToolUse(stdin io.Reader, stdout io.Writer, lookup func(string) (string, 
 		return err
 	}
 	if err := appendLog(log, logLine{Time: stamp(), Session: session, Tool: in.ToolName,
-		ToolUseID: in.ToolUseID, Cell: r.Cell.String(), Decision: r.Decision.String(), Trace: trace}); err != nil {
+		ToolUseID: in.ToolUseID, AgentID: in.AgentID, AgentType: in.AgentType, Cell: r.Cell.String(),
+		Decision: r.Decision.String(), Trace: trace}); err != nil {
 		return err
 	}
 	// The pin goes in before the answer, so the subagent's first commit finds its line.
 	if pl := writePin(in, r, s.Tree, workflow); pl != nil {
 		pl.Time, pl.Session, pl.Tool, pl.ToolUseID = stamp(), session, in.ToolName, in.ToolUseID
+		pl.AgentID, pl.AgentType = in.AgentID, in.AgentType
 		_ = appendLog(log, *pl) // a help never blocks, its log line included
 	}
 	if _, err := stdout.Write(out); err != nil {

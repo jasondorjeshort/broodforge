@@ -28,7 +28,8 @@ Implements: ADR 0029 rule 1; `03-hook-contract.md` (How the engine runs it: the 
 `reviewer` row; Decision step 4); `05-debug-interface.md` (The PreToolUse hook: `hook try`, `hook cases`). Files
 [no-check: the cases are added by this pass]: `internal/policy/policy.go` (`Request.Subagent bool`; a new `Ask`
 decision; `Decide`: under `ModePrompt` with `Subagent`, `CellAsk` and `CellWeb` return `Ask` with the ADR's
-placeholder reason unless the tool is session-allowed, then `Allow`; `CellReviewer` with `Subagent` returns `Deny`
+placeholder reason; `CellAsk` returns `Ask` unless the tool is session-allowed, then `Allow`; `CellWeb` returns `Ask`
+always (a session allow does not cover `web`); `CellReviewer` with `Subagent` returns `Deny`
 with the ADR's reviewer text in every mode, before any pin; no other branch changes: a policy or auto process and a
 call without `agent_id` decide as today); `internal/hook/hook.go` (`agent_id` and `agent_type` read from stdin, both
 strings or absent, any other type a hook error; `Subagent` set when `agent_id` is present and non-empty; the `ask`
@@ -40,8 +41,8 @@ table repeated with `agentId` under `prompt` expecting `ask`, with `sessionAllow
 `allow`, under `policy` and `auto` unchanged; the `reviewer` row with `agentId` in each mode expecting `deny` with
 the reviewer text; a reach deny with `agentId` still `deny`; `agent_id` of a non-string type expecting `error`).
 Debug surface: `hook try --tool Bash --input '{"command":"echo hi"}' --mode prompt --agent-id a1 --agent-type probe
---expect ask`; the same `--mode policy --expect allow`; `hook try --tool Agent --input '{"subagent_type":"reviewer"}'
---agent-id a1 --mode policy --expect deny` printing the reviewer text; `hook cases tests/hook/cases.jsonl`.
+--transcript-path <path> --expect ask`; the same `--mode policy --transcript-path <path> --expect allow`; `hook try --tool Agent --input '{"subagent_type":"reviewer"}'
+--agent-id a1 --mode policy --transcript-path <path> --expect deny` printing the reviewer text; `hook cases tests/hook/cases.jsonl`.
 Proof: the build, check and test lines; `hook cases` all `ok`; the three `hook try` lines; a test that the `ask`
 output is byte-for-byte the shape the spike's stub printed (the finding, What was tried). Does not: touch the
 engine, `session` or the spawn; add the `land` deny (P35 builds the `land` cell and takes the subagent row from
@@ -144,7 +145,7 @@ Then [no-check: the script and tests are this pass's]: `internal/session/turn.go
 `prompt` event in a prompt turn: the `deferred` row, `pending[request_id]` with tool, `tool_use_id`, target, agent
 type through the parent call's `subagent_type` else `AgentID`, the timer from the channel's key, the
 `waiting-for-answer` event indented under the `Agent` line, the state `waiting-for-answer` while any request is
-open; the at-once allow for a session-allowed tool; at `result`: every pending request `dropped`, decider
+open; the at-once allow for a session-allowed tool (never a `web` tool: a session allow does not cover `web`); at `result`: every pending request `dropped`, decider
 `instance`, cause `the turn ended`, the prompt's buttons removed, the timer cancelled, the turn ended on that
 `result`; the first-result rule in every mode: `lastResult` becomes the first `result` of the process and
 `engine.UsageOf` reads the first, every event after it logged and never classified, never a decision row, a

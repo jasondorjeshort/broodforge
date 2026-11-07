@@ -65,6 +65,25 @@ func TestProofHookTry(t *testing.T) {
 	want(t, clitest.Run(t, nil, "hook", "try"), 2, "", "error: usage: hook try: --tool <name> is required\n")
 }
 
+// TestProofHookTrySubagent is the P40a Debug surface's three lines (ADR 0029 rule 1): a
+// subagent's Bash in prompt mode is ask, in policy mode allow, and its reviewer launch deny with
+// the owner's text.
+func TestProofHookTrySubagent(t *testing.T) {
+	const transcript = "/tmp/cfg/projects/x/s.jsonl"
+	want(t, clitest.Run(t, nil, "hook", "try", "--tool", "Bash", "--input", `{"command":"echo hi"}`, "--mode", "prompt",
+		"--agent-id", "a1", "--agent-type", "probe", "--transcript-path", transcript, "--expect", "ask"), 0,
+		"ask  Broodforge: asked a person in this session; if this reads as a refusal, no prompt reached them: say so and stop  \"\"\n", "")
+	want(t, clitest.Run(t, nil, "hook", "try", "--tool", "Bash", "--input", `{"command":"echo hi"}`, "--mode", "policy",
+		"--agent-id", "a1", "--agent-type", "probe", "--transcript-path", transcript, "--expect", "allow"), 0,
+		"allow  Broodforge: allowed by this channel's reach  \"\"\n", "")
+	want(t, clitest.Run(t, nil, "hook", "try", "--tool", "Agent", "--input", `{"subagent_type":"reviewer"}`, "--agent-id", "a1",
+		"--mode", "policy", "--transcript-path", transcript, "--expect", "deny"), 0,
+		"deny  Denied by Broodforge: in this session the reviewer is launched by the driver process; report and let it launch one.  \"\"\n", "")
+	want(t, clitest.Run(t, nil, "hook", "try", "--tool", "Agent", "--input", `{"subagent_type":"reviewer"}`,
+		"--mode", "policy", "--transcript-path", transcript, "--expect", "defer"), 0,
+		"defer  Broodforge: the bot records the tree before the reviewer starts  \"\"\n", "")
+}
+
 // TestProofHookTryPin: hook try's pin column is the line pre-tool-use would append for an
 // Agent call, from --workflow's agents.json; a line the trailers file beside --tree already
 // holds, or a call nothing pins, is empty. try writes nothing.

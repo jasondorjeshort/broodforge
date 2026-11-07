@@ -191,26 +191,27 @@ BROODFORGE_SESSION=s0001 BROODFORGE_MODE=prompt
 BROODFORGE_REACH=code BROODFORGE_TREE=/tmp/x BROODFORGE_CANONICAL=/tmp/c
 BROODFORGE_HOOK_LOG=/dev/null broodforge hook pre-tool-use` prints `{"hookSpecificOutput":
 {"hookEventName":"PreToolUse","permissionDecision":"defer","permissionDecisionReason":
-"<reason>"}}`, exit 0; a `pass` (auto mode) prints nothing, exit 0, and `hook try` shows it as `pass` with the `hook.log`
+"<reason>"}}`, exit 0; an `ask` (a subagent's `ask`-cell call in prompt mode) prints the same object with `permissionDecision` `ask`; a `pass` (auto mode) prints nothing, exit 0, and `hook try` shows it as `pass` with the `hook.log`
 line's reason. Any error, a missing variable, malformed stdin or an unwritable log
 included, is exit 2 with `hook: <what>` on stderr, the one exit the engine reads as a block.
 The same code path with flags, nothing logged: `broodforge hook try --tool <name> [--input
 '<json>'] [--tool-use-id <id>] [--cwd <path>] [--mode prompt|policy|auto] [--reach read-only|code]
 [--tree <path>] [--canonical <path>] --transcript-path <path> [--answer <id>:allow|deny]
-[--answer-reason <text>] [--session-allow <names>] [--workflow <dir>] [--expect allow|deny|defer|pass|hook]` prints
+[--answer-reason <text>] [--session-allow <names>] [--agent-id <id>] [--agent-type <type>] [--workflow <dir>]
+[--expect allow|deny|defer|pass|ask|hook]` prints
 `<decision>  <reason>  <pin>` (defaults: `{}`, `toolu_01`, the tree, `prompt`, `code`, `.`, the tree; `pin` is the
 trailer line an allowed `Agent` call would append, `""` for none, `05-debug-interface-git.md`); a
 hook error is `error: hook: <what>`, exit 1; `--transcript-path` is what the hook derives the
-config directory from (`03-hook-contract.md`, Paths), so a case can read inside it. `--workflow` runs that copy's
+config directory from (`03-hook-contract.md`, Paths), so a case can read inside it. `--agent-id` makes it a subagent's call (stdin `agent_id`; `--agent-type` the `agent_type`), the default the driver process's own; for example `hook try --tool Agent --input '{"subagent_type":"reviewer"}' --agent-id a1 --mode policy --transcript-path <path> --expect deny`. `--workflow` runs that copy's
 `PreToolUse` children as the hook does (`03-hook-contract.md`, The child chain), after a decision that is not `deny`;
 on the PC `CLAUDE_CODE_GIT_BASH_PATH` must name Git Bash. `hook post-tool-use` takes the engine's `PostToolUse` JSON
 the same way and prints the children's `additionalContext` object or nothing, exit 0 always.
 Observe. The decision line; `BROODFORGE_HOOK_LOG` (`sessions/<id>/home/hook.log`), one line per
-decision; in a session, `audit --kind permission-decision --session <id>`.
+decision, carrying `agentId` and `agentType` on a subagent's call only; in a session, `audit --kind permission-decision --session <id>`.
 Reproduce. One `hook try` line with `--expect`, or a case file: `broodforge hook cases <file>`
 runs a JSONL of `{"tool","input","toolUseId","cwd","mode","reach","tree","canonical","transcript",
-"answer","answerReason","sessionAllow","workflow","expect","needs","note"}` objects (try's defaults; `expect`
-also `error`; `needs` a path whose absence skips the case; relative paths but `input`'s from the
+"answer","answerReason","sessionAllow","agentId","agentType","workflow","expect","needs","note"}` objects (try's defaults; `expect`
+also `ask` and `error`; `needs` a path whose absence skips the case; relative paths but `input`'s from the
 file's directory, `workflow` too; `{dir}` is that directory, `{posixdir}` its `/c/...` form), prints `ok|FAIL|skip  <line>  <tool>  <mode>  <reach>  <got>  <want>  <note>`,
 exit 1 `cases-failed` on a FAIL; `tests/hook/cases.jsonl` (over `tests/hook/linkworld/`) covers every cell, links, the refused spellings and 8.3 names, and with
 `tests/hook/chain/` each child outcome (its `sleep.sh` case takes ten seconds).

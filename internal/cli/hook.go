@@ -46,8 +46,9 @@ var hookPostToolUse = Command{
 // hookTry is the same code path with flags: `broodforge hook try --tool <name> --input <json>
 // [--tool-use-id <id>] [--mode prompt|policy|auto] [--reach read-only|code] [--tree <path>]
 // [--canonical <path>] --transcript-path <path> [--answer <id>:allow|deny] [--answer-reason
-// <text>] [--session-allow <names>] [--workflow <dir>] [--expect allow|deny|defer|pass|hook]`,
-// printing `<decision>  <reason>  <pin>`; --workflow runs the copy's PreToolUse children as the
+// <text>] [--session-allow <names>] [--agent-id <id>] [--agent-type <type>] [--workflow <dir>]
+// [--expect allow|deny|defer|pass|ask|hook]`, printing `<decision>  <reason>  <pin>`; --agent-id makes it a
+// subagent's call, as the hook input's agent_id does (ADR 0029 rule 1); --workflow runs the copy's PreToolUse children as the
 // hook does under BROODFORGE_WORKFLOW and is the agents.json an Agent call's pin is read from;
 // pin is the trailer line pre-tool-use would append to the trailers file beside --tree, empty
 // for none (05-debug-interface-git.md). A hook error is `error: hook: <what>`, exit 1. Nothing
@@ -69,6 +70,8 @@ var hookTry = Command{
 		{Name: "answer", Kind: FlagString, Value: "<id>:allow|deny", Usage: "BROODFORGE_ANSWER"},
 		{Name: "answer-reason", Kind: FlagString, Value: "<text>", Usage: "BROODFORGE_ANSWER_REASON"},
 		{Name: "session-allow", Kind: FlagString, Value: "<names>", Usage: "BROODFORGE_SESSION_ALLOW"},
+		{Name: "agent-id", Kind: FlagString, Value: "<id>", Usage: "agent_id: a subagent's call (default: the driver process's)"},
+		{Name: "agent-type", Kind: FlagString, Value: "<type>", Usage: "agent_type, a subagent's type"},
 		{Name: "workflow", Kind: FlagString, Value: "<dir>", Usage: "BROODFORGE_WORKFLOW: run this copy's PreToolUse children"},
 	},
 	Columns: tryColumns,
@@ -123,7 +126,7 @@ func runHookTry(_ context.Context, env *Env) error {
 		Reach: env.String("reach"), Tree: env.String("tree"), Canonical: env.String("canonical"),
 		Transcript: env.String("transcript-path"), Answer: env.String("answer"),
 		AnswerReason: env.String("answer-reason"), SessionAllow: env.String("session-allow"),
-		Workflow: env.String("workflow")}.Run()
+		AgentID: env.String("agent-id"), AgentType: env.String("agent-type"), Workflow: env.String("workflow")}.Run()
 	if err != nil {
 		return hookError(err)
 	}
