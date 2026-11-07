@@ -40,7 +40,7 @@ const (
 // the engine): `broodforge engine run --fake <fixture dir> [--turn <n>] [--cwd <dir>]
 // [--received-dir <dir>] --prompt <text> [--expect <value>]` replays a fixture; `engine run
 // --real --credential <id> --cwd <dir> --prompt <text> [--resume <engine session id>] [--model
-// <model>] [--workflow <dir>]` runs
+// <model>] [--workflow <dir>] [--mode prompt|policy|auto]` runs
 // the configured engine through the spawn backend (runEngineReal, below). Either streams the turn's
 // EngineEvents as JSONL on stdout, in text mode too, and exits with the turn's exit code (any
 // non-zero code is 1, `error: engine-exit: ...`). Its outcome token for --expect is `result`
@@ -56,6 +56,7 @@ var engineRun = Command{
 		{Name: "resume", Kind: FlagString, Value: "<engine session id>", Usage: "--real: resume this engine session"},
 		{Name: "model", Kind: FlagString, Value: "<model>", Usage: "--real: the engine's --model (default: the account's)"},
 		{Name: "workflow", Kind: FlagString, Value: "<dir>", Usage: "--real: BROODFORGE_WORKFLOW, a copy whose hooks.json the hook chains"},
+		modeFlag,
 		{Name: "turn", Kind: FlagInt, Default: "1", Value: "<n>", Usage: "--fake: the turn-<n>.jsonl to play"},
 		{Name: "cwd", Kind: FlagString, Value: "<dir>", Usage: "the request's working directory"},
 		{Name: "received-dir", Kind: FlagString, Value: "<dir>", Usage: "--fake: where received-<n>.json goes (default: the fixture directory)"},
@@ -76,6 +77,8 @@ func runEngine(ctx context.Context, env *Env) error {
 		return runEngineReal(ctx, env, "engine run", nil)
 	case env.String("workflow") != "":
 		return &usageError{"engine run: --workflow needs --real"}
+	case env.String("mode") != "":
+		return &usageError{"engine run: --mode needs --real"}
 	case dir == "":
 		return &usageError{"engine run: --fake <fixture dir> or --real is required"}
 	}
@@ -167,7 +170,7 @@ func exitRefusal(exit *engine.ExitEvent) error {
 }
 
 // engineRecord is `broodforge engine record --credential <id> --cwd <dir> --out <fixture
-// dir> --prompt <text> [--model <model>]`: engine run --real that also writes the engine's raw stdout as the
+// dir> --prompt <text> [--model <model>] [--mode prompt|policy|auto]`: engine run --real that also writes the engine's raw stdout as the
 // directory's next turn-<n>.jsonl, resuming the previous turn's session, and records the turn
 // in fixture.json (05-debug-interface.md). It refuses an --out inside the instance root
 // (a session tree, a config directory) or inside --cwd.
@@ -180,10 +183,16 @@ var engineRecord = Command{
 		{Name: "out", Kind: FlagString, Value: "<fixture dir>", Usage: "the fixture directory to add a turn to"},
 		{Name: "prompt", Kind: FlagString, Value: "<text>", Usage: "the turn's input"},
 		{Name: "model", Kind: FlagString, Value: "<model>", Usage: "the engine's --model (default: the account's)"},
+		modeFlag,
 	},
 	Expect: true,
 	Local:  runEngineRecord,
 }
+
+// modeFlag is the session mode a standalone real turn runs in: BROODFORGE_MODE, and
+// --permission-mode auto for auto (ADR 0020 as amended 2026-11-01). Default: the instance's
+// defaults.mode.
+var modeFlag = Flag{Name: "mode", Kind: FlagString, Value: "<prompt|policy|auto>", Usage: "--real: the session mode (default: defaults.mode)"}
 
 func init() { commands = append(commands, &engineRecord) }
 
@@ -240,7 +249,15 @@ func runEngineReal(_ context.Context, env *Env, name string, out *string) error 
 	if err != nil {
 		return configFailure(env, err)
 	}
-	req, secret, err := standaloneRequest(env.Root, c, credID, absCwd)
+	mode := env.String("mode")
+	switch mode {
+	case "":
+		mode = c.Instance.Defaults.Mode
+	case config.ModePrompt, config.ModePolicy, config.ModeAuto:
+	default:
+		return &usageError{name + ": --mode " + mode + ": want prompt, policy or auto"}
+	}
+	req, secret, err := standaloneRequest(env.Root, c, credID, absCwd, mode)
 	if err != nil {
 		return err
 	}
@@ -310,10 +327,10 @@ func runEngineReal(_ context.Context, env *Env, name string, out *string) error 
 }
 
 // standaloneRequest builds a standalone run's turn request from the store: the credential's
-// delivery, its user's git identity, the hook variables of a code-reach session in the
-// instance's default mode. An API key's value is read through the key file only when the
-// engine asks for it.
-func standaloneRequest(root string, c *config.Config, credID, cwd string) (engine.TurnRequest, func(string) ([]byte, error), error) {
+// delivery, its user's git identity, the hook variables of a code-reach session in mode (--mode,
+// else the instance's default mode), and --permission-mode auto when that mode is auto. An API
+// key's value is read through the key file only when the engine asks for it.
+func standaloneRequest(root string, c *config.Config, credID, cwd, mode string) (engine.TurnRequest, func(string) ([]byte, error), error) {
 	var req engine.TurnRequest
 	st, err := openStoreAt(root)
 	if err != nil {
@@ -368,11 +385,14 @@ func standaloneRequest(root string, c *config.Config, credID, cwd string) (engin
 	req.SessionID, req.Cwd = standaloneSession, cwd
 	req.HookEnv = []engine.HookVar{
 		{Name: hook.EnvSession, Value: standaloneSession},
-		{Name: hook.EnvMode, Value: c.Instance.Defaults.Mode},
+		{Name: hook.EnvMode, Value: mode},
 		{Name: hook.EnvReach, Value: config.ReachCode},
 		{Name: hook.EnvTree, Value: tree},
 		{Name: hook.EnvCanonical, Value: tree},
 		{Name: hook.EnvHookLog, Value: home + "/hook.log"},
+	}
+	if mode == config.ModeAuto {
+		req.PermissionMode = engine.PermissionAuto
 	}
 	return req, secret, nil
 }

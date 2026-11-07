@@ -60,9 +60,33 @@ So `auto` is startable and Broodforge's hook still decides first (claim 2); a ho
 round-trips (3b), but the classifier's own defer or refuse was not reproduced, so what `--permission-prompts
 host|none` change for it is unknown. Status stays `open` for row 3.
 
+Row 3, 2026-11-07 (P39's real turn, engine `2.1.319`, the dev instance's subscription credential,
+through Broodforge's own spawn): the classifier cannot act under the bot's spawn, because the
+engine refuses `auto` there. The spawn sets `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` on every
+process (C34), and this engine then forces the mode to `default`.
+
+| Run | Verdict | Deciding line |
+|---|---|---|
+| Probe 1: `engine record --mode auto`, a force push (`git commit --allow-empty ... && git push --force origin main`) to a scratch bare remote under `<scratchpad>` | the classifier never ran; the engine's default refused the call | stderr `⚠ Permission mode forced to default — CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set (allowed_non_write_users hardening). Declare allowedTools explicitly, or set CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0 to opt out.`; `system/init` `"permissionMode":"default"`; `hook.log` `"cell":"ask","decision":"pass"`; `system/permission_denied` `"decision_reason_type":"subcommandResults"`, `The following parts require approval: git commit ..., git push --force origin main`; `tool_result_meta` `{"decision":"reject","source":"config"}`, `non_execution_kind` `user-rejected`; no `control_request`; `result.modelUsage` one model only. |
+| Cause, plain `claude -p --permission-mode auto`, no tools: scrub `1` / unset / `1` with `--allowedTools Read` | the scrub alone forces `default`; `--allowedTools Read` does not lift it | `init` `default` with the stderr line above / `auto`, stderr empty / `default` with the same line. |
+| Session `s0007` on channel `200`, `--mode auto`, a Write of `probe.txt` in the tree | P39's guard fires; the refusal is labelled `engine` | events `internal-error  engine mode: wanted auto, got default`, then `permission-decision  deny [Write] probe.txt (engine)`; audit `engine-mode-mismatch` `{"got":"default","turn":"1","wanted":"auto"}` and a `permission-decision` with `decidedBy` `engine`, `source` `config`. |
+
+Probes 2 to 4 were not run: the forced `default` turns them into C40a's case (the engine's default
+refuses, `source` `config`), not a classifier decision. Five engine starts in all. The raw streams
+stay in `<scratchpad>`; no fixture was imported, and `auto-prompt` and `auto-refused` are still
+hand-written. So under the spawn as built, C40c fails (`init` says `default`), and shape A or B, the
+classifier's `source`, C40b and the id on re-issue all stay unobserved.
+
 ## Next
 
-- Row 3: find a call the classifier stops in `-p` (a real credential-shaped file in a throwaway
+- Row 3 after 2026-11-07, the architect's: `auto` and the C34 scrub do not coexist on engine
+  2.1.319. The choices the engine's message names are opting out of the scrub on `auto` processes
+  (so Bash would see the credential variables C34 hides) or declaring `allowedTools` (the
+  `--allowedTools Read` form did not lift the force; a settings `permissions.allow` form is
+  untried). Until one is chosen, an `auto` session runs as `default` and says so through
+  `engine-mode-mismatch`. A further question: a refusal under that forced `default` is labelled
+  decider `engine` (reason `config`), though no classifier decided it.
+- Row 3, before 2026-11-07: find a call the classifier stops in `-p` (a real credential-shaped file in a throwaway
   directory, a force push to a scratch remote, or a write to a scratch `~`-level dotfile under a
   disposable `HOME`), then record the stream under `host` and `none`. Until then the design cannot say
   how a classifier prompt reaches Discord.

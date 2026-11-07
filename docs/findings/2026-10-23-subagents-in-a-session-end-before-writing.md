@@ -137,15 +137,39 @@ field naming the agent, so a subagent's call is placed by its time after the `Ag
   reach table's inference. The hook log has no later row for either tool-use id: no resolving
   allow, unlike the coordinator's deferred `Edit` calls (01:56:36 defer, 01:57:04 allow).
 
+### Second occurrence: instance `dev-live`, session s000g, 2026-11-02
+
+- Prompt mode, engine 2.1.316, driven from Discord by the owner, building a pass. The coordinator
+  launched three `coder` subagents: two in the background ("Quieter, named bot DMs", 20:49:25 and
+  20:49:41 UTC) and one in the foreground (20:50:47, its prompt opening "Two earlier agents on this
+  brief ended after their first message ... with nothing done").
+- Each subagent's first `Bash` call hit the `ask` cell: the hook log shows `"cell":"ask","decision":"defer"`
+  (five Bash defers between 20:49:27 and 20:50:53). The subagent transcripts
+  (`<root>/.../projects/<slug>/<session>/subagents/agent-*.jsonl`) end on a `hook_deferred_tool`
+  attachment with `"permissionMode":"default"`, and the meta files say `"finished":true`. The first
+  agent's whole transcript is one sentence ("I'll start by reading CLAUDE.md and the rules.") and
+  one Bash call; the foreground one ran six Reads (the `allow` cell), then ended at its first Bash.
+- No prompt reached the venue for any of them (no `waiting-for-answer`). The coordinator then did the
+  work itself in the main process (the hook log shows 53 Edits there).
+- Control: a `reviewer` launched at 21:24:14 went through the reviewer cell (`defer`, then `allow`
+  on the resume at 21:24:16) and ran to a full report (297 transcript lines). Its Bash calls were
+  allowed by then: the hook log's Bash decisions turn `allow` later in the session (a session allow
+  or a mode switch by the driver).
+- s000e, the session before it, launched no subagent, so it is not evidence.
+
 ## Next
 
 - The hook's `defer` for a subagent's call is now seen (Result, "Read from the hook log"); the
   audit shows no deferred row and no prompt, and the subagent ends while the engine turn goes on.
+  A second occurrence on 2026-11-02 (s000g, `dev-live`, three `coder` launches; Result, "Second
+  occurrence") shows the same end at the first deferred Bash.
   Still open: why the engine returns no top-level `deferred_tool_use` result for a subagent's
   deferred call, so the bot never posts a prompt (the engine, or the bot's handling of a call
   whose tool-use id belongs to a subagent), and a design answer for the
   architect: prompt mode cannot host subagents until such a call resumes; it bears on `auto` too
-  (its classifier prompts would take the same path), and until it is answered a session that
+  (its classifier prompts would take the same path; today the engine forces `auto` back to `default`
+  under the spawn's `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, so `auto` is no workaround: the 2026-10-31
+  auto spike finding, row 3), and until it is answered a session that
   delegates runs in policy mode.
 - Decide whether `SendMessage` and `Skill` belong in `code` reach (the policy table,
   `03-hook-contract.md`); option D for skills needs the `Skill` row as well as its droplet row.

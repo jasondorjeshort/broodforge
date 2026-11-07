@@ -157,12 +157,12 @@ directory (default `fixtures/engine/basic/` [no-check: no code yet]). Adapter al
 --fake <fixture dir> [--turn <n>] [--cwd <dir>] --prompt "<text>"` streams `EngineEvent`s as JSONL to stdout exactly as the
 adapter parsed them (an unknown line as `{"type":"unknown","eventType":..,"subtype":..,"bytes":..,"head":..}`, `head` its first 200 bytes, so
 a page-long `commands_changed` is one short line; P29) and exits 0 when the fixture's `exit` is 0, else 1 with `error: engine-exit`. `engine run --real --credential
-<id> --cwd <dir> --prompt "<text>" [--resume <engine session id>] [--model <m>] [--workflow <dir>]`, with `--root`, does the same through the configured spawn
+<id> --cwd <dir> --prompt "<text>" [--resume <engine session id>] [--model <m>] [--workflow <dir>] [--mode prompt|policy|auto]`, with `--root`, does the same through the configured spawn
 backend: credential and git identity from the store, an API key through the key file; the hook sees session `engine-run`, code
-reach, `defaults.mode`, log `<root>/sessions/engine-run/home/hook.log`, and with `--workflow` `BROODFORGE_WORKFLOW` naming the
+reach, `--mode` else `defaults.mode` (`auto` also runs the engine with `--permission-mode auto`), log `<root>/sessions/engine-run/home/hook.log`, and with `--workflow` `BROODFORGE_WORKFLOW` naming the
 directory, so its chain runs without a session (`error: bad-workflow` when it is not a directory); Ctrl-C interrupts the turn; no `--credential` is `error:
 usage`, an unknown one `error: unknown-credential`, nothing spawned. `engine record --credential <id> --cwd <dir> --out <fixture
-dir> --prompt "<text>" [--model <m>]` runs the real engine and writes the raw lines as `turn-<n>.jsonl` (`n` counting up in an existing
+dir> --prompt "<text>" [--model <m>] [--mode prompt|policy|auto]` runs the real engine and writes the raw lines as `turn-<n>.jsonl` (`n` counting up in an existing
 directory, `--resume` the previous turn's, from `fixture.json` or its `init`) plus a `fixture.json` without delays (claim
 `recorded`, `engine.version`); an `--out` under `--root` or `--cwd` is `error: out-in-session`. The recorder redacts
 nothing, so record with a credential made for recording; before a commit the import rewrite (`go run

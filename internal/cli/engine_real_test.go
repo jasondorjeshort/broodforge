@@ -212,6 +212,72 @@ func TestProofEngineRunWorkflow(t *testing.T) {
 	}
 }
 
+// TestProofEngineRealModeAuto: --mode auto runs the engine with --permission-mode auto and the
+// hook with BROODFORGE_MODE=auto (the C40 recording); a mode that is not one of the three is
+// refused before any spawn.
+func TestProofEngineRealModeAuto(t *testing.T) {
+	root, sub, _ := realRoot(t)
+	log := filepath.Join(t.TempDir(), "standin.json")
+	r := clitest.Run(t, standinEnv(t, "basic", 1, log), "--root", root, "engine", "record", "--credential", sub,
+		"--cwd", t.TempDir(), "--out", filepath.Join(t.TempDir(), "rec"), "--prompt", "x", "--mode", "auto")
+	if r.Code != 0 {
+		t.Fatalf("exit %d stderr %q", r.Code, r.Stderr)
+	}
+	rec, err := spawntest.ReadRecord(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if i := slices.Index(rec.Args, "--permission-mode"); i < 0 || rec.Args[i+1] != "auto" {
+		t.Errorf("args %q: no --permission-mode auto", rec.Args)
+	}
+	if got := rec.Values["BROODFORGE_MODE"]; got != "auto" {
+		t.Errorf("BROODFORGE_MODE = %q", got)
+	}
+	none := filepath.Join(t.TempDir(), "standin.json")
+	want(t, clitest.Run(t, standinEnv(t, "basic", 1, none), "--root", root, "engine", "run", "--real", "--credential", sub,
+		"--cwd", t.TempDir(), "--prompt", "x", "--mode", "yolo"), 2, "", "error: usage: engine run: --mode yolo: want prompt, policy or auto\n")
+	want(t, clitest.Run(t, standinEnv(t, "basic", 1, none), "engine", "run", "--fake", fixtures+"basic", "--prompt", "x", "--mode", "auto"), 2, "",
+		"error: usage: engine run: --mode needs --real\n")
+	if _, err := os.Stat(none); !os.IsNotExist(err) {
+		t.Errorf("an engine was spawned: %v", err)
+	}
+}
+
+// TestProofEngineRealDefaultsModeAuto: with no --mode a standalone real turn follows
+// defaults.mode, so an instance whose default is auto runs the engine with --permission-mode
+// auto, as a session in that mode would (session.PermissionModeOf).
+func TestProofEngineRealDefaultsModeAuto(t *testing.T) {
+	root, sub, _ := realRoot(t)
+	cfgPath := filepath.Join(root, "config", "instance.json")
+	b, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := strings.Replace(string(b), `"mode": "prompt", "harness"`, `"mode": "auto", "harness"`, 1)
+	if cfg == string(b) {
+		t.Fatal("the instance config has no prompt default to replace")
+	}
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	log := filepath.Join(t.TempDir(), "standin.json")
+	r := clitest.Run(t, standinEnv(t, "basic", 1, log), "--root", root, "engine", "run", "--real", "--credential", sub,
+		"--cwd", t.TempDir(), "--prompt", "x")
+	if r.Code != 0 {
+		t.Fatalf("exit %d stderr %q", r.Code, r.Stderr)
+	}
+	rec, err := spawntest.ReadRecord(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if i := slices.Index(rec.Args, "--permission-mode"); i < 0 || rec.Args[i+1] != "auto" {
+		t.Errorf("args %q: no --permission-mode auto", rec.Args)
+	}
+	if got := rec.Values["BROODFORGE_MODE"]; got != "auto" {
+		t.Errorf("BROODFORGE_MODE = %q", got)
+	}
+}
+
 // TestProofEngineRealRefusals: no credential, or one the store does not hold, exits with its
 // error line and no engine is spawned.
 func TestProofEngineRealRefusals(t *testing.T) {
