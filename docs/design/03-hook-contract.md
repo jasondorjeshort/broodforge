@@ -28,11 +28,11 @@ its absence is a hook error, below, so the first real turn proves it; on a subag
 `hook.log` alone, their absence the hook's test for the driver process's own call), prints the engine's hook
 output with `permissionDecision` `allow`, `deny` or `defer` and a reason, and exits 0; on a `pass`
 (Auto mode) it prints nothing and exits 0.
-Amended 2026-11-07 (ADR 0029; unbuilt until its spike and build pass): a prompt-mode process runs with
-`--permission-prompt-tool stdio`, its stdin held open until the `result` line or exit, closed on `result`,
-never while a `control_request` is unanswered; a policy or auto process is unchanged. Which waits hold a
-process: a subagent's prompt only, for at most `subagentPromptTimeoutMinutes` (ADR 0029 rule 6); a
-top-level prompt holds none, the `defer` round trip (C27) standing in every mode.
+Amended 2026-11-07 (ADR 0029 and its Amendments of that date; unbuilt until P40): a prompt-mode process runs with
+`--permission-prompt-tool stdio` and its stdin held open, and on a subagent's call in prompt mode the hook has a fourth
+answer, `ask`; the process, the request, the answers, the stdin lifetime, the turn's end with a request open, Stop and
+the sources are `03-hook-contract-prompt-tool.md`; a policy or auto process is unchanged. Which waits hold a process: a
+subagent's prompt only, bounded (ADR 0029 rule 6); a top-level prompt holds none, the `defer` round trip (C27) standing.
 
 Failure, and the engine contract this depends on (C39, held). The engine blocks a call only when
 the hook exits 2, and hands the model the hook's stderr wrapped as `PreToolUse:<tool> hook error:
@@ -68,11 +68,10 @@ line's `tool_result_meta[].permission_decision.source`: `hook` when the hook ans
 deny or an answered defer), `config` when the engine's default decided (a timeout, or a non-2
 exit the engine ignored), `unknown` when the field is absent, since the engine does not document
 it; the adapter's fixture tests assert the field on every recorded result, so an engine pin that
-drops it fails the fixture check instead of silencing the audit below. Amended 2026-11-07 (ADR 0029,
-unbuilt until its build pass): a call the bot answered on the stdio prompt tool by `request_id` carries
-`user_temporary` (observed, C41a) and is decider `participant` from the bot's own record whatever the
-value; a `user_*` source on a call the bot did not answer is `hook bypassed`, cause `engine answered`;
-the fixture check asserts the value on those results too. A `tool-result` whose text
+drops it fails the fixture check instead of silencing the audit below. Amended 2026-11-07 (ADR 0029 as
+amended that day, unbuilt until P40): a call the bot holds a request record for takes its decider from the record
+whatever `source` the stream carries or omits; the values observed on the stdio tool, the bypass causes of an
+unrecorded one and the fixture check's assertions are `03-hook-contract-prompt-tool.md` (What the bot sees). A `tool-result` whose text
 begins `<tool_use_error>` is the tool's own error (the engine refuses a standalone `sleep` in
 Bash before any hook runs, S2) and gets no decision row. Any other error result is classified by
 its text after stripping `PreToolUse:<tool> hook error: `, then an optional `[<command>]: `, then
@@ -183,8 +182,8 @@ succeeded Bash call (the engine's documented resume pattern, ADR 0028; an engine
 starts `Landed`). (3) The cell is `allow`: allow. (4) The cell is `ask` or `web`: by mode as above;
 `reviewer` and `land` are `defer` in every mode for the coordinator's own call, and `deny` with a message
 for a subagent's (stdin `agent_id` set; amended 2026-11-07, ADR 0029, unbuilt until its build pass, `policy`
-answering `defer` for both till then; the ADR also owns what a subagent's `ask`-cell call gets in prompt
-mode once its spike has run). The two bot-answered cells (ADR 0028): the hook
+answering `defer` for both till then; a subagent's `ask`-cell call in prompt mode is `ask`, answered on the
+stdio prompt tool, `03-hook-contract-prompt-tool.md`). The two bot-answered cells (ADR 0028): the hook
 defers as for a person's answer, but `session` answers them itself on `deferred_tool_use`, no venue
 prompt and no `waiting-for-answer`: for `reviewer` it bundles the tree under the session's lock,
 records the sha and the tree's cleanliness on the call and resumes `allow`; for `land` it parses the

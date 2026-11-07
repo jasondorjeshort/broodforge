@@ -13,6 +13,7 @@ Planned documents (added as we go):
 | `03-architecture.md` | Components and boundaries, the per-turn data flow, the engine adapter, configuration format, the process model per host, failure modes; the git section points to its companion |
 | `03-architecture-git.md` | Companion to 03: session ids, branches, trees and refs, attribution and the trailer rules, the check at handoff, the end of session per `handoff` value, and landing (ADR 0028: the one `Land` procedure, its gate, lock and refusal codes) |
 | `03-hook-contract.md` | Companion to 03: how the engine runs the PreToolUse hook and reads its exit codes, the hook environment, path checks, the policy table per reach and mode (the `reviewer` and `land` cells among them), the decision order, the resume with `updatedInput` |
+| `03-hook-contract-prompt-tool.md` | Companion to the hook contract: the bot's side of the engine's control protocol on a prompt-mode process (ADR 0029 as amended 2026-11-07): the stdio prompt tool and the stdin lifetime, the `control_request` and the answers, a request open at `result`, Stop and the interrupting deny, the sources and deciders, the `prompt-*` fixtures |
 | `04-ux.md` | The Discord flows, venues, buttons and message wording, Ticket Tool as the reference; a proposal with every owner decision marked and collected at the end |
 | `04-ux-session-start.md` | Sibling of 04: the header the agent's prompt opens with (`session show --header`) and the not-started flow when a project hook's runtime is missing (ADR 0025) |
 | `04-ux-session-controls.md` | Sibling of 04: the driver's switches in the venue (policy mode, model and effort, the idle timeout) and the pinned header's three select menus for model, effort and mode |
@@ -37,6 +38,7 @@ Planned documents (added as we go):
 | `08-implementation-plan-golden-sessions.md` | Companion to 08: the pass P32 (golden sessions: a recorded session's events replayed through the dry-run renderer by `discord render --golden`, its outbox and transcript diffed against the blessed ones, `--update` to re-bless, one transcript per session, the P11 replay fixtures promoted and one golden captured on the dev root), under 08's conventions |
 | `08-implementation-plan-landing.md` | Companion to 08: the passes P33 to P37 that build ADR 0028 (the `reviewer` cell and the pin at the defer; `Land`, `handoff: main`, `roles.land` and `session land`; the `land` cell, the push-word parse and the resume with `updatedInput`; `/session land` in the venue; the subagent probe), under 08's conventions |
 | `08-implementation-plan-auto-mode.md` | Companion to 08: the pass P39 that builds ADR 0020's amendment of 2026-11-01 (the engine's `auto` as the third mode: the config value, the hook's `pass`, `--permission-mode auto` per process, the switch and menu, the `engine` decider, the two shapes of the classifier's ask and the one real turn that closes C40), under 08's conventions |
+| `08-implementation-plan-subagent-prompt.md` | Companion to 08: the pass P40 that builds ADR 0029 as amended 2026-11-07, five briefs (the hook's `agent_id` and the subagent `reviewer` deny; the spike's fixtures imported; the stdio tool, the stdin writer and its lifetime; the pending requests, the bound, the drop at `result`, Stop and the deciders; the defer fixtures re-recorded on the owner's word), under 08's conventions |
 | `proposals/` | Draft proposals for major choices; each gets a critic pass before becoming an ADR |
 | `decisions/` | Architecture decision records (ADRs), one per decision |
 
@@ -129,6 +131,9 @@ Decisions so far (this project's own; Hatchery's records are in
   `subagentPromptTimeoutMinutes` with a deny-and-report on expiry and a deny-and-interrupt on Stop, end and
   shutdown; a subagent's `land` and `reviewer` calls are refused with a message in every mode; a hook `ask` that
   gets no request is detected and audited; the spike (C42, C44, C45 must hold) precedes any code; the stdio tool
-  for every prompt deferred as its own proposal. Amends 0020, 0028 (Decisions 3 to 5, the Deferred item) and 03.
+  for every prompt deferred as its own proposal. Amends 0020, 0028 (Decisions 3 to 5, the Deferred item) and 03. Amended
+  2026-11-07 with the spike's verdicts (every must-hold claim held, C46 failed): a request open at `result` is dropped and the
+  process has one turn, the bot ends the turn itself after an interrupting deny, the bot's request record outranks the stream's
+  `source`; the spec in `03-hook-contract-prompt-tool.md`, the build P40.
 
 The rest of `docs/` (handoff, ideas, reference, findings) is mapped in [`../README.md`](../README.md).

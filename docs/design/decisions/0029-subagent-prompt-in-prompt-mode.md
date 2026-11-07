@@ -18,14 +18,12 @@ Under `-p` the engine ends a subagent at a hook `defer`, passes nothing up and l
 prompt-mode session cannot delegate, and a subagent's push word or `reviewer` launch is lost silently in every mode,
 since the hook reads neither `agent_id` nor `agent_type` from its stdin. The owner asked for the fix (2026-11-07) and
 answered the proposal's three questions the same day (the agent line's wording is fine; `Allow <tool> this session`
-from a subagent's prompt grants the session, one list; the spike's real turns are approved). Verified: a hook `ask`
-under `--permission-prompt-tool stdio` becomes a `control_request` (`can_use_tool`, `tool_use_id`, the hook's reason
-as `decision_reason`) the engine waits on, an allow on stdin runs the call under the same id with `source`
-`user_temporary`, the engine exits only when stdin closes after `result`, and the scrub leaves the tool on (the
-critic's run, C41a, C43b, C45 for `Write`); the engine never times a pending ask out; its documentation recommends
-hook `defer` for a wait longer than a process should live; `stdio` is the Agent SDK's internal value, undocumented
-for the CLI, and the protocol has broken for subagents twice in this year's pins; a subagent's ask reaching the tool
-(C42) is unobserved. Ruled out: `auto` mode (the scrub forces it off, ADR 0020 C40c); a file or socket the hook
+from a subagent's prompt grants the session, one list; the spike's real turns are approved). Verified before this record, by
+the critic's run (`../proposals/0029-critic-review.md`: C41a, C43b, C45 for `Write`): a hook `ask` under the flag is a `control_request`
+the engine waits on, an allow on stdin runs the call under its id (`source` `user_temporary`), the engine exits when stdin closes after
+`result`, the scrub leaves the tool on; the engine never times a pending ask out and recommends hook `defer` for a long wait; `stdio` is
+the Agent SDK's internal value, undocumented for the CLI, its protocol broken for subagents twice this year; C42 was unobserved until
+the spike (Amendments). Ruled out: `auto` mode (the scrub forces it off, ADR 0020 C40c); a file or socket the hook
 trusts (ADRs 0020 and 0022: the hook has no channel to the bot); holding a process for every prompt (critic,
 blocking 1: against one process per turn, ADR 0026's held sessions and 04's year-long default wait).
 
@@ -97,15 +95,10 @@ blocking 1: against one process per turn, ADR 0026's held sessions and 04's year
    the field fails the check, not rule 1's branch; the build pass owes that assertion. The debug surface is `hook try
    --agent-id <id> --agent-type <type>`, `hook cases`, `session answer`, `session show` and `session tail` (the trace
    line indented under the `Agent` call), `engine record --mode prompt`.
-10. The spike before any `internal/` change (`07-spike-plan.md` conventions; the bot's command line, the scrub,
-    `--setting-sources user`, a stub hook; owner-approved turns). Must hold before code: C42 (a foreground subagent's
-    ask reaches the tool, then a background one's, the request's `agent_id` recorded for each, critic's objection 6; an
-    allow runs it; a deny with `interrupt` false leaves it running and reporting), C44 (a hook `allow` or `deny` never
-    asks the tool; a hook `ask` asks even for a safe-listed `Bash`), C45 for a subagent's `Bash` under the scrub, C51
-    (with the flag on and stdin held open, a top-level hook `defer` still ends the turn with `deferred_tool_use` and a
-    `result`, and the resume with `updatedInput` matches C27; the build pass re-records the existing defer fixtures
-    under the flag). Must be known, any outcome designed for: C41b, C43a, C47, C49. Cheaper if held: C46, C50.
-    C42 failing revives option A of the proposal; C44, C45 or C51 failing the same.
+10. The spike before any `internal/` change, run 2026-11-07 (`07-spike-plan.md` conventions; the bot's command line, the scrub, a stub
+    hook; owner-approved turns): its claims, the must-hold set (C42 foreground then background, C44, C45 for a subagent's `Bash`, C51),
+    the must-be-known set (C41b, C43a, C47, C49), the cheaper-if-held pair (C46, C50) and the option A fallback are the proposal's
+    "Claims to verify" and this file's history; the verdicts are the Amendments below. The build pass's last brief re-records the defer fixtures under the flag, on the owner's word (real turns).
 
 Out of scope: the coordinator's own prompts (unchanged); `auto` mode; the engine's `PermissionRequest` hook (no
 `tool_use_id`); `SendMessage` to a finished agent (a policy-table question of its own).
@@ -132,8 +125,16 @@ passes a subagent's `deferred_tool_use` up.
   subagent's prompt to `permissions.denyInsteadOfPrompting` by default (2.1.319's new setting): the `prompt-ask`
   fixture check is the detector for both (critic's objection 13).
 - Prediction, check when the spike runs (by 2026-11-21): C42 holds on 2.1.319 for a foreground subagent, and the
-  request carries the subagent's `tool_use_id`.
+  request carries the subagent's `tool_use_id`. Held, 2026-11-07 (`c42-allow`).
 - Prediction, check by 2027-02-07: no prompt-mode session on the pinned engine has raised `engine-prompt-tool-missing`,
   and no subagent in prompt mode has ended on an `ask`-cell call with `(Subagent completed but returned no output.)`.
 - Prediction, check when the engine pin is first raised after the build: the `prompt-ask` fixture check, not a live
   session, is what reports any change in the control protocol.
+
+## Amendments
+
+2026-11-07 (the spike, `../../findings/2026-11-07-spike-subagent-prompt-stdio-claims-for-adr-0029.md`, engine 2.1.319, twelve starts; a run is named where a verdict is leaned on, the finding's table being under review; the spec of what follows is `../03-hook-contract-prompt-tool.md`, the build P40 in `../08-implementation-plan-subagent-prompt.md`). Verdicts: C42 foreground and background, C44, C45, C50 and C51 hold; C46 fails (`c46-c50`); C41b: two requests open at once, answered out of order, each by its id; C43a: a stdin close is the engine's own deny, `source` `config`, `reason_type` `other`, the turn going on (`c43a`); C47: a kill drops the call, the resume patching the transcript only; C49: an interrupting deny kills the subagent, not the turn: the engine's stock text, no `tool_result_meta`, one more model call, then `end_turn` (`c49`). Option A stays shelved; item 10 is done.
+
+(1) Rule 2's "closed on `result`" stands and a process has one turn: at `result` with a request open the adapter answers each open request deny with `interrupt` true, closes stdin and calls the backend's interrupt at once (the kill as today: `TerminateJobObject` on Windows, SIGINT then SIGKILL at `spawn.interruptTimeoutSeconds` on Linux, the backend's own bound; nothing new reads the key); `session` records each `dropped`, decider `instance`, cause `the turn ended`, and ends the turn on that `result` with its usage. Why the kill, not the close alone (revised 2026-11-07 on the reviewer's reading): a close after `result` with a request open was never run; an answer written after `result` starts a second turn in the process within 3 s (`c42-bg`) and the engine's notification for the subagent the deny kills plausibly does the same, its allowed calls changing the tree with no `session` row; a kill with a request open is observed (`c47-kill`: exit 1, no further line, the resume patching the transcript only); the first `result`'s usage is in hand. The denies go first so an engine that reads them before the kill lands has the rejection in its transcript. First-result rule, every mode: the process's result is its first `result` line; a later line, a second `init`, `result`, call or `deferred_tool_use` included, is logged and never classified, prompted or resumed; the fake replays such a recording whole so the rule has a fixture test. With no request open the close stands and the engine exits (C51); an exit not seen within `engine.ClaudeCode.ExitTimeout` of the close (an internal value set from `spawn.interruptTimeoutSeconds` beside `spawn.Config.InterruptTimeout`, no new key) gets the same interrupt. Reading the second turn is the 2026-10-24 finding's option b, an ADR 0020 proposal of its own, its recording now in hand; till then the header's foreground rule stands. (2) Rule 7 without its wait: Stop, `end`, the idle end and shutdown answer each open request deny with `interrupt` true, then call the backend's interrupt at once, as a running turn's Stop does today; the turn ends on the exit event, never before it (no queued turn starts under a live process), outcome `interrupted`, usage as S2 (unknown on Windows; on Linux the engine's interrupt `result` when it comes before the SIGKILL), so `04-ux.md`'s Stop line stands; a `result`, a request or a `deferred_tool_use` between the denies and the exit is logged, not acted on. Stop keeps its actor as today's Stop on a deferred call: decision `deny`, decider `participant` or `host`, reason `interrupted`; the other three record `dropped`, decider `instance`, with 05's cause. Waiting for a `result` was refused: in that window the coordinator takes one more model call (`c49`) and a hook-allowed call of its runs during the Stop. (3) A call the bot holds a request record for takes its decider from the record (`participant`, `prompt-timeout`, `instance`) whatever `source` the stream carries or omits (`user_temporary` on an allow, `user_reject` on a deny, `config`/`other` on the abort, none on an interrupting deny; the fixture check asserts each); with no record, a `user_*` or `config`/`other` source is `hook bypassed`, cause `engine answered` or `engine aborted`.
+
+C46's consequence: rule 5 stands, the session allow recorded by the bot and applied by the hook, and an allow never carries `updatedPermissions` (the sent shape passes the engine's validator; a hook `ask` outranking a session rule is the likely, unconfirmed cause). C50 fires the Deferred `land` item's trigger: its own pass after P40. New surface: `engine run --real` and `engine record` take `--requests allow|deny` under `--mode prompt`; `session show`'s `pending:` line gains `agent <type>`; `hook try --agent-id <id> --agent-type <type>` and `hook cases` `agentId`, `agentType`; `config check` refuses `subagentPromptTimeoutMinutes` 0 and below; the fixtures are rule 9's five and the companion's table, imported with every home path rewritten and the recording account's plugin lines dropped, or re-recorded with `engine record --mode prompt`. `--permission-prompts` stays off every command line, asserted by the adapter's args test (P40c).
