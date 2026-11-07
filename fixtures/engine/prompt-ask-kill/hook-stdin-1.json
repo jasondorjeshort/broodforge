@@ -1,0 +1,3 @@
+[
+{"session_id":"2de6a6e7-d812-4a10-b614-69d2212a7277","transcript_path":"/home/user/.claude/projects/-home-user-bf-spike-c47-kill-tree/2de6a6e7-d812-4a10-b614-69d2212a7277.jsonl","cwd":"/home/user/bf-spike/c47-kill/tree","prompt_id":"c5611442-0c06-4e2d-8864-1c8e5ab21182","permission_mode":"default","agent_id":"af780d2b4bf160969","agent_type":"probe","effort":{"level":"medium"},"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hi","description":"Print hi via echo"},"tool_use_id":"toolu_01BGWT2bcFyymZNcmJtg42DG"}
+]

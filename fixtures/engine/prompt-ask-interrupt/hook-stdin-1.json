@@ -1,0 +1,3 @@
+[
+{"session_id":"767f965f-990a-4ffb-8a75-484a590f38ae","transcript_path":"/home/user/.claude/projects/-home-user-bf-spike-c49-tree/767f965f-990a-4ffb-8a75-484a590f38ae.jsonl","cwd":"/home/user/bf-spike/c49/tree","prompt_id":"31e2d584-5098-4c9c-b7be-19bb9f703c06","permission_mode":"default","agent_id":"a73c3c9ab67003909","agent_type":"probe","effort":{"level":"medium"},"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hi","description":"Print hi via echo"},"tool_use_id":"toolu_01TtW1H5QRaiYYDcAhv3RS5i"}
+]

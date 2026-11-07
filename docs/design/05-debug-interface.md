@@ -166,7 +166,7 @@ dir> --prompt "<text>" [--model <m>] [--mode prompt|policy|auto]` runs the real 
 directory, `--resume` the previous turn's, from `fixture.json` or its `init`) plus a `fixture.json` without delays (claim
 `recorded`, `engine.version`); an `--out` under `--root` or `--cwd` is `error: out-in-session`. The recorder redacts
 nothing, so record with a credential made for recording; before a commit the import rewrite (`go run
-./internal/tools/importfixture [--user <pc user>] <out> fixtures/engine/<name>`, P1) replaces the recording host's home with `/home/user`,
+./internal/tools/importfixture [--force] [--user <pc user>] [--turn2 <src2>] <src> fixtures/engine/<name>`, P1; `<src>` is a directory `engine record` wrote or a spike run directory, `--turn2` its second turn) rewrites every home path's user segment to `/home/user`, writes the hook's stdin as `hook-stdin-<n>.json`, and drops the account's own `hook_` system lines, listing them in `fixture.json` as `dropped`,
 then an agent that did not record reads every file with nested JSON decoded, confirms no name, email, hostname, real host path or
 repository content survives, and reports in a few lines what is account-level or personal and no script can classify (the owner
 decides on that report, never by reading the files).

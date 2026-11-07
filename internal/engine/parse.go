@@ -39,13 +39,15 @@ type rawLine struct {
 }
 
 // rawControlRequest is a control_request line's request, the subset a permission ask carries
-// (shape A of the hook contract's Auto mode; assumed, C40).
+// (c42-allow's shape, the 2026-11-07 spike).
 type rawControlRequest struct {
-	Subtype        string          `json:"subtype"`
-	ToolName       string          `json:"tool_name"`
-	Input          json.RawMessage `json:"input"`
-	ToolUseID      string          `json:"tool_use_id"`
-	DecisionReason json.RawMessage `json:"decision_reason"`
+	Subtype            string          `json:"subtype"`
+	ToolName           string          `json:"tool_name"`
+	Input              json.RawMessage `json:"input"`
+	ToolUseID          string          `json:"tool_use_id"`
+	DecisionReason     json.RawMessage `json:"decision_reason"`
+	DecisionReasonType string          `json:"decision_reason_type"`
+	AgentID            string          `json:"agent_id"`
 }
 
 // rawRateLimit is rate_limit_info's subset (03, the stream subset): the top-level
@@ -95,8 +97,9 @@ type rawBlock struct {
 type rawMeta struct {
 	ID                 string `json:"id"`
 	PermissionDecision *struct {
-		Source   *string `json:"source"`
-		Decision string  `json:"decision"`
+		Source     *string `json:"source"`
+		Decision   string  `json:"decision"`
+		ReasonType string  `json:"reason_type"`
 	} `json:"permission_decision"`
 }
 
@@ -198,13 +201,14 @@ func assistant(o *rawLine) *AssistantEvent {
 }
 
 func toolResults(o *rawLine) []EngineEvent {
-	decided, decision := map[string]string{}, map[string]string{}
+	decided, decision, reasonType := map[string]string{}, map[string]string{}, map[string]string{}
 	for _, m := range o.ToolResultMeta {
 		if m.PermissionDecision != nil && m.PermissionDecision.Source != nil {
 			decided[m.ID] = *m.PermissionDecision.Source
 		}
 		if m.PermissionDecision != nil {
 			decision[m.ID] = m.PermissionDecision.Decision
+			reasonType[m.ID] = m.PermissionDecision.ReasonType
 		}
 	}
 	var out []EngineEvent
@@ -217,6 +221,7 @@ func toolResults(o *rawLine) []EngineEvent {
 			IsError:            b.IsError != nil && *b.IsError,
 			Text:               resultText(b.Content),
 			DecidedBy:          decided[b.ToolUseID],
+			ReasonType:         reasonType[b.ToolUseID],
 			PermissionDecision: decision[b.ToolUseID],
 		}})
 	}
@@ -260,14 +265,15 @@ func result(o *rawLine) *ResultEvent {
 
 // prompt is the event of a control_request line asking whether a tool call may run, nil for
 // one that does not parse as such (another subtype, no tool name or tool_use_id), which stays
-// unknown. The reason is decision_reason as a string, or as an object's "reason" or
-// "message" field, the form being unobserved (C40).
+// unknown. The reason is decision_reason as a string (a hook's `ask`, c42-allow), or as an
+// object's "reason" or "message" field (the Auto mode's form, unobserved, C40).
 func prompt(o *rawLine) *PromptEvent {
 	r := o.Request
 	if r == nil || r.Subtype != "can_use_tool" || r.ToolName == "" || r.ToolUseID == "" {
 		return nil
 	}
-	p := &PromptEvent{RequestID: o.RequestID, ToolUseID: r.ToolUseID, Tool: r.ToolName, Input: r.Input}
+	p := &PromptEvent{RequestID: o.RequestID, ToolUseID: r.ToolUseID, Tool: r.ToolName, Input: r.Input,
+		DecisionReasonType: r.DecisionReasonType, AgentID: r.AgentID}
 	if len(p.Input) == 0 {
 		p.Input = json.RawMessage("null")
 	}

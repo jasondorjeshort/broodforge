@@ -105,6 +105,11 @@ func oracle(t *testing.T, line []byte) (kinds []EventKind, toolErrors []bool) {
 	return []EventKind{KindUnknown}, nil
 }
 
+// initsPerTurn names the turns with other than one init: prompt-ask-background's engine began a
+// second turn itself after an answer written past the first result (c42-bg; ADR 0029, Amendments
+// 2026-11-07, the first-result rule).
+var initsPerTurn = map[string]int{"prompt-ask-background/turn-1.jsonl": 2}
+
 // TestEveryFixtureReplays parses every recorded turn and compares the parser with the oracle,
 // line by line, so a toolchain or parser change that alters what is read fails here first
 // (ADR 0023, Types and JSON).
@@ -176,8 +181,12 @@ func TestEveryFixtureReplays(t *testing.T) {
 					}
 				}
 			}
-			if inits != 1 {
-				t.Errorf("%s turn %d: %d init events, want 1", dir, turn.N, inits)
+			want, ok := initsPerTurn[filepath.Base(dir)+"/"+filepath.Base(TurnFile(dir, turn.N))]
+			if !ok {
+				want = 1
+			}
+			if inits != want {
+				t.Errorf("%s turn %d: %d init events, want %d", dir, turn.N, inits, want)
 			}
 		}
 	}
@@ -185,7 +194,8 @@ func TestEveryFixtureReplays(t *testing.T) {
 
 // TestToolResultMeta: every recorded tool result carries tool_result_meta with a source, so
 // decidedBy is set, except a <tool_use_error> the engine raised before any hook ran
-// (interrupted turn 1, S2).
+// (interrupted turn 1, S2). The result of a call the turn holds a request for is the prompt
+// fixture check's (TestPromptFixtures): its source is the answer's.
 func TestToolResultMeta(t *testing.T) {
 	var exceptions []string
 	for _, dir := range fixtureDirs(t) {
@@ -194,8 +204,15 @@ func TestToolResultMeta(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, turn := range fx.Turns {
-			for _, ev := range parseTurn(t, dir, turn.N) {
-				if ev.Kind != KindToolResult {
+			evs := parseTurn(t, dir, turn.N)
+			requested := map[string]bool{}
+			for _, ev := range evs {
+				if ev.Kind == KindPrompt {
+					requested[ev.Prompt.ToolUseID] = true
+				}
+			}
+			for _, ev := range evs {
+				if ev.Kind != KindToolResult || requested[ev.ToolResult.ToolUseID] {
 					continue
 				}
 				tr := ev.ToolResult

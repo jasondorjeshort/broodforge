@@ -1,0 +1,21 @@
+{
+  "claim": "C47",
+  "engineVersion": "2.1.319",
+  "recorded": "2026-11-07",
+  "turns": [
+    {
+      "n": 1,
+      "exit": 1,
+      "engineSessionId": "2de6a6e7-d812-4a10-b614-69d2212a7277"
+    },
+    {
+      "n": 2,
+      "exit": 0,
+      "engineSessionId": "2de6a6e7-d812-4a10-b614-69d2212a7277"
+    }
+  ],
+  "dropped": [
+    "system/hook_started",
+    "system/hook_response"
+  ]
+}

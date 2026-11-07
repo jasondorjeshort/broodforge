@@ -108,12 +108,13 @@ type EngineEvent struct {
 	Unknown    *UnknownEvent
 }
 
-// PromptEvent is a control_request line asking whether a tool call may run: shape A of the
-// hook contract's Auto mode, the engine's own check asking and then waiting. The line's form
-// is assumed, not observed (C40 of ADR 0020): the stream-json control protocol's
+// PromptEvent is a control_request line asking whether a tool call may run: under
+// --permission-prompt-tool stdio, a hook `ask` (ADR 0029 rule 3), and shape A of the hook
+// contract's Auto mode. The line's form is c42-allow's (the 2026-11-07 spike):
 // {"type":"control_request","request_id":...,"request":{"subtype":"can_use_tool","tool_name":...,
-// "input":{...},"tool_use_id":...,"decision_reason":...}}. A control_request that does not
-// carry a tool name and a tool_use_id stays an unknown event.
+// "input":{...},"decision_reason":...,"decision_reason_type":"hook",...,"tool_use_id":...,
+// "agent_id":...}}. A control_request that does not carry a tool name and a tool_use_id stays an
+// unknown event.
 type PromptEvent struct {
 	RequestID string          `json:"requestId"`
 	ToolUseID string          `json:"toolUseId"`
@@ -121,6 +122,12 @@ type PromptEvent struct {
 	Input     json.RawMessage `json:"input"`
 	// Reason is the engine's own reason for asking, "" when the line carries none.
 	Reason string `json:"reason"`
+	// DecisionReasonType is the request's decision_reason_type ("hook" for a hook's `ask`), ""
+	// when the line carries none.
+	DecisionReasonType string `json:"decisionReasonType"`
+	// AgentID is the request's agent_id, the asking subagent's task_id; "" for the coordinator's
+	// own call, whose request carries no agent_id.
+	AgentID string `json:"agentId"`
 }
 
 // UnknownEvent is a line the parser does not map: its type and subtype when it is a JSON
@@ -160,13 +167,17 @@ type AssistantEvent struct {
 }
 
 // ToolResultEvent is one tool_result block of a user line. DecidedBy is the matching
-// tool_result_meta entry's permission_decision.source ("hook" or "config"), empty when the
-// line carries none (C39).
+// tool_result_meta entry's permission_decision.source ("hook", "config", and under the stdio
+// prompt tool "user_temporary" or "user_reject"), empty when the line carries none (C39; a deny
+// with interrupt true carries none, c49).
 type ToolResultEvent struct {
 	ToolUseID string `json:"toolUseId"`
 	IsError   bool   `json:"isError"`
 	Text      string `json:"text"`
 	DecidedBy string `json:"decidedBy,omitempty"`
+	// ReasonType is the same entry's permission_decision.reason_type ("hook"; "other" on a
+	// request the engine aborted at a stdin close, c43a), empty when the line carries none.
+	ReasonType string `json:"reasonType,omitempty"`
 	// PermissionDecision is the same entry's permission_decision.decision, "accept" when the
 	// call was let run and "reject" when it was refused; empty when the line carries none. It
 	// tells a call that ran and failed from one that was refused (03-hook-contract.md, What the

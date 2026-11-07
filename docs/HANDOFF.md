@@ -1,12 +1,12 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-11-07 by main session (the s000g loss explained; ADR 0029; P40a built; windows optional)
+Updated: 2026-11-07 by main session (the s000g loss explained; ADR 0029; P40a and P40b built; windows optional)
 
 ## Now
 
-- Account `jdorje`. Pushed at `c716453`; unpushed on `main`: the ADR 0029 owner wording and P40a (reviewed; the
-  push waits on the owner's word). The s000g loss is explained (the engine ends a subagent at a hook
+- Account `jdorje`. Pushed at `51f21fc` (P40a); unpushed on `main`: P40b (the ten `prompt-*` fixtures, the
+  importer, the parser fields; reviewed). The s000g loss is explained (the engine ends a subagent at a hook
   `defer`; `2026-10-23` finding, Third look) and designed (ADR 0029, spike held: `2026-11-07-spike-...-adr-0029.md`);
   the build is P40, five briefs in `08-implementation-plan-subagent-prompt.md`. Delegate in policy mode till P40d lands.
 - Engine 2.1.319; some accounts have no five-hour window: parser, store (schema 6) and CLI take either shape.
@@ -15,9 +15,9 @@ Updated: 2026-11-07 by main session (the s000g loss explained; ADR 0029; P40a bu
 
 ## Next
 
-1. `coder` P40b (the fixtures from `<scratchpad>/bf-spike-0029/`, paths rewritten; P40a's hook-stdin shape is
-   built); then P40c (the adapter), P40d (`session`, mid-pass commit), P40e (re-recorded `defer`/`parallel`
-   fixtures and one live prompt-mode session: the owner's word). `architect` later: the `web` cell's session allow.
+1. `coder` P40c (the adapter: the flag, the stdin writer, the kill at `result`, `Answer`, the fake, `--requests`);
+   then P40d (`session`, mid-pass commit), P40e (re-recorded `defer`/`parallel` fixtures and one live prompt-mode
+   session: the owner's word). The owner's plugin name is on `~/.claude/privacy-never.txt` (2026-11-07).
 2. `runner`/`tester` carry-back Sends (`carry-back` skill): the usage-gate pool advice (`2026-11-07` idea), the
    post-edit hook trap (`2026-11-07` idea), the commit-skill departure, the heredoc-reason idea, the `--staged` scan.
 3. `architect`: `auto` under the scrub (opt out on `auto` processes, undoing C34 for Bash, or `permissions.allow`); the

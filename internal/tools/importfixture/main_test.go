@@ -57,6 +57,9 @@ func TestRewrite(t *testing.T) {
 		{"a segment that only starts like the spike root is under home",
 			`C:/Users/alice/AppData/Local/Temp/bf-spike2/x`,
 			`/home/user/AppData/Local/Temp/bf-spike2/x`},
+		{"ADR 0029's spike root, path and slug alike",
+			`"transcript_path":"C:\\Users\\alice\\.claude\\projects\\C--Users-alice-AppData-Local-Temp-bf-spike-0029-c42-allow-tree\\s.jsonl","cwd":"C:\\Users\\alice\\AppData\\Local\\Temp\\bf-spike-0029\\c42-allow\\tree"`,
+			`"transcript_path":"/home/user/.claude/projects/-home-user-bf-spike-c42-allow-tree/s.jsonl","cwd":"/home/user/bf-spike/c42-allow/tree"`},
 	}
 	r := newRewriter(user)
 	for _, c := range cases {
@@ -80,6 +83,18 @@ func TestRewriteMSYSHome(t *testing.T) {
 	for _, in := range []string{`/mnt/c/Users/alice/x`, `a/c/Users/alice/x`} {
 		if got := string(newRewriter(user).rewrite([]byte(in))); got != in {
 			t.Errorf("changed %s to %s", in, got)
+		}
+	}
+}
+
+// TestRewriteAfterJSONEscape: a home path that begins right after a JSON escape (\n, \t) is rewritten, not left to the refusal.
+func TestRewriteAfterJSONEscape(t *testing.T) {
+	for in, want := range map[string]string{
+		`"stdout":"x\nC:\\Users\\alice\\y"`: `"stdout":"x\n/home/user/y"`,
+		`"stdout":"x\t/c/Users/alice/y"`:    `"stdout":"x\t/home/user/y"`,
+	} {
+		if got := string(newRewriter(user).rewrite([]byte(in))); got != want {
+			t.Errorf("%s\n got  %s\n want %s", in, got, want)
 		}
 	}
 }
@@ -158,7 +173,7 @@ func TestImportRecordedDirectory(t *testing.T) {
 		"{\"type\":\"result\",\"result\":\"hello\"}\n"
 	src := writeFiles(t, map[string]string{"turn-1.jsonl": turn, "fixture.json": recordedFx, "received-1.json": "{}"})
 	dst := filepath.Join(t.TempDir(), "recorded-read")
-	if err := importDir(src, dst, user, false); err != nil {
+	if err := importDir(src, dst, "", user, false); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(filepath.Join(dst, "turn-1.jsonl"))
@@ -194,7 +209,7 @@ func TestImportRecordedRefusals(t *testing.T) {
 	} {
 		src := writeFiles(t, files)
 		dst := filepath.Join(t.TempDir(), "out")
-		if err := importDir(src, dst, user, false); err == nil {
+		if err := importDir(src, dst, "", user, false); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 		if _, err := os.Stat(dst); err == nil {
@@ -206,7 +221,7 @@ func TestImportRecordedRefusals(t *testing.T) {
 func TestMetasBesideFixtureJSONRefused(t *testing.T) {
 	src := writeFiles(t, map[string]string{"turn-1.jsonl": "{}\n", "meta-1.json": "{}", "fixture.json": recordedFx})
 	dst := filepath.Join(t.TempDir(), "out")
-	if err := importDir(src, dst, user, false); err == nil {
+	if err := importDir(src, dst, "", user, false); err == nil {
 		t.Fatal("meta-1.json and fixture.json together accepted")
 	}
 	if _, err := os.Stat(dst); err == nil {
@@ -415,6 +430,159 @@ func TestEventsReadsUserFromAnyHomeForm(t *testing.T) {
 		}
 		if _, err := os.Stat(path + ".tmp"); err == nil {
 			t.Errorf("%s: the temporary file is left", name)
+		}
+	}
+}
+
+// runDir writes a spike run directory named name (a key of claims) under a fresh temporary
+// directory and returns its path.
+func runDir(t *testing.T, name string, files map[string]string) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), name)
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for f, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+const (
+	runHookStarted  = `{"type":"system","subtype":"hook_started","hook_name":"SessionStart:startup","session_id":"e1"}` + "\n"
+	runHookResponse = `{"type":"system","subtype":"hook_response","output":"delete C:\\Users\\alice\\.claude\\plugin-flag to stop","session_id":"e1"}` + "\n"
+	runInit         = `{"type":"system","subtype":"init","cwd":"C:\\Users\\alice\\AppData\\Local\\Temp\\bf-spike-0029\\c42-allow\\tree","session_id":"e1","skills":["my-plugin:my-plugin","debug"],"plugins":[{"name":"my-plugin","path":"C:\\Users\\alice\\.claude\\plugins\\cache\\my-plugin\\my-plugin\\0.1.0","source":"my-plugin@my-plugin"},{"name":"cc-plugin-telemetry","path":"builtin"}],"claude_code_version":"2.1.319"}` + "\n"
+	runAssistant    = `{"type":"assistant","message":{"id":"m1"},"timestamp":"2026-11-07T18:23:07.004Z"}` + "\n"
+	runRequest      = `{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","tool_use_id":"t2","agent_id":"a1"}}` + "\n"
+	runResult       = `{"type":"result","subtype":"success","stop_reason":"end_turn"}` + "\n"
+	runStdinAgent   = `{"transcript_path":"C:\\Users\\alice\\.claude\\projects\\C--Users-alice-AppData-Local-Temp-bf-spike-0029-c42-allow-tree\\e1.jsonl","tool_name":"Agent","tool_use_id":"t1"}`
+	runStdinBash    = `{"transcript_path":"C:\\Users\\alice\\.claude\\projects\\C--Users-alice-AppData-Local-Temp-bf-spike-0029-c42-allow-tree\\e1.jsonl","agent_id":"a1","agent_type":"probe","tool_name":"Bash","tool_use_id":"t2"}`
+)
+
+// TestImportRunDirectories: a spike run directory and its --turn2 import as two turns: the plugin's
+// hook_ lines dropped and named in fixture.json, every other byte kept but for the rewrite, the
+// subagent's hook stdin entries as hook-stdin-<n>.json, fixture.json from the streams and driver.log.
+func TestImportRunDirectories(t *testing.T) {
+	src := runDir(t, "c42-allow", map[string]string{
+		"stream.jsonl":     runHookStarted + runHookResponse + runInit + runAssistant + runRequest + runResult,
+		"hook-stdin.jsonl": runStdinAgent + "\n" + runStdinBash + "\n",
+		"driver.log":       "[0.1s] system/init\n[9.0s] exit code=0 signal=null session=e1\n",
+	})
+	src2 := runDir(t, "c42-allow-resume", map[string]string{
+		"stream.jsonl":     runHookStarted + runInit + runAssistant + runResult,
+		"hook-stdin.jsonl": runStdinAgent + "\n",
+	})
+	dst := filepath.Join(t.TempDir(), "prompt-ask-allow")
+	if code := run([]string{"--user", user, "--turn2", src2, src, dst}); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	read := func(name string) string {
+		b, err := os.ReadFile(filepath.Join(dst, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	init := `{"type":"system","subtype":"init","cwd":"/home/user/bf-spike/c42-allow/tree","session_id":"e1","skills":["account-plugin:account-plugin","debug"],"plugins":[{"name":"account-plugin","path":"/home/user/.claude/plugins/cache/account-plugin/account-plugin/0.1.0","source":"account-plugin@account-plugin"},{"name":"cc-plugin-telemetry","path":"builtin"}],"claude_code_version":"2.1.319"}` + "\n"
+	if got, want := read("turn-1.jsonl"), init+runAssistant+runRequest+runResult; got != want {
+		t.Errorf("turn-1.jsonl:\n got  %s\n want %s", got, want)
+	}
+	if got, want := read("turn-2.jsonl"), init+runAssistant+runResult; got != want {
+		t.Errorf("turn-2.jsonl:\n got  %s\n want %s", got, want)
+	}
+	wantStdin := "[\n" + `{"transcript_path":"/home/user/.claude/projects/-home-user-bf-spike-c42-allow-tree/e1.jsonl","agent_id":"a1","agent_type":"probe","tool_name":"Bash","tool_use_id":"t2"}` + "\n]\n"
+	if got := read("hook-stdin-1.json"); got != wantStdin {
+		t.Errorf("hook-stdin-1.json:\n got  %s\n want %s", got, wantStdin)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "hook-stdin-2.json")); err == nil {
+		t.Error("hook-stdin-2.json written for a turn with no subagent call")
+	}
+	wantFx := `{
+  "claim": "C42",
+  "engineVersion": "2.1.319",
+  "recorded": "2026-11-07",
+  "turns": [
+    {
+      "n": 1,
+      "exit": 0,
+      "engineSessionId": "e1"
+    },
+    {
+      "n": 2,
+      "exit": 0,
+      "engineSessionId": "e1"
+    }
+  ],
+  "dropped": [
+    "system/hook_started",
+    "system/hook_response"
+  ]
+}
+`
+	if got := read("fixture.json"); got != wantFx {
+		t.Errorf("fixture.json:\n%s\nwant\n%s", got, wantFx)
+	}
+	left, _ := os.ReadDir(dst)
+	if len(left) != 4 {
+		t.Errorf("wrote %v, want two turns, hook-stdin-1.json and fixture.json", left)
+	}
+}
+
+func TestImportRunRefusals(t *testing.T) {
+	stream := runInit + runAssistant + runResult
+	for name, c := range map[string]struct {
+		run   string
+		files map[string]string
+		turn2 bool
+	}{
+		"no claim for the run":          {"c99", map[string]string{"stream.jsonl": stream}, false},
+		"no init":                       {"c42-allow", map[string]string{"stream.jsonl": runAssistant + runResult}, false},
+		"no timestamp":                  {"c42-allow", map[string]string{"stream.jsonl": runInit + runResult}, false},
+		"no driver.log and no result":   {"c47-kill", map[string]string{"stream.jsonl": runInit + runAssistant}, false},
+		"driver.log without exit":       {"c42-allow", map[string]string{"stream.jsonl": stream, "driver.log": "[1s] user\n"}, false},
+		"hook stdin not JSON":           {"c42-allow", map[string]string{"stream.jsonl": stream, "hook-stdin.jsonl": "{x\n"}, false},
+		"user survives in hook stdin":   {"c42-allow", map[string]string{"stream.jsonl": stream, "hook-stdin.jsonl": `{"agent_id":"a","p":"/mnt/c/Users/alice/x"}` + "\n"}, false},
+		"user survives the hook drop":   {"c42-allow", map[string]string{"stream.jsonl": stream + `{"type":"system","subtype":"x","p":"/mnt/c/Users/alice"}` + "\n"}, false},
+		"account plugin name survives":  {"c42-allow", map[string]string{"stream.jsonl": stream + `{"type":"user","text":"my-plugins"}` + "\n"}, false},
+		"--turn2 on a turn-file source": {"c42-allow", map[string]string{"turn-1.jsonl": stream, "fixture.json": recordedFx}, true},
+	} {
+		src := runDir(t, c.run, c.files)
+		dst := filepath.Join(t.TempDir(), "out")
+		turn2 := ""
+		if c.turn2 {
+			turn2 = src
+		}
+		if err := importDir(src, dst, turn2, user, false); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+		if _, err := os.Stat(dst); err == nil {
+			t.Errorf("%s: wrote %s", name, dst)
+		}
+	}
+}
+
+// TestImportRecordedDropsHookLines: a recorded directory's hook_ lines go too, and its
+// fixture.json gains dropped.
+func TestImportRecordedDropsHookLines(t *testing.T) {
+	src := writeFiles(t, map[string]string{"turn-1.jsonl": runHookStarted + "{\"type\":\"result\"}\n", "fixture.json": recordedFx})
+	dst := filepath.Join(t.TempDir(), "out")
+	if err := importDir(src, dst, "", user, false); err != nil {
+		t.Fatal(err)
+	}
+	turn, _ := os.ReadFile(filepath.Join(dst, "turn-1.jsonl"))
+	fx, _ := os.ReadFile(filepath.Join(dst, "fixture.json"))
+	if string(turn) != "{\"type\":\"result\"}\n" || !bytes.Contains(fx, []byte(`"dropped": [`)) || !bytes.Contains(fx, []byte(`"system/hook_started"`)) {
+		t.Errorf("turn %q, fixture.json %s", turn, fx)
+	}
+}
+
+func TestDestinationInsideRunSpikeRootRefused(t *testing.T) {
+	src := "C:/Users/alice/AppData/Local/Temp/bf-spike-0029/c42-allow"
+	for _, dst := range []string{src, "C:/Users/alice/AppData/Local/Temp/bf-spike-0029/c49", "C:/Users/alice/AppData/Local/Temp/bf-spike-0029"} {
+		if err := checkDst(src, dst); err == nil {
+			t.Errorf("accepted %s", dst)
 		}
 	}
 }
