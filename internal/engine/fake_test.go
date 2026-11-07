@@ -90,7 +90,7 @@ func TestFakeWritesReceived(t *testing.T) {
 		}
 	}
 	// args: the flags the request sets on the real engine (RequestArgs).
-	if want := `["--resume","e1","--append-system-prompt-file","/r/workflow/s0001/instructions.md"]`; compactJSON(keys["args"]) != want {
+	if want := `["--permission-mode","default","--resume","e1","--append-system-prompt-file","/r/workflow/s0001/instructions.md"]`; compactJSON(keys["args"]) != want {
 		t.Errorf("args %s, want %s", keys["args"], want)
 	}
 }

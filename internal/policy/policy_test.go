@@ -24,8 +24,19 @@ func TestTable(t *testing.T) {
 		want  Decision
 	}
 	var rows []row
+	// Auto mode (03-hook-contract.md, Auto mode) follows from the other two: the ask cell (policy
+	// allow, prompt defer) is a pass, the web cell (policy deny, prompt defer) a deny, and every
+	// other cell is answered as in both. So auto never allows what policy mode would not.
 	add := func(tool string, r Reach, paths []Path, policy, prompt Decision) {
-		rows = append(rows, row{tool, r, paths, ModePolicy, policy}, row{tool, r, paths, ModePrompt, prompt})
+		auto := prompt
+		if prompt == Defer {
+			auto = Pass
+			if policy == Deny {
+				auto = Deny
+			}
+		}
+		rows = append(rows, row{tool, r, paths, ModePolicy, policy}, row{tool, r, paths, ModePrompt, prompt},
+			row{tool, r, paths, ModeAuto, auto})
 	}
 	for _, tool := range []string{"Read", "Glob", "Grep", "LS", "NotebookRead"} {
 		add(tool, ReachReadOnly, []Path{inTree}, Allow, Allow)
@@ -85,6 +96,12 @@ func TestDecisionOrder(t *testing.T) {
 		{"session allow", Request{Tool: "Bash", ToolUseID: "toolu_01", Mode: ModePrompt, Reach: ReachCode, SessionAllow: []string{"Write", "Bash"}}, Allow, reasonSessionAllow},
 		{"session allow does not cover web", Request{Tool: "WebFetch", ToolUseID: "toolu_01", Mode: ModePrompt, Reach: ReachCode, SessionAllow: []string{"WebFetch"}}, Defer, reasonDefer},
 		{"session allow does not lift deny", Request{Tool: "Bash", ToolUseID: "toolu_01", Mode: ModePrompt, Reach: ReachReadOnly, SessionAllow: []string{"Bash"}}, Deny, DenyPrefix},
+		{"auto: the ask cell passes", Request{Tool: "Bash", ToolUseID: "toolu_01", Mode: ModeAuto, Reach: ReachCode}, Pass, reasonPass},
+		{"auto: an answer before the pass", Request{Tool: "Bash", ToolUseID: "toolu_01", Mode: ModeAuto, Reach: ReachCode, Answer: allow}, Allow, reasonAnswerAllow},
+		{"auto: an answer for another id", Request{Tool: "Bash", ToolUseID: "toolu_02", Mode: ModeAuto, Reach: ReachCode, Answer: allow}, Pass, reasonPass},
+		{"auto: session allow", Request{Tool: "Bash", ToolUseID: "toolu_01", Mode: ModeAuto, Reach: ReachCode, SessionAllow: []string{"Bash"}}, Allow, reasonSessionAllow},
+		{"auto: web is deny", Request{Tool: "WebFetch", ToolUseID: "toolu_01", Mode: ModeAuto, Reach: ReachCode, SessionAllow: []string{"WebFetch"}}, Deny, DenyPrefix},
+		{"auto: the reviewer cell defers", Request{Tool: "Agent", ToolUseID: "toolu_01", Mode: ModeAuto, Reach: ReachCode, SubagentType: ReviewerAgent}, Defer, reasonReviewer},
 	}
 	for _, c := range cases {
 		got := Decide(c.req)

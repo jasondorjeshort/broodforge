@@ -80,6 +80,13 @@ func oracle(t *testing.T, line []byte) (kinds []EventKind, toolErrors []bool) {
 		return []EventKind{KindResult}, nil
 	case typ == "rate_limit_event":
 		return []EventKind{KindRateLimit}, nil
+	case typ == "control_request":
+		req, _ := o["request"].(map[string]any)
+		name, _ := req["tool_name"].(string)
+		id, _ := req["tool_use_id"].(string)
+		if req["subtype"] == "can_use_tool" && name != "" && id != "" {
+			return []EventKind{KindPrompt}, nil
+		}
 	case typ == "user":
 		msg, _ := o["message"].(map[string]any)
 		content, _ := msg["content"].([]any)
@@ -155,6 +162,10 @@ func TestEveryFixtureReplays(t *testing.T) {
 					case KindRateLimit:
 						if ev.RateLimit.Status == "" || ev.RateLimit.SevenDay.ResetsAt == 0 || ev.RateLimit.FiveHour.ResetsAt == 0 {
 							t.Errorf("%s turn %d line %d: rate-limit without status or windows: %+v", dir, turn.N, i+1, ev.RateLimit)
+						}
+					case KindPrompt:
+						if ev.Prompt.ToolUseID == "" || ev.Prompt.Tool == "" {
+							t.Errorf("%s turn %d line %d: prompt without a tool or an id", dir, turn.N, i+1)
 						}
 					case KindExit, KindUnknown:
 					}
@@ -540,5 +551,36 @@ func TestRateLimitMalformedNeverRefuses(t *testing.T) {
 		FiveHour: Window{Utilization: 0.3}, SevenDay: Window{Utilization: 0.5, ResetsAt: 1792728000}}
 	if len(evs) != 1 || evs[0].Kind != KindRateLimit || evs[0].RateLimit == nil || *evs[0].RateLimit != want {
 		t.Errorf("bad fields beside good: %+v, want %+v", evs, want)
+	}
+}
+
+// TestParsePrompt: a control_request asking about a tool call is a prompt event (shape A of
+// the hook contract's Auto mode, assumed); one that does not parse as such stays unknown.
+func TestParsePrompt(t *testing.T) {
+	for _, c := range []struct {
+		line, reason string
+		prompt       bool
+	}{
+		{`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"x"},"tool_use_id":"toolu_1","decision_reason":"risky"}}`, "risky", true},
+		{`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{},"tool_use_id":"toolu_1","decision_reason":{"type":"classifier","reason":"why"}}}`, "why", true},
+		{`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","tool_use_id":"toolu_1"}}`, "", true},
+		{`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{}}}`, "", false},
+		{`{"type":"control_request","request_id":"r1","request":{"subtype":"interrupt"}}`, "", false},
+		{`{"type":"control_request","request_id":"r1","request":"not an object"}`, "", false},
+		{`{"type":"control_request","request_id":"r1"}`, "", false},
+	} {
+		evs := ParseLine([]byte(c.line))
+		if len(evs) != 1 {
+			t.Fatalf("%s: %d events", c.line, len(evs))
+		}
+		switch {
+		case c.prompt && (evs[0].Kind != KindPrompt || evs[0].Prompt.Tool != "Bash" || evs[0].Prompt.ToolUseID != "toolu_1" || evs[0].Prompt.Reason != c.reason):
+			t.Errorf("%s: %+v, want a prompt with reason %q", c.line, evs[0], c.reason)
+		case !c.prompt && evs[0].Kind != KindUnknown:
+			t.Errorf("%s: kind %s, want unknown", c.line, evs[0].Kind)
+		}
+		if _, err := evs[0].MarshalJSON(); err != nil {
+			t.Errorf("%s: %v", c.line, err)
+		}
 	}
 }

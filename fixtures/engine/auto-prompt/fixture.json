@@ -1,0 +1,15 @@
+{
+  "claim": "hand-written",
+  "turns": [
+    {
+      "n": 1,
+      "exit": 1,
+      "engineSessionId": "a0705e00-0000-4000-8000-00000000000a"
+    },
+    {
+      "n": 2,
+      "exit": 0,
+      "engineSessionId": "a0705e00-0000-4000-8000-00000000000a"
+    }
+  ]
+}

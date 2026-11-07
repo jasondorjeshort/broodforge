@@ -373,7 +373,7 @@ func TestRefusals(t *testing.T) {
 		{"no credential", StartRequest{Channel: "100", As: "1002"}, CodeNoCredential},
 		{"needs login", StartRequest{Channel: "100", As: "1001", Credential: "cred-b"}, CodeCredentialStatus},
 		{"unknown credential", StartRequest{Channel: "100", As: "1001", Credential: "cred-zz"}, "unknown-credential"},
-		{"bad mode", StartRequest{Channel: "100", As: "1001", Mode: "auto"}, CodeBadArgs},
+		{"bad mode", StartRequest{Channel: "100", As: "1001", Mode: "acts-freely"}, CodeBadArgs},
 		{"unknown fixture", StartRequest{Channel: "100", As: "1001", Fixture: "nope"}, CodeUnknownFixture},
 	} {
 		if _, err := h.svc.Start(ctx, c.req); code(err) != c.want {

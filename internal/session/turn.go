@@ -315,6 +315,7 @@ func (s *Service) startTurnLocked(l *live, msgs []queued) (int, error) {
 	}
 	l.turn, l.state, l.turnMode, l.requester, l.proc = n, StateRunningTurn, l.mode, msgs[0].user, 0
 	l.turnIn, l.turnOut, l.turnOutUnknown, l.turnModels = 0, 0, false, map[string]int64{}
+	l.turnEngineAsked = false
 	// Text is the whole input, From lines included: the transcript shows every message (04).
 	l.log.add(Event{Time: now, Type: EventTurnStarted, Turn: n, User: msgs[0].user, Summary: firstRunes(input, summaryRunes), Text: input})
 	_ = s.startProcessLocked(l, input, nil, "") // a failure ends the turn and publishes it
@@ -370,6 +371,9 @@ func (s *Service) startProcessLocked(l *live, input string, answer *engine.TurnA
 		// trailer lines reach commits through the trailers file and the commit-msg hook alone.
 		SystemPromptFile: l.wf.instructions,
 		AgentsFile:       l.wf.agents,
+		// The engine's own mode, set per process from the mode the turn started with, as
+		// BROODFORGE_MODE is (ADR 0020 as amended 2026-11-01).
+		PermissionMode: PermissionModeOf(l.turnMode),
 	}
 	h, err := l.eng.StartTurn(req)
 	if err != nil {
@@ -379,8 +383,41 @@ func (s *Service) startProcessLocked(l *live, input string, answer *engine.TurnA
 	l.running = &h
 	done := make(chan struct{})
 	l.turnDone = done
-	go s.runProcess(l, n, l.proc, h, done)
+	go s.runProcess(l, n, l.proc, h, done, req.PermissionMode)
 	return nil
+}
+
+// PermissionModeOf is the engine's --permission-mode for a session mode: auto for auto, else
+// default (ADR 0020 as amended 2026-11-01).
+func PermissionModeOf(mode string) string {
+	if mode == policy.ModeAuto.String() {
+		return engine.PermissionAuto
+	}
+	return engine.PermissionDefault
+}
+
+// checkEngineMode compares the mode system/init reports with the mode the process asked for
+// (03-hook-contract.md, Auto mode): a mismatch is the engine-mode-mismatch audit row and an
+// internal-error event, the turn continuing. An init that reports no mode is a mismatch, `got
+// none`, only when auto was wanted: that is the silent fall to the default the check exists
+// for; with default wanted it is not compared.
+func (s *Service) checkEngineMode(l *live, n int, wanted, got string) {
+	if got == wanted || got == "" && wanted != engine.PermissionAuto {
+		return
+	}
+	if got == "" {
+		got = "none"
+	}
+	now := s.stamp()
+	summary := "engine mode: wanted " + wanted + ", got " + got
+	if err := s.cfg.Store.Write(func(tx *store.Tx) error {
+		_, err := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindEngineModeMismatch, Actor: ActorInstance, Session: l.id,
+			Details: details("turn", strconv.Itoa(n), "wanted", wanted, "got", got)})
+		return err
+	}); err != nil {
+		l.log.add(storeFailed(now, n, "", call{}, err))
+	}
+	l.log.add(Event{Time: now, Type: EventInternalError, Turn: n, Summary: summary})
 }
 
 // failTurnLocked ends the running turn as an error when its process could not start: the turn
@@ -438,6 +475,9 @@ type call struct {
 	// model is a subagent call's pinned model by display name, `none` when nothing pins
 	// (policy.Pin); the subagent-result row's model.
 	model string
+	// ask is whether the call's cell for the session's reach is ask (AskCell): in auto mode a
+	// non-hook decider on it is the engine's own decision, never hook bypassed.
+	ask bool
 }
 
 // indent is s at the call's depth (session tail, 04's trace lines).
@@ -468,11 +508,12 @@ func (l *live) depthUnder(parent string) int {
 
 // runProcess reads one engine process's events to the end (03 Data flow, steps 4 to 7) and
 // hands them to processEnded. It is the only goroutine reading this handle.
-func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan struct{}) {
+func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan struct{}, wantMode string) {
 	defer close(done)
 	var evs []engine.EngineEvent
 	results := map[string]bool{}
 	esid := ""
+	var asked *engine.PromptEvent
 	for ev := range h.Events {
 		evs = append(evs, ev)
 		switch ev.Kind {
@@ -480,6 +521,19 @@ func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan s
 			if ev.Init != nil && ev.Init.EngineSessionID != "" {
 				esid = ev.Init.EngineSessionID
 				s.setEngineSession(l, n, esid)
+			}
+			if ev.Init != nil {
+				s.checkEngineMode(l, n, wantMode, ev.Init.PermissionMode)
+			}
+		case engine.KindPrompt:
+			// Shape A (03-hook-contract.md, Auto mode): the engine's own check asks and waits.
+			// The process is interrupted and the call deferred like a hook's defer; the first
+			// ask of a process is the one held, a later one (the process already stopping)
+			// is not answered. Only in an auto turn, and only for a call with no result yet:
+			// any other control_request is noise, kept in the events and not acted on.
+			if ev.Prompt != nil && asked == nil && !results[ev.Prompt.ToolUseID] && l.turnIsAuto() {
+				asked = ev.Prompt
+				_ = h.Interrupt()
 			}
 		case engine.KindAssistant:
 			if ev.Assistant == nil {
@@ -499,7 +553,7 @@ func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan s
 					}
 				case engine.BlockToolUse:
 					c := call{tool: b.Name, target: Target(b.Name, b.Input, l.tree), message: ev.Assistant.MessageID,
-						agent: subagentType(b.Name, b.Input), parent: parent, depth: depth}
+						agent: subagentType(b.Name, b.Input), parent: parent, depth: depth, ask: AskCell(b.Name, b.Input, l.reach, l.tree)}
 					var pin policy.Pinned
 					if subagentTools[b.Name] {
 						pin = l.pinOf(b.Input)
@@ -540,7 +594,7 @@ func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan s
 	if esid == "" {
 		esid = l.engineSessionID
 	}
-	s.processEndedLocked(l, n, k, esid, evs, results, pin)
+	s.processEndedLocked(l, n, k, esid, evs, results, pin, asked)
 }
 
 // lastResult is the process's result line, nil when it ended without one.
@@ -557,15 +611,32 @@ func lastResult(evs []engine.EngineEvent) *engine.ResultEvent {
 // processEndedLocked records a process's end. A result that defers a call keeps the turn
 // open, waiting for an answer, or for a call the `reviewer` cell deferred (pin set) resumes it
 // at once; anything else ends the turn. Its usage is measured against the engine session's last
-// result, never an interrupted row (S2). l.mu is held.
-func (s *Service) processEndedLocked(l *live, n, k int, esid string, evs []engine.EngineEvent, results map[string]bool, pin *reviewPin) {
+// result, never an interrupted row (S2). A process the session interrupted on the engine's own
+// ask (asked set, shape A of 03-hook-contract.md's Auto mode) defers that call the same way,
+// decided by the engine. l.mu is held.
+func (s *Service) processEndedLocked(l *live, n, k int, esid string, evs []engine.EngineEvent, results map[string]bool, pin *reviewPin, asked *engine.PromptEvent) {
 	u := engine.UsageOf(evs, l.baselines[esid])
 	r := lastResult(evs)
 	if u.Cumulative != nil {
 		l.baselines[esid] = u.Cumulative
 	}
-	if r != nil && r.Deferred != nil && l.state == StateRunningTurn && l.interruptedBy == "" && !s.closing.Load() {
-		s.deferLocked(l, n, k, esid, u, r, results, pin)
+	open := l.state == StateRunningTurn && l.interruptedBy == "" && !s.closing.Load()
+	if r != nil && r.Deferred != nil && open {
+		s.deferLocked(l, n, k, esid, u, r, r.Deferred, results, pin, nil)
+		return
+	}
+	if asked != nil && open {
+		if l.turnEngineAsked {
+			// The turn was already resumed on an answer to the engine's ask, and the engine
+			// asks again: the re-issued call did not keep its id (or asks anew). 03-hook-contract.md
+			// (Auto mode) handles that turn as shape B; asking again would interrupt once per
+			// click without end, so the call is refused and the turn ends.
+			s.engineReissuedLocked(l, n, k, esid, u, r, asked, evs)
+			return
+		}
+		l.turnEngineAsked = true
+		d := &engine.DeferredTool{ToolUseID: asked.ToolUseID, Name: asked.Tool, Input: asked.Input}
+		s.deferLocked(l, n, k, esid, u, r, d, results, nil, asked)
 		return
 	}
 	ended := s.endTurnLocked(l, n, r, u, "", usageRef{esid: esid, k: k})
@@ -573,6 +644,51 @@ func (s *Service) processEndedLocked(l *live, n, k int, esid string, evs []engin
 		ended.Usage.Exit = exitOf(evs)
 	}
 	s.settleLocked(l, ended)
+}
+
+// engineReissuedSummary is the internal-error of an engine that asks again in a turn already
+// resumed on an answer to its ask.
+const engineReissuedSummary = "engine re-issued the call under a new id; handled as a refusal"
+
+// engineReissuedLocked ends a turn whose engine asked again after the resume on an answer to
+// its first ask (03-hook-contract.md, Auto mode: a re-issued call that does not keep its id is
+// handled as shape B for that turn): the call recorded deferred, then denied, decider engine,
+// an internal-error event, and the turn ended with its usage. l.mu is held.
+func (s *Service) engineReissuedLocked(l *live, n, k int, esid string, u engine.TurnUsage, r *engine.ResultEvent,
+	asked *engine.PromptEvent, evs []engine.EngineEvent) {
+	c, ok := l.calls[asked.ToolUseID]
+	if !ok {
+		c = call{tool: asked.Tool, target: Target(asked.Tool, asked.Input, l.tree)}
+		l.calls[asked.ToolUseID] = c
+	}
+	now := s.stamp()
+	err := s.cfg.Store.Write(func(tx *store.Tx) error {
+		if err := s.decisionTx(tx, l, n, asked.ToolUseID, c, DecisionDeferred, DecidedByEngine, ActorInstance, "", asked.Reason, ""); err != nil {
+			return err
+		}
+		return s.decisionTx(tx, l, n, asked.ToolUseID, c, DecisionDeny, DecidedByEngine, ActorInstance, "", engineReissuedSummary, "")
+	})
+	if err != nil {
+		l.log.add(storeFailed(now, n, asked.ToolUseID, c, err))
+	} else {
+		l.log.add(Event{Time: now, Type: EventPermissionDecision, Turn: n, ToolUseID: asked.ToolUseID, Tool: c.tool, Target: c.target,
+			Decision: DecisionDeny, DecidedBy: DecidedByEngine, Reason: engineReissuedSummary,
+			Summary: c.indent(DecisionDeny + " " + TraceLine(c.tool, c.target) + " (" + DecidedByEngine + ")"), Parent: c.parent, Depth: c.depth})
+	}
+	l.log.add(Event{Time: now, Type: EventInternalError, Turn: n, ToolUseID: asked.ToolUseID, Tool: c.tool, Target: c.target,
+		Parent: c.parent, Depth: c.depth, Summary: engineReissuedSummary})
+	ended := s.endTurnLocked(l, n, r, u, "", usageRef{esid: esid, k: k})
+	if ended.Usage != nil {
+		ended.Usage.Exit = exitOf(evs)
+	}
+	s.settleLocked(l, ended)
+}
+
+// turnIsAuto is whether the running turn started in auto mode.
+func (l *live) turnIsAuto() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.turnMode == policy.ModeAuto.String()
 }
 
 // settleLocked moves the session on after its turn ended, then publishes turn-ended, so
@@ -604,9 +720,16 @@ func (s *Service) settleLocked(l *live, ended Event) {
 // that message without a result (C28), then waiting-for-answer with the prompt and idle
 // timers running. A call the `reviewer` cell deferred (pin set) is the bot's own to answer
 // (ADR 0028 Decision 3): the pin kept on the call, its `allow` row by instance in the same
-// write, and the resume at once, no prompt and no waiting-for-answer. l.mu is held.
-func (s *Service) deferLocked(l *live, n, k int, esid string, u engine.TurnUsage, r *engine.ResultEvent, results map[string]bool, pin *reviewPin) {
-	d := r.Deferred
+// write, and the resume at once, no prompt and no waiting-for-answer. A call the engine's own
+// check asked about (asked set; r may be nil, the process interrupted) is deferred with decider
+// engine and the engine's reason on the row and on waiting-for-answer (03-hook-contract.md,
+// Auto mode, shape A). l.mu is held.
+func (s *Service) deferLocked(l *live, n, k int, esid string, u engine.TurnUsage, r *engine.ResultEvent, d *engine.DeferredTool,
+	results map[string]bool, pin *reviewPin, asked *engine.PromptEvent) {
+	decidedBy, actor, why := DecidedByPolicy, ActorPolicy, ""
+	if asked != nil {
+		decidedBy, actor, why = DecidedByEngine, ActorInstance, asked.Reason
+	}
 	c, ok := l.calls[d.ToolUseID]
 	if !ok {
 		c = call{tool: d.Name, target: Target(d.Name, d.Input, l.tree), agent: subagentType(d.Name, d.Input)}
@@ -628,7 +751,7 @@ func (s *Service) deferLocked(l *live, n, k int, esid string, u engine.TurnUsage
 		if err := s.writeUsage(tx, l, n, u, r, usageRef{esid: esid, k: k}); err != nil {
 			return err
 		}
-		if err := s.decisionTx(tx, l, n, d.ToolUseID, c, DecisionDeferred, DecidedByPolicy, ActorPolicy, "", "", ""); err != nil {
+		if err := s.decisionTx(tx, l, n, d.ToolUseID, c, DecisionDeferred, decidedBy, actor, "", why, ""); err != nil {
 			return err
 		}
 		for _, id := range dropped {
@@ -650,12 +773,12 @@ func (s *Service) deferLocked(l *live, n, k int, esid string, u engine.TurnUsage
 	l.countUsageLocked(u)
 	for _, id := range append([]string{d.ToolUseID}, dropped...) {
 		dc := l.calls[id]
-		dec := DecisionDropped
+		dec, by, reason := DecisionDropped, DecidedByPolicy, ""
 		if id == d.ToolUseID {
-			dec = DecisionDeferred
+			dec, by, reason = DecisionDeferred, decidedBy, why
 		}
 		l.log.add(Event{Time: stamp, Type: EventPermissionDecision, Turn: n, ToolUseID: id, Tool: dc.tool, Target: dc.target,
-			Decision: dec, DecidedBy: DecidedByPolicy, Summary: dc.indent(dec + " " + TraceLine(dc.tool, dc.target) + " (" + DecidedByPolicy + ")")})
+			Decision: dec, DecidedBy: by, Reason: reason, Summary: dc.indent(dec + " " + TraceLine(dc.tool, dc.target) + " (" + by + ")")})
 	}
 	if pin != nil {
 		s.resumeReviewerLocked(l, n, d.ToolUseID, c)
@@ -668,8 +791,19 @@ func (s *Service) deferLocked(l *live, n, k int, esid string, u engine.TurnUsage
 	l.state = StateWaitingForAnswer
 	s.armPromptLocked(l)
 	s.armIdleLocked(l)
+	// Reason is the engine's own reason on a call its check asked about, which the prompt
+	// appends (04-ux-session-controls.md, the third mode); "" for a hook's defer.
 	l.log.add(Event{Time: stamp, Type: EventWaitingForAnswer, Turn: n, ToolUseID: d.ToolUseID, Tool: c.tool, Target: c.target,
-		Summary: d.ToolUseID + " " + TraceLine(c.tool, c.target), Text: FullCommand(c.tool, d.Input)})
+		Summary: d.ToolUseID + " " + TraceLine(c.tool, c.target), Text: FullCommand(c.tool, d.Input), Reason: why, DecidedBy: decidedByOf(asked)})
+}
+
+// decidedByOf is a waiting-for-answer event's decider: engine when the engine's own check
+// asked, "" for a hook's defer (the event's form before P39).
+func decidedByOf(asked *engine.PromptEvent) string {
+	if asked != nil {
+		return DecidedByEngine
+	}
+	return ""
 }
 
 func sortStrings(s []string) { sort.Strings(s) }
@@ -716,12 +850,13 @@ func (s *Service) toolResult(l *live, n int, tr engine.ToolResultEvent) {
 	c := l.calls[tr.ToolUseID]
 	ans, answered := l.answers[tr.ToolUseID]
 	delete(l.answers, tr.ToolUseID)
+	auto := l.turnMode == policy.ModeAuto.String()
 	l.mu.Unlock()
 	now := s.stamp()
 	s.subagentResult(l, n, tr, c)
 	var cl Classified
 	if !answered {
-		cl = Classify(tr, c.tool)
+		cl = ClassifyIn(tr, c.tool, auto && c.ask)
 	}
 	if subagentTools[c.tool] && (answered && ans.decision == DecisionDeny || !answered && cl.Decision == DecisionDeny) {
 		s.unpin(l, n, tr.ToolUseID, c)
@@ -741,7 +876,7 @@ func (s *Service) toolResult(l *live, n int, tr engine.ToolResultEvent) {
 		switch cl.DecidedBy {
 		case DecidedByHook:
 			actor = ActorHook
-		case DecidedByConfig, DecidedByUnknown:
+		case DecidedByConfig, DecidedByUnknown, DecidedByEngine:
 			actor = ActorInstance
 		}
 		err := s.cfg.Store.Write(func(tx *store.Tx) error {
@@ -752,7 +887,7 @@ func (s *Service) toolResult(l *live, n int, tr engine.ToolResultEvent) {
 			case ClassHookFailed:
 				_, err := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindActionRefused, Actor: ActorHook, Session: l.id,
 					Details: details("action", "tool-call", "reason", "hook-failed", "toolUseId", tr.ToolUseID, "tool", c.tool,
-						"message", cl.Reason)})
+						"message", cl.Reason, "cause", OnFailureCause(cl.Reason))})
 				return err
 			case ClassBypassed:
 				outcome, cause := "refused", "failed"
@@ -766,7 +901,7 @@ func (s *Service) toolResult(l *live, n int, tr engine.ToolResultEvent) {
 					Details: details("toolUseId", tr.ToolUseID, "tool", c.tool, "outcome", outcome, "cause", cause,
 						"text", firstRunes(tr.Text, summaryRunes))})
 				return err
-			case ClassNoDecision, ClassAllowed, ClassPolicyDenied:
+			case ClassNoDecision, ClassAllowed, ClassPolicyDenied, ClassEngine:
 			}
 			return nil
 		})

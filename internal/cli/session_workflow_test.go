@@ -66,7 +66,7 @@ func TestProofSessionWorkflow(t *testing.T) {
 	t.Logf("received-1.json args: %s", keys["args"])
 	var args []string
 	_ = json.Unmarshal(keys["args"], &args)
-	if strings.Join(args, " ") != "--append-system-prompt-file "+copyDir+"/instructions.md --agents "+copyDir+"/agents.json" {
+	if strings.Join(args, " ") != "--permission-mode default --append-system-prompt-file "+copyDir+"/instructions.md --agents "+copyDir+"/agents.json" {
 		t.Errorf("args %q", args)
 	}
 	if !strings.Contains(string(keys["hookEnv"]), `"name": "BROODFORGE_WORKFLOW",`+"\n"+`      "value": "`+copyDir+`"`) {
@@ -128,7 +128,7 @@ func TestProofSessionInjectNone(t *testing.T) {
 	keys := receivedOf(t, root, "s0001")
 	var args []string
 	_ = json.Unmarshal(keys["args"], &args)
-	if strings.Join(args, " ") != "--append-system-prompt-file "+root+"/workflow/s0001/instructions.md" ||
+	if strings.Join(args, " ") != "--permission-mode default --append-system-prompt-file "+root+"/workflow/s0001/instructions.md" ||
 		strings.Contains(string(keys["hookEnv"]), "BROODFORGE_WORKFLOW") {
 		t.Errorf("args %q hookEnv %s", args, keys["hookEnv"])
 	}

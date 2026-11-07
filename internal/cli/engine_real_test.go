@@ -150,7 +150,8 @@ func TestProofEngineRealMatchesFake(t *testing.T) {
 	if !strings.Contains(rec.Stdin, `"text":"Read hello.txt and reply with its one word."`) {
 		t.Errorf("stdin %q", rec.Stdin)
 	}
-	if !strings.Contains(rec.Settings, `hook pre-tool-use"`) || !strings.Contains(rec.Settings, `"timeout": 30`) {
+	if !strings.Contains(rec.Settings, `hook pre-tool-use"`) || !strings.Contains(rec.Settings, `"timeout": 30`) ||
+		!strings.Contains(rec.Settings, `"onFailure": "block"`) {
 		t.Errorf("settings %q", rec.Settings)
 	}
 	if !strings.EqualFold(rec.Cwd, filepath.ToSlash(tree)) {

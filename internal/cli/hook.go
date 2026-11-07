@@ -44,9 +44,9 @@ var hookPostToolUse = Command{
 }
 
 // hookTry is the same code path with flags: `broodforge hook try --tool <name> --input <json>
-// [--tool-use-id <id>] [--mode prompt|policy] [--reach read-only|code] [--tree <path>]
+// [--tool-use-id <id>] [--mode prompt|policy|auto] [--reach read-only|code] [--tree <path>]
 // [--canonical <path>] --transcript-path <path> [--answer <id>:allow|deny] [--answer-reason
-// <text>] [--session-allow <names>] [--workflow <dir>] [--expect allow|deny|defer|hook]`,
+// <text>] [--session-allow <names>] [--workflow <dir>] [--expect allow|deny|defer|pass|hook]`,
 // printing `<decision>  <reason>  <pin>`; --workflow runs the copy's PreToolUse children as the
 // hook does under BROODFORGE_WORKFLOW and is the agents.json an Agent call's pin is read from;
 // pin is the trailer line pre-tool-use would append to the trailers file beside --tree, empty
@@ -61,7 +61,7 @@ var hookTry = Command{
 		{Name: "input", Kind: FlagString, Default: "{}", Value: "<json>", Usage: "tool_input, a JSON object"},
 		{Name: "tool-use-id", Kind: FlagString, Default: hook.DefaultToolUseID, Value: "<id>", Usage: "tool_use_id"},
 		{Name: "cwd", Kind: FlagString, Value: "<path>", Usage: "cwd (default: the tree)"},
-		{Name: "mode", Kind: FlagString, Default: hook.DefaultMode, Value: "prompt|policy", Usage: "BROODFORGE_MODE"},
+		{Name: "mode", Kind: FlagString, Default: hook.DefaultMode, Value: "prompt|policy|auto", Usage: "BROODFORGE_MODE"},
 		{Name: "reach", Kind: FlagString, Default: hook.DefaultReach, Value: "read-only|code", Usage: "BROODFORGE_REACH"},
 		{Name: "tree", Kind: FlagString, Default: hook.DefaultTree, Value: "<path>", Usage: "BROODFORGE_TREE"},
 		{Name: "canonical", Kind: FlagString, Value: "<path>", Usage: "BROODFORGE_CANONICAL (default: the tree)"},

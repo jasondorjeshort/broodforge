@@ -80,7 +80,7 @@ type Relay struct {
 type Defaults struct {
 	IdleTimeoutMinutes   int    `json:"idleTimeoutMinutes"`
 	PromptTimeoutMinutes int    `json:"promptTimeoutMinutes"`
-	Mode                 string `json:"mode"`    // prompt or policy
+	Mode                 string `json:"mode"`    // prompt, policy or auto
 	Harness              string `json:"harness"` // claude-code or fake
 }
 
@@ -187,6 +187,7 @@ const (
 
 	ModePrompt = "prompt"
 	ModePolicy = "policy"
+	ModeAuto   = "auto"
 
 	HarnessClaudeCode = "claude-code"
 	HarnessFake       = "fake"

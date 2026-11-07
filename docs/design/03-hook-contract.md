@@ -73,7 +73,7 @@ audited `hook bypassed` with the tool, the outcome (ran, or refused by the engin
 (timed out, or the hook failed) and the text, shown as 04's hook-bypassed flow, the turn
 continuing. A stripped text beginning `failed; blocking because onFailure` is the engine blocking
 a hook that timed out or could not start (`onFailure: "block"`, above): `action refused` with actor
-`hook`, cause `timed out` or `did not start`, shown as 04's tool-denied notice. One exception, in
+`hook`, its `cause` the engine's own text (which does not say whether the hook timed out or did not start), shown as 04's tool-denied notice. One exception, in
 auto mode only: a result whose decider is not `hook`, on a call whose cell for the session's reach
 is `ask` (the shared `policy` function over the tool, the reach and the call's target resolved
 against the tree, as `session` computes a trace line's target), is the engine's own decision on a

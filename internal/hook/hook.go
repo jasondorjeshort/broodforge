@@ -63,7 +63,7 @@ type Input struct {
 func ParseMode(s string) (policy.Mode, error) {
 	m, ok := policy.ParseMode(s)
 	if !ok {
-		return m, &Error{EnvMode + " is " + quoteOrEmpty(s) + ", want policy or prompt"}
+		return m, &Error{EnvMode + " is " + quoteOrEmpty(s) + ", want policy, prompt or auto"}
 	}
 	return m, nil
 }
@@ -313,8 +313,13 @@ type HookSpecificOutput struct {
 	PermissionDecisionReason string `json:"permissionDecisionReason"`
 }
 
-// Encode is the output line for a result, newline included.
+// Encode is the output line for a result, newline included. A pass is no output at all: exit 0
+// with nothing on stdout is no decision, so the engine's own check decides (03-hook-contract.md,
+// Auto mode; C40a).
 func Encode(r policy.Result) ([]byte, error) {
+	if r.Decision == policy.Pass {
+		return nil, nil
+	}
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)

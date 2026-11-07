@@ -355,16 +355,19 @@ type live struct {
 	// assistant line naming one costs no write.
 	seen map[string]bool
 
-	model         string // the session row's, mirrored for the summary (P12a); a turn reads the row
-	turnMode      string // the mode the running turn started with (a switch waits for the next)
-	turnModel     string // the model and effort the running turn started with, from the row
-	turnEffort    string
-	requester     string // the running turn's requester (R-44)
-	proc          int    // the running turn's engine process, 1 up
-	pending       *Pending
-	answers       map[string]answerRec // answered calls whose result has not come yet
-	sessionAllow  []string             // tools allowed for the session (allow-session)
-	interruptedBy string               // set by Interrupt until the turn ends
+	model    string // the session row's, mirrored for the summary (P12a); a turn reads the row
+	turnMode string // the mode the running turn started with (a switch waits for the next)
+	// turnEngineAsked is set once the running turn deferred a call the engine's own check asked
+	// about (shape A): a second ask in that turn is refused, not prompted (engineReissuedLocked).
+	turnEngineAsked bool
+	turnModel       string // the model and effort the running turn started with, from the row
+	turnEffort      string
+	requester       string // the running turn's requester (R-44)
+	proc            int    // the running turn's engine process, 1 up
+	pending         *Pending
+	answers         map[string]answerRec // answered calls whose result has not come yet
+	sessionAllow    []string             // tools allowed for the session (allow-session)
+	interruptedBy   string               // set by Interrupt until the turn ends
 	// baselines is each engine session's last result's cumulative modelUsage (S2).
 	baselines map[string]map[string]engine.ModelUsage
 
@@ -429,7 +432,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (Started, error) 
 	mode, reach := ch.Mode, ch.Reach
 	if req.Mode != "" {
 		if _, ok := policy.ParseMode(req.Mode); !ok {
-			return Started{}, badArgs("--mode " + req.Mode + ": want prompt or policy")
+			return Started{}, badArgs("--mode " + req.Mode + ": want prompt, policy or auto")
 		}
 		mode = req.Mode
 	}

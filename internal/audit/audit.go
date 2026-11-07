@@ -55,6 +55,9 @@ const (
 	// KindLand is a land's push (ADR 0028 Decision 1, step 4): attempted, done or failed, with
 	// the actor, the claimed --as of a host land, the outcome, the commits and the sha.
 	KindLand Kind = "land"
+	// KindEngineModeMismatch is an engine process whose system/init permissionMode is not the
+	// mode the bot asked for (03-hook-contract.md, Auto mode): wanted and got.
+	KindEngineModeMismatch Kind = "engine-mode-mismatch"
 )
 
 // Phase marks an action outside the store: attempted before, done or failed after (ADR

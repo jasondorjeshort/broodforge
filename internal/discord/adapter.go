@@ -32,6 +32,9 @@ const (
 const (
 	modeAsksFirst  = "asks-first"
 	modeActsFreely = "acts-freely"
+	// modeAuto is the third mode's value. Placeholder (04-ux-session-controls.md, the third
+	// mode; Owner 7): not owner-worded.
+	modeAuto = "auto"
 )
 
 // The audit actions of the two routes a switch comes by: a typed command, a menu pick.
@@ -697,7 +700,7 @@ func (a *Adapter) setEffort(in Inbound, act session.ActRequest, value, action st
 	return none("effort from turn " + strconv.Itoa(ev.Turn) + ": " + value), nil
 }
 
-// setMode is /session mode asks-first|acts-freely and the mode menu's pick, as setModel.
+// setMode is /session mode asks-first|acts-freely|auto and the mode menu's pick, as setModel.
 func (a *Adapter) setMode(in Inbound, act session.ActRequest, value, action string) (Reply, error) {
 	mode := ""
 	switch value {
@@ -705,9 +708,12 @@ func (a *Adapter) setMode(in Inbound, act session.ActRequest, value, action stri
 		mode = policy.ModePrompt.String()
 	case modeActsFreely:
 		mode = policy.ModePolicy.String()
+	case modeAuto:
+		mode = policy.ModeAuto.String()
 	}
 	if mode == "" {
-		return Reply{}, a.refuse(in, action, CodeBadArgs, "/session mode takes asks-first or acts-freely")
+		// The `auto` part is a placeholder (04-ux-session-controls.md, the third mode; Owner 7).
+		return Reply{}, a.refuse(in, action, CodeBadArgs, "/session mode takes asks-first, acts-freely or auto")
 	}
 	ev, err := a.svc.SetMode(session.ModeRequest{ActRequest: act, Mode: mode})
 	if err != nil {

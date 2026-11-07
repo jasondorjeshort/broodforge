@@ -1020,7 +1020,9 @@ func Commands() []dg.ApplicationCommandCreate {
 				sub("start", "start a session in this project channel", optional(model)),
 				sub("stop", "stop the running turn"),
 				sub("end", "end this session and hand off its commits"),
-				sub("mode", "switch from the next turn", str("mode", "asks first or acts freely", 0, "asks-first", "acts-freely")),
+				// The description's and the choice's `auto` are placeholders
+				// (04-ux-session-controls.md, the third mode; Owner 7): not owner-worded.
+				sub("mode", "switch from the next turn", str("mode", "asks first, acts freely or auto", 0, modeAsksFirst, modeActsFreely, modeAuto)),
 				sub("model", "switch the model from the next turn", model),
 				sub("effort", "switch the effort from the next turn", str("effort", "the effort", 0, policy.Efforts...)),
 				sub("timeout", "end this session after this long without activity",

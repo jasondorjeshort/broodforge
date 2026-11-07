@@ -86,7 +86,7 @@ func validateInstance(in *Instance, exists CredentialExists) []string {
 	d := &in.Defaults
 	out = append(out, neverOrPositive("defaults.idleTimeoutMinutes", &d.IdleTimeoutMinutes)...)
 	out = append(out, neverOrPositive("defaults.promptTimeoutMinutes", &d.PromptTimeoutMinutes)...)
-	out = append(out, oneOf("defaults.mode", d.Mode, ModePrompt, ModePolicy)...)
+	out = append(out, oneOf("defaults.mode", d.Mode, ModePrompt, ModePolicy, ModeAuto)...)
 	out = append(out, oneOf("defaults.harness", d.Harness, HarnessClaudeCode, HarnessFake)...)
 	// The scan skips a never literal under three characters, as the base's does, so config
 	// refuses one rather than let it pass silently; an allow entry is a literal, never a pattern
@@ -194,7 +194,7 @@ func validateChannel(key, id string, ch Channel, groups map[string][]string, che
 	}
 	out = append(out, oneOf(key+".reach", ch.Reach, ReachReadOnly, ReachCode)...)
 	if ch.Mode != nil {
-		out = append(out, oneOf(key+".mode", *ch.Mode, ModePrompt, ModePolicy)...)
+		out = append(out, oneOf(key+".mode", *ch.Mode, ModePrompt, ModePolicy, ModeAuto)...)
 	}
 	if ch.Harness != nil {
 		out = append(out, oneOf(key+".harness", *ch.Harness, HarnessClaudeCode, HarnessFake)...)

@@ -289,7 +289,7 @@ type ModeRequest struct {
 // SetMode is SessionService.setMode: the driver's switch, effective at the next turn (ADR 0020).
 func (s *Service) SetMode(req ModeRequest) (Event, error) {
 	if _, ok := policy.ParseMode(req.Mode); !ok {
-		return Event{}, badArgs("mode " + quote(req.Mode) + ": want prompt or policy")
+		return Event{}, badArgs("mode " + quote(req.Mode) + ": want prompt, policy or auto")
 	}
 	l, _, err := s.acting(req.ActRequest)
 	if err != nil {
@@ -318,8 +318,12 @@ func (s *Service) SetMode(req ModeRequest) (Event, error) {
 	l.mode = req.Mode
 	// 04-ux-session-controls.md, Policy mode: the names people see are `asks first` and `acts freely`.
 	shown := "asks first"
-	if req.Mode == policy.ModePolicy.String() {
+	switch req.Mode {
+	case policy.ModePolicy.String():
 		shown = "acts freely"
+	case policy.ModeAuto.String():
+		// Placeholder (04-ux-session-controls.md, the third mode; Owner 7): not owner-worded.
+		shown = "auto (within reach)"
 	}
 	return l.log.add(Event{Time: s.stamp(), Type: EventModeChanged, Turn: l.turn + 1, User: req.As, Result: req.Mode,
 		Summary: "From the next turn: " + shown + "."}), nil

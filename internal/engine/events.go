@@ -35,7 +35,16 @@ type TurnRequest struct {
 	SystemPromptFile string `json:"systemPromptFile"`
 	// AgentsFile is --agents, the copy's agents.json; "" when the copy defines no agent.
 	AgentsFile string `json:"agentsFile"`
+	// PermissionMode is --permission-mode, set per process from the session's mode (ADR 0020 as
+	// amended 2026-11-01): "auto" on an auto-mode session, else "default"; "" is "default".
+	PermissionMode string `json:"permissionMode"`
 }
+
+// The engine's permission modes the bot asks for (ADR 0020 as amended 2026-11-01).
+const (
+	PermissionDefault = "default"
+	PermissionAuto    = "auto"
+)
 
 // Delivery is how the credential reaches the engine: Kind "config-dir" (Path) or "api-key"
 // (CredentialID).
@@ -81,6 +90,7 @@ const (
 	KindResult     EventKind = "result"
 	KindExit       EventKind = "exit"
 	KindRateLimit  EventKind = "rate-limit"
+	KindPrompt     EventKind = "prompt"
 	KindUnknown    EventKind = "unknown"
 )
 
@@ -94,7 +104,23 @@ type EngineEvent struct {
 	Result     *ResultEvent
 	Exit       *ExitEvent
 	RateLimit  *RateLimitEvent
+	Prompt     *PromptEvent
 	Unknown    *UnknownEvent
+}
+
+// PromptEvent is a control_request line asking whether a tool call may run: shape A of the
+// hook contract's Auto mode, the engine's own check asking and then waiting. The line's form
+// is assumed, not observed (C40 of ADR 0020): the stream-json control protocol's
+// {"type":"control_request","request_id":...,"request":{"subtype":"can_use_tool","tool_name":...,
+// "input":{...},"tool_use_id":...,"decision_reason":...}}. A control_request that does not
+// carry a tool name and a tool_use_id stays an unknown event.
+type PromptEvent struct {
+	RequestID string          `json:"requestId"`
+	ToolUseID string          `json:"toolUseId"`
+	Tool      string          `json:"tool"`
+	Input     json.RawMessage `json:"input"`
+	// Reason is the engine's own reason for asking, "" when the line carries none.
+	Reason string `json:"reason"`
 }
 
 // UnknownEvent is a line the parser does not map: its type and subtype when it is a JSON
@@ -118,6 +144,9 @@ type InitEvent struct {
 	Model           string   `json:"model"`
 	Tools           []string `json:"tools"`
 	Capabilities    []string `json:"capabilities"`
+	// PermissionMode is the mode the engine says it runs in ("default", "auto"); "" when the
+	// line carries none. session compares it with the mode the process asked for (C40c).
+	PermissionMode string `json:"permissionMode,omitempty"`
 }
 
 // AssistantEvent is one assistant line. The engine writes one line per content block, all
@@ -138,7 +167,18 @@ type ToolResultEvent struct {
 	IsError   bool   `json:"isError"`
 	Text      string `json:"text"`
 	DecidedBy string `json:"decidedBy,omitempty"`
+	// PermissionDecision is the same entry's permission_decision.decision, "accept" when the
+	// call was let run and "reject" when it was refused; empty when the line carries none. It
+	// tells a call that ran and failed from one that was refused (03-hook-contract.md, What the
+	// bot sees).
+	PermissionDecision string `json:"permissionDecision,omitempty"`
 }
+
+// The values of tool_result_meta[].permission_decision.decision.
+const (
+	PermissionAccept = "accept"
+	PermissionReject = "reject"
+)
 
 // ResultEvent is the turn's result line. ModelUsage is cumulative per engine session (S2).
 type ResultEvent struct {
@@ -230,6 +270,8 @@ func (e EngineEvent) MarshalJSON() ([]byte, error) {
 		body, err = encodeJSON(e.Exit)
 	case KindRateLimit:
 		body, err = encodeJSON(e.RateLimit)
+	case KindPrompt:
+		body, err = encodeJSON(e.Prompt)
 	case KindUnknown:
 		body, err = encodeJSON(e.Unknown)
 	default:

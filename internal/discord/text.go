@@ -31,8 +31,11 @@ const maxLineRunes = 1900
 
 // modeName is the mode's name people see (04, Owner 7).
 func modeName(mode string) string {
-	if mode == policy.ModePolicy.String() {
+	switch mode {
+	case policy.ModePolicy.String():
 		return "acts freely"
+	case policy.ModeAuto.String():
+		return modeAutoLabel
 	}
 	return "asks first"
 }
@@ -129,6 +132,10 @@ const (
 	effortEngineOwnPlaceholder = "Effort: the engine's own"
 	modeAsksFirstLabel         = "asks first"
 	modeActsFreelyLabel        = "acts freely (within reach)"
+	// modeAutoLabel is the third mode's label wherever the other two appear (the header's Mode:
+	// line, the footer, the menu). Placeholder (04-ux-session-controls.md, the third mode;
+	// Owner 7): not owner-worded.
+	modeAutoLabel = "auto (within reach)"
 )
 
 // modelPlaceholder is the model menu's placeholder for a model the map does not name: the
@@ -388,13 +395,21 @@ func turnErrorText(reason string) string {
 // promptText is the permission prompt (04, Permission prompts): the mention so a phone buzzes,
 // the call's trace line, the full command, and the parallel-calls line when the engine dropped
 // some (C28).
-func promptText(driver string, turn int, trace, command string, dropped int) string {
+func promptText(driver string, turn int, trace, command string, dropped int, byEngine bool, reason string) string {
 	lines := []string{mention(driver) + " Permission needed · turn " + strconv.Itoa(turn), trace}
 	if command != "" {
 		lines = append(lines, "Command: "+command)
 	}
 	if dropped > 0 {
 		lines = append(lines, "The agent asked for "+strconv.Itoa(dropped+1)+" actions at once; this is the last. The others will be asked again one at a time.")
+	}
+	if byEngine {
+		// Shape A of the hook contract's Auto mode: the engine's own check asked. Placeholder
+		// (04-ux-session-controls.md, the third mode; Owner 7): not owner-worded.
+		if reason == "" {
+			reason = "no reason given"
+		}
+		lines = append(lines, "The engine's check asked: "+reason)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -433,8 +448,12 @@ func answeredText(ev session.Event, by, trace string) string {
 // modeChangedText is the mode switch's post (04-ux-session-controls.md, Policy mode); not 04:
 // the asks-first form.
 func modeChangedText(mode, reach string) string {
-	if mode == policy.ModePolicy.String() {
+	switch mode {
+	case policy.ModePolicy.String():
 		return "From the next turn: acts freely. Broodforge answers permission prompts itself, inside this\nchannel's reach (" + reach + "). Switch back with /session mode asks-first."
+	case policy.ModeAuto.String():
+		// Placeholder (04-ux-session-controls.md, the third mode; Owner 7): not owner-worded.
+		return "From the next turn: auto (within reach). Broodforge still decides what is inside this channel's\nreach (" + reach + "); the engine's own check reviews each action there and only the risky ones stop.\nSwitch back with /session mode asks-first."
 	}
 	return "From the next turn: asks first. Permission prompts come here for an answer. Switch with /session mode acts-freely."
 }

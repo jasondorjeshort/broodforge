@@ -268,7 +268,7 @@ The last column names a 04 flow, not its wording.
 | `engine` | Exit without `result` | turn interrupted, partial usage recorded, exit code kept | turn-failed |
 | `engine` | `result` with `is_error` | turn ended as error; an auth error also ends the session through the normal ending sequence (summary, bundle handoff), discarding no work, and sets the credential `needs-login` (an API key keeps its status) | credential-needs-login |
 | `hook` | Internal error, exit 2 | the engine blocks that call with the hook's stderr as the result, the turn continues, audit `action refused` from the `hook:` prefix | tool-denied notice |
-| `hook` | Timeout | non-blocking: the engine's default decides (C39: Read allowed, Write denied, a safe-listed Bash run); the result's `decidedBy` is `config`, audit `hook bypassed` | hook-bypassed |
+| `hook` | Timeout | blocking under the settings entry's `"onFailure": "block"` (P39): the engine blocks the call with `failed; blocking because onFailure is "block"`, audit `action refused` with actor `hook`; on an engine before 2.1.295, non-blocking: the engine's default decides (C39), `decidedBy` `config`, audit `hook bypassed` | tool-denied (hook-bypassed on an older engine) |
 | `spawn` | Preflight fails; interrupt timeout | refusal at start naming the sudoers block; tree killed and turn interrupted (ADR 0022) | operator; turn-interrupted |
 | `credentials`, `git` | Key file missing or store unreadable; id removed or `needs-login`; clone fails | start refused; session start refused naming the credential or the clone error, no tree recorded | session-refused |
 | `git` | Bundle, fetch or attribution check fails | handoff refused, tree kept, session stays open, commits listed | handoff-refused |

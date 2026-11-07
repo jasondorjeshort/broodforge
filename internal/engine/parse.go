@@ -33,6 +33,19 @@ type rawLine struct {
 	ModelUsage        map[string]map[string]json.RawMessage `json:"modelUsage"`
 	Usage             json.RawMessage                       `json:"usage"`
 	RateLimitInfo     *rawRateLimit                         `json:"rate_limit_info"`
+	PermissionMode    string                                `json:"permissionMode"`
+	RequestID         string                                `json:"request_id"`
+	Request           *rawControlRequest                    `json:"request"`
+}
+
+// rawControlRequest is a control_request line's request, the subset a permission ask carries
+// (shape A of the hook contract's Auto mode; assumed, C40).
+type rawControlRequest struct {
+	Subtype        string          `json:"subtype"`
+	ToolName       string          `json:"tool_name"`
+	Input          json.RawMessage `json:"input"`
+	ToolUseID      string          `json:"tool_use_id"`
+	DecisionReason json.RawMessage `json:"decision_reason"`
 }
 
 // rawRateLimit is rate_limit_info's subset (03, the stream subset): the top-level
@@ -80,7 +93,8 @@ type rawBlock struct {
 type rawMeta struct {
 	ID                 string `json:"id"`
 	PermissionDecision *struct {
-		Source *string `json:"source"`
+		Source   *string `json:"source"`
+		Decision string  `json:"decision"`
 	} `json:"permission_decision"`
 }
 
@@ -118,7 +132,12 @@ func ParseLine(line []byte) []EngineEvent {
 			Model:           o.Model,
 			Tools:           nonNil(o.Tools),
 			Capabilities:    nonNil(o.Capabilities),
+			PermissionMode:  o.PermissionMode,
 		}}}
+	case o.Type == "control_request":
+		if p := prompt(&o); p != nil {
+			return []EngineEvent{{Kind: KindPrompt, Prompt: p}}
+		}
 	case o.Type == "assistant" && o.Message != nil:
 		return []EngineEvent{{Kind: KindAssistant, Assistant: assistant(&o)}}
 	case o.Type == "user" && o.Message != nil:
@@ -177,10 +196,13 @@ func assistant(o *rawLine) *AssistantEvent {
 }
 
 func toolResults(o *rawLine) []EngineEvent {
-	decided := map[string]string{}
+	decided, decision := map[string]string{}, map[string]string{}
 	for _, m := range o.ToolResultMeta {
 		if m.PermissionDecision != nil && m.PermissionDecision.Source != nil {
 			decided[m.ID] = *m.PermissionDecision.Source
+		}
+		if m.PermissionDecision != nil {
+			decision[m.ID] = m.PermissionDecision.Decision
 		}
 	}
 	var out []EngineEvent
@@ -189,10 +211,11 @@ func toolResults(o *rawLine) []EngineEvent {
 			continue
 		}
 		out = append(out, EngineEvent{Kind: KindToolResult, ToolResult: &ToolResultEvent{
-			ToolUseID: b.ToolUseID,
-			IsError:   b.IsError != nil && *b.IsError,
-			Text:      resultText(b.Content),
-			DecidedBy: decided[b.ToolUseID],
+			ToolUseID:          b.ToolUseID,
+			IsError:            b.IsError != nil && *b.IsError,
+			Text:               resultText(b.Content),
+			DecidedBy:          decided[b.ToolUseID],
+			PermissionDecision: decision[b.ToolUseID],
 		}})
 	}
 	return out
@@ -231,6 +254,36 @@ func result(o *rawLine) *ResultEvent {
 		ev.Deferred = &DeferredTool{ToolUseID: id, Name: d.Name, Input: d.Input}
 	}
 	return ev
+}
+
+// prompt is the event of a control_request line asking whether a tool call may run, nil for
+// one that does not parse as such (another subtype, no tool name or tool_use_id), which stays
+// unknown. The reason is decision_reason as a string, or as an object's "reason" or
+// "message" field, the form being unobserved (C40).
+func prompt(o *rawLine) *PromptEvent {
+	r := o.Request
+	if r == nil || r.Subtype != "can_use_tool" || r.ToolName == "" || r.ToolUseID == "" {
+		return nil
+	}
+	p := &PromptEvent{RequestID: o.RequestID, ToolUseID: r.ToolUseID, Tool: r.ToolName, Input: r.Input}
+	if len(p.Input) == 0 {
+		p.Input = json.RawMessage("null")
+	}
+	var s string
+	var obj struct {
+		Reason  string `json:"reason"`
+		Message string `json:"message"`
+	}
+	switch {
+	case json.Unmarshal(r.DecisionReason, &s) == nil:
+		p.Reason = s
+	case json.Unmarshal(r.DecisionReason, &obj) == nil:
+		p.Reason = obj.Reason
+		if p.Reason == "" {
+			p.Reason = obj.Message
+		}
+	}
+	return p
 }
 
 // rateLimit is the event of a rate_limit_event line; an absent rate_limit_info or field is

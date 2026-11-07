@@ -241,6 +241,29 @@ func TestPreToolUseDefer(t *testing.T) {
 	}
 }
 
+// TestPreToolUsePass: in auto mode the ask cell is a pass, exit 0 with nothing on stdout (no
+// decision, C40a), logged as pass; a pending answer for the id is still returned before it.
+func TestPreToolUsePass(t *testing.T) {
+	log := filepath.Join(t.TempDir(), "hook.log")
+	vars := baseEnv(log)
+	vars[EnvMode] = "auto"
+	code, out, errs := run(writeInput, vars)
+	if code != 0 || out != "" || errs != "" {
+		t.Fatalf("exit %d\nstdout %q\nstderr %q", code, out, errs)
+	}
+	b, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(b); got != `{"time":"2026-10-16T12:00:00Z","session":"s0001","tool":"Write","toolUseId":"toolu_01","cell":"ask","decision":"pass"}`+"\n" {
+		t.Errorf("log %q", got)
+	}
+	vars[EnvAnswer] = "toolu_01:allow"
+	if code, out, _ := run(writeInput, vars); code != 0 || !strings.Contains(out, `"permissionDecision":"allow"`) {
+		t.Errorf("an answer under auto: exit %d stdout %q", code, out)
+	}
+}
+
 func TestPreToolUseAnswer(t *testing.T) {
 	vars := baseEnv(os.DevNull)
 	vars[EnvAnswer] = "toolu_01:deny"
@@ -265,7 +288,7 @@ func TestPreToolUseErrorsExit2(t *testing.T) {
 		{"no tool_use_id", `{"tool_name":"Bash","tool_input":{},"transcript_path":"/c/projects/x/s.jsonl"}`, baseEnv(os.DevNull), "hook: no tool_use_id\n"},
 		{"missing variable", writeInput, missing(EnvTree), "hook: BROODFORGE_TREE is not set\n"},
 		{"missing log", writeInput, missing(EnvHookLog), "hook: BROODFORGE_HOOK_LOG is not set\n"},
-		{"bad mode", writeInput, func() map[string]string { v := baseEnv(os.DevNull); v[EnvMode] = "auto"; return v }(), "hook: BROODFORGE_MODE is \"auto\", want policy or prompt\n"},
+		{"bad mode", writeInput, func() map[string]string { v := baseEnv(os.DevNull); v[EnvMode] = "acts-freely"; return v }(), "hook: BROODFORGE_MODE is \"acts-freely\", want policy, prompt or auto\n"},
 		{"bad answer", writeInput, func() map[string]string { v := baseEnv(os.DevNull); v[EnvAnswer] = "allow"; return v }(), "hook: BROODFORGE_ANSWER is not <tool_use_id>:allow|deny\n"},
 		{"unwritable log", writeInput, baseEnv(filepath.Join(t.TempDir(), "no", "such", "dir", "hook.log")), ""},
 	}

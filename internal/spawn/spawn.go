@@ -184,13 +184,16 @@ func hookBinary(binary string) string {
 
 // Settings is the settings template (03-hook-contract.md, How the engine runs it): a
 // PreToolUse and a PostToolUse command hook, each with an empty matcher and a thirty-second
-// timeout. It is the same for both credential kinds; the kind picks the path. ADR 0022's
-// sandbox block joins it once C33 holds.
+// timeout. The PreToolUse entry alone carries "onFailure": "block" (ADR 0020 as amended
+// 2026-11-01), so a hook that times out or cannot start blocks the call instead of falling
+// through to the engine's default; a PostToolUse hook cannot block. It is the same for both
+// credential kinds; the kind picks the path. ADR 0022's sandbox block joins it once C33 holds.
 func Settings(preCommand, postCommand string) []byte {
 	type hook struct {
-		Type    string `json:"type"`
-		Command string `json:"command"`
-		Timeout int    `json:"timeout"`
+		Type      string `json:"type"`
+		Command   string `json:"command"`
+		Timeout   int    `json:"timeout"`
+		OnFailure string `json:"onFailure,omitempty"`
 	}
 	type matcher struct {
 		Matcher string `json:"matcher"`
@@ -202,7 +205,7 @@ func Settings(preCommand, postCommand string) []byte {
 			PostToolUse []matcher `json:"PostToolUse"`
 		} `json:"hooks"`
 	}{}
-	v.Hooks.PreToolUse = []matcher{{Matcher: "", Hooks: []hook{{Type: "command", Command: preCommand, Timeout: hookTimeoutSecond}}}}
+	v.Hooks.PreToolUse = []matcher{{Matcher: "", Hooks: []hook{{Type: "command", Command: preCommand, Timeout: hookTimeoutSecond, OnFailure: "block"}}}}
 	v.Hooks.PostToolUse = []matcher{{Matcher: "", Hooks: []hook{{Type: "command", Command: postCommand, Timeout: hookTimeoutSecond}}}}
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {

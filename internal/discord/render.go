@@ -329,10 +329,11 @@ func headerSelects(id string, m headerState) []Select {
 	if !anyDefault(effort.Options) {
 		effort.Placeholder = effortEngineOwnPlaceholder
 	}
-	acts := m.mode == policy.ModePolicy.String()
+	acts, auto := m.mode == policy.ModePolicy.String(), m.mode == policy.ModeAuto.String()
 	mode := Select{CustomID: CustomID{Kind: IDMode, Session: id}.String(), Options: []Option{
-		{Label: modeAsksFirstLabel, Value: modeAsksFirst, Default: !acts},
+		{Label: modeAsksFirstLabel, Value: modeAsksFirst, Default: !acts && !auto},
 		{Label: modeActsFreelyLabel, Value: modeActsFreely, Default: acts},
+		{Label: modeAutoLabel, Value: modeAuto, Default: auto},
 	}}
 	return []Select{model, effort, mode}
 }
@@ -556,7 +557,8 @@ func (v *View) wait(ev session.Event, t time.Time) {
 	}
 	v.promptCall = ev.ToolUseID
 	v.promptTrace = session.TraceLine(ev.Tool, ev.Target)
-	v.prompt = v.create(promptText(driver, ev.Turn, v.promptTrace, ev.Text, v.dropped),
+	// A call the engine's own check asked about carries its reason (shape A, P39).
+	v.prompt = v.create(promptText(driver, ev.Turn, v.promptTrace, ev.Text, v.dropped, ev.DecidedBy == session.DecidedByEngine, ev.Reason),
 		promptButtons(v.id, ev.ToolUseID, ev.Tool))
 	v.dropped = 0
 	if n := len(v.parts); n > 0 {

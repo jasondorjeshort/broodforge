@@ -66,7 +66,7 @@ func TestSelectHeaderMenus(t *testing.T) {
 		}
 	}
 	if got, want := strings.Join(labels, ","), "Opus=opus,Sonnet=sonnet,Haiku=haiku,Fable=fable,"+
-		"low=low,medium=medium,high=high,xhigh=xhigh,max=max,asks first=asks-first,acts freely (within reach)=acts-freely"; got != want {
+		"low=low,medium=medium,high=high,xhigh=xhigh,max=max,asks first=asks-first,acts freely (within reach)=acts-freely,auto (within reach)=auto"; got != want {
 		t.Errorf("options\n got %s\nwant %s", got, want)
 	}
 	if len(create.Buttons) != 2 || create.Buttons[0].CustomID != "bf:s0001:end" || create.Buttons[1].CustomID != "bf:s0001:discard" {
@@ -133,6 +133,19 @@ func TestSelectHeaderMenus(t *testing.T) {
 	}
 	if !strings.Contains(edit.Body, "\nMode: asks first (from turn 1).") || len(edit.Buttons) != 2 {
 		t.Errorf("mode edit %+v", edit)
+	}
+	// The third mode (P39): its placeholder post, label and menu option.
+	n = len(*posts)
+	v.Handle(ev(session.EventModeChanged, 3500*time.Millisecond, func(e *session.Event) { e.Turn, e.Result = 1, "auto" }))
+	if (*posts)[n].Op != OpCreate || !strings.HasPrefix((*posts)[n].Body, "From the next turn: auto (within reach). Broodforge still decides") {
+		t.Errorf("auto switch post %+v", (*posts)[n])
+	}
+	edit = lastHeaderEdit(t, (*posts)[n:], create.MessageID)
+	if got := selectsLine(edit); got != "bf:s0001:model[]=sonnet bf:s0001:effort[]=high bf:s0001:mode[]=auto" {
+		t.Errorf("after auto: %s", got)
+	}
+	if !strings.Contains(edit.Body, "\nMode: auto (within reach) (from turn 1).") {
+		t.Errorf("auto edit %+v", edit)
 	}
 	v.Handle(ev(session.EventSessionEnded, 4*time.Second, func(e *session.Event) {
 		e.End = &session.EndInfo{Outcome: "nothing to push", By: "1001"}

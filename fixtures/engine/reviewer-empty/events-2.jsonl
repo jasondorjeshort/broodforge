@@ -1,4 +1,4 @@
-{"type":"init","engineSessionId":"4e71e7e0-0000-4000-8000-000000000004","model":"claude-opus-5-5","tools":["Agent","Bash","Read"],"capabilities":["interrupt_receipt_v1"]}
+{"type":"init","engineSessionId":"4e71e7e0-0000-4000-8000-000000000004","model":"claude-opus-5-5","tools":["Agent","Bash","Read"],"capabilities":["interrupt_receipt_v1"],"permissionMode":"default"}
 {"type":"assistant","messageId":"msg_rev_02","model":"claude-opus-5-5","parentToolUseId":"toolu_rev_agent","blocks":[{"kind":"tool-use","id":"toolu_rev_read","name":"Read","input":{"file_path":"hello.txt"}}],"usage":{"input":7,"cacheRead":0,"cacheWrite":0}}
 {"type":"tool-result","toolUseId":"toolu_rev_read","isError":false,"text":"hello","decidedBy":"hook"}
 {"type":"assistant","messageId":"msg_rev_03","model":"claude-opus-5-5","parentToolUseId":"toolu_rev_agent","blocks":[{"kind":"text"}],"usage":{"input":9,"cacheRead":0,"cacheWrite":0}}

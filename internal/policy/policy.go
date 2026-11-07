@@ -7,12 +7,14 @@ import (
 	"strings"
 )
 
-// Mode is the session's permission mode (ADR 0020): policy or prompt.
+// Mode is the session's permission mode (ADR 0020 as amended 2026-11-01): policy, prompt or
+// auto, policy mode with the engine's own classifier reviewing the ask cell.
 type Mode int
 
 const (
 	ModePolicy Mode = iota
 	ModePrompt
+	ModeAuto
 )
 
 // Reach is the channel's reach (03-hook-contract.md, Policy table): read-only or code.
@@ -30,6 +32,8 @@ func ParseMode(s string) (Mode, bool) {
 		return ModePolicy, true
 	case "prompt":
 		return ModePrompt, true
+	case "auto":
+		return ModeAuto, true
 	}
 	return ModePolicy, false
 }
@@ -51,6 +55,8 @@ func (m Mode) String() string {
 		return "policy"
 	case ModePrompt:
 		return "prompt"
+	case ModeAuto:
+		return "auto"
 	}
 	return "unknown"
 }
@@ -99,8 +105,8 @@ type Cell int
 
 const (
 	CellAllow Cell = iota // both modes
-	CellAsk               // policy: allow; prompt: allow if session-allowed, else defer
-	CellWeb               // policy: deny; prompt: defer
+	CellAsk               // policy: allow; prompt: allow if session-allowed, else defer; auto: allow if session-allowed, else pass
+	CellWeb               // policy and auto: deny; prompt: defer
 	CellDeny              // both modes, and no answer lifts it
 	// CellReviewer is the `reviewer` cell (ADR 0028): an Agent or Task call whose subagent_type
 	// is reviewer, defer in every mode and reach; the bot answers it itself after pinning the
@@ -141,6 +147,10 @@ const (
 	Allow Decision = iota
 	Deny
 	Defer
+	// Pass is auto mode's answer for the ask cell (03-hook-contract.md, Auto mode): no
+	// decision, exit 0 with nothing on stdout, so the engine's own classifier decides. C40a
+	// (2026-11-07) holds that a silent exit 0 is no decision.
+	Pass
 )
 
 func (d Decision) String() string {
@@ -151,6 +161,8 @@ func (d Decision) String() string {
 		return "deny"
 	case Defer:
 		return "defer"
+	case Pass:
+		return "pass"
 	}
 	return "unknown"
 }
@@ -243,6 +255,9 @@ const (
 	reasonDefer         = "Broodforge: waiting for a person in this session to answer"
 	reasonReviewer      = "Broodforge: the bot records the tree before the reviewer starts"
 	reasonReviewerAllow = "Broodforge: the bot recorded the tree; the reviewer starts"
+	// reasonPass is a pass's reason: hook.log's and `hook try`'s only, since a pass prints
+	// nothing to the engine.
+	reasonPass = "Broodforge: inside this channel's reach; the engine's own check decides"
 )
 
 // CellFor is the table (03-hook-contract.md, Policy table) after the path checks: a credential
@@ -329,9 +344,12 @@ func Decide(req Request) Result {
 		if slices.Contains(req.SessionAllow, req.Tool) {
 			return Result{Allow, reasonSessionAllow, cell}
 		}
+		if req.Mode == ModeAuto {
+			return Result{Pass, reasonPass, cell}
+		}
 		return Result{Defer, reasonDefer, cell}
 	case CellWeb:
-		if req.Mode == ModePolicy {
+		if req.Mode == ModePolicy || req.Mode == ModeAuto {
 			return Result{Deny, DenyText(req.Tool, "", req.Reach), cell}
 		}
 		return Result{Defer, reasonDefer, cell}

@@ -53,6 +53,7 @@ func TestSettings(t *testing.T) {
 			Hooks   []struct {
 				Type, Command string
 				Timeout       int
+				OnFailure     *string `json:"onFailure"`
 			} `json:"hooks"`
 		} `json:"hooks"`
 	}
@@ -72,6 +73,13 @@ func TestSettings(t *testing.T) {
 		h := m[0].Hooks[0]
 		if h.Type != "command" || h.Timeout != 30 || h.Command != `"C:/Program Files/bf/bin/broodforge.exe" hook `+sub {
 			t.Errorf("%s hook %+v", event, h)
+		}
+		// onFailure block on the PreToolUse entry alone (ADR 0020 as amended 2026-11-01).
+		switch {
+		case event == "PreToolUse" && (h.OnFailure == nil || *h.OnFailure != "block"):
+			t.Errorf("PreToolUse onFailure %v, want block: %s", h.OnFailure, b)
+		case event == "PostToolUse" && h.OnFailure != nil:
+			t.Errorf("PostToolUse carries onFailure %q", *h.OnFailure)
 		}
 	}
 	if c := HookCommand(`C:\bf\bin\broodforge.exe`); c != "C:/bf/bin/broodforge.exe hook pre-tool-use" && runtime.GOOS == "windows" {

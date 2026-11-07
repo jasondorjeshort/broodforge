@@ -33,7 +33,7 @@ var actingFlags = []Flag{
 }
 
 // sessionStart is `broodforge session start --channel <id> --as <user id> [--roles <ids>]
-// [--credential <id>] [--mode prompt|policy] [--model <alias|model id>] [--reach read-only|code]
+// [--credential <id>] [--mode prompt|policy|auto] [--model <alias|model id>] [--reach read-only|code]
 // [--fixture <dir>] [--idle-timeout-seconds <seconds>] [--prompt-timeout-seconds <seconds>]`: prints the session id.
 var sessionStart = Command{
 	Name:   "session start",
@@ -42,7 +42,7 @@ var sessionStart = Command{
 	Flags: append([]Flag{
 		{Name: "channel", Kind: FlagString, Value: "<id>", Usage: "the configured channel"},
 		{Name: "credential", Kind: FlagString, Value: "<id>", Usage: "the credential (default: the driver's)"},
-		{Name: "mode", Kind: FlagString, Value: "prompt|policy", Usage: "the permission mode (default: the channel's)"},
+		{Name: "mode", Kind: FlagString, Value: "prompt|policy|auto", Usage: "the permission mode (default: the channel's)"},
 		{Name: "model", Kind: FlagString, Value: "<alias|model id>", Usage: "opus, sonnet, haiku, fable or a model id they name (default: the channel's)"},
 		{Name: "reach", Kind: FlagString, Value: "read-only|code", Usage: "override the channel's reach (dry-run only)"},
 		{Name: "fixture", Kind: FlagString, Value: "<dir>", Usage: "the fake's fixture: a name under engine.fakeFixtures or a path (dry-run only)"},
@@ -583,14 +583,14 @@ var sessionInterrupt = Command{
 	Columns: []string{"kind", "turn", "detail"},
 }
 
-// sessionMode is `broodforge session mode <id> prompt|policy`: the driver's switch, from the next
+// sessionMode is `broodforge session mode <id> prompt|policy|auto`: the driver's switch, from the next
 // turn; prints `mode-changed  <next turn>  <mode>`.
 var sessionMode = Command{
 	Name:  "session mode",
 	Class: ClassWrite,
 	Flags: append([]Flag{
 		{Name: "id", Kind: FlagString, Value: "<session id>"},
-		{Name: "mode", Kind: FlagString, Value: "prompt|policy"},
+		{Name: "mode", Kind: FlagString, Value: "prompt|policy|auto"},
 	}, actingFlags...),
 	Columns: []string{"kind", "turn", "detail"},
 }

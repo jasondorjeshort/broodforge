@@ -53,15 +53,31 @@ func (c *ClaudeCode) Name() string { return "claude-code" }
 // xhigh, max); the session sends only a level policy.Efforts lists.
 func Args(req TurnRequest, mcpConfig string) []string {
 	args := []string{"-p", "--output-format", "stream-json", "--verbose", "--input-format", "stream-json",
-		"--permission-mode", "default", "--setting-sources", "user", "--strict-mcp-config", "--mcp-config", mcpConfig}
-	return append(args, RequestArgs(req)...)
+		"--permission-mode", permissionMode(req), "--setting-sources", "user", "--strict-mcp-config", "--mcp-config", mcpConfig}
+	return append(args, requestFlags(req)...)
 }
 
-// RequestArgs are the flags the request sets: --resume, --model, --effort,
-// --append-system-prompt-file and --agents, each when the request names it. The text form
-// --append-system-prompt is retired (ADR 0025 rule 5): the session's prompt is a file in its
-// workflow copy, passed on every process. The fake records these as received-<n>.json's `args`.
+// permissionMode is --permission-mode's value: the request's, else default (ADR 0020 as amended
+// 2026-11-01: set per process from the session's mode, so a switch takes effect at the next
+// process). --permission-prompts is never set (the amendment's rule).
+func permissionMode(req TurnRequest) string {
+	if req.PermissionMode == "" {
+		return PermissionDefault
+	}
+	return req.PermissionMode
+}
+
+// RequestArgs are the flags the request sets: --permission-mode always, then --resume,
+// --model, --effort, --append-system-prompt-file and --agents, each when the request names it.
+// The text form --append-system-prompt is retired (ADR 0025 rule 5): the session's prompt is a
+// file in its workflow copy, passed on every process. The fake records these as
+// received-<n>.json's `args`; Args puts --permission-mode among the fixed flags.
 func RequestArgs(req TurnRequest) []string {
+	return append([]string{"--permission-mode", permissionMode(req)}, requestFlags(req)...)
+}
+
+// requestFlags are RequestArgs after --permission-mode.
+func requestFlags(req TurnRequest) []string {
 	var args []string
 	if req.EngineSessionID != "" {
 		args = append(args, "--resume", req.EngineSessionID)

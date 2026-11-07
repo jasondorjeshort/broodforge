@@ -112,7 +112,7 @@ grep -q -- "^\[{\"customId\":\"bf:$id:model\",\"placeholder\":\"Model: the engin
 	fail "the header's first menu is not the model's with its placeholder: $menus"
 grep -q -- "},{\"customId\":\"bf:$id:effort\",\"placeholder\":\"Effort: the engine.s own\",\"options\":\[{\"label\":\"low\",\"value\":\"low\"}" <<<"$menus" ||
 	fail "the header's second menu is not the effort's with its placeholder: $menus"
-grep -q -- "},{\"customId\":\"bf:$id:mode\",\"options\":\[{\"label\":\"asks first\",\"value\":\"asks-first\"},{\"label\":\"acts freely (within reach)\",\"value\":\"acts-freely\",\"default\":true}\]}\]$" <<<"$menus" ||
+grep -q -- "},{\"customId\":\"bf:$id:mode\",\"options\":\[{\"label\":\"asks first\",\"value\":\"asks-first\"},{\"label\":\"acts freely (within reach)\",\"value\":\"acts-freely\",\"default\":true},{\"label\":\"auto (within reach)\",\"value\":\"auto\"}\]}\]$" <<<"$menus" ||
 	fail "the header's last menu is not the mode's marking acts-freely: $menus"
 [ "$(grep -o '"default":true' <<<"$menus" | wc -l)" = 1 ] || fail "a menu other than mode marks a default: $menus"
 rows=$(grep -o '"custom_id":"[^"]*"' <<<"${header#*\"payload\":}" | tr '\n' ' ')

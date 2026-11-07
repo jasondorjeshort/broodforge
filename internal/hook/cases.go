@@ -221,9 +221,9 @@ func Cases(r io.Reader, dir string) ([]CaseResult, error) {
 			return out, &BadCasesError{fmt.Sprintf("line %d: %v", n, err)}
 		}
 		switch c.Expect {
-		case "allow", "deny", "defer", ExpectError:
+		case "allow", "deny", "defer", "pass", ExpectError:
 		default:
-			return out, &BadCasesError{fmt.Sprintf("line %d: expect is %q, want allow, deny, defer or error", n, c.Expect)}
+			return out, &BadCasesError{fmt.Sprintf("line %d: expect is %q, want allow, deny, defer, pass or error", n, c.Expect)}
 		}
 		for _, f := range []*string{&c.Tree, &c.Canonical, &c.Transcript, &c.Needs, &c.Cwd, &c.Workflow} {
 			if *f != "" && !filepath.IsAbs(*f) && !rooted(*f) && filepath.VolumeName(*f) == "" {

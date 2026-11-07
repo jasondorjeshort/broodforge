@@ -152,6 +152,9 @@ const (
 	causeTimedOut   = "the permission check timed out on the host."
 	causeFailed     = "the permission check failed on the host."
 	reachDenyMarker = " is outside this channel's reach ("
+	// traceRefusedByEngine is the third mode's trace line when the engine's check refuses a
+	// call. Placeholder (04-ux-session-controls.md, the third mode; Owner 7): not owner-worded.
+	traceRefusedByEngine = "refused by the engine's check: "
 )
 
 // NoAnswerCause is the cause a trace line gives when the hook gave the engine no answer and
@@ -190,6 +193,11 @@ func ResultLine(tool, target, reach string, isError bool, text string, c Classif
 		return line + " -> " + traceHookFailed
 	case ClassBypassed:
 		return BypassLine(line, c.Ran, c.DecidedBy)
+	case ClassEngine:
+		if c.Decision == DecisionDeny {
+			return line + " -> " + traceRefusedByEngine + firstRunes(firstLine(c.Said), summaryRunes)
+		}
+		// Let run: a failure is the tool's own, shown as for any allowed call below.
 	case ClassNoDecision, ClassAllowed:
 	}
 	if isError {
