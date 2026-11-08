@@ -95,6 +95,8 @@ func SetupInstance(o SetupOptions) *Doc {
 	d.set("Group names to Discord role ids; setup's role step fills trusted.", RawValue([]string{}), "roleGroups", "trusted")
 	d.set("Minutes without a message before a session ends; 0 is never.", RawValue(0), "defaults", "idleTimeoutMinutes")
 	d.set("Minutes a permission prompt waits for its answer; 0 is until answered.", RawValue(0), "defaults", "promptTimeoutMinutes")
+	d.set("Minutes a subagent's permission prompt holds its engine process before it is denied; 1 to 1440, 0 is refused.",
+		RawValue(DefaultSubagentPromptTimeoutMinutes), "defaults", "subagentPromptTimeoutMinutes")
 	d.set("prompt asks in Discord before a tool runs; policy decides from the reach table; auto is policy with the engine's own check reviewing what the table would ask about.", RawValue(ModePrompt), "defaults", "mode")
 	d.set("claude-code, or fake for tests.", RawValue(HarnessClaudeCode), "defaults", "harness")
 	d.set("Literals the push scan refuses wherever they stand.", RawValue([]string{}), "privacy", "never")

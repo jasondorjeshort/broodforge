@@ -37,15 +37,33 @@ func TestProofConfigCheck(t *testing.T) {
 	}
 }
 
+// TestConfigSubagentPromptTimeout is ADR 0029 rule 6 on the built binary: 0 and a negative value
+// refused naming the key, a value above a day capped at 1440 with a warning (P40d).
+func TestConfigSubagentPromptTimeout(t *testing.T) {
+	want(t, clitest.Run(t, nil, "config", "check", "--root", configTree("subagent-prompt-zero")), 1, "",
+		"error: bad-config: ../../tests/config/subagent-prompt-zero/config/instance.json: defaults.subagentPromptTimeoutMinutes: 0, "+
+			"want a positive number of minutes (0 is not never here)\n")
+	want(t, clitest.Run(t, nil, "config", "check", "--root", configTree("subagent-prompt-negative")), 1, "",
+		"error: bad-config: ../../tests/config/subagent-prompt-negative/config/projects/alpha.json: channels.100.subagentPromptTimeoutMinutes: -5, "+
+			"want a positive number of minutes (0 is not never here)\n")
+	want(t, clitest.Run(t, nil, "config", "check", "--root", configTree("subagent-prompt-capped")), 0,
+		"ok  1  1\nwarning: ../../tests/config/subagent-prompt-capped/config/projects/alpha.json: channels.100.subagentPromptTimeoutMinutes 2000 "+
+			"is more than a day; capped at 1440\n", "")
+	want(t, clitest.Run(t, nil, "--root", configTree("subagent-prompt-capped"), "--json", "config", "show", "--effective", "--channel", "100"), 0,
+		`{"id":"100","project":"alpha","reach":"code","roles":{"start":["trusted"],"contribute":[],"answer":[]},`+
+			`"mode":"prompt","harness":"fake","idleTimeoutMinutes":60,"promptTimeoutMinutes":5,"subagentPromptTimeoutMinutes":1440,`+
+			`"model":null,"effort":null}`+"\n", "")
+}
+
 func TestProofConfigShowEffective(t *testing.T) {
 	want(t, clitest.Run(t, nil, "--root", configTree("valid"), "config", "show", "--effective", "--channel", "100", "--json"), 0,
 		`{"id":"100","project":"scratch","reach":"code","roles":{"start":["trusted"],"contribute":["members"],"answer":["driver"]},`+
-			`"mode":"prompt","harness":"fake","idleTimeoutMinutes":60,"promptTimeoutMinutes":5,"model":null,"effort":null}`+"\n", "")
+			`"mode":"prompt","harness":"fake","idleTimeoutMinutes":60,"promptTimeoutMinutes":5,"subagentPromptTimeoutMinutes":60,"model":null,"effort":null}`+"\n", "")
 	want(t, clitest.Run(t, nil, "--root", configTree("valid"), "config", "show", "--effective"), 0,
-		`100  scratch  code  prompt  fake  60  5  -  -  {"start":["trusted"],"contribute":["members"],"answer":["driver"]}`+"\n"+
-			`200  scratch  read-only  policy  fake  30  2  sonnet  low  {"start":["10"],"contribute":["10"],"answer":["10"]}`+"\n", "")
+		`100  scratch  code  prompt  fake  60  5  60  -  -  {"start":["trusted"],"contribute":["members"],"answer":["driver"]}`+"\n"+
+			`200  scratch  read-only  policy  fake  30  2  15  sonnet  low  {"start":["10"],"contribute":["10"],"answer":["10"]}`+"\n", "")
 	want(t, clitest.Run(t, nil, "--root", configTree("valid"), "config", "show", "--effective", "--limit", "1", "--project", "scratch"), 0,
-		`100  scratch  code  prompt  fake  60  5  -  -  {"start":["trusted"],"contribute":["members"],"answer":["driver"]}`+"\n", "")
+		`100  scratch  code  prompt  fake  60  5  60  -  -  {"start":["trusted"],"contribute":["members"],"answer":["driver"]}`+"\n", "")
 	want(t, clitest.Run(t, nil, "--root", configTree("valid"), "config", "show", "--channel", "999"), 1, "",
 		"error: unknown-channel: no channel 999 in ../../tests/config/valid/config\n")
 	want(t, clitest.Run(t, nil, "--root", configTree("valid"), "config", "show", "--project", "nope"), 1, "",

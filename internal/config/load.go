@@ -214,14 +214,25 @@ func (c *Config) capTimeouts(ipath string, projectFiles []File) {
 			*v = MaxTimeoutMinutes
 		}
 	}
+	// The subagent prompt's bound caps at a day (ADR 0029 rule 6): "<key> <value> is more than
+	// a day; capped at 1440".
+	capDay := func(file, key string, v *int) {
+		if v != nil && *v > MaxSubagentPromptTimeoutMinutes {
+			c.Warnings = append(c.Warnings, Problem{File: file, Message: key + " " + strconv.Itoa(*v) +
+				" is more than a day; capped at " + strconv.Itoa(MaxSubagentPromptTimeoutMinutes)})
+			*v = MaxSubagentPromptTimeoutMinutes
+		}
+	}
 	d := &c.Instance.Defaults
 	cap1(ipath, "defaults.idleTimeoutMinutes", &d.IdleTimeoutMinutes)
 	cap1(ipath, "defaults.promptTimeoutMinutes", &d.PromptTimeoutMinutes)
+	capDay(ipath, "defaults.subagentPromptTimeoutMinutes", d.SubagentPromptTimeoutMinutes)
 	for i := range c.Projects {
 		for _, id := range channelIDs(&c.Projects[i]) {
 			ch := c.Projects[i].Channels[id]
 			cap1(projectFiles[i].Path, "channels."+id+".idleTimeoutMinutes", ch.IdleTimeoutMinutes)
 			cap1(projectFiles[i].Path, "channels."+id+".promptTimeoutMinutes", ch.PromptTimeoutMinutes)
+			capDay(projectFiles[i].Path, "channels."+id+".subagentPromptTimeoutMinutes", ch.SubagentPromptTimeoutMinutes)
 		}
 	}
 }

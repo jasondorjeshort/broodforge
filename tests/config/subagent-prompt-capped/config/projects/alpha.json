@@ -1,0 +1,7 @@
+{
+  "//": "subagentPromptTimeoutMinutes above a day on a channel: capped at 1440 with a warning, the check still ok (ADR 0029 rule 6).",
+  "id": "alpha",
+  "name": "Alpha",
+  "repo": { "canonical": "<root>/projects/alpha", "defaultBranch": "main" },
+  "channels": { "100": { "reach": "code", "roles": { "start": ["trusted"] }, "subagentPromptTimeoutMinutes": 2000 } }
+}

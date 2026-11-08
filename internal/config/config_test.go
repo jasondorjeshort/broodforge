@@ -39,10 +39,10 @@ func TestValidTree(t *testing.T) {
 	want := []config.EffectiveChannel{
 		{ID: "100", Project: "scratch", Reach: "code",
 			Roles: config.Roles{Start: []string{"trusted"}, Contribute: []string{"members"}, Answer: []string{"driver"}},
-			Mode:  "prompt", Harness: "fake", IdleTimeoutMinutes: 60, PromptTimeoutMinutes: 5},
+			Mode:  "prompt", Harness: "fake", IdleTimeoutMinutes: 60, PromptTimeoutMinutes: 5, SubagentPromptTimeoutMinutes: 60},
 		{ID: "200", Project: "scratch", Reach: "read-only",
 			Roles: config.Roles{Start: []string{"10"}, Contribute: []string{"10"}, Answer: []string{"10"}},
-			Mode:  "policy", Harness: "fake", IdleTimeoutMinutes: 30, PromptTimeoutMinutes: 2,
+			Mode:  "policy", Harness: "fake", IdleTimeoutMinutes: 30, PromptTimeoutMinutes: 2, SubagentPromptTimeoutMinutes: 15,
 			Model: ptr("sonnet"), Effort: ptr("low")},
 	}
 	if got := c.Channels(); !reflect.DeepEqual(got, want) {
@@ -52,7 +52,7 @@ func TestValidTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const wantJSON = `{"id":"100","project":"scratch","reach":"code","roles":{"start":["trusted"],"contribute":["members"],"answer":["driver"]},"mode":"prompt","harness":"fake","idleTimeoutMinutes":60,"promptTimeoutMinutes":5,"model":null,"effort":null}`
+	const wantJSON = `{"id":"100","project":"scratch","reach":"code","roles":{"start":["trusted"],"contribute":["members"],"answer":["driver"]},"mode":"prompt","harness":"fake","idleTimeoutMinutes":60,"promptTimeoutMinutes":5,"subagentPromptTimeoutMinutes":60,"model":null,"effort":null}`
 	if string(b) != wantJSON {
 		t.Errorf("Effective 100:\n got %s\nwant %s", b, wantJSON)
 	}
@@ -188,6 +188,12 @@ func TestProblems(t *testing.T) {
 				`channels.x1.mode: "acts-freely", want prompt or policy or auto`, "channels.x1.idleTimeoutMinutes: -1, want 0 (never) or a positive number",
 				`channels.x1.roles.start: "driver" is allowed under answer only`,
 				`channels.x1.roles.start: "nobody" is neither a role id nor a group in roleGroups`}},
+		{"subagent prompt timeout negative", inst(`"idleTimeoutMinutes":60`, `"idleTimeoutMinutes":60,"subagentPromptTimeoutMinutes":-1`),
+			minimalProject, "i", []string{"defaults.subagentPromptTimeoutMinutes: -1, want a positive number of minutes (0 is not never here)"}},
+		{"subagent prompt timeout 0", minimalInstance, proj(`"reach":"code"`, `"reach":"code","subagentPromptTimeoutMinutes":0`), "p",
+			[]string{"channels.100.subagentPromptTimeoutMinutes: 0, want a positive number of minutes (0 is not never here)"}},
+		{"subagent prompt timeout positive", inst(`"idleTimeoutMinutes":60`, `"idleTimeoutMinutes":60,"subagentPromptTimeoutMinutes":1`),
+			proj(`"reach":"code"`, `"reach":"code","subagentPromptTimeoutMinutes":1440`), "", nil},
 		{"channel type", minimalInstance, proj(`"reach":"code"`, `"reach":"code","model":5`), "p",
 			[]string{"channels.100.model: want a string, got number"}},
 		{"workflow", minimalInstance, proj(`"id":"p"`, `"id":"p","workflow":{"inject":"none","hooks":["PreToolUse","PostToolUse"]}`), "", nil},
@@ -256,6 +262,40 @@ func TestTimeoutAboveAYearIsCappedWithAWarning(t *testing.T) {
 	e := c.Effective(c.Project("p"), "100")
 	if e.IdleTimeoutMinutes != 525600 || e.PromptTimeoutMinutes != 525600 {
 		t.Errorf("effective %d %d, want both 525600", e.IdleTimeoutMinutes, e.PromptTimeoutMinutes)
+	}
+	if e.SubagentPromptTimeoutMinutes != config.DefaultSubagentPromptTimeoutMinutes {
+		t.Errorf("subagent prompt %d, want the default %d", e.SubagentPromptTimeoutMinutes, config.DefaultSubagentPromptTimeoutMinutes)
+	}
+}
+
+// TestSubagentPromptTimeoutCapsAtADay: ADR 0029 rule 6, a value above 1440 capped there with a
+// warning, in defaults and per channel; a channel inherits defaults' value.
+func TestSubagentPromptTimeoutCapsAtADay(t *testing.T) {
+	inst := strings.Replace(minimalInstance, `"idleTimeoutMinutes":60`, `"idleTimeoutMinutes":60,"subagentPromptTimeoutMinutes":1441`, 1)
+	proj := strings.Replace(minimalProject, `"reach":"code"`, `"reach":"code","subagentPromptTimeoutMinutes":2000`, 1)
+	c, err := config.Load(root(t, inst, map[string]string{"p.json": proj}), nil)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	var got []string
+	for _, w := range c.Warnings {
+		got = append(got, w.Message)
+	}
+	want := []string{"defaults.subagentPromptTimeoutMinutes 1441 is more than a day; capped at 1440",
+		"channels.100.subagentPromptTimeoutMinutes 2000 is more than a day; capped at 1440"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("warnings %q, want %q", got, want)
+	}
+	if e := c.Effective(c.Project("p"), "100"); e.SubagentPromptTimeoutMinutes != 1440 {
+		t.Errorf("effective %d, want 1440", e.SubagentPromptTimeoutMinutes)
+	}
+	inst = strings.Replace(minimalInstance, `"idleTimeoutMinutes":60`, `"idleTimeoutMinutes":60,"subagentPromptTimeoutMinutes":7`, 1)
+	c, err = config.Load(root(t, inst, map[string]string{"p.json": minimalProject}), nil)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if e := c.Effective(c.Project("p"), "100"); e.SubagentPromptTimeoutMinutes != 7 {
+		t.Errorf("inherited %d, want 7", e.SubagentPromptTimeoutMinutes)
 	}
 }
 

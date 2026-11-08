@@ -37,6 +37,7 @@ type ScratchOptions struct {
 // ScratchTemplate is the scratch configuration for o.
 func ScratchTemplate(o ScratchOptions) (Instance, Project) {
 	fixtures, prompt, policy := filepath.ToSlash(o.Fixtures), ModePrompt, ModePolicy
+	subagentPrompt := DefaultSubagentPromptTimeoutMinutes
 	inst := Instance{
 		SchemaVersion: SchemaVersion,
 		InstanceName:  o.InstanceName,
@@ -46,7 +47,8 @@ func ScratchTemplate(o ScratchOptions) (Instance, Project) {
 		Spawn:         Spawn{Backend: BackendSameAccount},
 		Paths:         Paths{Install: filepath.ToSlash(o.Install)},
 		RoleGroups:    map[string][]string{"trusted": {PlaceholderRole}},
-		Defaults:      Defaults{IdleTimeoutMinutes: 0, PromptTimeoutMinutes: 0, Mode: ModePrompt, Harness: HarnessFake},
+		Defaults: Defaults{IdleTimeoutMinutes: 0, PromptTimeoutMinutes: 0, SubagentPromptTimeoutMinutes: &subagentPrompt,
+			Mode: ModePrompt, Harness: HarnessFake},
 	}
 	roles := Roles{Start: []string{"trusted"}, Contribute: []string{"trusted"}, Answer: []string{"trusted"}}
 	proj := Project{

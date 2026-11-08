@@ -1,0 +1,9 @@
+{
+  "//": "subagentPromptTimeoutMinutes 0 in defaults: not never as for its siblings, a config check error naming the key (ADR 0029 rule 6).",
+  "schemaVersion": 1,
+  "instanceName": "test-subagent-prompt-zero",
+  "discord": { "mode": "dry-run" },
+  "spawn": { "backend": "same-account" },
+  "roleGroups": { "trusted": ["10"] },
+  "defaults": { "idleTimeoutMinutes": 60, "promptTimeoutMinutes": 5, "subagentPromptTimeoutMinutes": 0, "mode": "prompt", "harness": "fake" }
+}

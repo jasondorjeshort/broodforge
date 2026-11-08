@@ -89,7 +89,7 @@ var (
 	checkColumns       = []string{"result", "projects", "channels"}
 	showFileColumns    = []string{"file", "content"}
 	showChannelColumns = []string{"id", "project", "reach", "mode", "harness", "idleTimeoutMinutes",
-		"promptTimeoutMinutes", "model", "effort", "roles"}
+		"promptTimeoutMinutes", "subagentPromptTimeoutMinutes", "model", "effort", "roles"}
 )
 
 // checkResult is what config check prints.

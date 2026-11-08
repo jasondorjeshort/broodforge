@@ -177,7 +177,8 @@ once and never changed; a rename is a new file plus `worktree forget` for the ol
   "paths": { "install": "…" }, "audit": { "fileSink": null },
   "relay": { "loginByDirectMessage": false },
   "roleGroups": { "trusted": ["role id"], "members": ["role id"] },
-  "defaults": { "idleTimeoutMinutes": 0, "promptTimeoutMinutes": 0, "mode": "prompt", "harness": "claude-code" },
+  "defaults": { "idleTimeoutMinutes": 0, "promptTimeoutMinutes": 0, "subagentPromptTimeoutMinutes": 60, "mode": "prompt",
+                "harness": "claude-code" },
   "privacy": { "never": ["…"], "allow": ["broodforge"], "identities": ["Name <email>"] } }
 ```
 
@@ -189,14 +190,18 @@ once and never changed; a rename is a new file plus `worktree forget` for the ol
   "venue": { "category": "<category id>", "endedCategory": "<category id>", "summaryChannel": null },
   "channels": { "<discord channel id>": {
       "reach": "code", "roles": { "start": ["trusted"], "contribute": ["members"], "answer": ["driver"], "land": ["trusted"] },
-      "mode": "prompt", "harness": "claude-code", "idleTimeoutMinutes": 60, "promptTimeoutMinutes": 5, "model": null, "effort": null } } }
+      "mode": "prompt", "harness": "claude-code", "idleTimeoutMinutes": 60, "promptTimeoutMinutes": 5,
+      "subagentPromptTimeoutMinutes": 30, "model": null, "effort": null } } }
 ```
 
 Rules: a role list holds group names from `roleGroups` or raw role ids; `"driver"` under `answer` means the driver only
 (R-25). A channel inherits `defaults` for a key it omits. `idleTimeoutMinutes` and `promptTimeoutMinutes` 0 (or absent
 from `defaults`) is never, the default: a session does not end for inactivity, a prompt waits for its answer (each is a
 timer of a year, the cap on any timeout); a negative value is an error; a value above 525600 (a year) is capped there
-with a warning from `config check`, `config reload` and `serve`. `mode` is `prompt`, `policy` or `auto` (ADR 0020 as
+with a warning from `config check`, `config reload` and `serve`. `subagentPromptTimeoutMinutes` inherits the same way
+and bounds a subagent's prompt, the one wait that holds an engine process (ADR 0029 rule 6): absent from both files it
+is 60; 0 and a negative value are errors naming the key, not never, from the same three; a value above 1440 (a day) is
+capped there with a warning. `mode` is `prompt`, `policy` or `auto` (ADR 0020 as
 amended 2026-11-01; `03-hook-contract.md`, Auto mode), in `defaults` and per channel alike; `harness` is `claude-code` or `fake`; `handoff` is
 `pull-request` (default), `push` or `main` (ADR 0028: a fast-forward of the reviewed sha onto `repo.defaultBranch`);
 `handoffFallback` is `push` (default) or `pull-request`, what a `main` end falls back to when the land refuses, an

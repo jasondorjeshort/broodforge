@@ -86,6 +86,7 @@ func validateInstance(in *Instance, exists CredentialExists) []string {
 	d := &in.Defaults
 	out = append(out, neverOrPositive("defaults.idleTimeoutMinutes", &d.IdleTimeoutMinutes)...)
 	out = append(out, neverOrPositive("defaults.promptTimeoutMinutes", &d.PromptTimeoutMinutes)...)
+	out = append(out, positiveMinutes("defaults.subagentPromptTimeoutMinutes", d.SubagentPromptTimeoutMinutes)...)
 	out = append(out, oneOf("defaults.mode", d.Mode, ModePrompt, ModePolicy, ModeAuto)...)
 	out = append(out, oneOf("defaults.harness", d.Harness, HarnessClaudeCode, HarnessFake)...)
 	// The scan skips a never literal under three characters, as the base's does, so config
@@ -134,6 +135,16 @@ const MaxTimeoutMinutes = 365 * 24 * 60
 func neverOrPositive(key string, v *int) []string {
 	if v != nil && *v < 0 {
 		return []string{key + ": " + strconv.Itoa(*v) + ", want 0 (never) or a positive number"}
+	}
+	return nil
+}
+
+// positiveMinutes checks a timeout in minutes that has no never: subagentPromptTimeoutMinutes,
+// whose wait holds an engine process (ADR 0029 rule 6), so 0 is refused rather than read as a
+// third meaning beside its siblings' never.
+func positiveMinutes(key string, v *int) []string {
+	if v != nil && *v <= 0 {
+		return []string{key + ": " + strconv.Itoa(*v) + ", want a positive number of minutes (0 is not never here)"}
 	}
 	return nil
 }
@@ -212,6 +223,7 @@ func validateChannel(key, id string, ch Channel, groups map[string][]string, che
 	}
 	out = append(out, neverOrPositive(key+".idleTimeoutMinutes", ch.IdleTimeoutMinutes)...)
 	out = append(out, neverOrPositive(key+".promptTimeoutMinutes", ch.PromptTimeoutMinutes)...)
+	out = append(out, positiveMinutes(key+".subagentPromptTimeoutMinutes", ch.SubagentPromptTimeoutMinutes)...)
 	lists := []struct {
 		name   string
 		roles  []string

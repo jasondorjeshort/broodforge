@@ -78,10 +78,14 @@ type Relay struct {
 
 // Defaults are what a channel inherits for a key it omits.
 type Defaults struct {
-	IdleTimeoutMinutes   int    `json:"idleTimeoutMinutes"`
-	PromptTimeoutMinutes int    `json:"promptTimeoutMinutes"`
-	Mode                 string `json:"mode"`    // prompt, policy or auto
-	Harness              string `json:"harness"` // claude-code or fake
+	IdleTimeoutMinutes   int `json:"idleTimeoutMinutes"`
+	PromptTimeoutMinutes int `json:"promptTimeoutMinutes"`
+	// SubagentPromptTimeoutMinutes bounds a subagent's prompt, which holds its engine process
+	// (ADR 0029 rule 6): absent is DefaultSubagentPromptTimeoutMinutes; 0 and below are errors,
+	// not never as for its siblings.
+	SubagentPromptTimeoutMinutes *int   `json:"subagentPromptTimeoutMinutes"`
+	Mode                         string `json:"mode"`    // prompt, policy or auto
+	Harness                      string `json:"harness"` // claude-code or fake
 }
 
 // Project is config/projects/<id>.json.
@@ -161,8 +165,11 @@ type Channel struct {
 	Harness              *string `json:"harness"`
 	IdleTimeoutMinutes   *int    `json:"idleTimeoutMinutes"`
 	PromptTimeoutMinutes *int    `json:"promptTimeoutMinutes"`
-	Model                *string `json:"model"`
-	Effort               *string `json:"effort"`
+	// SubagentPromptTimeoutMinutes is the channel's bound on a subagent's prompt, inheriting
+	// defaults (ADR 0029 rule 6).
+	SubagentPromptTimeoutMinutes *int    `json:"subagentPromptTimeoutMinutes"`
+	Model                        *string `json:"model"`
+	Effort                       *string `json:"effort"`
 }
 
 // Roles are the role lists of a channel: group names from roleGroups or raw role ids, and
@@ -178,6 +185,12 @@ type Roles struct {
 // The enumerated values of 03.
 const (
 	SchemaVersion = 1
+
+	// DefaultSubagentPromptTimeoutMinutes is subagentPromptTimeoutMinutes absent from both
+	// defaults and the channel (ADR 0029 rule 6, owner-approved 2026-11-07); a value above
+	// MaxSubagentPromptTimeoutMinutes (a day) is capped there with a warning.
+	DefaultSubagentPromptTimeoutMinutes = 60
+	MaxSubagentPromptTimeoutMinutes     = 24 * 60
 
 	DiscordLive   = "live"
 	DiscordDryRun = "dry-run"

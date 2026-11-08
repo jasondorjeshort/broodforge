@@ -1,0 +1,7 @@
+{
+  "//": "A negative subagentPromptTimeoutMinutes on a channel: a config check error naming the key (ADR 0029 rule 6).",
+  "id": "alpha",
+  "name": "Alpha",
+  "repo": { "canonical": "<root>/projects/alpha", "defaultBranch": "main" },
+  "channels": { "100": { "reach": "code", "roles": { "start": ["trusted"] }, "subagentPromptTimeoutMinutes": -5 } }
+}

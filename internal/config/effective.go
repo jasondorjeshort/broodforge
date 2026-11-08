@@ -6,16 +6,19 @@ package config
 // omits taken from the instance's defaults, plus its id and project. Role lists are as written
 // (group names are not expanded); a missing list is empty.
 type EffectiveChannel struct {
-	ID                   string  `json:"id"`
-	Project              string  `json:"project"`
-	Reach                string  `json:"reach"`
-	Roles                Roles   `json:"roles"`
-	Mode                 string  `json:"mode"`
-	Harness              string  `json:"harness"`
-	IdleTimeoutMinutes   int     `json:"idleTimeoutMinutes"`
-	PromptTimeoutMinutes int     `json:"promptTimeoutMinutes"`
-	Model                *string `json:"model"`
-	Effort               *string `json:"effort"`
+	ID                   string `json:"id"`
+	Project              string `json:"project"`
+	Reach                string `json:"reach"`
+	Roles                Roles  `json:"roles"`
+	Mode                 string `json:"mode"`
+	Harness              string `json:"harness"`
+	IdleTimeoutMinutes   int    `json:"idleTimeoutMinutes"`
+	PromptTimeoutMinutes int    `json:"promptTimeoutMinutes"`
+	// SubagentPromptTimeoutMinutes is always positive: absent from both files it is
+	// DefaultSubagentPromptTimeoutMinutes.
+	SubagentPromptTimeoutMinutes int     `json:"subagentPromptTimeoutMinutes"`
+	Model                        *string `json:"model"`
+	Effort                       *string `json:"effort"`
 }
 
 // Effective merges defaults into one channel.
@@ -46,6 +49,13 @@ func (c *Config) Effective(project *Project, id string) EffectiveChannel {
 	}
 	if ch.PromptTimeoutMinutes != nil {
 		e.PromptTimeoutMinutes = *ch.PromptTimeoutMinutes
+	}
+	e.SubagentPromptTimeoutMinutes = DefaultSubagentPromptTimeoutMinutes
+	if d.SubagentPromptTimeoutMinutes != nil {
+		e.SubagentPromptTimeoutMinutes = *d.SubagentPromptTimeoutMinutes
+	}
+	if ch.SubagentPromptTimeoutMinutes != nil {
+		e.SubagentPromptTimeoutMinutes = *ch.SubagentPromptTimeoutMinutes
 	}
 	return e
 }
