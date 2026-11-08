@@ -93,7 +93,15 @@ type Classified struct {
 	Said string
 	// Ran is whether the call ran, for a bypassed one (04: "ran without" or "refused by the engine").
 	Ran bool
+	// Cause is a bypassed call's cause when the stdio prompt tool's sources name it (ADR 0029
+	// Amendments 2026-11-07 (3)): CauseEngineAnswered or CauseEngineAborted, also the Reason;
+	// "" otherwise.
+	Cause string
 }
+
+// sourceUserPrefix starts the stdio prompt tool's sources for a call the driver answered on
+// stdin (user_temporary, user_reject; 03-hook-contract-prompt-tool.md, What the bot sees).
+const sourceUserPrefix = "user_"
 
 // StripWrapper removes what the engine wraps a hook's block or deny reason in before the model
 // sees it (ADR 0020, C39 amendment): `PreToolUse:<tool> hook error: `, then an optional
@@ -182,6 +190,22 @@ func ClassifyIn(tr engine.ToolResultEvent, tool string, engineAsk bool) Classifi
 			c.Decision, c.Said = DecisionDeny, stripped
 		}
 		return c
+	}
+	// The stdio prompt tool's sources on a call the bot holds no request record for (a record
+	// takes the result before it gets here, toolResult): a user_* source is the engine answering
+	// without the bot, a config source with reason_type other its abort at a stdin close.
+	refused := tr.PermissionDecision == engine.PermissionReject || tr.PermissionDecision == "" && tr.IsError
+	switch {
+	case strings.HasPrefix(tr.DecidedBy, sourceUserPrefix):
+		c := Classified{Kind: ClassBypassed, Decision: DecisionAllow, DecidedBy: DecidedByUnknown, Ran: !refused,
+			Reason: CauseEngineAnswered, Cause: CauseEngineAnswered}
+		if refused {
+			c.Decision = DecisionDeny
+		}
+		return c
+	case tr.DecidedBy == sourceConfig && tr.ReasonType == reasonTypeOther:
+		return Classified{Kind: ClassBypassed, Decision: DecisionDeny, DecidedBy: DecidedByConfig,
+			Reason: CauseEngineAborted, Cause: CauseEngineAborted}
 	}
 	switch tr.DecidedBy {
 	case sourceHook:

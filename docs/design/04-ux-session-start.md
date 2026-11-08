@@ -19,12 +19,14 @@ You are working in Broodforge session s0001 on Broodforge.
 Reach: code (change only this session's tree).
 Each message starts with a From: line naming its writer and their role; the driver is Ada Example.
 Make one tool call at a time: calls made together are asked about one by one.
+Run subagents in the foreground: a background subagent's permission request is dropped when your turn ends.
 Every commit carries the Co-Authored-By lines Broodforge's commit-msg hook adds; never remove one.
 The project's instructions below were taken from main at <commit> on <date>.
 ```
 
 The first sentence is the owner's, verbatim from the ADR; the trailer rule is rule 10's, its first
-letter capitalised. Read-only reach reads `Reach: read-only (read the project, write nothing).`
+letter capitalised. The foreground line is ADR 0029 rule 7's, a placeholder until the owner words
+it, in every mode since the header never changes. Read-only reach reads `Reach: read-only (read the project, write nothing).`
 The last line is left out when nothing was copied (`workflow.inject` is `none`, or the default
 branch has neither `CLAUDE.md` nor `.claude`); otherwise the project's `CLAUDE.md`, its `@` imports
 and its rules follow after a blank line. Nothing in it changes during the session: the engine

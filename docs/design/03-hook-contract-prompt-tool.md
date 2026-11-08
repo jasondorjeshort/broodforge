@@ -131,7 +131,7 @@ while requests are open, `session` answers each deny with `interrupt` true and t
 by Broodforge: the session was interrupted`, then interrupts the process through the backend at once, as a
 running turn's Stop does today (`TerminateJobObject` on Windows; SIGINT, then SIGKILL at
 `spawn.interruptTimeoutSeconds`, on Linux). The records: Stop keeps its actor, decision `deny`, decider
-`participant` (or `host` from the CLI with no `--as`), reason `interrupted`, as today's Stop on a deferred call;
+`participant` (or `host` from the CLI with no `--as`), reason `interrupted`, as today's Stop on a deferred call, its result tracing `-> denied: the turn was stopped` (placeholder);
 `end`, the idle end and shutdown record `dropped`, decider `instance`, with the cause
 `05-debug-interface-session.md` names (`the session ended`, `the session ended: no activity`, `the bot stopped`).
 The turn ends on the exit event as an interrupted turn does today, never before it, so a queued turn starts

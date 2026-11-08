@@ -53,12 +53,17 @@ const (
 	headerPrecedence = "This session is run by Broodforge. Where the project's instructions below conflict with this header, " +
 		"this header wins; it never says how the project's work is done."
 	headerTrailerRule = "Every commit carries the Co-Authored-By lines Broodforge's commit-msg hook adds; never remove one."
+	// headerForeground is ADR 0029 rule 7's sentence: a background subagent's permission
+	// request is dropped when the turn ends (the first-result rule). Every mode gets it, since
+	// nothing in the header changes during a session and the mode may switch. Placeholder: not
+	// owner-worded.
+	headerForeground = "Run subagents in the foreground: a background subagent's permission request is dropped when your turn ends."
 )
 
 // SystemPromptAppend is the header that opens the appended prompt, every line of it ending in a
 // newline and none blank, so the first blank line of instructions.md ends it (ReadHeader): the
-// precedence sentence, the session and project, the reach, the driver, one call at a time, the
-// trailer rule, and where the project's instructions were taken from. It is the one place the
+// precedence sentence, the session and project, the reach, the driver, one call at a time,
+// subagents in the foreground, the trailer rule, and where the project's instructions were taken from. It is the one place the
 // header's text lives; `session show --header <id>` prints it as the session got it.
 func SystemPromptAppend(h Header) string {
 	var b strings.Builder
@@ -67,6 +72,7 @@ func SystemPromptAppend(h Header) string {
 	b.WriteString("Reach: " + h.Reach + " (" + reachMeaning(h.Reach) + ").\n")
 	b.WriteString("Each message starts with a From: line naming its writer and their role; the driver is " + h.DriverName + ".\n")
 	b.WriteString("Make one tool call at a time: calls made together are asked about one by one.\n")
+	b.WriteString(headerForeground + "\n")
 	b.WriteString(headerTrailerRule + "\n")
 	if h.Copied {
 		b.WriteString("The project's instructions below were taken from " + h.Branch + " at " + h.Commit + " on " +

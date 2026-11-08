@@ -477,7 +477,8 @@ func (b *bot) channel(id string) (session.Channel, bool) {
 	return session.Channel{ID: id, Project: p.ID, ProjectName: p.Name, Reach: e.Reach, Mode: e.Mode, Harness: e.Harness,
 		Roles:       session.Roles{Start: e.Roles.Start, Contribute: e.Roles.Contribute, Answer: e.Roles.Answer, Land: e.Roles.Land},
 		IdleTimeout: time.Duration(e.IdleTimeoutMinutes) * time.Minute, PromptTimeout: time.Duration(e.PromptTimeoutMinutes) * time.Minute,
-		Model: deref(e.Model), Effort: deref(e.Effort),
+		SubagentPromptTimeout: time.Duration(e.SubagentPromptTimeoutMinutes) * time.Minute,
+		Model:                 deref(e.Model), Effort: deref(e.Effort),
 		Repo: session.Repo{Canonical: p.Repo.Canonical, Remote: p.Repo.Remote, DefaultBranch: p.Repo.DefaultBranch,
 			Handoff: p.HandoffOrDefault(), GitCredentialID: p.Repo.GitCredentialID},
 		Workflow: session.WorkflowKey{Inject: w.Inject, Hooks: w.Hooks}}, true
@@ -517,7 +518,10 @@ func (b *bot) engine(harness, fixture, received string) (engine.Engine, error) {
 	case config.HarnessFake:
 		return engine.NewFake(fixture, received)
 	case config.HarnessClaudeCode:
-		return &engine.ClaudeCode{Backend: b.backend, Secret: b.creds.Secret}, nil
+		// ExitTimeout: the prompt-mode exit bound after the close at result, the value
+		// spawn.interruptTimeoutSeconds gives the backend (ADR 0029 Amendments 2026-11-07 (1)).
+		return &engine.ClaudeCode{Backend: b.backend, Secret: b.creds.Secret,
+			ExitTimeout: spawnConfig(b.config()).InterruptTimeout}, nil
 	}
 	return nil, fmt.Errorf("harness %s: want %s or %s", quoteArg(harness), config.HarnessClaudeCode, config.HarnessFake)
 }

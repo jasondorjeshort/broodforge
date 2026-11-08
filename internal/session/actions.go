@@ -159,6 +159,18 @@ func (s *Service) Answer(ctx context.Context, req AnswerRequest) (Submitted, err
 	if s.closing.Load() {
 		return Submitted{}, &Error{CodeShuttingDown, "the bot is stopping"}
 	}
+	// A subagent's live request (ADR 0029 rule 5): answered in place by tool_use_id, the
+	// process running on; --tool-use-id required with two or more open.
+	if r, live, err := l.pickRequestLocked(req.ToolUseID); live {
+		if err != nil {
+			return Submitted{}, err
+		}
+		seq := l.log.last()
+		if err := s.answerRequestLocked(l, r, req.Decision, DecidedByParticipant, actorOf(req.As), req.As, who, req.Reason); err != nil {
+			return Submitted{}, err
+		}
+		return Submitted{Turn: l.turn, State: SubmitResumed, Seq: seq}, nil
+	}
 	if l.pending == nil {
 		return Submitted{}, &Error{CodeNoPending, l.id + " is " + l.state + " and waits on no call"}
 	}
@@ -231,6 +243,16 @@ func (s *Service) Interrupt(ctx context.Context, req ActRequest) (Event, error) 
 		return Event{}, err
 	}
 	l.mu.Lock()
+	if len(l.requests) > 0 {
+		// Stop with a subagent's live requests open (ADR 0029 rule 7 as amended): each denied
+		// with interrupt true and recorded with the Stop's actor, then the process interrupted at
+		// once below, the turn ending on its exit.
+		decidedBy := DecidedByParticipant
+		if req.As == "" {
+			decidedBy = DecidedByHost
+		}
+		s.stopRequestsLocked(l, DecisionDeny, decidedBy, actorOf(req.As), req.As, ResultInterrupted)
+	}
 	if l.state == StateWaitingForAnswer && l.pending != nil {
 		// Stop while a call waits (the coordinator's default until the owner decides): the
 		// call is denied with the reason `interrupted` and the turn ends, without a resume.
@@ -677,6 +699,10 @@ func endCause(reason string) string {
 // interrupted); every queued message is dropped with a `message-dropped` event and an
 // action-refused audit row. l.mu is held.
 func (s *Service) discardLocked(l *live, actor, cause string) {
+	// A subagent's live requests (ADR 0029 rule 7 as amended): each denied with interrupt true
+	// and recorded dropped with the cause; the caller interrupts the process at once and the
+	// turn ends on its exit.
+	s.stopRequestsLocked(l, DecisionDropped, DecidedByInstance, ActorInstance, "", cause)
 	if p := l.pending; p != nil {
 		c := l.calls[p.ToolUseID]
 		if err := s.cfg.Store.Write(func(tx *store.Tx) error {

@@ -127,9 +127,12 @@ type Channel struct {
 	Reach, Mode, Harness       string
 	Roles                      Roles
 	IdleTimeout, PromptTimeout time.Duration
-	Model, Effort              string
-	Repo                       Repo
-	Workflow                   WorkflowKey
+	// SubagentPromptTimeout bounds a subagent's live request (ADR 0029 rule 6); 0 is the
+	// configuration's default, 60 minutes, never a wait without end.
+	SubagentPromptTimeout time.Duration
+	Model, Effort         string
+	Repo                  Repo
+	Workflow              WorkflowKey
 }
 
 // EngineFactory returns the engine a new session runs on: harness "fake" replays fixture
@@ -365,9 +368,17 @@ type live struct {
 	requester       string // the running turn's requester (R-44)
 	proc            int    // the running turn's engine process, 1 up
 	pending         *Pending
-	answers         map[string]answerRec // answered calls whose result has not come yet
-	sessionAllow    []string             // tools allowed for the session (allow-session)
-	interruptedBy   string               // set by Interrupt until the turn ends
+	// requests are a prompt-mode process's live requests by request_id (ADR 0029 rule 4): a
+	// subagent's ask-cell call waiting on stdin, each with its prompt and timer (request.go);
+	// requestOrder keeps them as they came. stopDenied is set once Stop, end, the idle end or
+	// shutdown denied them with interrupt true: the process's result, requests and defers are
+	// then logged, not acted on, and the turn ends interrupted on the exit.
+	requests      map[string]*request
+	requestOrder  []string
+	stopDenied    bool
+	answers       map[string]answerRec // answered calls whose result has not come yet
+	sessionAllow  []string             // tools allowed for the session (allow-session)
+	interruptedBy string               // set by Interrupt until the turn ends
 	// baselines is each engine session's last result's cumulative modelUsage (S2).
 	baselines map[string]map[string]engine.ModelUsage
 
@@ -745,6 +756,11 @@ func (s *Service) Shutdown(ctx context.Context) ([]string, error) {
 	sort.Slice(lives, func(i, j int) bool { return lives[i].id < lives[j].id })
 	var open []string
 	for _, l := range lives {
+		// A subagent's live requests are denied with interrupt true before the interrupt and
+		// recorded dropped (ADR 0029 rule 7 as amended).
+		l.mu.Lock()
+		s.stopRequestsLocked(l, DecisionDropped, DecidedByInstance, ActorInstance, "", endCause(InterruptedShutdown))
+		l.mu.Unlock()
 		if !waitIdle(ctx, l) {
 			open = append(open, l.id)
 		}

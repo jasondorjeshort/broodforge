@@ -55,6 +55,9 @@ type Event struct {
 	// the summary is indented by Depth (Indent), so a subagent's calls sit under its Agent line.
 	Parent string `json:"parentToolUseId,omitempty"`
 	Depth  int    `json:"depth,omitempty"`
+	// Agent is the agent type on a subagent's live request's waiting-for-answer (ADR 0029 rule
+	// 4), the prompt's agent line; "" on a top-level deferred call's.
+	Agent string `json:"agent,omitempty"`
 	// The payloads the Discord renderer needs beyond the summary (P11): the header's facts on
 	// session-started, the footer's on turn-ended, the summary's on session-ended.
 	Start *StartInfo `json:"start,omitempty"`

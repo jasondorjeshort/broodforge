@@ -130,6 +130,30 @@ func TestClassifyUnknownSource(t *testing.T) {
 	}
 }
 
+// TestClassifyStdioSourcesWithoutRecord is ADR 0029 Amendments 2026-11-07 (3) with no request
+// record: a user_* source is hook bypassed, cause engine answered; config with reason_type other
+// is hook bypassed, cause engine aborted; plain config stays today's (P40d).
+func TestClassifyStdioSourcesWithoutRecord(t *testing.T) {
+	ran := Classify(engine.ToolResultEvent{Text: "hi", DecidedBy: "user_temporary", PermissionDecision: engine.PermissionAccept}, "Bash")
+	if ran.Kind != ClassBypassed || ran.Decision != DecisionAllow || !ran.Ran || ran.Cause != CauseEngineAnswered || ran.Reason != CauseEngineAnswered {
+		t.Errorf("user_temporary: %+v", ran)
+	}
+	rej := Classify(engine.ToolResultEvent{IsError: true, Text: "no", DecidedBy: "user_reject", PermissionDecision: engine.PermissionReject}, "Bash")
+	if rej.Kind != ClassBypassed || rej.Decision != DecisionDeny || rej.Ran || rej.Cause != CauseEngineAnswered {
+		t.Errorf("user_reject: %+v", rej)
+	}
+	abort := Classify(engine.ToolResultEvent{IsError: true, Text: "Tool permission request failed: AbortError", DecidedBy: "config",
+		ReasonType: "other"}, "Bash")
+	if abort.Kind != ClassBypassed || abort.Decision != DecisionDeny || abort.DecidedBy != DecidedByConfig || abort.Cause != CauseEngineAborted ||
+		abort.Reason != CauseEngineAborted {
+		t.Errorf("config/other: %+v", abort)
+	}
+	plain := Classify(engine.ToolResultEvent{IsError: true, Text: "timed out", DecidedBy: "config"}, "Bash")
+	if plain.Kind != ClassBypassed || plain.Cause != "" || plain.Reason != "timed out" {
+		t.Errorf("config: %+v", plain)
+	}
+}
+
 // TestClassifyAutoReadOnlyTimeoutIsBypassed (P39): in an auto session a Write result whose
 // decider is config is the engine's own decision only on a call whose cell for the session's
 // reach is ask. In read-only reach the Write's cell is deny, so a config decider there is the

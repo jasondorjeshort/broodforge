@@ -48,18 +48,21 @@ type View struct {
 	lastCall  int        // the number of the turn's newest call, 0 before one
 	lastText  int        // the number of the turn's newest text, 0 before one
 
-	ending      string // the `Ending:` line's message id while the end's handoff runs
-	confirm     string // End and discard's confirm, while one stands with its button
-	confirmN    int    // the commit count the confirm names
-	over        bool   // session-ended handled
-	summaryTo   func(lobby string) string
-	endedTo     func(id, lobby string) string
-	prompt      string // the open prompt's message id
-	promptCall  string
-	promptTrace string
-	dropped     int
-	bypass      map[string]session.Event // decisions of calls the hook did not decide
+	ending    string // the `Ending:` line's message id while the end's handoff runs
+	confirm   string // End and discard's confirm, while one stands with its button
+	confirmN  int    // the commit count the confirm names
+	over      bool   // session-ended handled
+	summaryTo func(lobby string) string
+	endedTo   func(id, lobby string) string
+	// prompts are the open prompts by tool use id: a top-level deferred call's, or each of a
+	// subagent's live requests (ADR 0029 rule 4), several at once.
+	prompts map[string]openPrompt
+	dropped int
+	bypass  map[string]session.Event // decisions of calls the hook did not decide
 }
+
+// openPrompt is a posted prompt waiting for its answer: its message id and the call's trace.
+type openPrompt struct{ msg, trace string }
 
 type entry struct {
 	call string // tool use id; "" for a text line
@@ -536,9 +539,11 @@ func (v *View) decision(ev session.Event) {
 		v.bypass[ev.ToolUseID] = ev
 		return
 	}
-	if ev.ToolUseID == v.promptCall && v.prompt != "" && ev.Decision != session.DecisionDeferred {
-		v.post(Post{Op: OpEdit, MessageID: v.prompt, Body: answeredText(ev, v.who(ev.User), v.promptTrace)})
-		v.prompt, v.promptCall = "", ""
+	if p, ok := v.prompts[ev.ToolUseID]; ok && ev.Decision != session.DecisionDeferred {
+		// The buttons go with the edit: 04's answered line, or a dropped request's `No answer;
+		// <cause>` (the turn ended, the session ended, the bot stopped).
+		v.post(Post{Op: OpEdit, MessageID: p.msg, Body: answeredText(ev, v.who(ev.User), p.trace)})
+		delete(v.prompts, ev.ToolUseID)
 		return
 	}
 	if ev.Decision == session.DecisionDropped && ev.DecidedBy == session.DecidedByPolicy {
@@ -555,11 +560,15 @@ func (v *View) wait(ev session.Event, t time.Time) {
 	if v.start != nil {
 		driver = v.start.Driver
 	}
-	v.promptCall = ev.ToolUseID
-	v.promptTrace = session.TraceLine(ev.Tool, ev.Target)
-	// A call the engine's own check asked about carries its reason (shape A, P39).
-	v.prompt = v.create(promptText(driver, ev.Turn, v.promptTrace, ev.Text, v.dropped, ev.DecidedBy == session.DecidedByEngine, ev.Reason),
+	trace := session.TraceLine(ev.Tool, ev.Target)
+	// A call the engine's own check asked about carries its reason (shape A, P39); a subagent's
+	// live request its agent type (ADR 0029 rule 4).
+	msg := v.create(promptText(driver, ev.Turn, ev.Agent, trace, ev.Text, v.dropped, ev.DecidedBy == session.DecidedByEngine, ev.Reason),
 		promptButtons(v.id, ev.ToolUseID, ev.Tool))
+	if v.prompts == nil {
+		v.prompts = map[string]openPrompt{}
+	}
+	v.prompts[ev.ToolUseID] = openPrompt{msg: msg, trace: trace}
 	v.dropped = 0
 	if n := len(v.parts); n > 0 {
 		last := v.parts[n-1]

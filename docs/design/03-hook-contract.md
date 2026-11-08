@@ -182,7 +182,7 @@ succeeded Bash call (the engine's documented resume pattern, ADR 0028; an engine
 starts `Landed`). (3) The cell is `allow`: allow. (4) The cell is `ask` or `web`: by mode as above;
 `reviewer` and `land` are `defer` in every mode for the coordinator's own call, and `deny` with a message
 for a subagent's (stdin `agent_id` set; amended 2026-11-07, ADR 0029; `reviewer` built in P40a, the `land` deny P35's, `policy`
-answering `defer` for `land` till then; a subagent's `ask`-cell call in prompt mode is `ask` (unbuilt until P40c and P40d), answered on the
+answering `defer` for `land` till then; a subagent's `ask`-cell call in prompt mode is `ask`, answered on the
 stdio prompt tool, `03-hook-contract-prompt-tool.md`). The two bot-answered cells (ADR 0028): the hook
 defers as for a person's answer, but `session` answers them itself on `deferred_tool_use`, no venue
 prompt and no `waiting-for-answer`: for `reviewer` it bundles the tree under the session's lock,

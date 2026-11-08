@@ -4,6 +4,7 @@ package session
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -162,5 +163,42 @@ func TestSetIdleTimeout(t *testing.T) {
 	}
 	if n := count(t, h.st, `SELECT count(*) FROM audit_event WHERE kind = 'timeout-changed' AND details = '{"from":"60 minutes","to":"never"}'`); n != 1 {
 		t.Error("no timeout-changed audit event with from and to")
+	}
+}
+
+// TestSubagentPromptExpiry is ADR 0029 rule 6 on the manual clock: a subagent's live request
+// unanswered for the channel's bound (absent: 60 minutes) is denied with interrupt false and
+// the owner's reason, decider prompt-timeout, and the turn goes on to its end (P40d).
+func TestSubagentPromptExpiry(t *testing.T) {
+	h := newHarness(t, "", true)
+	id, sub := promptSession(t, h, "prompt-ask-allow")
+	const bash = "toolu_01GgR6UWwxWCU6FVfmQSDfqe"
+	waitFor(t, h.svc, id, sub.Seq, isType(EventWaitingForAnswer, 1))
+	seq := waitSeq(h.svc, id)
+	h.clock.Advance(59 * time.Minute)
+	if d, _ := h.svc.Show(id); len(d.Requests) != 1 {
+		t.Fatalf("the request expired early: %+v", d.Requests)
+	}
+	h.clock.Advance(time.Minute)
+	if e := waitFor(t, h.svc, id, seq, isType(EventTurnEnded, 1)); e.Result != ResultCompleted {
+		t.Errorf("turn 1 ended %+v", e)
+	}
+	reason := "Broodforge: the Discord prompt went unanswered for 60 minutes; stop here and report what you have."
+	if rowCount(t, h, id, bash, "decision = 'deny' AND decided_by = 'prompt-timeout' AND reason = '"+reason+"'") != 1 {
+		t.Error("no prompt-timeout deny with the owner's reason")
+	}
+	if a := receivedAnswers(t, h.root, id, 1); len(a) != 1 || !strings.Contains(a[0], `"message":"`+reason+`","interrupt":false`) {
+		t.Errorf("answers %q", a)
+	}
+	evs, _ := h.svc.Events(id, seq)
+	found := false
+	for _, ev := range evs {
+		found = found || ev.Type == EventToolResult && ev.ToolUseID == bash && strings.HasSuffix(ev.Summary, "-> denied: the prompt timed out after 60 minutes.")
+	}
+	if !found {
+		t.Errorf("no timeout trace line:\n%s", strings.Join(summaries(evs), "\n"))
+	}
+	if got := expiryReason(time.Minute); got != "Broodforge: the Discord prompt went unanswered for 1 minute; stop here and report what you have." {
+		t.Errorf("one minute: %q", got)
 	}
 }

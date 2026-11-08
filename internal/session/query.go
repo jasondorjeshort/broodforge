@@ -74,6 +74,9 @@ type Pending struct {
 	Until     string `json:"until"`
 	// Dropped is how many other calls of its message the engine dropped (C28): 04 says so.
 	Dropped int `json:"dropped"`
+	// Agent is a subagent's live request's agent type (ADR 0029 rule 5: the parent Agent call's
+	// subagent_type, else the request's agent_id); "" on a top-level deferred call.
+	Agent string `json:"agent,omitempty"`
 }
 
 // Detail is `session show`.
@@ -97,6 +100,9 @@ type Detail struct {
 	Participants    []Participant `json:"participants"`
 	Worktree        *Worktree     `json:"worktree"`
 	Pending         *Pending      `json:"pending"`
+	// Requests are a prompt-mode process's live requests (ADR 0029 rule 5), each with its agent
+	// type and timer, as they came; `session show` prints one `pending:` line each after Pending's.
+	Requests []Pending `json:"requests,omitempty"`
 	// Workflow is the `workflow:` line's value and Hooks the `hooks:` names, from the
 	// session-started event (ADR 0025 rule 5); nil for a session started without a copy.
 	Workflow *string  `json:"workflow"`
@@ -170,6 +176,11 @@ func (s *Service) Show(id string) (Detail, error) {
 		if l.pending != nil {
 			p := *l.pending
 			d.Pending = &p
+		}
+		for _, rid := range l.requestOrder {
+			if r := l.requests[rid]; r != nil {
+				d.Requests = append(d.Requests, r.pending())
+			}
 		}
 		l.mu.Unlock()
 	}

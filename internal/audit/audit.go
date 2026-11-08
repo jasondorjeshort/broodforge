@@ -58,6 +58,9 @@ const (
 	// KindEngineModeMismatch is an engine process whose system/init permissionMode is not the
 	// mode the bot asked for (03-hook-contract.md, Auto mode): wanted and got.
 	KindEngineModeMismatch Kind = "engine-mode-mismatch"
+	// KindEnginePromptToolMissing is a hook-answered ask on a prompt-mode process that reached a
+	// result with no control_request seen for it (ADR 0029 rule 8): the stdio prompt tool absent.
+	KindEnginePromptToolMissing Kind = "engine-prompt-tool-missing"
 )
 
 // Phase marks an action outside the store: attempted before, done or failed after (ADR

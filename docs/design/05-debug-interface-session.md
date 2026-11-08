@@ -93,7 +93,7 @@ prints `timeout-changed  <next turn>  <never or 04's words>`; audit `timeout-cha
 and `to`; held in the bot's memory, not the row. `session interrupt <id>` (the `answer` list) stops the
 running turn and prints `turn-ended  <n>  interrupted` once it ended; while a call waits for an
 answer it denies the call with the reason `interrupted` and ends the turn without a resume (the
-default until the owner decides); otherwise `no-running-turn`. `session end <id>
+default until the owner decides); with live requests open it denies each with `interrupt` true; otherwise `no-running-turn`. `session end <id>
 [--no-closing-turn] [--discard]` (the `answer` list) runs 03's end of session: a running turn interrupted,
 then the handoff (a dirty tree WIP-committed first; `--discard` keeps the commits on `refs/aborted/<id>`
 and pushes nothing: `05-debug-interface-git.md`), printing its line as `worktree handoff` does; a refused handoff
@@ -122,7 +122,7 @@ their first message (R-13), so no co-author line is owed for an invitation alone
 <started at>`. `session show <id>` prints `session: <id>  <state>  <channel>  <project>  <driver>  <mode>
 <reach>  <harness>`, `credential: <id>`, `engine-session: <id or ->`, `model: <id or ->  effort: <level or ->`, `turns: <n>`, the
 `participants:` lines, `worktree: <path>  <branch>  <state>` and `pending: -`, or while waiting
-`pending: <tool use id>  <tool>  <target>  since <time>  until <deadline>`, then ADR 0025's
+`pending: <tool use id>  <tool>  <target>  since <time>  until <deadline>  agent <type>` (one per live request; `session answer` needs `--tool-use-id`, else `bad-args`, when two or more are open), then ADR 0025's
 lines: `workflow: <commit> <date>` or `workflow: none (inject none)` or `none (<branch> at
 <commit> has no CLAUDE.md or .claude)` (`-` for a session started without a copy), `hooks:
 <names>` (`hooks.json`'s, `-` for none), and `review: <tool use id> at <commit>` or `review:

@@ -374,7 +374,11 @@ func (s *Service) startProcessLocked(l *live, input string, answer *engine.TurnA
 		// The engine's own mode, set per process from the mode the turn started with, as
 		// BROODFORGE_MODE is (ADR 0020 as amended 2026-11-01).
 		PermissionMode: PermissionModeOf(l.turnMode),
+		// A prompt-mode process runs the stdio prompt tool, stdin held open for a subagent's
+		// live requests (ADR 0029 rule 2).
+		Mode: l.turnMode,
 	}
+	l.stopDenied = false
 	h, err := l.eng.StartTurn(req)
 	if err != nil {
 		s.failTurnLocked(l, err)
@@ -508,14 +512,28 @@ func (l *live) depthUnder(parent string) int {
 
 // runProcess reads one engine process's events to the end (03 Data flow, steps 4 to 7) and
 // hands them to processEnded. It is the only goroutine reading this handle.
+//
+// The first-result rule, every mode (ADR 0029 Amendments 2026-11-07 (1)): the process's result
+// is its first result line; every event after it is kept in the process's events and never
+// classified, never a decision row, a prompt or a resume, the exit last. In a prompt turn a
+// prompt event is a subagent's live request (request.go), the first result drops those still
+// open, and a hook-answered ask that reaches its result with no request seen is rule 8's
+// detector.
 func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan struct{}, wantMode string) {
 	defer close(done)
 	var evs []engine.EngineEvent
 	results := map[string]bool{}
 	esid := ""
 	var asked *engine.PromptEvent
+	prompt := l.turnIsPrompt()
+	resulted := false
+	requested := map[string]bool{} // tool_use_ids a control_request was seen for
+	hookAsked := map[string]bool{} // tool_use_ids a system/permission_denied line says the hook decided
 	for ev := range h.Events {
 		evs = append(evs, ev)
+		if resulted && ev.Kind != engine.KindExit {
+			continue
+		}
 		switch ev.Kind {
 		case engine.KindInit:
 			if ev.Init != nil && ev.Init.EngineSessionID != "" {
@@ -526,6 +544,16 @@ func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan s
 				s.checkEngineMode(l, n, wantMode, ev.Init.PermissionMode)
 			}
 		case engine.KindPrompt:
+			if ev.Prompt != nil {
+				requested[ev.Prompt.ToolUseID] = true
+			}
+			if prompt {
+				// A subagent's live request (ADR 0029 rule 4); a call already answered is noise.
+				if ev.Prompt != nil && !results[ev.Prompt.ToolUseID] {
+					s.requestArrived(l, n, h, ev.Prompt)
+				}
+				continue
+			}
 			// Shape A (03-hook-contract.md, Auto mode): the engine's own check asks and waits.
 			// The process is interrupted and the call deferred like a hook's defer; the first
 			// ask of a process is the one held, a later one (the process already stopping)
@@ -571,20 +599,40 @@ func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan s
 			}
 		case engine.KindToolResult:
 			if ev.ToolResult != nil {
-				results[ev.ToolResult.ToolUseID] = true
-				s.toolResult(l, n, *ev.ToolResult)
+				tr := *ev.ToolResult
+				results[tr.ToolUseID] = true
+				trace := ""
+				// Rule 8: a hook-answered ask with no request seen; a result the hook decided
+				// (source hook) was never an ask.
+				if prompt && !requested[tr.ToolUseID] && tr.DecidedBy != sourceHook &&
+					(hookAsked[tr.ToolUseID] || l.hookLogAsked(tr.ToolUseID)) {
+					trace = s.promptToolMissing(l, n, tr.ToolUseID)
+				}
+				s.toolResult(l, n, tr, trace)
 			}
 		case engine.KindRateLimit:
 			if ev.RateLimit != nil {
 				s.saveMeter(l, n, *ev.RateLimit)
 			}
-		case engine.KindResult, engine.KindExit, engine.KindUnknown:
+		case engine.KindResult:
+			if ev.Result != nil {
+				resulted = true
+				l.mu.Lock()
+				s.dropRequestsLocked(l, n)
+				l.mu.Unlock()
+			}
+		case engine.KindUnknown:
+			if id := hookAskedOf(ev); id != "" {
+				hookAsked[id] = true
+			}
+		case engine.KindExit:
 		}
 	}
 	// A call the `reviewer` cell deferred is pinned here, before l.mu, so the bundle never
 	// holds the session's lock; deferLocked records it and resumes.
 	var pin *reviewPin
-	if r := lastResult(evs); r != nil && r.Deferred != nil && policy.ReviewerCall(r.Deferred.Name, subagentType(r.Deferred.Name, r.Deferred.Input)) {
+	if r := firstResult(evs); r != nil && r.Deferred != nil && !l.stopped() &&
+		policy.ReviewerCall(r.Deferred.Name, subagentType(r.Deferred.Name, r.Deferred.Input)) {
 		p := s.pinReview(l)
 		pin = &p
 	}
@@ -597,15 +645,34 @@ func (s *Service) runProcess(l *live, n, k int, h engine.TurnHandle, done chan s
 	s.processEndedLocked(l, n, k, esid, evs, results, pin, asked)
 }
 
-// lastResult is the process's result line, nil when it ended without one.
-func lastResult(evs []engine.EngineEvent) *engine.ResultEvent {
-	var r *engine.ResultEvent
-	for _, ev := range evs {
+// firstResult is the process's result line, its first (the first-result rule, ADR 0029
+// Amendments 2026-11-07 (1)), nil when it ended without one.
+func firstResult(evs []engine.EngineEvent) *engine.ResultEvent {
+	for _, ev := range throughFirstResult(evs) {
 		if ev.Kind == engine.KindResult && ev.Result != nil {
-			r = ev.Result
+			return ev.Result
 		}
 	}
-	return r
+	return nil
+}
+
+// throughFirstResult is the process's events up to and including its first result line, all
+// of them when it has none: what engine.UsageOf reads, so a second turn after the first result
+// counts nothing.
+func throughFirstResult(evs []engine.EngineEvent) []engine.EngineEvent {
+	for i, ev := range evs {
+		if ev.Kind == engine.KindResult && ev.Result != nil {
+			return evs[:i+1]
+		}
+	}
+	return evs
+}
+
+// stopped is whether Stop, end or shutdown denied the process's requests (stopDenied).
+func (l *live) stopped() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.stopDenied
 }
 
 // processEndedLocked records a process's end. A result that defers a call keeps the turn
@@ -615,10 +682,20 @@ func lastResult(evs []engine.EngineEvent) *engine.ResultEvent {
 // ask (asked set, shape A of 03-hook-contract.md's Auto mode) defers that call the same way,
 // decided by the engine. l.mu is held.
 func (s *Service) processEndedLocked(l *live, n, k int, esid string, evs []engine.EngineEvent, results map[string]bool, pin *reviewPin, asked *engine.PromptEvent) {
-	u := engine.UsageOf(evs, l.baselines[esid])
-	r := lastResult(evs)
+	u := engine.UsageOf(throughFirstResult(evs), l.baselines[esid])
+	r := firstResult(evs)
 	if u.Cumulative != nil {
 		l.baselines[esid] = u.Cumulative
+	}
+	// A process that exited with requests still open (killed, no result) drops them as the
+	// first result would.
+	s.dropRequestsLocked(l, n)
+	if l.stopDenied {
+		// Stop, end, the idle end or shutdown denied its requests (ADR 0029 rule 7 as amended):
+		// the turn ends interrupted on the exit whatever it carries, a result between the denies
+		// and the exit logged, not acted on; its usage stands as the stream gave it (S2).
+		l.stopDenied = false
+		r, asked = nil, nil
 	}
 	open := l.state == StateRunningTurn && l.interruptedBy == "" && !s.closing.Load()
 	if r != nil && r.Deferred != nil && open {
@@ -845,11 +922,19 @@ func (s *Service) setEngineSession(l *live, n int, id string) {
 // then publishes the decision and the result (03 Data flow, step 5). A tool's own error gets no
 // row (03-hook-contract.md). A call a person or the prompt timeout answered has its row and
 // event already (answerLocked): only its result is published, with the answer's outcome.
-func (s *Service) toolResult(l *live, n int, tr engine.ToolResultEvent) {
+//
+// The record-first rule (ADR 0029 Amendments 2026-11-07 (3)): a call the bot answered a live
+// request for takes the record's decider whatever source the stream carries; a result for a
+// call whose request is still open closes it on the record (requestResultLocked). trace, when
+// set, replaces the result's trace line (rule 8's detector names the lift there).
+func (s *Service) toolResult(l *live, n int, tr engine.ToolResultEvent, trace string) {
 	l.mu.Lock()
 	c := l.calls[tr.ToolUseID]
 	ans, answered := l.answers[tr.ToolUseID]
 	delete(l.answers, tr.ToolUseID)
+	if r := l.requestByToolUseLocked(tr.ToolUseID); r != nil && !answered {
+		ans, answered = s.requestResultLocked(l, n, r, tr), true
+	}
 	auto := l.turnMode == policy.ModeAuto.String()
 	l.mu.Unlock()
 	now := s.stamp()
@@ -871,6 +956,9 @@ func (s *Service) toolResult(l *live, n int, tr engine.ToolResultEvent) {
 		return
 	}
 	line := ResultLine(c.tool, c.target, l.reach, tr.IsError, tr.Text, cl)
+	if trace != "" {
+		line = trace
+	}
 	if cl.Kind != ClassNoDecision {
 		actor := ActorPolicy
 		switch cl.DecidedBy {
@@ -890,11 +978,19 @@ func (s *Service) toolResult(l *live, n int, tr engine.ToolResultEvent) {
 						"message", cl.Reason, "cause", OnFailureCause(cl.Reason))})
 				return err
 			case ClassBypassed:
+				if trace != "" {
+					// Rule 8's detector fired: engine-prompt-tool-missing is the audit row; a
+					// hook-bypassed row with cause timed-out would be false.
+					return nil
+				}
 				outcome, cause := "refused", "failed"
 				if cl.Ran {
 					outcome = "ran"
 				}
-				if cl.DecidedBy == DecidedByConfig {
+				switch {
+				case cl.Cause != "":
+					cause = cl.Cause // engine answered or engine aborted (ADR 0029)
+				case cl.DecidedBy == DecidedByConfig:
 					cause = "timed-out"
 				}
 				_, err := s.cfg.Audit.Append(tx, audit.Event{Kind: audit.KindHookBypassed, Actor: ActorInstance, Session: l.id,

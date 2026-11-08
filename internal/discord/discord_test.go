@@ -376,6 +376,43 @@ func TestViewHeaderAndTurn(t *testing.T) {
 	}
 }
 
+// TestViewSubagentPrompts (P40d): a subagent's live requests, two open at once, each prompt
+// naming the agent type after the turn number (ADR 0029 rule 4); a click answers one by its
+// tool use id, the drop at the turn's first result turns the other into `No answer; the turn
+// ended`, each edit removing its buttons.
+func TestViewSubagentPrompts(t *testing.T) {
+	v, posts := newTestView()
+	v.Handle(ev(session.EventSessionStarted, 0, func(e *session.Event) { e.Start = testStart }))
+	v.Handle(ev(session.EventTurnStarted, time.Second, func(e *session.Event) { e.Turn = 2 }))
+	for i, id := range []string{"a1", "a2"} {
+		v.Handle(ev(session.EventWaitingForAnswer, time.Duration(2+i)*time.Second, func(e *session.Event) {
+			e.Turn, e.ToolUseID, e.Tool, e.Target, e.Text, e.Agent, e.Depth = 2, id, "Bash", "echo "+id, "echo "+id, "probe", 1
+		}))
+	}
+	prompts := map[string]Post{}
+	for _, p := range *posts {
+		if strings.HasPrefix(p.Body, "<@1001> Permission needed") {
+			prompts[p.Buttons[0].CustomID] = p
+		}
+	}
+	a1, a2 := prompts["bf:s0001:a1:allow"], prompts["bf:s0001:a2:allow"]
+	if a1.Body != "<@1001> Permission needed · turn 2 · probe\n[Bash] echo a1\nCommand: echo a1" || a2.MessageID == "" || a2.MessageID == a1.MessageID {
+		t.Fatalf("prompts %+v", prompts)
+	}
+	v.Handle(ev(session.EventPermissionDecision, 4*time.Second, func(e *session.Event) {
+		e.ToolUseID, e.Decision, e.DecidedBy, e.User = "a2", session.DecisionAllow, session.DecidedByParticipant, "1001"
+	}))
+	if p := (*posts)[len(*posts)-1]; p.MessageID != a2.MessageID || p.Op != OpEdit || p.Body != "Allowed by Jason\n[Bash] echo a2" || len(p.Buttons) != 0 {
+		t.Errorf("answered prompt %+v", p)
+	}
+	v.Handle(ev(session.EventPermissionDecision, 5*time.Second, func(e *session.Event) {
+		e.ToolUseID, e.Decision, e.DecidedBy, e.Reason = "a1", session.DecisionDropped, session.DecidedByInstance, "the turn ended"
+	}))
+	if p := (*posts)[len(*posts)-1]; p.MessageID != a1.MessageID || p.Op != OpEdit || p.Body != "No answer; the turn ended\n[Bash] echo a1" || len(p.Buttons) != 0 {
+		t.Errorf("dropped prompt %+v", p)
+	}
+}
+
 // TestViewOverflow: a working message near Discord's limit is frozen and continued (R-22).
 func TestViewOverflow(t *testing.T) {
 	v, posts := newTestView()

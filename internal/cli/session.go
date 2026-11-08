@@ -258,8 +258,9 @@ func runSessionShow(ctx context.Context, env *Env) error {
 // <driver>  <mode>  <reach>  <harness>`, `credential: <id>`, `engine-session: <id or ->`,
 // `model: <id or ->  effort: <level or ->`, `turns: <n>`, one `participants: <user id>
 // driver|contributor  <joined at>` per participant,
-// `worktree: <path>  <branch>  <state>` (or -), `pending: <tool use id>  <tool>  <target>  since
-// <time>  until <deadline>` (or -), then ADR 0025's `workflow: <commit> <date>` or `workflow:
+// `worktree: <path>  <branch>  <state>` (or -), one `pending: <tool use id>  <tool>  <target>  since
+// <time>  until <deadline>` per open call, `  agent <type>` after a subagent's live request (or
+// `pending: -`), then ADR 0025's `workflow: <commit> <date>` or `workflow:
 // none (...)` (or -), `hooks: <names>` (or -) and `review: <tool use id> at <commit>`,
 // `review: none since <commit>` (or -). With --header only the header, as the session got it.
 func renderSessionShow(env *Env, raw json.RawMessage) error {
@@ -290,9 +291,18 @@ func renderSessionShow(env *Env, raw json.RawMessage) error {
 	} else {
 		lines = append(lines, "worktree: -")
 	}
+	pending := d.Requests
 	if p := d.Pending; p != nil {
-		lines = append(lines, "pending: "+p.ToolUseID+"  "+p.Tool+"  "+orDash(p.Target)+"  since "+p.Since+"  until "+orDash(p.Until))
-	} else {
+		pending = append([]session.Pending{*p}, pending...)
+	}
+	for _, p := range pending {
+		line := "pending: " + p.ToolUseID + "  " + p.Tool + "  " + orDash(p.Target) + "  since " + p.Since + "  until " + orDash(p.Until)
+		if p.Agent != "" {
+			line += "  agent " + p.Agent // a subagent's live request (ADR 0029 rule 5)
+		}
+		lines = append(lines, line)
+	}
+	if len(pending) == 0 {
 		lines = append(lines, "pending: -")
 	}
 	hooks := strings.Join(d.Hooks, ", ")

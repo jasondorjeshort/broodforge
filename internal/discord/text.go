@@ -394,9 +394,14 @@ func turnErrorText(reason string) string {
 
 // promptText is the permission prompt (04, Permission prompts): the mention so a phone buzzes,
 // the call's trace line, the full command, and the parallel-calls line when the engine dropped
-// some (C28).
-func promptText(driver string, turn int, trace, command string, dropped int, byEngine bool, reason string) string {
-	lines := []string{mention(driver) + " Permission needed · turn " + strconv.Itoa(turn), trace}
+// some (C28). A subagent's live request names its agent type after the turn number (ADR 0029
+// rule 4; the owner's answer of 2026-11-07: the agent type after the turn number).
+func promptText(driver string, turn int, agent, trace, command string, dropped int, byEngine bool, reason string) string {
+	head := mention(driver) + " Permission needed · turn " + strconv.Itoa(turn)
+	if agent != "" {
+		head += " · " + agent
+	}
+	lines := []string{head, trace}
 	if command != "" {
 		lines = append(lines, "Command: "+command)
 	}
