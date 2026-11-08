@@ -25,7 +25,7 @@ import (
 const (
 	Env        = "BFTEST_STANDIN"         // set: run as the stand-in
 	EnvVersion = "BFTEST_STANDIN_VERSION" // --version prints "<this> (Claude Code)"; default 2.1.296
-	EnvFixture = "BFTEST_STANDIN_FIXTURE" // a turn-<n>.jsonl copied to stdout
+	EnvFixture = "BFTEST_STANDIN_FIXTURE" // a turn-<n>.jsonl copied to stdout; unreadable, exit FixtureUnreadable
 	EnvLog     = "BFTEST_STANDIN_LOG"     // where the Record goes, as JSON
 	EnvSleep   = "BFTEST_STANDIN_SLEEP"   // a duration slept after the fixture, before exiting
 	EnvExit    = "BFTEST_STANDIN_EXIT"    // the exit code; default 0
@@ -38,6 +38,9 @@ const (
 	// waits for stdin's end, then sleeps EnvSleep, then exits.
 	EnvHold = "BFTEST_STANDIN_HOLD"
 )
+
+// FixtureUnreadable is the stand-in's exit code when EnvFixture names a file it cannot read.
+const FixtureUnreadable = 3
 
 // Record is what one stand-in run saw: never an environment value except the names below.
 type Record struct {
@@ -140,9 +143,16 @@ func Main() {
 	in.write()
 	go in.read(os.Stdin)
 	if path := os.Getenv(EnvFixture); path != "" {
-		if b, err := os.ReadFile(path); err == nil {
-			replay(b, in, os.Getenv(EnvWait) != "")
+		b, err := os.ReadFile(path)
+		if err != nil {
+			// An unreadable fixture (an MSYS path such as /c/... handed on unconverted) is the
+			// caller's mistake: say so and exit, rather than print nothing and wait on a stdin a
+			// prompt-mode adapter closes only at a result that will never come.
+			os.Stderr.WriteString("stand-in: " + EnvFixture + ": " + err.Error() + "\n")
+			in.write()
+			os.Exit(FixtureUnreadable)
 		}
+		replay(b, in, os.Getenv(EnvWait) != "")
 	}
 	if os.Getenv(EnvHold) != "sleep" {
 		in.waitClosed()

@@ -196,9 +196,12 @@ grep -q '"path": "",' "$instance" && grep -q '"version": "",' "$instance" ||
 	fail "the scratch instance has no empty engine.path and engine.version"
 sed -i -e "0,/\"path\": \"\",/s||\"path\": \"$stub/$exe\",|" -e '0,/"version": "",/s//"version": "2.1.296",/' "$instance"
 mkdir -p "$work/cwd"
+# The stand-in is a native binary: under MSYS_NO_PATHCONV=1 a /c/... path reaches it as is and
+# cannot be read, so the fixture goes in the host's own form.
 fixture=$(pwd)/fixtures/engine/auto-refused/turn-1.jsonl
+if command -v cygpath >/dev/null; then fixture=$(cygpath -m "$fixture"); fi
 BFTEST_STANDIN=1 BFTEST_STANDIN_FIXTURE=$fixture \
-	"$bf" engine run --real --credential "$cred" --cwd "$work/cwd" --prompt "x" >/dev/null ||
+	"$bf" engine run --real --credential "$cred" --cwd "$work/cwd" --prompt "x" --expect result >/dev/null ||
 	fail "engine run --real with the stand-in failed"
 settings=$root/sessions/engine-run/home/.claude/settings.json
 [ -f "$settings" ] || fail "no settings file at $settings"

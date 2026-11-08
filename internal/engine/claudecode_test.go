@@ -510,6 +510,41 @@ func TestPromptStdinLifetime(t *testing.T) {
 	})
 }
 
+// TestPromptStandinUnreadableFixture: a prompt-mode turn on a stand-in whose fixture path it
+// cannot read (an MSYS /c/... path under MSYS_NO_PATHCONV=1, as auto-mode.sh step 6 once
+// passed) ends with the stand-in's own exit and its reason on stderr. Before, the stand-in
+// printed nothing and waited for stdin's end, which a prompt-mode adapter gives only at a
+// result or at exit: neither came, and engine run --real hung.
+func TestPromptStandinUnreadableFixture(t *testing.T) {
+	cc, _, tap := tapped(t, "", time.Minute)
+	t.Setenv(spawntest.EnvFixture, "/c/no/such/turn-1.jsonl")
+	var stderr bytes.Buffer
+	cc.Stderr = &stderr
+	h, err := cc.StartTurn(promptRequest(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan []EngineEvent, 1)
+	go func() { done <- drain(h) }()
+	var evs []EngineEvent
+	select {
+	case evs = <-done:
+	case <-time.After(30 * time.Second):
+		_ = h.Interrupt()
+		<-done
+		t.Fatal("the turn did not end: the stand-in waits on stdin and the adapter on its exit")
+	}
+	if exit := exitOf(t, evs); exit.Interrupted || exit.Code == nil || *exit.Code != spawntest.FixtureUnreadable {
+		t.Errorf("exit %+v, want the stand-in's own exit %d", exit, spawntest.FixtureUnreadable)
+	}
+	if !strings.Contains(stderr.String(), "stand-in: "+spawntest.EnvFixture+": ") {
+		t.Errorf("stderr %q names no unreadable fixture", stderr.String())
+	}
+	if ops, closes := tap.snapshot(); !slices.Equal(ops, []string{"close"}) || closes != 1 {
+		t.Errorf("stdin ops %q, want one close at exit", ops)
+	}
+}
+
 // TestArgsPromptTool (P40c; ADR 0029 rule 2): --permission-prompt-tool stdio under prompt
 // only, on the command line and in RequestArgs; --permission-prompts under no mode.
 func TestArgsPromptTool(t *testing.T) {
