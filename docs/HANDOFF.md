@@ -5,8 +5,8 @@ Updated: 2026-11-07 by main session (the s000g loss explained; ADR 0029; P40 com
 
 ## Now
 
-- Account `jdorje`. Pushed at `546b48a` (P40d); unpushed: `7546e3d` (P40e's live half: the ADR's prediction held on
-  dev s0008) and P40e's recording half (`--answer`; `defer`/`parallel` on 2.1.319; review in flight). The s000g loss is explained (the engine ends a subagent at a hook
+- Account `jdorje`. Pushed at `1f8e9ab` (P40 complete: P40e's live half held on dev s0008; `--answer`;
+  `defer`/`parallel` re-recorded on 2.1.319); unpushed: this handoff only. The s000g loss is explained (the engine ends a subagent at a hook
   `defer`; `2026-10-23` finding, Third look) and designed (ADR 0029, spike held: `2026-11-07-spike-...-adr-0029.md`);
   the build is P40 (`08-implementation-plan-subagent-prompt.md`). `dev-live` runs the old binary: policy mode there till redeployed.
 - Engine 2.1.319; some accounts have no five-hour window: parser, store (schema 6) and CLI take either shape.
