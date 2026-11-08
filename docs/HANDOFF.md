@@ -1,12 +1,12 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-11-07 by main session (the s000g loss explained; ADR 0029; P40 built; the live session held; windows optional)
+Updated: 2026-11-07 by main session (the s000g loss explained; ADR 0029; P40 complete; windows optional)
 
 ## Now
 
-- Account `jdorje`. Pushed at `546b48a` (P40d, the `auto-mode.sh` fix); unpushed: P40e's record (the ADR's
-  prediction held on dev s0008: a subagent's `Bash` prompted, answered, run). The s000g loss is explained (the engine ends a subagent at a hook
+- Account `jdorje`. Pushed at `546b48a` (P40d); unpushed: `7546e3d` (P40e's live half: the ADR's prediction held on
+  dev s0008) and P40e's recording half (`--answer`; `defer`/`parallel` on 2.1.319; review in flight). The s000g loss is explained (the engine ends a subagent at a hook
   `defer`; `2026-10-23` finding, Third look) and designed (ADR 0029, spike held: `2026-11-07-spike-...-adr-0029.md`);
   the build is P40 (`08-implementation-plan-subagent-prompt.md`). `dev-live` runs the old binary: policy mode there till redeployed.
 - Engine 2.1.319; some accounts have no five-hour window: parser, store (schema 6) and CLI take either shape.
@@ -15,9 +15,9 @@ Updated: 2026-11-07 by main session (the s000g loss explained; ADR 0029; P40 bui
 
 ## Next
 
-1. P40e remainder: `coder` adds `engine record`/`engine run --real` `--answer <tool_use_id>:allow|deny` (the plan's
-   P40e status), then re-records `defer` and `parallel` on dev (about 6 starts, the owner's word; `defer-resume.sh`'s
-   hard-coded id). Then `tester` resolves the 2026-10-23 and 2026-11-07 spike findings (`finding` skill, promote).
+1. `tester`: resolve the 2026-10-23 and 2026-11-07 spike findings (`finding` skill, promote to ADR 0029); the
+   companion's "unbuilt" clauses. `coder` (P40 gaps): a killed `Agent` call's own record after a Stop; the fake
+   holding two requests open; the `2026-11-07` ideas (an idle bound for a `result`-less process; the tail's agent column).
 2. `runner`/`tester` carry-back Sends (`carry-back` skill): the usage-gate pool advice (`2026-11-07` idea), the
    post-edit hook trap (`2026-11-07` idea), the commit-skill departure, the heredoc-reason idea, the `--staged` scan.
 3. `architect`: `auto` under the scrub (opt out on `auto` processes, undoing C34 for Bash, or `permissions.allow`); the

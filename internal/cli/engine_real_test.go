@@ -415,6 +415,96 @@ func TestProofSpawnPreflight(t *testing.T) {
 	want(t, clitest.Run(t, env, "--root", root, "spawn", "preflight"), 1, "", "error: preflight-backend: held\n")
 }
 
+// TestProofEngineRealAnswer (P40e): --answer resumes a deferred call as a session does: the
+// engine resumes the session, the hook's BROODFORGE_ANSWER (and a deny's
+// BROODFORGE_ANSWER_REASON) is set and nothing is written to stdin; engine record resumes its
+// previous turn the same way.
+func TestProofEngineRealAnswer(t *testing.T) {
+	root, sub, _ := realRoot(t)
+	log := filepath.Join(t.TempDir(), "standin.json")
+	r := clitest.Run(t, standinEnv(t, "basic", 2, log), "--root", root, "engine", "run", "--real", "--credential", sub,
+		"--cwd", t.TempDir(), "--mode", "prompt", "--resume", "e1", "--answer", "toolu_1:deny", "--reason", "Denied by Broodforge: not now",
+		"--expect", "result")
+	if r.Code != 0 || r.Stderr != "" {
+		t.Fatalf("engine run --real --answer: exit %d stderr %q", r.Code, r.Stderr)
+	}
+	rec, err := spawntest.ReadRecord(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if i := slices.Index(rec.Args, "--resume"); i < 0 || rec.Args[i+1] != "e1" {
+		t.Errorf("args %q: no --resume e1", rec.Args)
+	}
+	if rec.Values["BROODFORGE_ANSWER"] != "toolu_1:deny" || rec.Values["BROODFORGE_ANSWER_REASON"] != "Denied by Broodforge: not now" {
+		t.Errorf("answer variables %v", rec.Values)
+	}
+	if rec.Stdin != "" || !rec.StdinClosed {
+		t.Errorf("the stand-in read %q (closed %v), want nothing", rec.Stdin, rec.StdinClosed)
+	}
+
+	// engine record: turn 2 answers a call of turn 1, resuming turn 1's session (basic's, which
+	// is never re-recorded; the stand-in replays a stream, whatever the answer).
+	out := filepath.Join(t.TempDir(), "rec")
+	tree := t.TempDir()
+	if r := clitest.Run(t, standinEnv(t, "basic", 1, log), "--root", root, "engine", "record", "--credential", sub,
+		"--cwd", tree, "--out", out, "--prompt", "x", "--mode", "prompt"); r.Code != 0 {
+		t.Fatalf("record turn 1: exit %d stderr %q", r.Code, r.Stderr)
+	}
+	r = clitest.Run(t, standinEnv(t, "basic", 2, log), "--root", root, "engine", "record", "--credential", sub,
+		"--cwd", tree, "--out", out, "--answer", "toolu_1:allow", "--mode", "prompt")
+	if r.Code != 0 {
+		t.Fatalf("record turn 2: exit %d stderr %q", r.Code, r.Stderr)
+	}
+	if rec, err = spawntest.ReadRecord(log); err != nil {
+		t.Fatal(err)
+	}
+	if i := slices.Index(rec.Args, "--resume"); i < 0 || rec.Args[i+1] != "f0451bd7-4428-40b5-a52e-ad6b604c210a" {
+		t.Errorf("turn 2 args %q", rec.Args)
+	}
+	if rec.Values["BROODFORGE_ANSWER"] != "toolu_1:allow" || rec.Has("BROODFORGE_ANSWER_REASON") || rec.Stdin != "" {
+		t.Errorf("turn 2: answer variables %v, stdin %q", rec.Values, rec.Stdin)
+	}
+	if got, _ := os.ReadFile(filepath.Join(out, "turn-2.jsonl")); string(got) == "" {
+		t.Error("turn-2.jsonl is empty")
+	}
+}
+
+// TestProofEngineRealAnswerRefusals: --answer with --prompt, a malformed answer, an answer with
+// no session to resume, and --reason without a deny answer are bad-args; nothing is spawned and
+// engine record leaves no turn file. Without --real, --answer is a usage error.
+func TestProofEngineRealAnswerRefusals(t *testing.T) {
+	root, sub, _ := realRoot(t)
+	none := filepath.Join(t.TempDir(), "standin.json")
+	env := standinEnv(t, "basic", 1, none)
+	tree := t.TempDir()
+	run := func(extra ...string) clitest.Result {
+		return clitest.Run(t, env, append([]string{"--root", root, "engine", "run", "--real", "--credential", sub, "--cwd", tree}, extra...)...)
+	}
+	want(t, run("--resume", "e1", "--answer", "toolu_1:allow", "--prompt", "x"), 1, "",
+		"error: bad-args: engine run: --prompt and --answer exclude each other: a resume writes no input\n")
+	for _, bad := range []string{"toolu_1", "toolu_1:maybe", ":allow", "toolu_1:"} {
+		want(t, run("--resume", "e1", "--answer", bad), 1, "", "error: bad-args: engine run: --answer "+bad+": want <tool_use_id>:allow|deny\n")
+	}
+	want(t, run("--answer", "toolu_1:allow"), 1, "",
+		"error: bad-args: engine run: --answer needs --resume <engine session id>: the answer resumes a deferred call\n")
+	want(t, run("--resume", "e1", "--reason", "no"), 1, "", "error: bad-args: engine run: --reason needs --answer <tool_use_id>:deny\n")
+	want(t, run("--resume", "e1", "--answer", "toolu_1:allow", "--reason", "no"), 1, "",
+		"error: bad-args: engine run: --reason needs --answer <tool_use_id>:deny\n")
+	want(t, run("--resume", "e1"), 2, "", "error: usage: engine run: --prompt <text> is required\n")
+	want(t, clitest.Run(t, env, "engine", "run", "--fake", fixtures+"basic", "--answer", "toolu_1:allow"), 2, "",
+		"error: usage: engine run: --answer and --reason need --real\n")
+
+	out := filepath.Join(t.TempDir(), "rec")
+	want(t, clitest.Run(t, env, "--root", root, "engine", "record", "--credential", sub, "--cwd", tree, "--out", out,
+		"--answer", "toolu_1:allow"), 1, "", "error: bad-args: engine record: --answer needs a previous turn to resume: "+filepath.ToSlash(out)+" has none\n")
+	if _, err := os.Stat(filepath.Join(out, "turn-1.jsonl")); !os.IsNotExist(err) {
+		t.Errorf("engine record left a turn file: %v", err)
+	}
+	if _, err := os.Stat(none); !os.IsNotExist(err) {
+		t.Errorf("an engine was spawned: %v", err)
+	}
+}
+
 // allowRequest is prompt-ask-allow's one request: id, tool, agent id.
 const allowRequest = "ac51e519-431c-4ad3-a5ff-6e3a99987959  Bash  a26c6f2b725f33c8e"
 

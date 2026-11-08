@@ -1,17 +1,18 @@
 {
   "claim": "C28",
-  "engineVersion": "2.1.296",
-  "recorded": "2026-10-16",
+  "engineVersion": "2.1.319",
+  "recorded": "2026-11-07",
   "turns": [
     {
       "n": 1,
       "exit": 0,
-      "engineSessionId": "bc31c3ca-5ef2-4dbe-ae49-8387a22c3274"
+      "engineSessionId": "8fecc1d7-4891-406e-8925-e349d83b64b8"
     },
     {
       "n": 2,
       "exit": 0,
-      "engineSessionId": "bc31c3ca-5ef2-4dbe-ae49-8387a22c3274"
+      "engineSessionId": "8fecc1d7-4891-406e-8925-e349d83b64b8"
     }
-  ]
+  ],
+  "requests": "deny"
 }

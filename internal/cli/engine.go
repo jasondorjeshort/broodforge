@@ -39,10 +39,11 @@ const (
 // engineRun is the adapter alone, no store, no session (05-debug-interface.md, A turn against
 // the engine): `broodforge engine run --fake <fixture dir> [--turn <n>] [--cwd <dir>]
 // [--received-dir <dir>] --prompt <text> [--requests allow|deny] [--expect <value>]` replays a
-// fixture; `engine run --real --credential <id> --cwd <dir> --prompt <text> [--resume <engine
-// session id>] [--model <model>] [--workflow <dir>] [--mode prompt|policy|auto] [--requests
-// allow|deny]` runs the configured engine through the spawn backend (runEngineReal, below);
-// --requests answers every request (requestsFlag). Either streams the turn's
+// fixture; `engine run --real --credential <id> --cwd <dir> (--prompt <text> | --answer
+// <tool_use_id>:allow|deny [--reason <text>]) [--resume <engine session id>] [--model <model>]
+// [--workflow <dir>] [--mode prompt|policy|auto] [--requests allow|deny]` runs the configured
+// engine through the spawn backend (runEngineReal, below); --requests answers every request
+// (requestsFlag), --answer resumes a deferred call (answerFlag). Either streams the turn's
 // EngineEvents as JSONL on stdout, in text mode too, and exits with the turn's exit code (any
 // non-zero code is 1, `error: engine-exit: ...`). Its outcome token for --expect is `result`
 // when the turn produced a result event and `no-result` otherwise; a non-zero exit is the
@@ -63,9 +64,48 @@ var engineRun = Command{
 		{Name: "received-dir", Kind: FlagString, Value: "<dir>", Usage: "--fake: where received-<n>.json goes (default: the fixture directory)"},
 		{Name: "prompt", Kind: FlagString, Value: "<text>", Usage: "the turn's input"},
 		requestsFlag,
+		answerFlag,
+		reasonFlag,
 	},
 	Expect: true,
 	Local:  runEngine,
+}
+
+// answerFlag resumes a deferred call instead of sending input (05-debug-interface.md, engine
+// run --real): the turn's TurnRequest.Answer, which the adapter hands the hook as
+// BROODFORGE_ANSWER, writing no stdin line (C27), as a session's resume does. It needs a session
+// to resume (--resume; engine record's previous turn) and excludes --prompt. reasonFlag is a
+// deny answer's text, the hook's BROODFORGE_ANSWER_REASON (a session sends one on a deny only).
+var (
+	answerFlag = Flag{Name: "answer", Kind: FlagString, Value: "<tool_use_id>:allow|deny",
+		Usage: "--real: resume the deferred call with this answer, no input (needs a resume; excludes --prompt)"}
+	reasonFlag = Flag{Name: "reason", Kind: FlagString, Value: "<text>",
+		Usage: "--answer <id>:deny: the deny text the hook returns (default: its own)"}
+)
+
+// answerOf reads --answer and --reason: nil when neither is given; bad-args for a value that is
+// not <tool_use_id>:allow|deny, for --answer with --prompt, for --reason without a deny answer.
+// Whether there is a session to resume is the caller's check.
+func answerOf(env *Env, name string) (*engine.TurnAnswer, string, error) {
+	v, reason := env.String("answer"), env.String("reason")
+	if v == "" {
+		if reason != "" {
+			return nil, "", control.NewError(control.CodeBadArgs, name+": --reason needs --answer <tool_use_id>:deny")
+		}
+		return nil, "", nil
+	}
+	i := strings.LastIndexByte(v, ':')
+	if i <= 0 || (v[i+1:] != requestsAllow && v[i+1:] != requestsDeny) {
+		return nil, "", control.NewError(control.CodeBadArgs, name+": --answer "+v+": want <tool_use_id>:allow|deny")
+	}
+	a := &engine.TurnAnswer{ToolUseID: v[:i], Decision: v[i+1:]}
+	switch {
+	case env.String("prompt") != "":
+		return nil, "", control.NewError(control.CodeBadArgs, name+": --prompt and --answer exclude each other: a resume writes no input")
+	case reason != "" && a.Decision != requestsDeny:
+		return nil, "", control.NewError(control.CodeBadArgs, name+": --reason needs --answer <tool_use_id>:deny")
+	}
+	return a, reason, nil
 }
 
 // requestsFlag is how a standalone turn answers every request (03-hook-contract-prompt-tool.md,
@@ -112,6 +152,8 @@ func runEngine(ctx context.Context, env *Env) error {
 		return &usageError{"engine run: --workflow needs --real"}
 	case env.String("mode") != "":
 		return &usageError{"engine run: --mode needs --real"}
+	case env.String("answer") != "" || env.String("reason") != "":
+		return &usageError{"engine run: --answer and --reason need --real"}
 	case dir == "":
 		return &usageError{"engine run: --fake <fixture dir> or --real is required"}
 	}
@@ -224,10 +266,12 @@ func exitRefusal(exit *engine.ExitEvent) error {
 }
 
 // engineRecord is `broodforge engine record --credential <id> --cwd <dir> --out <fixture
-// dir> --prompt <text> [--model <model>] [--mode prompt|policy|auto] [--requests allow|deny]`: engine run --real that also writes the engine's raw stdout as the
+// dir> (--prompt <text> | --answer <tool_use_id>:allow|deny [--reason <text>]) [--model <model>]
+// [--mode prompt|policy|auto] [--requests allow|deny]`: engine run --real that also writes the engine's raw stdout as the
 // directory's next turn-<n>.jsonl, resuming the previous turn's session, and records the turn
-// in fixture.json, under --mode prompt with the requests policy (05-debug-interface.md). It refuses an --out inside the instance root
-// (a session tree, a config directory) or inside --cwd.
+// in fixture.json, under --mode prompt with the requests policy (05-debug-interface.md); --answer
+// records the resume of the previous turn's deferred call, so it needs a previous turn. It
+// refuses an --out inside the instance root (a session tree, a config directory) or inside --cwd.
 var engineRecord = Command{
 	Name:  "engine record",
 	Class: ClassStandalone,
@@ -239,6 +283,8 @@ var engineRecord = Command{
 		{Name: "model", Kind: FlagString, Value: "<model>", Usage: "the engine's --model (default: the account's)"},
 		modeFlag,
 		requestsFlag,
+		answerFlag,
+		reasonFlag,
 	},
 	Expect: true,
 	Local:  runEngineRecord,
@@ -277,15 +323,21 @@ func runEngineRecord(ctx context.Context, env *Env) error {
 // --fake streams it. out, when set, is engine record's fixture directory.
 func runEngineReal(_ context.Context, env *Env, name string, out *string) error {
 	credID, cwd, prompt := env.String("credential"), env.String("cwd"), env.String("prompt")
+	answer, reason, err := answerOf(env, name)
+	if err != nil {
+		return err
+	}
 	switch {
 	case credID == "":
 		return &usageError{name + ": --credential <id> is required"}
 	case cwd == "":
 		return &usageError{name + ": --cwd <dir> is required"}
-	case prompt == "":
+	case prompt == "" && answer == nil:
 		return &usageError{name + ": --prompt <text> is required"}
 	case env.Root == "":
 		return &usageError{name + ": no instance root: pass --root <path> or set " + RootEnv}
+	case answer != nil && out == nil && env.String("resume") == "":
+		return control.NewError(control.CodeBadArgs, name+": --answer needs --resume <engine session id>: the answer resumes a deferred call")
 	}
 	absCwd, err := filepath.Abs(cwd)
 	if err != nil {
@@ -337,11 +389,23 @@ func runEngineReal(_ context.Context, env *Env, name string, out *string) error 
 		req.HookEnv = append(req.HookEnv, engine.HookVar{Name: hook.EnvWorkflow, Value: filepath.ToSlash(wf)})
 	}
 	req.Input, req.EngineSessionID, req.Model = prompt, env.String("resume"), env.String("model")
+	if answer != nil {
+		// As a session's resume (session.startProcessLocked): the answer in the request, so the
+		// adapter writes no stdin line, and a deny's text as the hook's variable.
+		req.Answer = answer
+		if reason != "" {
+			req.HookEnv = append(req.HookEnv, engine.HookVar{Name: hook.EnvAnswerReason, Value: reason})
+		}
+	}
 
 	var rec *engine.Recording
 	if out != nil {
 		if rec, err = openRecording(env.Root, absCwd, *out); err != nil {
 			return err
+		}
+		if answer != nil && rec.Resume() == "" {
+			rec.Abort()
+			return control.NewError(control.CodeBadArgs, name+": --answer needs a previous turn to resume: "+filepath.ToSlash(*out)+" has none")
 		}
 		req.EngineSessionID = rec.Resume()
 		rec.Requests = requests

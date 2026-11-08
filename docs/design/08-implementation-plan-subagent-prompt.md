@@ -204,14 +204,11 @@ build raised that only a real turn can settle is added here, not to a new spike.
 run without the owner's word (the pass is complete without this brief; the handoff lists it); touch `~/.claude`.
 Depends on: P40d.
 
-Status 2026-11-07: the live half is done: s0008 on the dev root ran as ADR 0029 designs (a `general-purpose`
-subagent's `Bash echo hi` held at `waiting-for-answer`, `session answer s0008 allow --wait` ended the turn
-`completed`, the `Agent` result carried the report, `audit --kind engine-prompt-tool-missing` empty; engine
-2.1.319, one process, no resume), so the second prediction holds. The recording half is blocked: `engine record`
-cannot record a resume turn (no answer flag, `--prompt` always written to stdin, the spawn strips inherited
-`BROODFORGE_*`), so `defer` turns 2 and 4 and `parallel` turn 2 cannot be re-recorded as built. Remainder: a flag
-`--answer <tool_use_id>:allow|deny` (with `--reason`) on `engine record` and `engine run --real`, setting
-`TurnRequest.Answer`, `--prompt` optional with it, `05-debug-interface.md` updated; then the recording run (about 6
-engine starts, the owner's word). Knock-on edits: `tests/repro/defer-resume.sh` hard-codes turn 1's tool use id, so a
-re-recording edits it; the old `defer` used two engine sessions where `engine record` makes one (the fake does not
-care).
+Status 2026-11-07: both halves are done. The live half: s0008 on the dev root ran as ADR 0029 designs (engine 2.1.319,
+one process, no resume), so the second prediction holds. The recording half: `engine run --real` and `engine record` take
+`--answer <tool_use_id>:allow|deny` and `--reason <text>` (`--prompt` with `--answer`, `--answer` with no previous turn,
+`--reason` without a deny, and `--fake --answer` are refused); `defer` (four turns, one engine session where the old had
+two) and `parallel` (two turns) were re-recorded on the dev root under the stdio flag, imported in place, goldens
+regenerated; `defer-resume.sh` passes with the new turn-1 id; C27 and C28 hold. Shape changes against 2.1.296: a
+PostToolUse `attachment` line after each allowed Write, no `thinking_tokens` lines in `defer` turn 2, a `seven_day`-only
+rate-limit line. Eight engine starts for P40e in all.

@@ -79,7 +79,7 @@ func TestDeferAnswerAndPromptTimeout(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := waitFor(t, h.svc, "s0001", sub.Seq, isType(EventWaitingForAnswer, 1))
-	if w.ToolUseID != "toolu_01NmkmkiJgpriuU7yQrtDWYi" || w.Tool != "Write" {
+	if w.ToolUseID != "toolu_01536WaGFU1xVZtHXVdpztcM" || w.Tool != "Write" {
 		t.Fatalf("waiting-for-answer %+v", w)
 	}
 	d, err := h.svc.Show("s0001")
@@ -106,7 +106,7 @@ func TestDeferAnswerAndPromptTimeout(t *testing.T) {
 		t.Errorf("turn 1 ended %+v", e)
 	}
 	if req := received(t, h.root, "s0001", 2); req.Answer == nil || req.Answer.Decision != "allow" || req.Input != "" ||
-		req.EngineSessionID != "93ab3f0d-b9f2-40b7-8921-a95858da0251" {
+		req.EngineSessionID != "0c4cb90e-781f-4c59-8dee-f97569bac5ef" {
 		t.Errorf("resume request: %+v", req)
 	}
 	if n := count(t, h.st, `SELECT count(*) FROM permission_decision WHERE request_id = '`+w.ToolUseID+`'
@@ -174,10 +174,10 @@ func TestParallelDropsOne(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := waitFor(t, h.svc, "s0001", sub.Seq, isType(EventWaitingForAnswer, 1))
-	if w.ToolUseID != "toolu_01FfytaZavRivXiQSPniauVu" {
+	if w.ToolUseID != "toolu_01N6bE6FU6L5oPHQta9BLVao" {
 		t.Fatalf("waiting on %s", w.ToolUseID)
 	}
-	if n := count(t, h.st, `SELECT count(*) FROM permission_decision WHERE decision = 'dropped' AND request_id = 'toolu_01B5b1rkmDCfPP4aQPdM3VCT'`); n != 1 {
+	if n := count(t, h.st, `SELECT count(*) FROM permission_decision WHERE decision = 'dropped' AND request_id = 'toolu_01LzNQTQQPrgECAbBsSKctFi'`); n != 1 {
 		t.Error("no dropped row for the first call")
 	}
 	if n := count(t, h.st, `SELECT count(*) FROM audit_event WHERE kind = 'permission-decision' AND details LIKE '%"decision":"dropped"%'`); n != 1 {
@@ -191,7 +191,7 @@ func TestParallelDropsOne(t *testing.T) {
 		t.Fatal(err)
 	}
 	w = waitFor(t, h.svc, "s0001", ans.Seq, isType(EventWaitingForAnswer, 1))
-	if w.ToolUseID != "toolu_01DSwcaGCZMPUQgCp2cERJcp" {
+	if w.ToolUseID != "toolu_011Qp7XtfVfcjityws6yr3Mr" {
 		t.Errorf("re-issued call %s", w.ToolUseID)
 	}
 	// allow-session holds from the resume on: the dropped call comes back in that process.

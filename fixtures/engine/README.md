@@ -4,7 +4,7 @@ Recorded Claude Code stream-json turns, replayed by the fake engine. Each direct
 `turn-<n>.jsonl` (the engine's stdout, verbatim but for paths) and `fixture.json` (`claim`,
 `engineVersion`, `recorded`, and `turns: [{n, exit, engineSessionId}]`). All but the hand-written `subagent`, `subagent-pinned`, `subagent-pinned-denied`, `reviewer-*`, `auto-*` and `prompt-ask-session-allow` fixtures were
 recorded on the PC, by the spike or by `engine record` (claim `recorded`), with engine 2.1.296 except
-`subagent-deferred` and the `prompt-*` fixtures (2.1.319); the
+`subagent-deferred`, `defer`, `parallel` and the `prompt-*` fixtures (2.1.319); the
 import rewrote the PC home to `/home/user`, the spike root to `/home/user/bf-spike`, and the
 engine's project slugs to match, and changed nothing else. The `prompt-*` fixtures are ADR 0029's
 spike runs (`docs/findings/2026-11-07-spike-subagent-prompt-stdio-claims-for-adr-0029.md`) and
@@ -53,9 +53,9 @@ from the source path's `<drive>:/Users/<user>` prefix. Read the result as `docs/
 | Fixture | Claim | Turns | What it shows |
 |---|---|---|---|
 | `basic` | S1 | 3 | A Read turn, a resumed turn, and a turn asking for AskUserQuestion: the stream shape, the `modelUsage` delta over a resumed session, AskUserQuestion absent under `-p`. |
-| `defer` | C27 | 4 | Prompt-mode `defer` round trip: turns 1 and 3 end deferred; turn 2 resumes with allow and the Write runs; turn 4 resumes with deny and the reason reaches the model wrapped. |
+| `defer` | C27 | 4 | Prompt-mode `defer` round trip: turns 1 and 3 end deferred; turn 2 resumes with allow and the Write runs; turn 4 resumes with deny and the reason reaches the model wrapped. `engine record --mode prompt --requests deny` on the dev root, engine 2.1.319, 2026-11-07, the stdio prompt tool on: one engine session for all four turns (the 2.1.296 recording used two; the fake does not care), the resumes recorded with `--answer`, turn 4 with no `--reason` (the hook's own deny text); each allowed Write is followed by the PostToolUse hook's `attachment` line. |
 | `interrupted` | S2 | 3 | Turn 1 the engine blocks a standalone `sleep` before the hook (`<tool_use_error>`) and the kill lands after the `result`, exit 1; turn 2 a ping killed mid-call with no `result`, exit 1; turn 3 the resume reruns it to a `result`. |
-| `parallel` | C28 | 2 | Two Writes in one message, both deferred, `result` naming the last; on resume the answered call runs and the other is re-issued and deferred again. |
+| `parallel` | C28 | 2 | Two Writes in one message, both deferred, `result` naming the last; on resume the answered call runs and the other is re-issued and deferred again. Recorded as `defer` (engine 2.1.319, 2026-11-07, turn 2 with `--answer` allow): C28 holds under the stdio prompt tool. |
 | `hook-exit2` | C39 | 1 | A hook exiting 2 blocks Read and Bash; the reason reaches the model wrapped with `[<hook command>]: `. |
 | `hook-exit1` | C39 | 1 | A hook exiting 1 falls through to the engine's own permission check: Read and Bash run, the Write is denied for want of a grant. |
 | `hook-sleep` | C39 | 1 | A hook that outlives its timeout falls through the same way as exit 1. |

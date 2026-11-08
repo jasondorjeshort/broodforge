@@ -1,27 +1,28 @@
 {
   "claim": "C27",
-  "engineVersion": "2.1.296",
-  "recorded": "2026-10-16",
+  "engineVersion": "2.1.319",
+  "recorded": "2026-11-07",
   "turns": [
     {
       "n": 1,
       "exit": 0,
-      "engineSessionId": "93ab3f0d-b9f2-40b7-8921-a95858da0251"
+      "engineSessionId": "0c4cb90e-781f-4c59-8dee-f97569bac5ef"
     },
     {
       "n": 2,
       "exit": 0,
-      "engineSessionId": "93ab3f0d-b9f2-40b7-8921-a95858da0251"
+      "engineSessionId": "0c4cb90e-781f-4c59-8dee-f97569bac5ef"
     },
     {
       "n": 3,
       "exit": 0,
-      "engineSessionId": "c8922a32-fb6f-4ab5-ab21-e9c38b9b0bd4"
+      "engineSessionId": "0c4cb90e-781f-4c59-8dee-f97569bac5ef"
     },
     {
       "n": 4,
       "exit": 0,
-      "engineSessionId": "c8922a32-fb6f-4ab5-ab21-e9c38b9b0bd4"
+      "engineSessionId": "0c4cb90e-781f-4c59-8dee-f97569bac5ef"
     }
-  ]
+  ],
+  "requests": "deny"
 }

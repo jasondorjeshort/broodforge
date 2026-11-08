@@ -44,7 +44,7 @@ func assertClosedPending(t *testing.T, h *harness, cause string) {
 	if n := count(t, h.st, `SELECT count(*) FROM turn WHERE session_id = 's0001' AND seq = 1 AND ended_at IS NOT NULL AND result = 'interrupted'`); n != 1 {
 		t.Error("the waiting turn's row is not ended")
 	}
-	if n := count(t, h.st, `SELECT count(*) FROM permission_decision WHERE request_id = 'toolu_01NmkmkiJgpriuU7yQrtDWYi'
+	if n := count(t, h.st, `SELECT count(*) FROM permission_decision WHERE request_id = 'toolu_01536WaGFU1xVZtHXVdpztcM'
     AND decision = 'dropped' AND decided_by = 'instance' AND reason = '`+cause+` before an answer'`); n != 1 {
 		t.Errorf("the pending call is not dropped with %q", cause)
 	}
@@ -152,7 +152,7 @@ func TestInterruptWhileACallWaits(t *testing.T) {
 	if err != nil || e.Type != EventTurnEnded || e.Turn != 1 || e.Result != ResultInterrupted {
 		t.Fatalf("interrupt: %+v, %v", e, err)
 	}
-	if n := count(t, h.st, `SELECT count(*) FROM permission_decision WHERE request_id = 'toolu_01NmkmkiJgpriuU7yQrtDWYi'
+	if n := count(t, h.st, `SELECT count(*) FROM permission_decision WHERE request_id = 'toolu_01536WaGFU1xVZtHXVdpztcM'
     AND decision = 'deny' AND decided_by = 'participant' AND user_id = '1001' AND reason = 'interrupted'`); n != 1 {
 		t.Error("the pending call is not denied as interrupted")
 	}
@@ -558,7 +558,7 @@ func TestStoreFailureOnDropIsOneInternalError(t *testing.T) {
 		switch ev.Type {
 		case EventInternalError:
 			internal++
-			if ev.ToolUseID != "toolu_01NmkmkiJgpriuU7yQrtDWYi" || ev.Turn != 1 || !strings.Contains(ev.Summary, "disk I/O error") {
+			if ev.ToolUseID != "toolu_01536WaGFU1xVZtHXVdpztcM" || ev.Turn != 1 || !strings.Contains(ev.Summary, "disk I/O error") {
 				t.Errorf("internal-error: %+v", ev)
 			}
 			after = true

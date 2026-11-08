@@ -157,12 +157,12 @@ directory (default `fixtures/engine/basic/` [no-check: no code yet]). Adapter al
 --fake <fixture dir> [--turn <n>] [--cwd <dir>] --prompt "<text>"` streams `EngineEvent`s as JSONL to stdout exactly as the
 adapter parsed them (an unknown line as `{"type":"unknown","eventType":..,"subtype":..,"bytes":..,"head":..}`, `head` its first 200 bytes, so
 a page-long `commands_changed` is one short line; P29) and exits 0 when the fixture's `exit` is 0, else 1 with `error: engine-exit`; `--requests allow|deny` (default `deny`) answers every prompt event the fake emits (it waits only on those the recording answered inside the turn), and on `--real` and `engine record` each one a `--mode prompt` process raises, one stderr line each (`03-hook-contract-prompt-tool.md`, Debug surface; another mode `bad-args`). `engine run --real --credential
-<id> --cwd <dir> --prompt "<text>" [--resume <engine session id>] [--model <m>] [--workflow <dir>] [--mode prompt|policy|auto]`, with `--root`, does the same through the configured spawn
+<id> --cwd <dir> (--prompt "<text>" | --answer <tool_use_id>:allow|deny [--reason <text>]) [--resume <engine session id>] [--model <m>] [--workflow <dir>] [--mode prompt|policy|auto]`, with `--root`, does the same through the configured spawn
 backend: credential and git identity from the store, an API key through the key file; the hook sees session `engine-run`, code
 reach, `--mode` else `defaults.mode` (`auto` also runs the engine with `--permission-mode auto`), log `<root>/sessions/engine-run/home/hook.log`, and with `--workflow` `BROODFORGE_WORKFLOW` naming the
 directory, so its chain runs without a session (`error: bad-workflow` when it is not a directory); Ctrl-C interrupts the turn; no `--credential` is `error:
-usage`, an unknown one `error: unknown-credential`, nothing spawned. `engine record --credential <id> --cwd <dir> --out <fixture
-dir> --prompt "<text>" [--model <m>] [--mode prompt|policy|auto]` runs the real engine and writes the raw lines as `turn-<n>.jsonl` (`n` counting up in an existing
+usage`, an unknown one `error: unknown-credential`, nothing spawned. `--answer` resumes a deferred call as a session's answer does: the turn's answer, the hook's `BROODFORGE_ANSWER`, no stdin line (C27), `--reason` a deny's `BROODFORGE_ANSWER_REASON`; it needs a session to resume (`--resume`, `engine record`'s previous turn), and with `--prompt`, a value not of that form, no session to resume, or `--reason` without a deny answer is `bad-args`, nothing spawned. `engine record --credential <id> --cwd <dir> --out <fixture
+dir> (--prompt "<text>" | --answer <tool_use_id>:allow|deny [--reason <text>]) [--model <m>] [--mode prompt|policy|auto]` runs the real engine and writes the raw lines as `turn-<n>.jsonl` (`n` counting up in an existing
 directory, `--resume` the previous turn's, from `fixture.json` or its `init`) plus a `fixture.json` without delays (claim
 `recorded`, `engine.version`); an `--out` under `--root` or `--cwd` is `error: out-in-session`. The recorder redacts
 nothing, so record with a credential made for recording; before a commit the import rewrite (`go run

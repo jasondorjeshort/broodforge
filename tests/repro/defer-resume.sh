@@ -37,7 +37,7 @@ id=$("$bf" session start --channel 100 --as 1001 --roles 10 --credential cred-sc
 "$bf" session send "$id" --as 1001 --wait --expect waiting-for-answer "write hi.txt" >/dev/null
 show=$("$bf" session show "$id")
 printf '%s\n' "$show"
-grep -q '^pending: toolu_01NmkmkiJgpriuU7yQrtDWYi  Write  .*hi\.txt  since .*  until ' <<<"$show" ||
+grep -q '^pending: toolu_01536WaGFU1xVZtHXVdpztcM  Write  .*hi\.txt  since .*  until ' <<<"$show" ||
 	fail "session show has no pending line while waiting"
 # The renderer's prompt (P11): the driver mentioned, the three buttons with 03's custom ids.
 # It is posted once the coalescer lets it out; a person can click only after that, so wait.
@@ -50,7 +50,7 @@ outbox_has() {
 	done
 	return 1
 }
-tid=toolu_01NmkmkiJgpriuU7yQrtDWYi
+tid=toolu_01536WaGFU1xVZtHXVdpztcM
 outbox_has "$id" '  create  m[0-9]*  [0-9]*  <@1001> Permission needed · turn 1$' || fail "session outbox has no permission prompt"
 for b in "Allow\",\"customId\":\"bf:$id:$tid:allow\"" "Deny\",\"customId\":\"bf:$id:$tid:deny\"" \
 	"Allow Write this session\",\"customId\":\"bf:$id:$tid:allow-session\""; do
@@ -71,7 +71,7 @@ tail=$("$bf" session tail "$id" --all)
 printf '%s\n' "$tail"
 for want in \
 	'  permission-decision  deferred \[Write\] .*hi\.txt (policy)$' \
-	'  waiting-for-answer  toolu_01NmkmkiJgpriuU7yQrtDWYi \[Write\] ' \
+	'  waiting-for-answer  toolu_01536WaGFU1xVZtHXVdpztcM \[Write\] ' \
 	'  permission-decision  allow \[Write\] .*hi\.txt (participant)$' \
 	'  permission-decision  deny \[Write\] .*bye\.txt (prompt-timeout)$' \
 	'  tool-result  \[Write\] .*bye\.txt -> denied: the prompt timed out after 3 seconds\.$'; do
