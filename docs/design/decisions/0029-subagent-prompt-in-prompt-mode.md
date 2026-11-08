@@ -128,6 +128,7 @@ passes a subagent's `deferred_tool_use` up.
   request carries the subagent's `tool_use_id`. Held, 2026-11-07 (`c42-allow`).
 - Prediction, check by 2027-02-07: no prompt-mode session on the pinned engine has raised `engine-prompt-tool-missing`,
   and no subagent in prompt mode has ended on an `ask`-cell call with `(Subagent completed but returned no output.)`.
+  Held, 2026-11-07 (s0008 on the dev root, engine 2.1.319, one process for the turn): no `engine-prompt-tool-missing`, and the `Agent` result carried the report.
 - Prediction, check when the engine pin is first raised after the build: the `prompt-ask` fixture check, not a live
   session, is what reports any change in the control protocol.
 
@@ -140,5 +141,7 @@ passes a subagent's `deferred_tool_use` up.
 C46's consequence: rule 5 stands, the session allow recorded by the bot and applied by the hook, and an allow never carries `updatedPermissions` (the sent shape passes the engine's validator; a hook `ask` outranking a session rule is the likely, unconfirmed cause). C50 fires the Deferred `land` item's trigger: its own pass after P40. New surface: `engine run --real` and `engine record` take `--requests allow|deny` under `--mode prompt`; `session show`'s `pending:` line gains `agent <type>`; `hook try --agent-id <id> --agent-type <type>` and `hook cases` `agentId`, `agentType`; `config check` refuses `subagentPromptTimeoutMinutes` 0 and below; the fixtures are rule 9's five and the companion's table, imported with every home path rewritten and the recording account's plugin lines dropped, or re-recorded with `engine record --mode prompt`. `--permission-prompts` stays off every command line, asserted by the adapter's args test (P40c).
 
 2026-11-07 (Owner wording, the owner's four answers, multiple choice): (1) `subagentPromptTimeoutMinutes` default 60 confirmed; (2) the expiry reason is exactly `Broodforge: the Discord prompt went unanswered for <n> minutes; stop here and report what you have.` (replacing the earlier "no answer" placeholder); (3) the `reviewer` deny text of rule 1 stands as written, approved; (4) the fall-through `ask` reason of rule 1 stands as written, approved. Not answered: rule 8's `internal-error` summary and trace line, which stay the owner's placeholders.
+
+P40e 2026-11-07: the live session held; the `defer`/`parallel` re-recording waits on `engine record --answer` (the plan).
 
 Clarification 2026-11-07: rule 1's session-allow lift is the `ask` cell's only; `web` is `ask` for a subagent as it is `defer` for the coordinator (the policy table).

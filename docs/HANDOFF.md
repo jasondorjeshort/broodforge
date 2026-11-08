@@ -1,23 +1,23 @@
 # Handoff
 
 Coordinator state. Subagents follow their brief, not this file.
-Updated: 2026-11-07 by main session (the s000g loss explained; ADR 0029; P40a to P40d built; windows optional)
+Updated: 2026-11-07 by main session (the s000g loss explained; ADR 0029; P40 built; the live session held; windows optional)
 
 ## Now
 
-- Account `jdorje`. Pushed at `2bc0ca6` (P40c); unpushed on `main`: P40d (`bfd4040` the key, `680a790` the
-  session half; review in flight) and the `auto-mode.sh` fix (a P40c hang under prompt mode; coder in flight). The s000g loss is explained (the engine ends a subagent at a hook
+- Account `jdorje`. Pushed at `546b48a` (P40d, the `auto-mode.sh` fix); unpushed: P40e's record (the ADR's
+  prediction held on dev s0008: a subagent's `Bash` prompted, answered, run). The s000g loss is explained (the engine ends a subagent at a hook
   `defer`; `2026-10-23` finding, Third look) and designed (ADR 0029, spike held: `2026-11-07-spike-...-adr-0029.md`);
-  the build is P40, five briefs in `08-implementation-plan-subagent-prompt.md`. Delegate in policy mode till P40d lands.
+  the build is P40 (`08-implementation-plan-subagent-prompt.md`). `dev-live` runs the old binary: policy mode there till redeployed.
 - Engine 2.1.319; some accounts have no five-hour window: parser, store (schema 6) and CLI take either shape.
 - `dev-live`: s000g's `b15362c` sits on `broodforge/dev-live/s000g`, unlanded, pushed by `[End session]` with no
   venue message. `dev`: dry-run, schema 6 at its next start. Hatchery `../hatchery`: `bcc78fe` is on its `origin/main`.
 
 ## Next
 
-1. P40e (`coder`, the owner's word for the real turns): the `defer`/`parallel` fixtures re-recorded under the flag;
-   one live prompt-mode session with a subagent's call. `tester`: the companion and `05-debug-interface-session.md`
-   still say "unbuilt" for P40d's part. P40d's known gaps: a Stop's result lacks `-> denied`; the killed `Agent` call's record.
+1. P40e remainder: `coder` adds `engine record`/`engine run --real` `--answer <tool_use_id>:allow|deny` (the plan's
+   P40e status), then re-records `defer` and `parallel` on dev (about 6 starts, the owner's word; `defer-resume.sh`'s
+   hard-coded id). Then `tester` resolves the 2026-10-23 and 2026-11-07 spike findings (`finding` skill, promote).
 2. `runner`/`tester` carry-back Sends (`carry-back` skill): the usage-gate pool advice (`2026-11-07` idea), the
    post-edit hook trap (`2026-11-07` idea), the commit-skill departure, the heredoc-reason idea, the `--staged` scan.
 3. `architect`: `auto` under the scrub (opt out on `auto` processes, undoing C34 for Bash, or `permissions.allow`); the
