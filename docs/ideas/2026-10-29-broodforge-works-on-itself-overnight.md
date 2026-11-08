@@ -6,7 +6,9 @@ related: [2026-10-23-session-land-pushes-to-main-mid-session.md, 2026-10-30-owne
 
 # Broodforge works on itself overnight
 
-A moonshot the owner judged far off at filing (2026-10-29). A scheduled session in the Broodforge
+A moonshot the owner judged far off at filing (2026-10-29); on 2026-11-08 the owner asked for it to
+move: P40 (ADR 0029) removed the one blocker a delegating session had, a subagent's prompt ending the
+subagent, so a session now delegates in prompt mode under a 60-minute bound. A scheduled session in the Broodforge
 channel reads `docs/ideas/` and `docs/findings/`, runs the `triage` skill, builds the `Plan:` ideas
 on session branches, and posts each result in the channel as buttons: accept (the `main` handoff),
 review (open the venue), discard (delete the branch). The vision already has the owner developing
